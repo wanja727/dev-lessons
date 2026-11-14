@@ -467,14 +467,14 @@ public void rename(Long id) {
       return 'INSERT를 바로 보내지 않고 쓰기 지연 SQL 저장소에 넣었어요. 1차 캐시에는 이미 들어 있어요.';
     },
     jpql: function () {
-      var pending = S.queue.length;
       dirtyCheck();
-      var flushed = S.queue.length ? doFlush() : 0;
-      if (flushed) lognote('-- JPQL 실행 전 자동 flush');
+      var hasPending = S.queue.length > 0;
+      if (hasPending) lognote('-- JPQL 실행 전 자동 flush');
+      var flushed = hasPending ? doFlush() : 0;
       sql('select * from book');
       var reused = 0;
       S.db.forEach(function (r) { if (cached(r.id)) reused++; else S.cache.push({ id: r.id, title: r.title, snapshot: r.title }); });
-      return (flushed ? '조회 전에 자동으로 flush해서 ' + flushed + '개의 SQL을 먼저 보냈어요. ' : '') + 'JPQL은 1차 캐시를 보지 않고 SQL을 보내요.' + (reused ? ' 이미 캐시에 있던 ' + reused + '권은 캐시의 객체를 그대로 돌려줘요.' : '') + (pending && !flushed ? '' : '');
+      return (flushed ? '조회 전에 자동으로 flush해서 ' + flushed + '개의 SQL을 먼저 보냈어요. ' : '') + 'JPQL은 1차 캐시를 보지 않고 SQL을 보내요.' + (reused ? ' 이미 캐시에 있던 ' + reused + '권은 캐시의 객체를 그대로 돌려줘요.' : '');
     },
     flush: function () {
       var n = doFlush();
