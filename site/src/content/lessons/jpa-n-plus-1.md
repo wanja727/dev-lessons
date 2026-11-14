@@ -8,7 +8,7 @@ verifiedBy:
   - verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java
 sources:
   - https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-  - https://docs.spring.io/spring-data/jpa/reference/jpa/entity-graph.html
+  - https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html#jpa.entity-graph
 updated: 2026-11-15
 ---
 
