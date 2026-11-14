@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['site/**', '.github/workflows/pages.yml']
+  pull_request:
+    paths: ['site/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,8 @@ jobs:
         with:
           path: site
   deploy:
+    # PR에서는 빌드만 확인하고, 배포는 main에서만
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
