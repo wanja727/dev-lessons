@@ -174,6 +174,30 @@ class IsolationLevelTest {
         assertThat(currentBalance()).isEqualTo(180);
     }
 
+    @Test
+    @DisplayName("REPEATABLE READ에서는 원자적 UPDATE도 앞 트랜잭션이 커밋하면 직렬화 오류(40001)로 실패한다 (재시도 필요)")
+    void atomicUpdateAtRepeatableReadFails() throws Exception {
+        try (Connection t1 = tx(TRANSACTION_REPEATABLE_READ); Connection t2 = tx(TRANSACTION_REPEATABLE_READ)) {
+            update(t1, "update iso_account set balance = balance + 50 where id = 1");
+
+            CompletableFuture<String> second = CompletableFuture.supplyAsync(() -> {
+                try {
+                    update(t2, "update iso_account set balance = balance + 30 where id = 1");
+                    return "ok";
+                } catch (SQLException e) {
+                    return e.getSQLState();
+                }
+            });
+            Thread.sleep(300);
+            assertThat(second.isDone()).isFalse();
+
+            t1.commit();
+            assertThat(second.get(10, TimeUnit.SECONDS)).isEqualTo("40001");
+            t2.rollback();
+        }
+        assertThat(currentBalance()).isEqualTo(150);
+    }
+
     private Connection tx(int isolation) throws SQLException {
         Connection c = dataSource.getConnection();
         c.setAutoCommit(false);

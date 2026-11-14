@@ -1,0 +1,325 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/isolation/IsolationLevelTest.java`;
+
+const codePredict = `-- 잔액 100인 계좌에 두 트랜잭션이 동시에 입금 (PostgreSQL 기본 설정)
+-- T1                                   T2
+SELECT balance ... ;  -- 100
+                                        SELECT balance ... ;  -- 100
+UPDATE ... SET balance = 150;  -- 100 + 50
+COMMIT;
+                                        UPDATE ... SET balance = 130;  -- 100 + 30
+                                        COMMIT;`;
+
+const codeAtomic = `-- 앱에서 읽고 계산하지 않고, DB가 현재 값에 더하게 한다
+UPDATE account SET balance = balance + 30 WHERE id = 1;
+
+-- JPA라면
+@Modifying
+@Query("update Account a set a.balance = a.balance + :amount where a.id = :id")
+int deposit(Long id, int amount);`;
+
+const codeSpring = `@Transactional(isolation = Isolation.REPEATABLE_READ)
+public void transfer(...) { ... }
+// 지정하지 않으면 DB 기본값 (PostgreSQL: READ COMMITTED, MySQL InnoDB: REPEATABLE READ)`;
+---
+<Base title="격리 수준과 이상 현상 · Dev Lessons" description="두 트랜잭션을 한 단계씩 번갈아 실행하며 Non-Repeatable Read, Phantom Read, 갱신 손실이 언제 생기고 격리 수준이 무엇을 막는지 PostgreSQL 기준으로 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨 없음 (트랜잭션 기본 개념은 알고 있다고 가정)</p>
+    <h1>격리 수준과 이상 현상</h1>
+    <p class="lede">트랜잭션은 "동시에 실행돼도 서로 간섭하지 않는다"고 배우지만, 실제 DB는 성능 때문에 어느 정도의 간섭을 허용해요. 얼마나 허용할지 정하는 게 <strong>격리 수준</strong>이에요. 두 트랜잭션을 직접 번갈아 실행해 보며 어떤 일이 생기는지 확인해요. 모든 결과는 PostgreSQL 16에서 테스트로 확인했어요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#levels"><span>1</span>격리 수준 네 가지</a>
+      <a href="#sim"><span>2</span>두 트랜잭션 번갈아 실행</a>
+      <a href="#lost"><span>3</span>갱신 손실 막기</a>
+      <a href="#db"><span>4</span>DB마다 다른 점</a>
+      <a href="#check"><span>5</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>잔액은 얼마가 될까요?</h2>
+    <p>두 트랜잭션이 각자 잔액을 읽고, 자기 입금액을 더한 값을 써요. 50과 30을 입금했으니 180이 되어야 할 것 같아요.</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">최종 잔액은</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="180" aria-pressed="false">180</button>
+          <button class="chip" type="button" data-v="150" aria-pressed="false">150</button>
+          <button class="chip" type="button" data-v="130" aria-pressed="false">130</button>
+          <button class="chip" type="button" data-v="error" aria-pressed="false">T2가 오류로 실패</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 "갱신 손실" + READ COMMITTED로 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="levels" class="read">
+    <p class="eyebrow">1 · 격리 수준 네 가지</p>
+    <h2>이상 현상을 얼마나 허용하나</h2>
+    <p>SQL 표준은 세 가지 <strong>이상 현상</strong>과 네 가지 <strong>격리 수준</strong>을 정해요.</p>
+    <ul>
+      <li><strong>Dirty Read:</strong> 다른 트랜잭션이 아직 커밋하지 않은 값을 읽음. 그 트랜잭션이 롤백하면 존재한 적 없는 값을 본 셈이에요.</li>
+      <li><strong>Non-Repeatable Read:</strong> 같은 트랜잭션에서 같은 행을 두 번 읽었는데, 사이에 다른 트랜잭션이 바꾸고 커밋해서 값이 달라짐.</li>
+      <li><strong>Phantom Read:</strong> 같은 조건으로 두 번 조회했는데, 사이에 다른 트랜잭션이 행을 추가하거나 지워서 결과 행 수가 달라짐.</li>
+    </ul>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>격리 수준 (표준)</th><th>Dirty Read</th><th>Non-Repeatable Read</th><th>Phantom Read</th></tr></thead>
+        <tbody>
+          <tr><td>READ UNCOMMITTED</td><td>허용</td><td>허용</td><td>허용</td></tr>
+          <tr><td>READ COMMITTED</td><td>막음</td><td>허용</td><td>허용</td></tr>
+          <tr><td>REPEATABLE READ</td><td>막음</td><td>막음</td><td>허용</td></tr>
+          <tr><td>SERIALIZABLE</td><td>막음</td><td>막음</td><td>막음</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>표준은 "최소한 이만큼은 막아라"는 기준이고, 실제 DB는 더 많이 막기도 해요. PostgreSQL은 READ UNCOMMITTED로 열어도 READ COMMITTED처럼 동작해서 Dirty Read가 없고, REPEATABLE READ에서 Phantom Read도 막아요(4장).</p>
+    <p>PostgreSQL과 MySQL InnoDB는 <strong>MVCC</strong>(다중 버전 동시성 제어)로 격리를 구현해요. 행을 바꿀 때 이전 버전을 남겨 두고, 각 트랜잭션은 자기 <strong>스냅샷</strong>에 맞는 버전을 읽어요. 그래서 읽기가 쓰기를 기다리지 않아요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · 두 트랜잭션 번갈아 실행</p>
+      <h2>현상과 격리 수준을 골라 한 단계씩</h2>
+      <p>계좌 1번의 잔액은 100에서 시작해요. 결과는 모두 PostgreSQL 16에서 실제로 실행해 확인한 그대로예요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">상황</span>
+        <div class="seg" id="case">
+          <button type="button" data-v="nrr" aria-pressed="true">Non-Repeatable Read</button>
+          <button type="button" data-v="phantom" aria-pressed="false">Phantom Read</button>
+          <button type="button" data-v="lost" aria-pressed="false">갱신 손실 (읽고 계산해서 쓰기)</button>
+          <button type="button" data-v="atomic" aria-pressed="false">원자적 UPDATE</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">두 트랜잭션의 격리 수준</span>
+        <div class="seg" id="level">
+          <button type="button" data-v="rc" aria-pressed="true">READ COMMITTED (기본)</button>
+          <button type="button" data-v="rr" aria-pressed="false">REPEATABLE READ</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tx-table">
+          <thead><tr><th>#</th><th>T1</th><th>T2</th><th>DB에 커밋된 잔액</th></tr></thead>
+          <tbody id="tx-rows"></tbody>
+        </table>
+      </div>
+      <p class="verdict" id="tx-verdict"></p>
+      <div class="step-nav">
+        <button class="btn" type="button" id="tx-reset">처음으로</button>
+        <button class="btn primary" type="button" id="tx-next">다음</button>
+        <button class="btn" type="button" id="tx-all">끝까지</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="lost" class="read">
+    <p class="eyebrow">3 · 갱신 손실 막기</p>
+    <h2>격리 수준만 올린다고 끝나지 않아요</h2>
+    <p>0장의 답은 <strong>130</strong>이에요. 두 트랜잭션이 모두 100을 읽고 각자 계산해서 덮어써서, T1이 넣은 50이 사라졌어요. 이걸 <strong>갱신 손실</strong>(lost update)이라고 해요. 기본 격리 수준(READ COMMITTED)은 이걸 막지 않아요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>방법</th><th>결과</th><th>대가</th></tr></thead>
+        <tbody>
+          <tr><td>원자적 UPDATE (<code>balance = balance + 30</code>)</td><td>180. 뒤 트랜잭션이 행 락을 기다렸다가 최신 값에 더함</td><td>계산을 SQL로 표현할 수 있을 때만</td></tr>
+          <tr><td>REPEATABLE READ</td><td>뒤 트랜잭션이 직렬화 오류(SQLSTATE 40001)로 실패, 최종 150</td><td>실패한 트랜잭션을 앱이 다시 시도해야 함</td></tr>
+          <tr><td>비관적 락 (<code>SELECT ... FOR UPDATE</code>)</td><td>읽을 때부터 락을 잡아 뒤 트랜잭션이 기다림</td><td>대기 시간, 데드락 주의</td></tr>
+          <tr><td>낙관적 락 (<code>@Version</code>)</td><td>버전이 바뀌었으면 쓰기 실패</td><td>충돌 시 재시도</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <pre set:text={codeAtomic} />
+    <p>락 두 가지는 다음 레슨 <strong>낙관적 락 vs 비관적 락</strong>에서 자세히 다뤄요. 핵심은 <strong>"앱이 읽고 계산해서 덮어쓰는" 패턴이 갱신 손실의 원인</strong>이라는 거예요. JPA의 변경 감지도 이 패턴이에요(조회 → 값 변경 → UPDATE).</p>
+  </section>
+
+  <section id="db" class="read">
+    <p class="eyebrow">4 · DB마다 다른 점</p>
+    <h2>같은 이름, 다른 동작</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>PostgreSQL</th><th>MySQL InnoDB</th></tr></thead>
+        <tbody>
+          <tr><td>기본 격리 수준</td><td>READ COMMITTED</td><td>REPEATABLE READ</td></tr>
+          <tr><td>READ UNCOMMITTED</td><td>READ COMMITTED와 같게 동작 (Dirty Read 없음)</td><td>Dirty Read 가능</td></tr>
+          <tr><td>REPEATABLE READ의 Phantom</td><td>스냅샷으로 막음</td><td>일반 조회는 스냅샷으로 막고, 잠금 조회는 갭 락으로 막음</td></tr>
+          <tr><td>REPEATABLE READ의 동시 수정</td><td>뒤 트랜잭션을 직렬화 오류로 실패시킴</td><td>기다렸다가 최신 값을 기준으로 진행</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>그래서 면접에서 "REPEATABLE READ는 Phantom Read를 허용한다"는 표준 기준 답에 "단, PostgreSQL과 InnoDB는 실제로 대부분 막는다"를 덧붙이면 좋아요. MySQL 칸은 MySQL 공식 문서 기준이고, 이 저장소의 테스트는 PostgreSQL만 확인해요.</p>
+    <p>스프링에서는 트랜잭션마다 격리 수준을 정할 수 있어요.</p>
+    <pre set:text={codeSpring} />
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">5 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "트랜잭션 격리 수준에 대해 설명해 주세요"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 격리 수준은 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>격리 수준은 동시에 실행되는 트랜잭션이 서로의 변경을 얼마나 볼 수 있는지 정하는 기준으로, READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE 네 단계가 있습니다.</dd>
+        <dt>원리</dt><dd>단계가 높을수록 Dirty Read, Non-Repeatable Read, Phantom Read를 차례로 막습니다. PostgreSQL과 InnoDB는 MVCC로 각 트랜잭션이 스냅샷을 읽게 해서 구현하고, 기본값은 각각 READ COMMITTED와 REPEATABLE READ입니다.</dd>
+        <dt>트레이드오프</dt><dd>높일수록 정합성은 좋아지지만 충돌로 인한 실패와 재시도, 대기가 늘어납니다. 그리고 격리 수준과 별개로 앱이 읽고 계산해서 쓰는 패턴은 READ COMMITTED에서 갱신 손실이 나므로, 원자적 UPDATE나 락으로 막아야 합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 동시 입금 테스트에서 갱신 손실을 재현하고, 잔액 변경을 원자적 UPDATE로 바꿔 해결했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 세 현상을 정확히 구분했나요? DB마다 기본값과 동작이 다르다는 점, 갱신 손실은 격리 수준과 별개로 챙겨야 한다는 점을 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>PostgreSQL 16(Testcontainers)에 커넥션 두 개를 열어 트랜잭션 순서를 직접 정해 실행해요.</p>
+    <ul>
+      <li>기본 격리 수준은 read committed</li>
+      <li>READ UNCOMMITTED로 열어도 커밋 전 값은 안 보임</li>
+      <li>READ COMMITTED: Non-Repeatable Read와 Phantom Read 발생. REPEATABLE READ: 둘 다 발생하지 않음</li>
+      <li>READ COMMITTED에서 읽고 계산해서 쓰기: 130 (갱신 손실)</li>
+      <li>REPEATABLE READ의 동시 수정: 뒤 트랜잭션이 SQLSTATE 40001로 실패, 최종 150 (읽고 쓰기, 원자적 UPDATE 둘 다)</li>
+      <li>READ COMMITTED의 원자적 UPDATE: 뒤 트랜잭션이 기다렸다가 진행, 최종 180</li>
+    </ul>
+    <p><a href={test}>IsolationLevelTest</a></p>
+  </section>
+
+  <footer>
+    근거: PostgreSQL 16 문서의 Transaction Isolation, MySQL 8.4 문서의 InnoDB Transaction Isolation Levels. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .tx-table { min-width: 600px; font-size: 14px; }
+  .tx-table td { font-family: var(--font-mono); font-size: 13px; }
+  .tx-table td.note { font-family: var(--font-body); }
+  .tx-table tr.warn td { background: var(--query-soft); }
+  .tx-table tr.good td { background: var(--ok-soft); }
+  .tx-table tr.wait td { background: var(--warn-soft); }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pl = { '180': '180', '150': '150', '130': '130', error: 'T2가 오류로 실패' };
+  var pred = { p1: store('iso-p1'), p2: store('iso-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 130이에요. T1이 넣은 50이 사라져요. 2장에서 "갱신 손실" + READ COMMITTED로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('iso-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 두 트랜잭션 시뮬레이터: [T1, T2, 커밋된 잔액, 표시(warn/good/wait), 설명] */
+  var S = {
+    nrr: {
+      rc: [['SELECT balance → 100', '', '100', '', 'T1이 처음 읽음'], ['', 'UPDATE balance = 200; COMMIT', '200', '', 'T2가 바꾸고 커밋'], ['SELECT balance → 200', '', '200', 'warn', '같은 트랜잭션인데 값이 달라졌어요']],
+      rr: [['SELECT balance → 100', '', '100', '', '첫 조회 시점에 스냅샷이 정해져요'], ['', 'UPDATE balance = 200; COMMIT', '200', '', 'T2가 바꾸고 커밋'], ['SELECT balance → 100', '', '200', 'good', 'T1은 자기 스냅샷의 100을 계속 봐요']],
+      verdict: { rc: 'Non-Repeatable Read가 생겼어요. READ COMMITTED는 문장마다 그 시점에 커밋된 최신 값을 읽어요.', rr: 'REPEATABLE READ는 트랜잭션 동안 같은 스냅샷을 봐서 값이 바뀌지 않아요.' }
+    },
+    phantom: {
+      rc: [['SELECT count(*) → 1', '', '1행', '', '조건에 맞는 행 1개'], ['', 'INSERT (2, 50); COMMIT', '2행', '', 'T2가 행을 추가하고 커밋'], ['SELECT count(*) → 2', '', '2행', 'warn', '없던 행이 나타났어요']],
+      rr: [['SELECT count(*) → 1', '', '1행', '', '스냅샷 시작'], ['', 'INSERT (2, 50); COMMIT', '2행', '', 'T2가 행을 추가하고 커밋'], ['SELECT count(*) → 1', '', '2행', 'good', 'PostgreSQL은 RR에서 새 행도 안 보여요']],
+      verdict: { rc: 'Phantom Read가 생겼어요.', rr: 'SQL 표준은 RR에서 Phantom을 허용하지만, PostgreSQL은 스냅샷 덕분에 막아요.' }
+    },
+    lost: {
+      rc: [['SELECT balance → 100', '', '100', '', ''], ['', 'SELECT balance → 100', '100', '', '둘 다 100을 읽음'], ['UPDATE balance = 150; COMMIT', '', '150', '', 'T1: 100 + 50'], ['', 'UPDATE balance = 130; COMMIT', '130', 'warn', 'T2: 자기가 읽은 100 + 30으로 덮어씀']],
+      rr: [['SELECT balance → 100', '', '100', '', ''], ['', 'SELECT balance → 100', '100', '', '둘 다 100을 읽음'], ['UPDATE balance = 150; COMMIT', '', '150', '', 'T1: 100 + 50'], ['', 'UPDATE ... → ERROR 40001', '150', 'good', '스냅샷 이후 다른 트랜잭션이 바꾼 행이라 거부. T2는 롤백하고 다시 시도해야 해요']],
+      verdict: { rc: '최종 130. T1이 넣은 50이 사라졌어요 (갱신 손실).', rr: '최종 150. 덮어쓰기 대신 T2가 실패했어요. 앱이 재시도하면 150을 읽고 180으로 만들어요.' }
+    },
+    atomic: {
+      rc: [['UPDATE balance = balance + 50', '', '100', '', 'T1이 행 락을 잡음 (커밋 전)'], ['', 'UPDATE balance = balance + 30', '100', 'wait', 'T2는 같은 행이라 T1을 기다려요'], ['COMMIT', '', '150', '', 'T1 커밋, 락 해제'], ['', '(진행) 최신 150에 +30; COMMIT', '180', 'good', 'T2가 최신 값을 다시 읽고 더해요']],
+      rr: [['UPDATE balance = balance + 50', '', '100', '', 'T1이 행 락을 잡음'], ['', 'UPDATE balance = balance + 30', '100', 'wait', 'T2는 기다려요'], ['COMMIT', '', '150', '', 'T1 커밋'], ['', '→ ERROR 40001', '150', 'warn', 'RR에서는 기다린 끝에 직렬화 오류. 재시도해야 해요']],
+      verdict: { rc: '최종 180. 계산을 DB에 맡기면 기본 격리 수준에서도 정확해요.', rr: '최종 150 + T2 실패. RR에서는 원자적 UPDATE도 재시도가 필요해요.' }
+    }
+  };
+  var kase = 'nrr', level = 'rc', idx = -1;
+  function rows() { return S[kase][level]; }
+  function render() {
+    var r = rows();
+    document.getElementById('tx-rows').innerHTML = r.map(function (x, i) {
+      if (i > idx) return '<tr><td>' + (i + 1) + '</td><td colspan="3" class="muted note">…</td></tr>';
+      return '<tr class="' + x[3] + '"><td>' + (i + 1) + '</td><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td>' + esc(x[2]) + (x[4] ? '<br><span class="note muted">' + esc(x[4]) + '</span>' : '') + '</td></tr>';
+    }).join('');
+    document.getElementById('tx-verdict').textContent = idx === r.length - 1 ? S[kase].verdict[level] : '';
+    document.getElementById('tx-next').disabled = idx >= r.length - 1;
+  }
+  function reset() { idx = -1; render(); }
+  document.getElementById('tx-next').addEventListener('click', function () { if (idx < rows().length - 1) { idx++; render(); } });
+  document.getElementById('tx-all').addEventListener('click', function () { idx = rows().length - 1; render(); });
+  document.getElementById('tx-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('case'), function (v) { kase = v; reset(); });
+  pressGroup(document.getElementById('level'), function (v) { level = v; reset(); });
+  reset();
+
+  /* 5. 확인 문제 */
+  var quiz = [
+    { q: '같은 트랜잭션에서 같은 행을 두 번 읽었는데, 사이에 다른 트랜잭션이 커밋해서 값이 달라졌다. 이 현상은?', o: ['Dirty Read', 'Non-Repeatable Read', 'Phantom Read'], a: 1, e: '커밋된 변경이 같은 행의 두 번째 읽기에 보이는 현상이에요. 행 수가 달라지면 Phantom이에요.' },
+    { q: 'PostgreSQL 기본 설정에서 두 트랜잭션이 잔액을 읽고 각자 계산해 덮어쓰면?', o: ['둘 다 반영된다', '하나의 변경이 사라질 수 있다', '뒤 트랜잭션이 항상 오류로 실패한다'], a: 1, e: '기본값 READ COMMITTED는 갱신 손실을 막지 않아요.' },
+    { q: 'PostgreSQL REPEATABLE READ에서 다른 트랜잭션이 먼저 바꾸고 커밋한 행을 UPDATE하면?', o: ['최신 값으로 덮어쓴다', '직렬화 오류(40001)로 실패한다'], a: 1, e: '스냅샷 이후 바뀐 행이라 거부해요. 앱이 재시도해야 해요. MySQL InnoDB는 다르게 동작해요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('iso-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('iso-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
