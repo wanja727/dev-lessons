@@ -42,6 +42,14 @@ class PersistenceContextScopeTest {
     }
 
     @Test
+    @DisplayName("쓰기 트랜잭션 안에서 readOnly 메서드를 내부 호출해 얻은 엔티티는 영속 상태라 반영된다")
+    void internalReadOnlyCallStillManaged() {
+        bookService.renameViaFind(bookId, "JPA 입문 2판");
+
+        assertThat(bookRepository.findById(bookId).orElseThrow().getTitle()).isEqualTo("JPA 입문 2판");
+    }
+
+    @Test
     @DisplayName("트랜잭션이 끝난 뒤(준영속) 바꾼 값은 반영되지 않는다")
     void changeAfterTransactionIgnored() {
         Book book = bookService.find(bookId);

@@ -24,6 +24,16 @@ public class BookService {
         bookRepository.findById(id).orElseThrow().changeTitle(title);
     }
 
+    /**
+     * 내부 호출한 find()의 readOnly는 적용되지 않는다(프록시를 거치지 않음).
+     * 바깥 쓰기 트랜잭션 안에서 영속 상태라 변경 감지로 반영된다. 문제 [코드 2-A] 검증용.
+     */
+    @Transactional
+    public void renameViaFind(Long id, String title) {
+        Book book = find(id);
+        book.changeTitle(title);
+    }
+
     /** 트랜잭션이 끝나면 영속성 컨텍스트도 닫혀서, 돌려준 엔티티는 준영속이 된다 */
     @Transactional(readOnly = true)
     public Book find(Long id) {
