@@ -52,4 +52,4 @@ flowchart LR
 | 14 | OSIV | Spring | @Transactional, 프록시 | #8 | 대기 |
 | 15 | 연관관계 주인과 양방향 매핑 | JPA | 영속성 컨텍스트 | #9 | 대기 |
 
-KG파이낸셜 1차 면접에서 막힌 주제: 프로세스와 스레드, Future, 스프링 배치, 대량 DML, AOP와 감사 로그 ( 라벨).
+KG파이낸셜 1차 면접에서 막힌 주제: 프로세스와 스레드, Future, 스프링 배치, 대량 DML, AOP와 감사 로그 (`priority:interview-gap` 라벨).
