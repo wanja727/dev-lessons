@@ -6,7 +6,7 @@ const lessons = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/lessons' }),
   schema: z.object({
     title: z.string(),
-    unit: z.enum(['Java', 'Spring', 'JPA', 'DB', '동시성·분산', '네트워크·웹']),
+    unit: z.enum(['Java', 'Spring', 'JPA', 'DB', '운영체제', '동시성·분산', '네트워크·웹']),
     summary: z.string(),
     minutes: z.number().int().positive(),
     page: z.string(),
