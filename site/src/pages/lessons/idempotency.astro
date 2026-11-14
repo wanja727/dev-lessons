@@ -1,0 +1,366 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/idempotency/IdempotencyTest.java`;
+const impl = `${repo}/blob/main/verification/src/main/java/lab/devlessons/idempotency/PaymentServices.java`;
+
+const codePredict = `@Transactional
+public void pay(String idempotencyKey, Long orderId, long amount) {
+    if (paymentRepository.existsByIdempotencyKey(idempotencyKey)) {
+        return;                                   // 이미 처리한 요청
+    }
+    paymentRepository.save(new Payment(idempotencyKey, orderId, amount));
+}`;
+
+const codeRequest = `POST /payments
+Idempotency-Key: 7f3c1e0a-4b2d-4c9e-9f61-2d8a5b3c9e10
+Content-Type: application/json
+
+{ "orderId": 1, "amount": 10000 }`;
+
+const codeConstraint = `@Entity
+public class Payment {
+    @Column(name = "idempotency_key", nullable = false, unique = true)
+    private String idempotencyKey;
+    ...
+}
+-- 실제 DDL: idempotency_key 에 UNIQUE 제약`;
+
+const codeService = `public Payment pay(String key, Long orderId, long amount) {
+    try {
+        // 자기 트랜잭션에서 바로 INSERT (먼저 조회하지 않는다)
+        return paymentRepository.saveAndFlush(new Payment(key, orderId, amount));
+    } catch (DataIntegrityViolationException duplicate) {
+        // 이미 같은 키가 있다: 처음 결과를 찾아서 그대로 돌려준다
+        Payment first = paymentRepository.findByIdempotencyKey(key).orElseThrow();
+        if (first.getAmount() != amount) {
+            throw new IllegalStateException("같은 키로 다른 요청");  // 409로 응답
+        }
+        return first;
+    }
+}`;
+---
+<Base title="멱등성과 중복 요청 방지 · Dev Lessons" description="결제가 두 번 되는 이유와 막는 법. 재시도와 더블 클릭을 시뮬레이터로 재현하고, 먼저 조회하는 방식이 동시 요청에서 실패하는 이유와 멱등 키 + 유니크 제약으로 막는 방법을 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a></p>
+    <h1>멱등성과 중복 요청 방지</h1>
+    <p class="lede">결제 버튼을 한 번 눌렀는데 돈이 두 번 빠졌다면 서비스는 끝이에요. 그런데 네트워크에서는 같은 요청이 두 번 오는 일이 생각보다 흔해요. 핀테크와 커머스 면접의 단골인 이 주제를, 요청이 겹치는 순간을 직접 재현하며 배워요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>멱등성이란</a>
+      <a href="#why"><span>2</span>요청은 왜 두 번 오나</a>
+      <a href="#sim"><span>3</span>세 가지 서버 비교</a>
+      <a href="#design"><span>4</span>멱등 키 + 유니크 제약</a>
+      <a href="#details"><span>5</span>실무에서 더 챙길 것</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>먼저 조회하면 막을 수 있을까요?</h2>
+    <p>결제 전에 같은 멱등 키가 이미 있는지 조회하고, 없을 때만 저장해요. 같은 키를 가진 요청 두 개가 <strong>동시에</strong> 도착하면 결제는 몇 건 저장될까요?</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="1" aria-pressed="false">항상 1건</button>
+          <button class="chip" type="button" data-v="2" aria-pressed="false">2건이 될 수 있다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장에서 직접 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 멱등성이란</p>
+    <h2>여러 번 해도 한 번 한 것과 같은 결과</h2>
+    <p><strong>멱등성</strong>(idempotency)은 같은 요청을 한 번 보내든 여러 번 보내든 서버의 최종 상태가 같은 성질이에요. 엘리베이터 버튼을 여러 번 눌러도 엘리베이터가 한 번만 오는 것과 같아요.</p>
+    <ul>
+      <li>HTTP 명세(RFC 9110)에서 GET, PUT, DELETE는 멱등 메서드로 정의돼요. "1번 상품을 삭제"는 두 번 해도 결과가 같아요.</li>
+      <li><strong>POST는 멱등이 아니에요.</strong> "결제 생성"을 두 번 하면 결제가 두 건 생겨요.</li>
+    </ul>
+    <p>그래서 결제처럼 POST로 무언가를 만드는 API는 서버가 직접 멱등하게 만들어야 해요. 그 열쇠가 <strong>멱등 키</strong>예요. 클라이언트가 요청마다 고유한 값을 만들어 보내고, 재시도할 때는 <strong>같은 키</strong>를 다시 보내요.</p>
+    <pre set:text={codeRequest} />
+  </section>
+
+  <section id="why" class="read">
+    <p class="eyebrow">2 · 요청은 왜 두 번 오나</p>
+    <h2>클라이언트는 "처리됐는지"를 모를 때가 있어요</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>무슨 일이</th><th>도착 순서</th></tr></thead>
+        <tbody>
+          <tr><td>응답 유실 후 재시도</td><td>서버는 결제를 마쳤는데 응답이 타임아웃으로 사라짐. 클라이언트는 실패로 알고 다시 보냄</td><td>순차 (앞 요청 처리 후)</td></tr>
+          <tr><td>더블 클릭</td><td>사용자가 버튼을 빠르게 두 번 누름</td><td>거의 동시</td></tr>
+          <tr><td>게이트웨이·SDK 자동 재시도</td><td>중간 계층이 실패로 보고 자동으로 다시 보냄</td><td>순차 또는 동시</td></tr>
+          <tr><td>메시지 재전달</td><td>메시지 큐가 "최소 한 번" 전달이라 같은 메시지를 다시 줌</td><td>순차</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>핵심은 <strong>클라이언트가 재시도를 멈출 수 없다</strong>는 거예요. 응답을 못 받았으면 다시 보내는 게 맞는 행동이에요. 그러니 막는 책임은 서버에 있어요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 세 가지 서버 비교</p>
+      <h2>같은 키를 가진 요청 두 개</h2>
+      <p>도착 방식과 서버 구현을 골라 "다음"을 눌러 보세요. 오른쪽 아래 결제 테이블에 실제로 몇 건이 남는지 보세요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">도착 방식</span>
+        <div class="seg" id="arrival">
+          <button type="button" data-v="seq" aria-pressed="true">재시도 (순차)</button>
+          <button type="button" data-v="conc" aria-pressed="false">더블 클릭 (동시)</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">서버 구현</span>
+        <div class="seg" id="server">
+          <button type="button" data-v="none" aria-pressed="true">대책 없음</button>
+          <button type="button" data-v="check" aria-pressed="false">먼저 조회 후 저장</button>
+          <button type="button" data-v="unique" aria-pressed="false">멱등 키 + 유니크 제약</button>
+        </div>
+      </div>
+      <div class="idem-grid">
+        <div class="pane">
+          <span class="label">진행</span>
+          <ol class="path-steps" id="steps"></ol>
+        </div>
+        <div class="pane">
+          <span class="label">payment 테이블</span>
+          <div class="table-wrap"><table class="mini"><thead><tr><th>id</th><th>idempotency_key</th><th>amount</th></tr></thead><tbody id="rows"></tbody></table></div>
+          <p class="verdict" id="sim-verdict"></p>
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn" type="button" id="s-reset">처음으로</button>
+        <button class="btn primary" type="button" id="s-next">다음</button>
+        <button class="btn" type="button" id="s-all">끝까지</button>
+      </div>
+    </div>
+    <div class="read callout warn">
+      <strong>"먼저 조회 후 저장"이 동시 요청에서 실패하는 이유:</strong> 두 요청이 거의 동시에 조회하면 둘 다 "아직 없음"을 봐요. 조회와 저장 사이에 다른 요청이 끼어들 틈이 있어서예요. <a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a> 레슨의 check-then-act 경쟁 상태와 같은 문제예요. 애플리케이션 코드만으로는 이 틈을 닫기 어렵고, 서버가 여러 대면 더 그래요.
+    </div>
+  </section>
+
+  <section id="design" class="read">
+    <p class="eyebrow">4 · 멱등 키 + 유니크 제약</p>
+    <h2>마지막 판단은 DB에 맡겨요</h2>
+    <p>동시에 들어온 요청 중 하나만 통과시키는 일은 DB가 가장 잘해요. 멱등 키 컬럼에 <strong>유니크 제약</strong>을 걸면, 같은 키의 두 번째 INSERT는 서버가 몇 대든 DB가 거절해요.</p>
+    <pre set:text={codeConstraint} />
+    <p>서비스는 "먼저 조회"하지 않고 <strong>바로 저장을 시도</strong>해요. 실패하면 이미 처리된 요청이니 처음 결과를 찾아 그대로 돌려줘요.</p>
+    <pre set:text={codeService} />
+    <ul>
+      <li>PostgreSQL은 같은 키를 넣으려는 두 번째 트랜잭션을 첫 번째가 끝날 때까지 기다리게 했다가, 첫 번째가 커밋하면 유니크 위반으로 실패시켜요. 그래서 동시 요청 10개가 와도 결제는 1건이에요.</li>
+      <li>INSERT가 실패한 트랜잭션은 더 쓸 수 없어서, 재조회는 <strong>그 트랜잭션 밖에서</strong> 해요. 위 코드에서 <code>pay</code>에 @Transactional을 붙이지 않은 이유예요.</li>
+      <li>같은 키로 <strong>내용이 다른</strong> 요청(금액이 바뀜)이 오면 처음 결과를 돌려주면 안 돼요. 클라이언트 버그이니 거절해요(보통 409 Conflict 또는 422).</li>
+    </ul>
+    <p class="muted">전체 코드: <a href={impl}>PaymentServices.java</a></p>
+  </section>
+
+  <section id="details" class="read">
+    <p class="eyebrow">5 · 실무에서 더 챙길 것</p>
+    <h2>키 하나로 끝나지 않는 부분들</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>주제</th><th>고민할 것</th></tr></thead>
+        <tbody>
+          <tr><td>키 범위</td><td>키는 사용자(또는 가맹점)별로 유일하면 충분해요. 유니크 제약을 (user_id, idempotency_key)로 걸기도 해요.</td></tr>
+          <tr><td>처음 응답 저장</td><td>결제 id뿐 아니라 처음 돌려준 응답 전체(상태 코드, 본문)를 저장해 두고 재요청에 그대로 돌려주면 클라이언트가 같은 결과를 받아요.</td></tr>
+          <tr><td>처리 중 상태</td><td>첫 요청이 외부 PG사 호출로 오래 걸리는 동안 같은 키가 또 오면? "처리 중"으로 기록해 두고 409나 잠시 후 재시도를 안내해요.</td></tr>
+          <tr><td>보관 기간</td><td>키를 영원히 둘 필요는 없어요. 재시도가 일어날 만한 기간(예: 24시간)만 보관하고 정리해요.</td></tr>
+          <tr><td>외부 연동</td><td>PG사 같은 외부 API에도 멱등 키를 넘겨서, 우리 쪽 재시도가 외부에서 이중 결제가 되지 않게 해요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>요청 헤더 이름은 <code>Idempotency-Key</code>를 많이 써요. IETF에서 표준화가 진행 중이고, Stripe 같은 결제 API가 같은 방식을 써요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "결제 API에서 중복 결제를 어떻게 막나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 결제 API를 멱등하게 만들어서 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>같은 결제 요청이 여러 번 와도 한 번만 처리되도록 API를 멱등하게 만듭니다. 응답 유실 후 재시도나 더블 클릭으로 같은 요청이 다시 오는 건 막을 수 없기 때문입니다.</dd>
+        <dt>원리</dt><dd>클라이언트가 요청마다 멱등 키를 보내고 재시도 때 같은 키를 쓰게 합니다. 서버는 키 컬럼에 유니크 제약을 걸고 바로 저장을 시도해, 중복이면 DB가 거절하고 서버는 처음 결과를 찾아 그대로 돌려줍니다.</dd>
+        <dt>트레이드오프</dt><dd>먼저 조회 후 저장하는 방식은 동시 요청에서 둘 다 통과해 막지 못하고, 애플리케이션 락은 서버가 여러 대면 효과가 없어서 최종 판단은 DB 제약에 맡깁니다. 같은 키로 내용이 다른 요청은 거절하고, 처리 중 상태와 키 보관 기간도 정해야 합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 동시 요청 테스트로 조회 후 저장 방식의 이중 저장을 재현하고, 유니크 제약 기반으로 바꿔 동시 10건에도 1건만 저장되는 것을 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 멱등 키, 유니크 제약, 처음 결과 반환을 모두 말했나요? 조회 후 저장이 왜 안 되는지 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>Spring Boot 3.5와 실제 PostgreSQL(Testcontainers)에서 여러 스레드로 동시에 요청해 확인해요.</p>
+    <ul>
+      <li>대책 없음: 같은 요청 두 번이면 결제 2건</li>
+      <li>먼저 조회 후 저장: 순차 재시도는 1건, 두 요청이 동시에 조회를 통과하면 2건</li>
+      <li>유니크 제약: 같은 키의 두 번째 INSERT는 DataIntegrityViolationException</li>
+      <li>멱등 키 + 유니크 제약: 재요청은 같은 결제 id, 동시 10번 요청에도 1건이고 모두 같은 id</li>
+      <li>같은 키로 금액이 다른 요청은 거절</li>
+    </ul>
+    <p><a href={test}>IdempotencyTest</a></p>
+  </section>
+
+  <footer>
+    근거: RFC 9110(HTTP Semantics)의 멱등 메서드 정의, IETF Idempotency-Key 헤더 초안, Stripe API의 Idempotent requests 문서. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .idem-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  table.mini { min-width: 0; font-size: 14px; }
+  table.mini td, table.mini th { padding: 6px 8px; }
+  table.mini tr.dup td { color: var(--query); font-weight: 700; }
+  .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .path-steps li { color: var(--muted); }
+  .path-steps li.done { color: var(--ink); }
+  .path-steps li.now { color: var(--accent); font-weight: 700; }
+  .path-steps .who { font-family: var(--font-mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--code-bg); margin-right: 4px; }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .idem-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('id-p1'), p2: store('id-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '1' ? '항상 1건' : '2건이 될 수 있다') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "2건이 될 수 있다"예요. 3장에서 "더블 클릭 (동시)" + "먼저 조회 후 저장"으로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('id-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 시뮬레이터: 각 단계는 테이블에 행을 추가(add)할 수 있다 */
+  var KEY = '7f3c…9e10';
+  var scripts = {
+    seq: {
+      none: [
+        ['요청1', '결제 저장 (id 1)', 1], ['요청1', '응답이 타임아웃으로 사라짐. 클라이언트는 실패로 앎', 0],
+        ['요청2', '재시도 도착. 서버는 이전 요청을 모름', 0], ['요청2', '결제 저장 (id 2)', 1]
+      ],
+      check: [
+        ['요청1', '조회: 키 없음', 0], ['요청1', '결제 저장 (id 1)', 1], ['요청1', '응답이 타임아웃으로 사라짐', 0],
+        ['요청2', '재시도 도착. 조회: 키 있음', 0], ['요청2', '이미 처리됨, 저장하지 않음', 0]
+      ],
+      unique: [
+        ['요청1', 'INSERT 시도 → 성공 (id 1)', 1], ['요청1', '응답이 타임아웃으로 사라짐', 0],
+        ['요청2', '재시도 도착. INSERT 시도 → 유니크 위반', 0], ['요청2', '키로 처음 결제를 찾아 id 1 결과를 그대로 응답', 0]
+      ]
+    },
+    conc: {
+      none: [
+        ['요청1·2', '거의 동시에 도착', 0], ['요청1', '결제 저장 (id 1)', 1], ['요청2', '결제 저장 (id 2)', 1]
+      ],
+      check: [
+        ['요청1·2', '거의 동시에 도착', 0], ['요청1', '조회: 키 없음', 0], ['요청2', '조회: 키 없음 (요청1이 아직 저장 전)', 0],
+        ['요청1', '결제 저장 (id 1)', 1], ['요청2', '결제 저장 (id 2) — 이미 조회를 통과했으니 막을 방법이 없음', 1]
+      ],
+      unique: [
+        ['요청1·2', '거의 동시에 도착', 0], ['요청1', 'INSERT 시도 → 들어감 (아직 커밋 전)', 1], ['요청2', 'INSERT 시도 → 같은 키라 요청1의 트랜잭션이 끝날 때까지 DB가 기다리게 함', 0],
+        ['요청1', '커밋', 0], ['요청2', '유니크 위반으로 실패', 0], ['요청2', '키로 처음 결제를 찾아 id 1 결과를 그대로 응답', 0]
+      ]
+    }
+  };
+  var arrival = 'seq', server = 'none', idx = -1;
+  function steps() { return scripts[arrival][server]; }
+  function render() {
+    var st = steps(), rows = [], id = 0;
+    for (var i = 0; i <= idx; i++) if (st[i][2]) { id++; rows.push(id); }
+    document.getElementById('steps').innerHTML = st.map(function (s, i) {
+      return '<li class="' + (i < idx ? 'done' : i === idx ? 'now' : '') + '">' + (i <= idx ? '<span class="who">' + esc(s[0]) + '</span>' + esc(s[1]) : '…') + '</li>';
+    }).join('');
+    document.getElementById('rows').innerHTML = rows.length ? rows.map(function (r) {
+      return '<tr class="' + (r > 1 ? 'dup' : '') + '"><td>' + r + '</td><td>' + KEY + '</td><td>10,000</td></tr>';
+    }).join('') : '<tr><td colspan="3" class="muted">비어 있음</td></tr>';
+    var v = '';
+    if (idx === st.length - 1) {
+      v = rows.length > 1 ? '결제 ' + rows.length + '건. 이중 결제가 일어났어요.' : '결제 1건. 같은 요청이 두 번 왔지만 한 번만 처리됐어요.';
+      if (server === 'check' && arrival === 'seq') v += ' 순차 재시도는 막지만, "더블 클릭 (동시)"로 바꿔 보세요.';
+    }
+    document.getElementById('sim-verdict').textContent = v;
+    document.getElementById('s-next').disabled = idx >= st.length - 1;
+  }
+  function reset() { idx = -1; render(); }
+  document.getElementById('s-next').addEventListener('click', function () { if (idx < steps().length - 1) { idx++; render(); } });
+  document.getElementById('s-all').addEventListener('click', function () { idx = steps().length - 1; render(); });
+  document.getElementById('s-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('arrival'), function (v) { arrival = v; reset(); });
+  pressGroup(document.getElementById('server'), function (v) { server = v; reset(); });
+  reset();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: '다음 HTTP 메서드 중 명세상 멱등이 아닌 것은?', o: ['GET', 'PUT', 'DELETE', 'POST'], a: 3, e: 'POST는 요청마다 새 리소스를 만들 수 있어서 멱등이 아니에요. 그래서 결제 생성 API는 서버가 직접 멱등하게 만들어야 해요.' },
+    { q: '서버가 3대일 때 같은 멱등 키의 동시 요청을 확실히 하나만 통과시키는 방법은?', o: ['서비스 메서드에 synchronized', '먼저 조회 후 저장', 'DB 유니크 제약'], a: 2, e: 'synchronized는 서버 한 대 안에서만, 조회 후 저장은 동시 요청에서 둘 다 통과해요. DB 제약은 서버 수와 상관없이 막아요.' },
+    { q: '같은 멱등 키로 금액만 다른 요청이 오면?', o: ['처음 결과를 돌려준다', '새 결제로 저장한다', '거절한다'], a: 2, e: '같은 키는 같은 요청이라는 약속이에요. 내용이 다르면 클라이언트 버그이니 거절해요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('id-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('id-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
