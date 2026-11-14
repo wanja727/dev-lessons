@@ -1,6 +1,7 @@
 package lab.devlessons.transaction;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import lab.devlessons.support.PostgresContainerConfig;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,32 @@ import org.springframework.context.annotation.Import;
 class TransactionalProxyTest {
 
     @Autowired TxProbeService probe;
+    @Autowired FixedOrderService fixedOrderService;
+    @Autowired SplitOrderService splitOrderService;
+    @Autowired PurchaseOrderRepository orderRepository;
+    @Autowired PointRepository pointRepository;
+
+    @Test
+    @DisplayName("프록시는 런타임 예외가 나면 롤백한다: 호출하는 쪽 트랜잭션 하나에 묶인 주문 저장도 취소")
+    void runtimeExceptionRollsBackWholeBoundary() {
+        orderRepository.deleteAll();
+        pointRepository.deleteAll(); // 포인트 계좌가 없어서 point.add()에서 NullPointerException
+
+        assertThatThrownBy(() -> fixedOrderService.placeOrder(new PurchaseOrder(99L)))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(orderRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("빈을 나누면 트랜잭션도 나뉜다: 포인트 적립이 실패해도 이미 커밋된 주문은 남는다")
+    void splitBeansSplitTransactions() {
+        orderRepository.deleteAll();
+        pointRepository.deleteAll();
+
+        assertThatThrownBy(() -> splitOrderService.placeOrder(new PurchaseOrder(99L)))
+                .isInstanceOf(NullPointerException.class);
+        assertThat(orderRepository.count()).isEqualTo(1);
+    }
 
     @Test
     @DisplayName("@Transactional이 붙은 빈은 원본이 아니라 CGLIB 프록시가 주입된다")
