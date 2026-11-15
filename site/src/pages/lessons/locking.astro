@@ -1,0 +1,309 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/lock/LockingTest.java`;
+const impl = `${repo}/blob/main/verification/src/main/java/lab/devlessons/lock/StockServices.java`;
+
+const codePredict = `@Entity
+public class Stock {
+    @Id Long id;
+    int quantity;
+    @Version Long version;     // 낙관적 락
+}
+
+@Transactional
+public void order(Long id, int n) {
+    Stock stock = stockRepository.findById(id).get();   // 재고 100, version 0
+    stock.decrease(n);                                   // 변경 감지로 UPDATE
+}
+// 두 주문이 거의 동시에 order(1, 10)을 호출하고, 둘 다 version 0을 읽었다`;
+
+const codeOptimistic = `@Version
+private Long version;
+
+-- 커밋 때 Hibernate가 보내는 SQL
+UPDATE stock SET quantity = 90, version = 1
+ WHERE id = 1 AND version = 0;   -- 읽었을 때의 버전이 조건
+-- 영향받은 행이 0이면 → ObjectOptimisticLockingFailureException`;
+
+const codeRetry = `// 재시도는 트랜잭션 바깥(다른 빈)에서. 시도마다 새 트랜잭션으로 다시 읽는다
+public void order(Long id, int n) {
+    for (int attempt = 1; ; attempt++) {
+        try {
+            stockService.decreaseOptimistic(id, n);   // @Transactional
+            return;
+        } catch (ObjectOptimisticLockingFailureException e) {
+            if (attempt >= 3) throw e;                 // 횟수 제한
+        }
+    }
+}`;
+
+const codePessimistic = `@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("select s from Stock s where s.id = :id")
+Optional<Stock> findForUpdate(@Param("id") Long id);
+-- 실제 SQL: select ... from stock where id = ? for no key update (또는 for update)
+
+// 기다리지 않고 바로 실패하고 싶다면 (NOWAIT)
+@QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "0"))`;
+---
+<Base title="낙관적 락 vs 비관적 락 · Dev Lessons" description="두 주문이 같은 재고를 동시에 줄일 때, 락 없음, 낙관적 락, 비관적 락이 각각 어떻게 동작하는지 단계별로 보고 상황별 선택 기준을 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/isolation-level/">격리 수준과 이상 현상</a>, <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a></p>
+    <h1>낙관적 락 vs 비관적 락</h1>
+    <p class="lede"><a href="/dev-lessons/lessons/isolation-level/">격리 수준 레슨</a>에서 "읽고 계산해서 쓰면" 갱신 손실이 난다는 걸 봤어요. JPA의 변경 감지가 바로 이 패턴이라, 재고·잔액·좌석처럼 동시에 줄어드는 값에는 락이 필요해요. 두 가지 락이 충돌을 어떻게 다르게 다루는지 직접 따라가 봐요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#two"><span>1</span>두 가지 철학</a>
+      <a href="#sim"><span>2</span>동시 주문 따라가기</a>
+      <a href="#optimistic"><span>3</span>낙관적 락</a>
+      <a href="#pessimistic"><span>4</span>비관적 락</a>
+      <a href="#choose"><span>5</span>고르는 기준</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>두 주문은 어떻게 될까요?</h2>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">결과는</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="both" aria-pressed="false">둘 다 성공, 재고 80</button>
+          <button class="chip" type="button" data-v="lost" aria-pressed="false">둘 다 성공, 재고 90</button>
+          <button class="chip" type="button" data-v="one" aria-pressed="false">하나만 성공, 재고 90, 다른 하나는 예외</button>
+          <button class="chip" type="button" data-v="wait" aria-pressed="false">하나가 기다렸다가 둘 다 성공, 재고 80</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="two" class="read">
+    <p class="eyebrow">1 · 두 가지 철학</p>
+    <h2>충돌을 막을까, 충돌을 감지할까</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>낙관적 락</th><th>비관적 락</th></tr></thead>
+        <tbody>
+          <tr><td>가정</td><td>충돌은 드물다</td><td>충돌은 자주 난다</td></tr>
+          <tr><td>방법</td><td>버전 번호로 <strong>쓸 때</strong> 충돌을 감지</td><td><strong>읽을 때</strong> 행을 잠가 다른 트랜잭션을 기다리게 함</td></tr>
+          <tr><td>DB 락</td><td>쓰지 않음 (UPDATE 순간만)</td><td>SELECT ... FOR UPDATE</td></tr>
+          <tr><td>충돌하면</td><td>나중 트랜잭션이 예외로 실패 → 재시도</td><td>나중 트랜잭션이 기다림 → 순서대로 처리</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>이름에 "락"이 붙었지만 낙관적 락은 실제로 아무것도 잠그지 않아요. "다른 사람이 안 바꿨겠지"라고 낙관하고 진행하다가, 마지막에 확인해서 바뀌었으면 실패시켜요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · 동시 주문 따라가기</p>
+      <h2>재고 100, 두 주문이 각각 10개씩</h2>
+      <p>방식을 고르고 "다음"을 눌러 보세요. 결과는 PostgreSQL에서 테스트로 확인한 그대로예요.</p>
+    </div>
+    <div class="panel">
+      <div class="seg" id="mode">
+        <button type="button" data-v="none" aria-pressed="true">락 없음</button>
+        <button type="button" data-v="opt" aria-pressed="false">낙관적 락</button>
+        <button type="button" data-v="optretry" aria-pressed="false">낙관적 락 + 재시도</button>
+        <button type="button" data-v="pess" aria-pressed="false">비관적 락</button>
+      </div>
+      <div class="table-wrap">
+        <table class="tx-table">
+          <thead><tr><th>#</th><th>주문 A</th><th>주문 B</th><th>DB (재고, 버전)</th></tr></thead>
+          <tbody id="lk-rows"></tbody>
+        </table>
+      </div>
+      <p class="verdict" id="lk-verdict"></p>
+      <div class="step-nav">
+        <button class="btn" type="button" id="lk-reset">처음으로</button>
+        <button class="btn primary" type="button" id="lk-next">다음</button>
+        <button class="btn" type="button" id="lk-all">끝까지</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="optimistic" class="read">
+    <p class="eyebrow">3 · 낙관적 락</p>
+    <h2>@Version 하나로 충돌 감지</h2>
+    <p>엔티티에 <code>@Version</code> 필드를 두면, JPA가 UPDATE할 때 <strong>읽었을 때의 버전</strong>을 조건에 넣고 버전을 1 올려요. 그 사이 다른 트랜잭션이 먼저 바꿨다면 조건에 맞는 행이 없어서 0건이 바뀌고, 스프링은 <code>ObjectOptimisticLockingFailureException</code>을 던져요.</p>
+    <pre set:text={codeOptimistic} />
+    <p>실패한 주문은 버려지는 게 아니라 <strong>다시 시도</strong>해야 해요. 재시도는 반드시 트랜잭션 <strong>바깥</strong>에서, 시도마다 새 트랜잭션으로 최신 값을 다시 읽어야 해요. 같은 트랜잭션 안에서 다시 시도하면 영속성 컨텍스트에 옛 값이 남아 있어서 소용없어요.</p>
+    <pre set:text={codeRetry} />
+    <p class="muted">전체 코드: <a href={impl}>StockServices.java</a></p>
+  </section>
+
+  <section id="pessimistic" class="read">
+    <p class="eyebrow">4 · 비관적 락</p>
+    <h2>읽는 순간부터 잠그기</h2>
+    <p><code>@Lock(PESSIMISTIC_WRITE)</code>를 붙이면 조회 SQL에 <code>FOR UPDATE</code>가 붙어요(PostgreSQL에서 Hibernate는 <code>FOR NO KEY UPDATE</code>를 쓰기도 해요). 같은 행을 같은 방식으로 읽으려는 다른 트랜잭션은 <strong>앞 트랜잭션이 커밋하거나 롤백할 때까지 기다려요.</strong> 기다린 뒤에는 최신 값을 읽으니 계산이 틀어지지 않아요.</p>
+    <pre set:text={codePessimistic} />
+    <ul>
+      <li><strong>대기 시간:</strong> 락을 쥔 트랜잭션이 길면 뒤 요청이 전부 줄을 서요. 락을 잡은 채 외부 API를 부르면 안 돼요.</li>
+      <li><strong>타임아웃:</strong> 무한정 기다리지 않게 락 타임아웃이나 NOWAIT(바로 실패)를 정해요.</li>
+      <li><strong>데드락:</strong> 두 트랜잭션이 서로 상대가 쥔 행을 기다리면 데드락이에요. 여러 행을 잠글 때는 항상 같은 순서(예: id 오름차순)로 잠가요. DB가 데드락을 감지하면 한쪽을 실패시켜요.</li>
+    </ul>
+  </section>
+
+  <section id="choose" class="read">
+    <p class="eyebrow">5 · 고르는 기준</p>
+    <h2>충돌이 얼마나 자주 나는가</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>추천</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td>회원 정보 수정, 게시글 수정</td><td>낙관적 락</td><td>같은 행을 동시에 고칠 일이 드물고, 충돌 시 "다른 사람이 먼저 수정했어요"로 알려 주면 충분</td></tr>
+          <tr><td>인기 상품 재고 차감, 선착순 쿠폰</td><td>비관적 락 (또는 원자적 UPDATE)</td><td>충돌이 잦아서 낙관적 락이면 재시도가 폭증</td></tr>
+          <tr><td>계좌 이체 (두 계좌)</td><td>비관적 락, id 순서로 잠금</td><td>정확성이 최우선, 데드락 방지</td></tr>
+          <tr><td>단순 수량 증감</td><td>원자적 UPDATE</td><td>락 없이 DB가 최신 값에 계산 (<a href="/dev-lessons/lessons/isolation-level/">격리 수준 레슨</a>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>두 락 모두 DB가 판정하니 <strong>서버가 여러 대여도</strong> 동작해요. 자바의 synchronized와 다른 점이에요. DB 밖의 자원(외부 API 호출 등)까지 한 번에 하나만 처리해야 할 때는 Redis 같은 분산 락을 검토하지만, 이 레슨의 범위는 DB 락까지예요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "낙관적 락과 비관적 락의 차이와 선택 기준을 설명해 주세요"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 낙관적 락은 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>둘 다 동시 수정으로 인한 갱신 손실을 막는 방법입니다. 낙관적 락은 충돌이 드물다고 보고 쓸 때 버전으로 충돌을 감지하고, 비관적 락은 충돌이 잦다고 보고 읽을 때부터 행을 잠급니다.</dd>
+        <dt>원리</dt><dd>낙관적 락은 @Version을 두면 UPDATE 조건에 읽은 버전을 넣어, 다른 트랜잭션이 먼저 바꿨으면 0건이 갱신되어 예외가 나고 새 트랜잭션으로 재시도합니다. 비관적 락은 SELECT FOR UPDATE로 행 락을 잡아 뒤 트랜잭션이 커밋까지 기다리게 합니다.</dd>
+        <dt>트레이드오프</dt><dd>낙관적 락은 락 대기가 없지만 충돌이 잦으면 재시도가 폭증하고, 비관적 락은 정확하지만 대기와 데드락, 커넥션 점유 비용이 있습니다. 그래서 일반 수정은 낙관적 락, 인기 상품 재고나 이체처럼 경합이 큰 곳은 비관적 락이나 원자적 UPDATE를 씁니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 동시 주문 테스트로 갱신 손실을 재현하고, 재고 차감은 비관적 락으로 바꿔 동시 50건에도 정확한 것을 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 감지 vs 차단, 재시도 vs 대기, 충돌 빈도에 따른 선택을 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <ul>
+      <li>락 없음: 두 주문이 같은 재고를 읽고 10씩 빼면 90 (갱신 손실)</li>
+      <li>낙관적 락: 같은 버전을 읽은 두 주문 중 하나만 성공, 다른 하나는 ObjectOptimisticLockingFailureException, 재고 90. UPDATE마다 버전 +1</li>
+      <li>낙관적 락 + 재시도: 동시 20건이 1씩 빼도 정확히 80</li>
+      <li>비관적 락: FOR UPDATE SQL, 뒤 트랜잭션은 앞 트랜잭션이 끝날 때까지 대기, 재고 80. 동시 50건도 정확히 50</li>
+      <li>NOWAIT: 이미 잠긴 행이면 바로 PessimisticLockingFailureException</li>
+    </ul>
+    <p><a href={test}>LockingTest</a></p>
+  </section>
+
+  <footer>
+    근거: Spring Data JPA 참조 문서의 Locking, Hibernate ORM 사용자 가이드의 Locking, PostgreSQL 16 문서의 Explicit Locking. 데드락 설명은 PostgreSQL 문서 기준이며 테스트하지 않았어요. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .tx-table { min-width: 600px; font-size: 14px; }
+  .tx-table td { font-size: 13px; }
+  .tx-table tr.warn td { background: var(--query-soft); }
+  .tx-table tr.good td { background: var(--ok-soft); }
+  .tx-table tr.wait td { background: var(--warn-soft); }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  var pl = { both: '둘 다 성공, 재고 80', lost: '둘 다 성공, 재고 90', one: '하나만 성공, 재고 90, 다른 하나는 예외', wait: '하나가 기다렸다가 둘 다 성공, 재고 80' };
+  var pred = { p1: store('lk-p1'), p2: store('lk-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "하나만 성공, 재고 90, 다른 하나는 예외"예요. @Version이 있어서 낙관적 락이 걸려요. 2장에서 "낙관적 락"으로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('lk-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* [주문 A, 주문 B, DB, 표시] */
+  var S = {
+    none: { rows: [['SELECT → 재고 100', '', '100', ''], ['', 'SELECT → 재고 100', '100', ''], ['100 - 10 → UPDATE 90; COMMIT', '', '90', ''], ['', '100 - 10 → UPDATE 90; COMMIT', '90', 'warn']], v: '둘 다 성공했는데 재고는 90. 10개가 팔렸는데 재고에서 빠지지 않았어요 (갱신 손실).' },
+    opt: { rows: [['SELECT → 재고 100, version 0', '', '100, v0', ''], ['', 'SELECT → 재고 100, version 0', '100, v0', ''], ['UPDATE ... WHERE version = 0 → 1건; COMMIT', '', '90, v1', 'good'], ['', 'UPDATE ... WHERE version = 0 → 0건 → 예외, 롤백', '90, v1', 'warn']], v: '주문 A만 성공, 재고 90. 주문 B는 ObjectOptimisticLockingFailureException. 덮어쓰기는 막았지만, B를 재시도하지 않으면 주문이 실패로 끝나요.' },
+    optretry: { rows: [['SELECT → 100, v0', '', '100, v0', ''], ['', 'SELECT → 100, v0', '100, v0', ''], ['UPDATE (v0 → v1); COMMIT', '', '90, v1', 'good'], ['', 'UPDATE → 0건 → 예외', '90, v1', 'warn'], ['', '재시도: 새 트랜잭션에서 SELECT → 90, v1', '90, v1', ''], ['', 'UPDATE ... WHERE version = 1 → 1건; COMMIT', '80, v2', 'good']], v: '둘 다 성공, 재고 80. 충돌한 쪽이 최신 값을 다시 읽고 처리했어요.' },
+    pess: { rows: [['SELECT ... FOR UPDATE → 100 (행 잠금)', '', '100', ''], ['', 'SELECT ... FOR UPDATE → 대기', '100', 'wait'], ['UPDATE 90; COMMIT (잠금 해제)', '', '90', ''], ['', '(대기 끝) 최신 값 90을 읽음', '90', ''], ['', 'UPDATE 80; COMMIT', '80', 'good']], v: '둘 다 성공, 재고 80. 뒤 주문이 기다렸다가 최신 값으로 처리했어요. 대신 그동안 기다린 시간만큼 응답이 늦어요.' }
+  };
+  var mode = 'none', idx = -1;
+  function rows() { return S[mode].rows; }
+  function render() {
+    var r = rows();
+    document.getElementById('lk-rows').innerHTML = r.map(function (x, i) {
+      if (i > idx) return '<tr><td>' + (i + 1) + '</td><td colspan="3" class="muted">…</td></tr>';
+      return '<tr class="' + x[3] + '"><td>' + (i + 1) + '</td><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td><td>' + esc(x[2]) + '</td></tr>';
+    }).join('');
+    document.getElementById('lk-verdict').textContent = idx === r.length - 1 ? S[mode].v : '';
+    document.getElementById('lk-next').disabled = idx >= r.length - 1;
+  }
+  function reset() { idx = -1; render(); }
+  document.getElementById('lk-next').addEventListener('click', function () { if (idx < rows().length - 1) { idx++; render(); } });
+  document.getElementById('lk-all').addEventListener('click', function () { idx = rows().length - 1; render(); });
+  document.getElementById('lk-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('mode'), function (v) { mode = v; reset(); });
+  reset();
+
+  var quiz = [
+    { q: '@Version이 있는 엔티티를 두 트랜잭션이 같은 버전으로 읽고 둘 다 수정하면?', o: ['둘 다 반영된다', '나중에 커밋하는 쪽이 예외로 실패한다', '나중 쪽이 기다린다'], a: 1, e: 'UPDATE 조건의 버전이 맞지 않아 0건이 갱신되고 예외가 나요.' },
+    { q: '낙관적 락 충돌을 재시도할 때 올바른 위치는?', o: ['같은 @Transactional 메서드 안에서 다시 시도', '트랜잭션 바깥에서 새 트랜잭션으로 다시 시도'], a: 1, e: '같은 트랜잭션 안에서는 영속성 컨텍스트의 옛 값과 실패한 트랜잭션이 남아 있어요.' },
+    { q: '선착순 쿠폰처럼 같은 행에 요청이 몰리는 경우 더 알맞은 것은?', o: ['낙관적 락', '비관적 락이나 원자적 UPDATE'], a: 1, e: '충돌이 잦으면 낙관적 락은 재시도가 폭증해요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('lk-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('lk-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
