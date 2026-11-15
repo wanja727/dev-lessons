@@ -37,6 +37,7 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
       <a href="#what"><span>1</span>인덱스가 하는 일</a>
       <a href="#explain"><span>2</span>실행계획 읽기</a>
       <a href="#lab"><span>3</span>EXPLAIN 실험실</a>
+      <a href="#run"><span>3+</span>진짜 PostgreSQL로 실행</a>
       <a href="#miss"><span>4</span>인덱스를 못 타는 경우</a>
       <a href="#composite"><span>5</span>복합 인덱스의 순서</a>
       <a href="#check"><span>6</span>확인과 면접 답변</a>
@@ -123,6 +124,27 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
     </div>
   </section>
 
+  <section id="run">
+    <div class="read stack">
+      <p class="eyebrow">3+ · 진짜 PostgreSQL로 실행</p>
+      <h2>브라우저 안의 PostgreSQL에 직접 쳐 보기</h2>
+      <p>위 실험실과 같은 주문 20만 건을 브라우저 안의 진짜 PostgreSQL(<a href="https://pglite.dev/">PGlite</a>, PostgreSQL 18)에 만들어요. 서버로 보내는 건 없고, 새로고침하면 사라져요. 처음 한 번 약 13MB를 받아요.</p>
+      <p><strong>먼저 예측하고 실행하세요.</strong> 예를 들어 인덱스 없이 member_id로 찾을 때, 인덱스를 만든 뒤, lower(email)로 찾을 때 각각 어떤 스캔이 나올까요?</p>
+    </div>
+    <div class="panel">
+      <div><button class="btn primary" type="button" id="pg-start">PostgreSQL 시작하고 20만 건 만들기</button></div>
+      <p class="muted" id="pg-status" aria-live="polite">아직 시작하지 않았어요.</p>
+      <div class="field">
+        <span class="label">예제 (누르면 아래 칸에 들어가요)</span>
+        <div class="choice-row" id="pg-presets"></div>
+      </div>
+      <label class="label" for="pg-sql">SQL (세미콜론으로 여러 문장 가능, 마지막 문장의 결과를 보여줘요)</label>
+      <textarea id="pg-sql" class="pg-sql" spellcheck="false">explain analyze select * from idx_orders where member_id = 123;</textarea>
+      <div><button class="btn" type="button" id="pg-run" disabled>실행</button></div>
+      <pre id="pg-out" class="plan"></pre>
+    </div>
+  </section>
+
   <section id="miss" class="read">
     <p class="eyebrow">4 · 인덱스를 못 타는 경우</p>
     <h2>있는데 안 쓰이는 다섯 가지</h2>
@@ -203,6 +225,7 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
   .idx-list label { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 13px; }
   .idx-list input { width: 18px; height: 18px; accent-color: var(--accent); }
   .plan { min-height: 64px; }
+  .pg-sql { font-family: var(--font-mono); font-size: 14px; min-height: 90px; line-height: 1.5; }
 </style>
 
 <script is:inline>
@@ -310,4 +333,70 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
   syncBtn();
   mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
 })();
+</script>
+
+<script is:inline type="module">
+  // 브라우저 안의 PostgreSQL(PGlite). 버튼을 누를 때만 내려받는다
+  const PGLITE = 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.16/dist/index.js';
+  const presets = [
+    ['인덱스 없이 member_id', 'explain analyze select * from idx_orders where member_id = 123;'],
+    ['member_id 인덱스 만들기', 'create index if not exists idx_member on idx_orders (member_id);\nanalyze idx_orders;\nexplain analyze select * from idx_orders where member_id = 123;'],
+    ['lower(email)과 email 인덱스', 'create index if not exists idx_email on idx_orders (email);\nanalyze idx_orders;\nexplain select * from idx_orders where lower(email) = \'user77@example.com\';'],
+    ['함수 인덱스', 'create index if not exists idx_email_lower on idx_orders (lower(email));\nanalyze idx_orders;\nexplain select * from idx_orders where lower(email) = \'user77@example.com\';'],
+    ['PAID(99%) vs CANCELED(1%)', 'create index if not exists idx_status on idx_orders (status);\nanalyze idx_orders;\nexplain select * from idx_orders where status = \'PAID\';'],
+    ['복합 인덱스', 'create index if not exists idx_status_created on idx_orders (status, created_at);\nanalyze idx_orders;\nexplain select * from idx_orders where status = \'CANCELED\' and created_at >= \'2026-03-01\';'],
+    ['인덱스 모두 지우기', 'drop index if exists idx_member, idx_email, idx_email_lower, idx_status, idx_status_created;\nanalyze idx_orders;\nselect indexname from pg_indexes where tablename = \'idx_orders\';']
+  ];
+  const $ = (id) => document.getElementById(id);
+  const sql = $('pg-sql'), out = $('pg-out'), status = $('pg-status'), runBtn = $('pg-run'), startBtn = $('pg-start');
+  presets.forEach(([label, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = label;
+    b.addEventListener('click', () => { sql.value = text; });
+    $('pg-presets').appendChild(b);
+  });
+  let db = null;
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    try {
+      const t0 = performance.now();
+      status.textContent = 'PostgreSQL을 내려받는 중… (처음 한 번 약 13MB)';
+      const { PGlite } = await import(PGLITE);
+      db = await PGlite.create();
+      status.textContent = '주문 20만 건 만드는 중…';
+      await db.exec(`
+        create table idx_orders (id bigint primary key, member_id int not null, status text not null,
+          created_at timestamp not null, email text not null);
+        insert into idx_orders select g, g % 20000, case when g % 100 = 0 then 'CANCELED' else 'PAID' end,
+          timestamp '2026-01-01' + (g || ' minutes')::interval, 'user' || g || '@example.com'
+          from generate_series(1, 200000) g;
+        analyze idx_orders;`);
+      const v = (await db.query('show server_version')).rows[0].server_version;
+      status.textContent = `준비됐어요 (PostgreSQL ${v}, ${Math.round((performance.now() - t0) / 100) / 10}초). 예제를 고르거나 직접 써서 실행해 보세요.`;
+      startBtn.textContent = '실행 중';
+      runBtn.disabled = false;
+    } catch (e) {
+      status.textContent = '시작하지 못했어요: ' + e.message;
+      startBtn.disabled = false;
+    }
+  });
+  function render(r) {
+    if (!r || !r.fields || r.fields.length === 0) return `완료 (${r && r.affectedRows != null ? r.affectedRows + '행 변경' : '결과 없음'})`;
+    if (r.fields.length === 1 && r.fields[0].name === 'QUERY PLAN') return r.rows.map((x) => x['QUERY PLAN']).join('\n');
+    const names = r.fields.map((f) => f.name);
+    const rows = r.rows.slice(0, 20).map((x) => names.map((n) => String(x[n])).join(' | '));
+    return [names.join(' | '), ...rows, r.rows.length > 20 ? `… (${r.rows.length}행 중 20행)` : `(${r.rows.length}행)`].join('\n');
+  }
+  runBtn.addEventListener('click', async () => {
+    if (!db) return;
+    runBtn.disabled = true;
+    try {
+      const t0 = performance.now();
+      const results = await db.exec(sql.value);
+      out.textContent = render(results[results.length - 1]) + `\n\n(${Math.round(performance.now() - t0)}ms)`;
+    } catch (e) {
+      out.textContent = '오류: ' + e.message;
+    }
+    runBtn.disabled = false;
+  });
 </script>
