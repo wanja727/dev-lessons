@@ -1,0 +1,416 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/concurrency/ThreadPoolTest.java`;
+
+const codePredict = `ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    2,                      // corePoolSize
+    4,                      // maximumPoolSize
+    60, TimeUnit.SECONDS,   // 남는 스레드를 정리하기까지 기다리는 시간
+    new ArrayBlockingQueue<>(2));  // 크기 2짜리 작업 큐
+
+for (int i = 0; i < 5; i++) {
+    pool.execute(() -> callSlowApi());   // 오래 걸리는 작업 5개
+}`;
+
+const codeFactories = `Executors.newFixedThreadPool(2);
+// = new ThreadPoolExecutor(2, 2, 0, ms, new LinkedBlockingQueue<>())
+//   스레드는 2개로 고정, 큐는 끝이 없다
+
+Executors.newCachedThreadPool();
+// = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60, s, new SynchronousQueue<>())
+//   큐가 없어서 쉬는 스레드가 없으면 작업마다 새 스레드
+
+Executors.newSingleThreadExecutor();
+// 스레드 하나, 큐는 끝이 없다. 작업이 들어온 순서대로 하나씩`;
+
+const codeBounded = `ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    10, 20, 60, TimeUnit.SECONDS,
+    new ArrayBlockingQueue<>(500),                 // 큐 크기에 한계를 둔다
+    new ThreadPoolExecutor.CallerRunsPolicy());    // 넘치면 제출한 스레드가 직접 실행
+
+// Spring이라면
+@Bean
+ThreadPoolTaskExecutor reportExecutor() {
+    ThreadPoolTaskExecutor e = new ThreadPoolTaskExecutor();
+    e.setCorePoolSize(10);
+    e.setMaxPoolSize(20);
+    e.setQueueCapacity(500);
+    e.setThreadNamePrefix("report-");
+    return e;
+}`;
+
+const codeShutdown = `pool.shutdown();                        // 새 작업은 거절, 받은 작업은 끝까지
+if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+    List<Runnable> dropped = pool.shutdownNow();  // 실행 중 작업은 인터럽트,
+}                                                 // 대기 중 작업 목록을 돌려받음`;
+
+const codeException = `pool.execute(() -> { throw new IllegalStateException(); });
+// 작업 스레드가 예외로 끝나고, UncaughtExceptionHandler(기본: 콘솔 출력)로 간다
+
+Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
+// 예외가 Future 안에 보관된다. get()을 부르지 않으면 아무도 모른다`;
+---
+<Base title="스레드 풀과 ExecutorService · Dev Lessons" description="스레드 풀이 작업을 받는 규칙(core → 큐 → max → 거절)을 시뮬레이터로 직접 확인하고, Executors 팩토리의 함정과 종료, 예외 처리까지 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">Java 동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a></p>
+    <h1>스레드 풀과 ExecutorService</h1>
+    <p class="lede">스레드 풀은 "스레드를 미리 만들어 두고 돌려 쓰는 것" 정도로만 알기 쉬워요. 하지만 면접과 장애에서 중요한 건 <strong>작업이 몰릴 때 풀이 어떤 순서로 반응하는지</strong>예요. 스레드가 언제 늘어나고, 언제 작업이 거절되는지 직접 넣어 보며 배워요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>왜 풀을 쓰나</a>
+      <a href="#rules"><span>2</span>작업을 받는 규칙</a>
+      <a href="#sim"><span>3</span>직접 넣어 보기</a>
+      <a href="#factories"><span>4</span>Executors의 함정</a>
+      <a href="#lifecycle"><span>5</span>종료와 예외</a>
+      <a href="#sizing"><span>6</span>크기 정하기</a>
+      <a href="#check"><span>7</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>스레드는 몇 개가 될까요?</h2>
+    <p>core 2, max 4, 큐 크기 2인 풀에 오래 걸리는 작업 5개를 연달아 넣었어요. 모두 넣은 직후 풀의 스레드는 몇 개일까요?</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="2" aria-pressed="false">2개</button>
+          <button class="chip" type="button" data-v="3" aria-pressed="false">3개</button>
+          <button class="chip" type="button" data-v="4" aria-pressed="false">4개</button>
+          <button class="chip" type="button" data-v="5" aria-pressed="false">5개</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 직접 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 왜 풀을 쓰나</p>
+    <h2>스레드를 매번 만들지 않기 위해서</h2>
+    <p>스레드는 프로세스보다 가볍지만 공짜는 아니에요. 만들 때마다 스택 메모리를 잡고 운영체제에 등록해야 해요. 요청마다 스레드를 새로 만들면 비용이 쌓이고, 요청이 몰리면 스레드가 끝없이 늘어나 메모리가 바닥날 수 있어요.</p>
+    <p><strong>스레드 풀</strong>은 스레드를 미리 정해진 만큼 만들어 두고, 작업이 오면 쉬는 스레드에 맡겨요. 작업이 끝난 스레드는 사라지지 않고 다음 작업을 기다려요. 그래서 두 가지를 얻어요.</p>
+    <ul>
+      <li><strong>재사용:</strong> 스레드 생성 비용을 아껴요. 작업 20개를 스레드 2개가 나눠서 처리해요.</li>
+      <li><strong>상한:</strong> 동시에 도는 스레드 수와 기다리는 작업 수에 한계를 둬서, 몰리는 요청이 서버 전체를 무너뜨리지 않게 해요.</li>
+    </ul>
+    <p>자바에서는 <code>ExecutorService</code>가 스레드 풀의 인터페이스이고, 실제 구현은 대부분 <code>ThreadPoolExecutor</code>예요. 톰캣의 요청 스레드, Spring의 <code>@Async</code>도 내부에서 이런 풀을 써요.</p>
+  </section>
+
+  <section id="rules" class="read">
+    <p class="eyebrow">2 · 작업을 받는 규칙</p>
+    <h2>core → 큐 → max → 거절</h2>
+    <p><code>ThreadPoolExecutor</code>는 새 작업을 받을 때마다 아래 순서로 판단해요. 순서가 핵심이에요.</p>
+    <ol>
+      <li><strong>스레드가 core보다 적으면</strong> 새 스레드를 만들어 맡겨요. (다른 스레드가 쉬고 있어도 core까지는 만들어요)</li>
+      <li>core가 다 찼으면 <strong>큐에 넣어요.</strong> 스레드를 늘리지 않아요.</li>
+      <li><strong>큐도 가득 차면</strong> 그때서야 max까지 스레드를 더 만들어요.</li>
+      <li>스레드도 max, 큐도 가득이면 <strong>거절</strong>해요. 기본 정책(AbortPolicy)은 <code>RejectedExecutionException</code>을 던져요.</li>
+    </ol>
+    <div class="callout warn">
+      <strong>흔한 오해:</strong> "바쁘면 max까지 스레드를 늘리고, 그래도 넘치면 큐에 넣겠지"라고 생각하기 쉬워요. 실제로는 반대로 <strong>큐가 먼저</strong>예요. 그래서 큐가 끝이 없으면 스레드는 영원히 core를 넘지 않아요(4장).
+    </div>
+    <p>core를 넘어 만든 스레드는 일이 없으면 <code>keepAliveTime</code>(예: 60초)만큼 기다리다 정리돼요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 직접 넣어 보기</p>
+      <h2>작업이 몰리면 풀은 이렇게 반응해요</h2>
+      <p>프리셋을 고르고 "작업 넣기"를 눌러 보세요. 작업은 "작업 끝내기"를 누를 때까지 계속 실행 중이에요. 굵은 칸은 core 스레드, 점선 칸은 core를 넘어 만든 스레드예요. 0장 예측은 "직접 설정" 프리셋에서 작업을 5번 넣으면 확인할 수 있어요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">프리셋</span>
+        <div class="seg" id="tp-preset">
+          <button type="button" data-v="custom" aria-pressed="true">직접 설정 (2, 4, 큐 2)</button>
+          <button type="button" data-v="fixed" aria-pressed="false">newFixedThreadPool(2)</button>
+          <button type="button" data-v="cached" aria-pressed="false">newCachedThreadPool()</button>
+          <button type="button" data-v="spring" aria-pressed="false">Spring Boot @Async 기본</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">거절 정책 (직접 설정에서만)</span>
+        <div class="seg" id="tp-policy">
+          <button type="button" data-v="abort" aria-pressed="true">AbortPolicy (예외)</button>
+          <button type="button" data-v="caller" aria-pressed="false">CallerRunsPolicy</button>
+        </div>
+      </div>
+      <p class="mono small" id="tp-config"></p>
+      <div class="actions">
+        <button class="btn primary" type="button" id="tp-add1">작업 1개 넣기</button>
+        <button class="btn" type="button" id="tp-add5">작업 5개 넣기</button>
+        <button class="btn" type="button" id="tp-done">작업 1개 끝내기</button>
+        <button class="btn" type="button" id="tp-reset">처음으로</button>
+      </div>
+      <div class="tp-stats">
+        <div><span class="label">스레드</span><span class="big" id="tp-threads">0</span></div>
+        <div><span class="label">큐</span><span class="big" id="tp-queued">0</span></div>
+        <div><span class="label">거절</span><span class="big" id="tp-rejected">0</span></div>
+      </div>
+      <div class="field"><span class="label">스레드</span><div class="slots" id="tp-workers"></div></div>
+      <div class="field"><span class="label">작업 큐</span><div class="slots" id="tp-queue"></div></div>
+      <p class="verdict" id="tp-note" aria-live="polite"></p>
+      <div class="log" id="tp-log"></div>
+    </div>
+  </section>
+
+  <section id="factories" class="read">
+    <p class="eyebrow">4 · Executors의 함정</p>
+    <h2>편한 팩토리 메서드에 숨은 한계 없음</h2>
+    <p><code>Executors</code>의 팩토리 메서드는 편하지만, 안을 보면 한계가 없는 부분이 있어요.</p>
+    <pre set:text={codeFactories} />
+    <ul>
+      <li><strong>newFixedThreadPool:</strong> 큐가 끝이 없어서 작업이 처리 속도보다 빨리 들어오면 큐에 계속 쌓여요. 거절은 일어나지 않고, 메모리가 바닥날 때까지 쌓이다가 응답이 한없이 느려져요.</li>
+      <li><strong>newCachedThreadPool:</strong> 큐가 없어서 쉬는 스레드가 없으면 작업마다 스레드를 새로 만들어요. 느린 외부 API 호출이 몰리면 스레드가 수천 개까지 늘 수 있어요.</li>
+    </ul>
+    <p>그래서 운영 코드에서는 큐 크기와 거절 정책을 직접 정해서 만드는 경우가 많아요.</p>
+    <pre set:text={codeBounded} />
+    <div class="callout">
+      <strong>Spring Boot의 기본 @Async 실행기</strong>도 확인해 둘 만해요. 기본값은 core 8, 큐 크기 제한 없음이에요. 공식 문서에도 "큐가 무제한이면 max-size는 무시된다"고 적혀 있어요. 즉 기본 설정에서는 스레드 8개에 작업이 끝없이 쌓여요. 3장에서 "Spring Boot @Async 기본"을 골라 확인해 보세요.
+    </div>
+  </section>
+
+  <section id="lifecycle" class="read">
+    <p class="eyebrow">5 · 종료와 예외</p>
+    <h2>풀은 직접 닫고, 예외는 직접 챙겨요</h2>
+    <p>직접 만든 풀의 스레드는 작업이 없어도 살아 있어서, 닫지 않으면 애플리케이션이 끝나지 않거나 스레드가 새어요.</p>
+    <pre set:text={codeShutdown} />
+    <ul>
+      <li><strong>shutdown():</strong> 새 작업은 거절하고, 이미 받은 작업(큐에 있는 것 포함)은 끝까지 처리해요.</li>
+      <li><strong>shutdownNow():</strong> 실행 중인 작업에 인터럽트를 걸고, 아직 시작 못 한 작업 목록을 돌려줘요.</li>
+      <li>Spring 빈으로 등록한 <code>ThreadPoolTaskExecutor</code>는 컨테이너가 종료 시점에 닫아 줘요.</li>
+    </ul>
+    <p>예외도 <code>execute</code>와 <code>submit</code>이 다르게 다뤄요.</p>
+    <pre set:text={codeException} />
+    <p><code>submit</code>으로 넣고 결과를 확인하지 않으면 작업이 실패해도 로그 한 줄 남지 않을 수 있어요. 결과가 필요 없는 작업이라도 작업 안에서 예외를 잡아 기록해 두는 게 안전해요.</p>
+  </section>
+
+  <section id="sizing" class="read">
+    <p class="eyebrow">6 · 크기 정하기</p>
+    <h2>정답은 없고, 작업의 성격이 기준이에요</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>작업 성격</th><th>출발점</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td>CPU를 계속 쓰는 작업 (계산, 압축)</td><td>코어 수 근처</td><td>코어보다 많으면 컨텍스트 스위칭만 늘어요</td></tr>
+          <tr><td>기다리는 시간이 긴 작업 (외부 API, DB)</td><td>코어 수보다 많이</td><td>기다리는 동안 다른 스레드가 CPU를 쓸 수 있어요</td></tr>
+          <tr><td>DB를 쓰는 작업</td><td>커넥션 풀 크기도 함께</td><td>스레드가 많아도 커넥션이 모자라면 거기서 기다려요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>어느 경우든 출발점일 뿐이고, 부하 테스트로 처리량과 대기 시간을 재서 정해요. 자바 21부터는 기다리는 시간이 긴 작업에 가상 스레드도 선택지예요(별도 레슨에서 다룰 예정).</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">7 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "스레드 풀을 쓰는 이유와 ThreadPoolExecutor의 동작을 설명해 주세요"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 스레드 풀은 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>스레드 풀은 스레드를 미리 만들어 두고 작업마다 재사용하는 구조로, 생성 비용을 줄이고 동시에 실행되는 스레드 수에 상한을 둡니다.</dd>
+        <dt>원리</dt><dd>ThreadPoolExecutor는 스레드가 core보다 적으면 새로 만들고, core가 차면 큐에 넣고, 큐가 가득 차야 max까지 늘리며, 그래도 넘치면 거절 정책을 실행합니다.</dd>
+        <dt>트레이드오프</dt><dd>큐가 무제한이면 거절은 없지만 작업이 쌓여 메모리와 지연이 커지고, 스레드가 무제한이면 스레드가 폭증합니다. 그래서 운영에서는 큐 크기와 거절 정책(예: CallerRunsPolicy)을 명시하고, 작업 성격과 커넥션 풀 크기를 보고 크기를 정합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: @Async 기본 실행기가 큐 무제한이라는 점을 확인하고, 리포트 생성용 실행기를 따로 만들어 큐 크기와 거절 정책을 정했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: core → 큐 → max → 거절 순서를 정확히 말했나요? 무제한 큐와 무제한 스레드의 위험을 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>JDK 21의 ThreadPoolExecutor로 직접 확인해요. 코드가 바뀔 때마다 GitHub Actions에서 다시 실행돼요.</p>
+    <ul>
+      <li>작업 20개를 스레드 2개가 나눠 처리 (재사용)</li>
+      <li>core 2, max 4, 큐 2: 작업 2개까지 스레드 2, 4개까지 큐 2, 6개에서 스레드 4, 7번째는 RejectedExecutionException</li>
+      <li>newFixedThreadPool(2)에 작업 100개: 스레드 2, 큐 98</li>
+      <li>newCachedThreadPool에 작업 50개: 스레드 50</li>
+      <li>CallerRunsPolicy: 거절된 작업을 제출한 스레드가 실행</li>
+      <li>shutdown은 받은 작업을 끝까지 처리하고 새 작업은 거절, shutdownNow는 인터럽트하고 대기 작업 목록 반환</li>
+      <li>execute의 예외는 UncaughtExceptionHandler로, submit의 예외는 get()까지 Future 안에</li>
+    </ul>
+    <p><a href={test}>ThreadPoolTest</a></p>
+  </section>
+
+  <footer>
+    근거: Java SE 21 API 문서의 ThreadPoolExecutor, Executors, Spring Boot 공통 애플리케이션 속성(spring.task.execution.pool.*). 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .small { font-size: 13px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tp-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .tp-stats > div { display: flex; flex-direction: column; gap: 2px; }
+  .tp-stats .big { font-size: 36px; }
+  .slots { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; }
+  .slot { min-width: 54px; height: 40px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; padding: 0 6px; }
+  .slot.core { border: 2px solid var(--accent); }
+  .slot.extra { border: 2px dashed var(--accent); }
+  .slot.busy { background: var(--accent); color: var(--surface); }
+  .slot.idle { color: var(--muted); }
+  .slot.q { border: 1.5px solid var(--line); background: var(--code-bg); }
+  .slot.q.free { color: var(--muted); border-style: dashed; background: transparent; }
+  .slot.more { color: var(--muted); }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('tp-p1'), p2: store('tp-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pred.p1 + '개' + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 3개예요. core 2개 → 큐 2개 → 큐가 가득 차서 5번째에 스레드 1개 추가. 3장에서 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('tp-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 시뮬레이터: ThreadPoolExecutor.execute()의 판단 순서를 그대로 따른다 */
+  var INF = Infinity;
+  var presets = {
+    custom: { core: 2, max: 4, queue: 2, label: 'new ThreadPoolExecutor(2, 4, 60s, new ArrayBlockingQueue<>(2))' },
+    fixed: { core: 2, max: 2, queue: INF, label: 'newFixedThreadPool(2) = core 2, max 2, LinkedBlockingQueue(무제한)' },
+    cached: { core: 0, max: INF, queue: 0, label: 'newCachedThreadPool() = core 0, max 무제한, SynchronousQueue(크기 0)' },
+    spring: { core: 8, max: INF, queue: INF, label: 'Spring Boot 기본 실행기 = core 8, 큐 무제한 (그래서 max는 무시됨)' }
+  };
+  var cfg, policy = 'abort', S;
+  function reset() {
+    S = { workers: [], queue: [], rejected: 0, nextId: 1, log: [] };
+    document.getElementById('tp-note').textContent = '작업을 넣어 보세요.';
+    render();
+  }
+  function idleWorker() { for (var i = 0; i < S.workers.length; i++) if (S.workers[i].task === null) return S.workers[i]; return null; }
+  function dispatch() {
+    var w;
+    while (S.queue.length && (w = idleWorker())) w.task = S.queue.shift();
+  }
+  function addWorker(task) { S.workers.push({ core: S.workers.length < cfg.core, task: task }); }
+  function submit() {
+    var id = S.nextId++, name = '작업' + id;
+    if (S.workers.length < cfg.core) {
+      addWorker(id);
+      return name + ': 스레드가 core(' + cfg.core + ')보다 적어서 새 스레드를 만들어 맡겼어요.';
+    }
+    var w = idleWorker();
+    if (cfg.queue === 0) {
+      if (w) { w.task = id; return name + ': 큐가 없어서 쉬고 있던 스레드에 바로 넘겼어요.'; }
+    } else if (S.queue.length < cfg.queue) {
+      S.queue.push(id); dispatch();
+      return w ? name + ': 큐에 넣었고, 쉬고 있던 스레드가 바로 가져갔어요.' : name + ': core가 다 바빠서 스레드를 늘리지 않고 큐에 넣었어요.';
+    }
+    if (S.workers.length < cfg.max) {
+      addWorker(id);
+      return name + ': ' + (cfg.queue === 0 ? '큐가 없고 쉬는 스레드도 없어서' : '큐가 가득 차서') + ' 새 스레드를 만들었어요 (core를 넘는 스레드).';
+    }
+    if (policy === 'caller' && presets.custom === cfg) {
+      S.log.push(name + ' → 제출한 스레드(main)가 직접 실행');
+      return name + ': 스레드도 큐도 가득 차서 거절됐고, CallerRunsPolicy라 제출한 스레드가 직접 실행했어요. 그동안 제출하는 쪽이 느려져서 자연스럽게 속도가 조절돼요.';
+    }
+    S.rejected++;
+    return name + ': 스레드도 max, 큐도 가득이라 거절됐어요. RejectedExecutionException이 던져져요.';
+  }
+  function finishOne() {
+    var w = null;
+    for (var i = 0; i < S.workers.length; i++) if (S.workers[i].task !== null) { w = S.workers[i]; break; }
+    if (!w) return '실행 중인 작업이 없어요.';
+    var done = w.task; w.task = null; dispatch();
+    return '작업' + done + '이 끝났어요. ' + (w.task !== null ? '그 스레드가 큐에서 작업' + w.task + '을 꺼내 바로 실행해요.' : '큐가 비어 있어서 스레드는 쉬면서 다음 작업을 기다려요.' + (!w.core ? ' core를 넘는 스레드는 keepAliveTime 동안 일이 없으면 정리돼요.' : ''));
+  }
+  function slots(el, html) { document.getElementById(el).innerHTML = html; }
+  function render() {
+    var maxShow = 24;
+    var ws = S.workers.slice(0, maxShow).map(function (w) {
+      return '<span class="slot ' + (w.core ? 'core' : 'extra') + ' ' + (w.task !== null ? 'busy' : 'idle') + '">' + (w.task !== null ? '작업' + w.task : '쉼') + '</span>';
+    }).join('') + (S.workers.length > maxShow ? '<span class="slot more">+' + (S.workers.length - maxShow) + '</span>' : '');
+    slots('tp-workers', ws || '<span class="muted small">아직 스레드가 없어요</span>');
+    var qs = S.queue.slice(0, maxShow).map(function (t) { return '<span class="slot q">작업' + t + '</span>'; }).join('');
+    if (S.queue.length > maxShow) qs += '<span class="slot more">+' + (S.queue.length - maxShow) + '</span>';
+    if (cfg.queue !== INF && cfg.queue > 0) for (var i = S.queue.length; i < cfg.queue; i++) qs += '<span class="slot q free">빈칸</span>';
+    if (cfg.queue === 0) qs = '<span class="muted small">큐가 없어요 (SynchronousQueue)</span>';
+    else if (cfg.queue === INF) qs += '<span class="muted small">… 끝없이 쌓을 수 있어요</span>';
+    slots('tp-queue', qs);
+    document.getElementById('tp-threads').textContent = S.workers.length;
+    document.getElementById('tp-queued').textContent = S.queue.length;
+    document.getElementById('tp-rejected').textContent = S.rejected;
+    document.getElementById('tp-log').innerHTML = S.log.slice(-12).map(function (l) { return '<div class="row note">' + esc(l) + '</div>'; }).join('');
+    document.getElementById('tp-config').textContent = cfg.label;
+  }
+  function act(fn) { var msg = fn(); S.log.push(msg); document.getElementById('tp-note').textContent = msg; render(); }
+  document.getElementById('tp-add1').addEventListener('click', function () { act(submit); });
+  document.getElementById('tp-add5').addEventListener('click', function () { var m; for (var i = 0; i < 5; i++) { m = submit(); S.log.push(m); } document.getElementById('tp-note').textContent = m; render(); });
+  document.getElementById('tp-done').addEventListener('click', function () { act(finishOne); });
+  document.getElementById('tp-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('tp-preset'), function (v) { cfg = presets[v]; reset(); });
+  pressGroup(document.getElementById('tp-policy'), function (v) { policy = v; reset(); });
+  cfg = presets.custom; reset();
+
+  /* 7. 확인 문제 */
+  var quiz = [
+    { q: 'core 2, max 4, 큐 3인 풀에 오래 걸리는 작업 6개를 넣으면 스레드는?', o: ['2개', '3개', '4개'], a: 1, e: 'core 2개 → 큐 3개 → 큐가 가득 차서 6번째에 스레드 1개 추가. 스레드 3개, 큐 3개예요.' },
+    { q: 'newFixedThreadPool(4)에 처리 속도보다 빨리 작업이 계속 들어오면?', o: ['스레드가 max까지 늘어난다', '거절 예외가 난다', '큐에 끝없이 쌓인다'], a: 2, e: '큐가 무제한이라 거절도 스레드 증가도 없이 쌓여요. 메모리와 지연이 커져요.' },
+    { q: 'submit()으로 넣은 작업에서 예외가 났는데 get()을 부르지 않았다면?', o: ['콘솔에 스택 트레이스가 찍힌다', '예외가 Future 안에 묻혀 아무도 모를 수 있다'], a: 1, e: 'submit의 예외는 Future에 보관돼요. execute와 달리 UncaughtExceptionHandler로 가지 않아요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('tp-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('tp-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
