@@ -93,10 +93,8 @@ class IndexPlanTest {
         exec("create index idx_email on idx_orders (email)");
         exec("analyze idx_orders");
 
-        String plan = plan("select * from idx_orders where email like 'user12345@%'");
-        if (!"C".equals(collation) && !"POSIX".equals(collation)) {
-            assertThat(plan).contains("Seq Scan");
-        }
+        assertThat(collation).as("테스트 DB의 정렬 규칙").isNotIn("C", "POSIX"); // postgres:16-alpine 기본값 en_US.utf8
+        assertThat(plan("select * from idx_orders where email like 'user12345@%'")).contains("Seq Scan");
     }
 
     @Test
