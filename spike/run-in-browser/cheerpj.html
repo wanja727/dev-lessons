@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheerpJ 시험</title>
+<script src="https://cjrtnc.leaningtech.com/5.0/loader.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 760px; }
+  pre { background: #111; color: #eee; padding: 12px; white-space: pre-wrap; min-height: 120px; font-size: 13px; }
+  button { font-size: 15px; padding: 8px 14px; }
+  #log { font-size: 13px; color: #555; }
+</style>
+</head>
+<body>
+<h1>스레드 풀 예제 직접 돌려 보기 (CheerpJ 시험)</h1>
+<p>코어 2, 최대 4, 큐 2인 풀에 작업 7개. 먼저 예측: 작업 7은 어떻게 될까?</p>
+<label>Java 버전
+  <select id="ver"><option>8</option><option>11</option><option selected>17</option><option>21</option></select>
+</label>
+<button id="run" type="button">실행</button>
+<p id="log"></p>
+<pre id="console"></pre>
+<script>
+  var log = document.getElementById('log');
+  var t = { start: performance.now() };
+  var ready = null;
+  function note(s) { log.textContent += s + ' · '; console.log('[spike] ' + s); }
+  document.getElementById('run').addEventListener('click', async function () {
+    var btn = this; btn.disabled = true;
+    try {
+      if (!ready) {
+        var v = +document.getElementById('ver').value;
+        var i0 = performance.now();
+        ready = cheerpjInit({ version: v, status: 'none' });
+        await ready;
+        note('cheerpjInit(v' + v + ') ' + Math.round(performance.now() - i0) + 'ms');
+        cheerpjCreateDisplay(1, 1);
+      }
+      var r0 = performance.now();
+      var code = await cheerpjRunMain('ThreadPoolDemo', '/app/ThreadPoolDemo.jar');
+      note('run ' + Math.round(performance.now() - r0) + 'ms (exit ' + code + ')');
+      window.__spikeDone = (window.__spikeDone || 0) + 1;
+    } catch (e) {
+      note('error ' + e); window.__spikeError = String(e);
+    } finally { btn.disabled = false; }
+  });
+</script>
+</body>
+</html>

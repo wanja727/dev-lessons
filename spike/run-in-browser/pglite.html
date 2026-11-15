@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PGlite 시험</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 760px; }
+  pre { background: #111; color: #eee; padding: 12px; white-space: pre-wrap; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>PGlite 시험: 인덱스 전후 EXPLAIN, 동시 트랜잭션</h1>
+<button id="run" type="button">실행</button>
+<pre id="out"></pre>
+<script type="module">
+  const out = document.getElementById('out');
+  const log = (s) => { out.textContent += s + '\n'; console.log('[pglite] ' + s); };
+  const plan = (r) => r.rows.map(x => x['QUERY PLAN']).join('\n');
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  window.__result = {};
+
+  document.getElementById('run').addEventListener('click', async () => {
+    try {
+      const t0 = performance.now();
+      const { PGlite } = await import('https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.16/dist/index.js');
+      const db = await PGlite.create();
+      const tInit = Math.round(performance.now() - t0);
+      log('init ' + tInit + 'ms, ' + (await db.query('select version()')).rows[0].version);
+      window.__result.initMs = tInit;
+
+      // 1. 인덱스 전후 실행계획
+      const s1 = performance.now();
+      await db.exec(`
+        create table orders (id bigserial primary key, member_id int, status text, created_at timestamp);
+        insert into orders (member_id, status, created_at)
+          select (random()*10000)::int, case when g % 100 = 0 then 'CANCELED' else 'PAID' end,
+                 timestamp '2026-01-01' + (g || ' minutes')::interval
+          from generate_series(1, 200000) g;
+        analyze orders;`);
+      log('200,000행 생성 ' + Math.round(performance.now() - s1) + 'ms');
+      const q = `explain analyze select * from orders where member_id = 42`;
+      log('--- 인덱스 전\n' + plan(await db.query(q)));
+      await db.exec('create index idx_member on orders(member_id); analyze orders;');
+      log('--- 인덱스 후\n' + plan(await db.query(q)));
+      await db.exec('create index idx_status on orders(status); analyze orders;');
+      log('--- status = PAID (99%)\n' + plan(await db.query(`explain select * from orders where status = 'PAID'`)));
+      log('--- status = CANCELED (1%)\n' + plan(await db.query(`explain select * from orders where status = 'CANCELED'`)));
+
+      // 2. 같은 인스턴스에서 두 트랜잭션을 겹치게 열 수 있나
+      await db.exec(`create table account (id int primary key, balance int); insert into account values (1, 100);`);
+      const order = [];
+      const txA = db.transaction(async (tx) => {
+        await tx.query('update account set balance = 50 where id = 1');
+        order.push('A: update (미커밋)');
+        await sleep(500);
+        order.push('A: commit');
+      });
+      await sleep(50);
+      const read = db.query('select balance from account where id = 1').then(r => { order.push('B: read balance=' + r.rows[0].balance); });
+      await Promise.all([txA, read]);
+      log('--- 같은 인스턴스, A 트랜잭션 중 B 조회 순서\n' + order.join('\n'));
+      window.__result.sameInstance = order;
+
+      // 3. 인스턴스 두 개가 같은 데이터를 볼 수 있나 (메모리 DB는 서로 독립)
+      const db2 = await PGlite.create();
+      const r2 = await db2.query(`select count(*) from pg_tables where tablename = 'account'`);
+      log('--- 두 번째 인스턴스에서 account 테이블 수: ' + r2.rows[0].count + ' (0이면 데이터 공유 안 됨)');
+
+      // 4. 한 세션에서 BEGIN을 두 번
+      try {
+        await db.exec('begin; begin;');
+        log('--- BEGIN 두 번: 경고만 나고 같은 트랜잭션 (중첩/동시 아님)');
+        await db.exec('rollback;');
+      } catch (e) { log('--- BEGIN 두 번 오류: ' + e.message); }
+
+      window.__result.done = true;
+    } catch (e) {
+      log('오류: ' + e); window.__result.error = String(e);
+    }
+  });
+</script>
+</body>
+</html>
