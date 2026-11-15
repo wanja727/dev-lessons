@@ -5,3 +5,4 @@ build/
 .gradle/
 *.log
 .idea/
+site/public/ci/

@@ -1,0 +1,26 @@
+---
+/** "저장소에서 이 테스트 돌려 보기": 테스트 파일 경로와 실행 명령 */
+interface Props {
+  tests: string[];        // 테스트 클래스의 전체 이름 (예: lab.devlessons.concurrency.ThreadPoolTest)
+  docker?: boolean;       // Testcontainers(PostgreSQL)가 필요한지
+}
+const { tests, docker = false } = Astro.props;
+const repo = 'https://github.com/wanja727/dev-lessons';
+const paths = tests.map((t) => `verification/src/test/java/${t.replace(/\./g, '/')}.java`);
+const command = `git clone ${repo}.git\ncd dev-lessons/verification\ngradle test ${tests.map((t) => `--tests "${t}"`).join(' ')}`;
+---
+<div class="run-local">
+  <h3>저장소에서 이 테스트 돌려 보기</h3>
+  <ul>
+    {paths.map((p) => <li><a href={`${repo}/blob/main/${p}`}><code>{p}</code></a></li>)}
+  </ul>
+  <pre set:text={command} />
+  <p class="muted">필요한 것: JDK 21, Gradle 8.14 이상{docker && ', Docker(테스트가 PostgreSQL 컨테이너를 띄워요)'}. 결과는 <code>verification/build/reports/tests/test/index.html</code>에서 볼 수 있어요.</p>
+</div>
+
+<style is:global>
+  .run-local { display: flex; flex-direction: column; gap: 8px; }
+  .run-local h3 { margin: 8px 0 0; font-size: 17px; }
+  .run-local ul { margin: 0; }
+  .run-local code { overflow-wrap: anywhere; }
+</style>

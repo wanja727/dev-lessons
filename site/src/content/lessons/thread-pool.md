@@ -6,6 +6,7 @@ minutes: 30
 page: thread-pool
 verifiedBy:
   - verification/src/test/java/lab/devlessons/concurrency/ThreadPoolTest.java
+  - verification/src/test/java/lab/devlessons/concurrency/ThreadPoolOutputTest.java
 sources:
   - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
   - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html

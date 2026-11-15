@@ -1,0 +1,58 @@
+---
+/**
+ * CI에서 검증 테스트가 실제로 낸 출력(CiOutput.record)을 보여준다.
+ * 답 먼저: 버튼을 누르기 전에는 출력을 숨긴다. JSON은 배포 때 /ci/<lesson>.json으로 들어간다.
+ */
+interface Props {
+  lesson: string;          // 레슨 페이지 이름 (CiOutput.record의 lesson)
+  key: string;             // 출력 이름 (CiOutput.record의 key)
+  label?: string;          // 버튼 문구
+  source?: string;         // 출력을 만든 테스트 (예: ThreadPoolOutputTest.predictExample)
+}
+const { lesson, key, label = 'CI에서 실제로 돌린 출력 보기', source } = Astro.props;
+const src = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/ci/${lesson}.json`;
+---
+<div class="ci-out" data-src={src} data-key={key}>
+  <button class="btn" type="button">{label}</button>
+  <div class="ci-body" hidden>
+    <pre class="ci-text"></pre>
+    <p class="ci-meta muted"></p>
+    {source && <p class="ci-meta muted">출력을 만든 테스트: <code>{source}</code></p>}
+  </div>
+</div>
+
+<style is:global>
+  .ci-out { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .ci-out .ci-body { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .ci-out .ci-text { margin: 0; white-space: pre-wrap; }
+  .ci-out .ci-meta { margin: 0; font-size: 13px; }
+</style>
+
+<script>
+  const cache = new Map<string, Promise<any>>();
+  function load(src: string) {
+    if (!cache.has(src)) cache.set(src, fetch(src).then((r) => (r.ok ? r.json() : Promise.reject(r.status))));
+    return cache.get(src)!;
+  }
+  document.querySelectorAll<HTMLElement>('.ci-out').forEach((box) => {
+    const btn = box.querySelector('button')!;
+    const body = box.querySelector<HTMLElement>('.ci-body')!;
+    const text = box.querySelector<HTMLElement>('.ci-text')!;
+    const meta = box.querySelector<HTMLElement>('.ci-meta')!;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const data = await load(box.dataset.src!);
+        const out = data.outputs?.[box.dataset.key!];
+        text.textContent = out ?? '이 출력은 아직 기록되지 않았어요.';
+        const when = data.recordedAt ? new Date(data.recordedAt).toLocaleString('ko-KR') : '';
+        const commit = data.commit && data.commit !== 'local' ? ` · 커밋 ${String(data.commit).slice(0, 7)}` : '';
+        meta.textContent = `GitHub Actions, Java ${data.javaVersion} · ${when}${commit}`;
+      } catch {
+        text.textContent = 'CI 출력을 불러오지 못했어요. 아래 "저장소에서 이 테스트 돌려 보기"로 직접 확인할 수 있어요.';
+      }
+      body.hidden = false;
+      btn.textContent = '실제 출력';
+    });
+  });
+</script>
