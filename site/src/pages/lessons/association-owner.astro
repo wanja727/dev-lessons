@@ -1,0 +1,339 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const testDir = `${repo}/blob/main/verification/src/test/java/lab/devlessons/association`;
+
+const codePredict = `@Transactional
+public void join(Long teamId, String name) {
+    Team team = teamRepository.findById(teamId).orElseThrow();
+    Member member = new Member(name);
+    team.getMembers().add(member);      // 팀에 멤버 추가
+    memberRepository.save(member);
+}`;
+
+const codeMapping = `@Entity
+public class Member {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_id")        // 주인: FK를 관리한다
+    private Team team;
+}
+
+@Entity
+public class Team {
+    @OneToMany(mappedBy = "team")        // 주인 아님: Member.team이 주인이라는 뜻
+    private List<Member> members = new ArrayList<>();
+}`;
+
+const codeHelper = `// Member (주인 쪽에 두는 게 일반적)
+public void changeTeam(Team team) {
+    if (this.team != null) {
+        this.team.getMembers().remove(this);   // 이전 팀의 거울에서 빼기
+    }
+    this.team = team;                          // 주인: 이게 FK가 된다
+    if (team != null) {
+        team.getMembers().add(this);           // 새 팀의 거울에 넣기
+    }
+}`;
+
+const codeUni = `@Entity
+public class Team {
+    @OneToMany
+    @JoinColumn(name = "team_id")    // FK는 member 테이블에 있는데 팀이 관리
+    private List<Member> members;
+}
+// 저장 SQL
+// insert into member (name) values ('a')          ← team_id 모름
+// insert into member (name) values ('b')
+// insert into team (name) values ('블루')
+// update member set team_id=? where id=?           ← 멤버 수만큼 추가
+// update member set team_id=? where id=?`;
+---
+<Base title="연관관계 주인과 양방향 매핑 · Dev Lessons" description="양방향 매핑에서 mappedBy와 연관관계 주인의 의미, 주인이 아닌 쪽만 설정하면 FK가 null로 저장되는 이유, 편의 메서드, 일대다 단방향의 추가 UPDATE를 객체와 테이블을 나란히 놓고 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">JPA · 개념 학습 · 약 25분 · 선수 레슨: <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a></p>
+    <h1>연관관계 주인과 양방향 매핑</h1>
+    <p class="lede">객체는 참조가 양쪽에 있을 수 있지만, 테이블의 FK는 <strong>한 곳</strong>에만 있어요. 그래서 JPA는 양방향 관계에서 FK를 관리할 쪽을 하나 정해요. 그게 <strong>연관관계의 주인</strong>이에요. 이걸 모르면 "분명 추가했는데 FK가 null"인 버그를 만나요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#owner"><span>1</span>주인과 mappedBy</a>
+      <a href="#lab"><span>2</span>객체와 테이블 나란히</a>
+      <a href="#helper"><span>3</span>편의 메서드</a>
+      <a href="#uni"><span>4</span>일대다 단방향</a>
+      <a href="#traps"><span>5</span>함정</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>member 테이블의 team_id에는 무엇이 저장될까요?</h2>
+    <p>Team.members는 <code>@OneToMany(mappedBy = "team")</code>, Member.team은 <code>@ManyToOne @JoinColumn(name = "team_id")</code>예요.</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">team_id</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="id" aria-pressed="false">팀의 id</button>
+          <button class="chip" type="button" data-v="null" aria-pressed="false">null</button>
+          <button class="chip" type="button" data-v="error" aria-pressed="false">저장할 때 예외</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 직접 해 볼 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="owner" class="read">
+    <p class="eyebrow">1 · 주인과 mappedBy</p>
+    <h2>FK를 가진 테이블 쪽 필드가 주인이에요</h2>
+    <pre set:text={codeMapping} />
+    <p>테이블에서 팀과 멤버의 관계는 <code>member.team_id</code> 컬럼 하나로 끝나요. 그런데 객체에는 <code>member.team</code>과 <code>team.members</code> 두 곳에 관계가 있어요. 둘이 다르면 JPA는 어느 쪽을 믿어야 할까요?</p>
+    <ul>
+      <li><strong>주인</strong>(mappedBy가 없는 쪽, 여기선 Member.team): 이 값이 INSERT, UPDATE의 team_id가 돼요.</li>
+      <li><strong>주인이 아닌 쪽</strong>(mappedBy가 있는 쪽, Team.members): <strong>읽기 전용 거울</strong>이에요. 조회할 때 채워지지만, 여기에 넣거나 빼도 DB는 바뀌지 않아요.</li>
+      <li><code>mappedBy = "team"</code>은 "이 관계는 Member의 team 필드가 관리한다"는 뜻이에요.</li>
+    </ul>
+    <p class="callout"><strong>규칙:</strong> FK가 있는 테이블의 엔티티를 주인으로 정해요. 일대다·다대일이면 항상 "다" 쪽(@ManyToOne)이 주인이에요. 그래서 0장의 정답은 <strong>null</strong>이에요. 거울에만 넣었으니까요.</p>
+  </section>
+
+  <section id="lab">
+    <div class="read stack">
+      <p class="eyebrow">2 · 객체와 테이블 나란히</p>
+      <h2>어느 쪽을 바꿔야 DB가 바뀔까</h2>
+      <p>트랜잭션 하나 안에서 팀(id 10)과 새 멤버 kim이 있어요. 버튼으로 코드를 실행하고 "커밋"을 눌러 DB에 무엇이 저장되는지 보세요. "새 트랜잭션에서 다시 조회"는 DB 값으로 객체를 새로 만들어요.</p>
+    </div>
+    <div class="panel">
+      <div class="lab-actions">
+        <button class="btn" type="button" data-act="addMirror">team.getMembers().add(kim)</button>
+        <button class="btn" type="button" data-act="setOwner">kim.team = team (주인)</button>
+        <button class="btn" type="button" data-act="helper">kim.changeTeam(team) (편의 메서드)</button>
+        <button class="btn" type="button" data-act="removeMirror">team.getMembers().remove(kim)</button>
+        <button class="btn" type="button" data-act="clearOwner">kim.changeTeam(null)</button>
+        <button class="btn primary" type="button" data-act="commit">커밋</button>
+        <button class="btn" type="button" data-act="reload">새 트랜잭션에서 다시 조회</button>
+        <button class="btn" type="button" data-act="reset">처음부터</button>
+      </div>
+      <div class="lab-grid">
+        <div class="lab-box">
+          <span class="label">메모리의 객체</span>
+          <div class="obj"><b>team (id 10)</b><span>members = <code id="o-members"></code></span><span class="tag">mappedBy · 거울</span></div>
+          <div class="obj"><b>kim</b><span>team = <code id="o-team"></code></span><span class="tag owner">주인 · FK</span></div>
+        </div>
+        <div class="lab-box">
+          <span class="label">DB: member 테이블</span>
+          <table><thead><tr><th>id</th><th>name</th><th>team_id</th></tr></thead><tbody><tr><td>1</td><td>kim</td><td id="db-fk"></td></tr></tbody></table>
+          <span class="muted" id="db-note"></span>
+        </div>
+      </div>
+      <p class="verdict" id="lab-msg" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="helper" class="read">
+    <p class="eyebrow">3 · 편의 메서드</p>
+    <h2>주인만 바꾸면 DB는 맞지만, 메모리가 어긋나요</h2>
+    <p>주인(member.team)만 설정해도 FK는 정확히 저장돼요. 그런데 <strong>같은 트랜잭션 안에서</strong> team.getMembers()를 보면 kim이 없어요. 영속성 컨텍스트는 DB를 다시 읽지 않고 메모리의 객체를 그대로 돌려주니까요. 이 상태에서 "팀 인원 수"를 계산하면 틀린 값이 나와요.</p>
+    <p>그래서 양쪽을 한 번에 맞추는 <strong>연관관계 편의 메서드</strong>를 둬요.</p>
+    <pre set:text={codeHelper} />
+    <ul>
+      <li>한쪽에만 두세요. 양쪽 엔티티에 모두 만들면 서로를 부르다 무한 호출이 되거나, 어느 쪽을 써야 할지 헷갈려요.</li>
+      <li>이전 팀에서 빼는 처리까지 넣어야 팀을 옮길 때 이전 팀의 거울에 남지 않아요.</li>
+      <li>관계를 끊을 때도 주인을 바꿔야 해요. team.getMembers().remove()만 하면 FK는 그대로예요.</li>
+    </ul>
+  </section>
+
+  <section id="uni" class="read">
+    <p class="eyebrow">4 · 일대다 단방향</p>
+    <h2>"팀에서만 멤버를 알면 되는데요?"</h2>
+    <p>멤버가 팀을 알 필요가 없어서 팀 쪽에만 @OneToMany를 두고 @JoinColumn으로 FK를 관리하게 할 수도 있어요. 그런데 FK는 여전히 <strong>member 테이블</strong>에 있어요. 팀 엔티티가 다른 테이블의 컬럼을 관리하니, 멤버를 INSERT할 때는 team_id를 모르고 나중에 UPDATE로 채워요.</p>
+    <pre set:text={codeUni} />
+    <p>멤버 2명을 저장하면 UPDATE가 2번 더 나가요(검증 테스트). 같은 저장을 양방향 다대일로 하면 UPDATE는 0번이에요. 그래서 보통은 <strong>다대일 단방향</strong>(Member.team만)으로 시작하고, 팀에서 멤버 목록이 꼭 필요할 때 mappedBy로 거울을 추가해요.</p>
+  </section>
+
+  <section id="traps" class="read">
+    <p class="eyebrow">5 · 함정</p>
+    <h2>양방향이라서 생기는 일</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>결과</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><td>주인이 아닌 쪽에만 추가</td><td>FK null로 저장</td><td>주인을 설정, 편의 메서드</td></tr>
+          <tr><td>주인만 설정</td><td>DB는 맞지만 같은 트랜잭션의 컬렉션이 비어 있음</td><td>편의 메서드로 양쪽 맞추기</td></tr>
+          <tr><td>주인이 아닌 쪽 컬렉션에서 remove</td><td>관계가 끊기지 않음</td><td>주인 쪽을 null이나 다른 팀으로</td></tr>
+          <tr><td>toString, JSON 직렬화에 양쪽 참조 포함</td><td>서로를 계속 따라가며 무한 순환 (StackOverflowError)</td><td>한쪽 제외, 엔티티 대신 DTO로 응답</td></tr>
+          <tr><td>일대다 단방향</td><td>멤버 수만큼 추가 UPDATE, 멤버 테이블 변경이 팀 엔티티 코드에서 일어남</td><td>다대일 단방향 + 필요 시 양방향</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">"양방향은 꼭 필요할 때만"이 실무 원칙이에요. 단방향 다대일만으로 설계를 끝내고, 반대 방향 조회는 JPQL로 해결할 수도 있어요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "연관관계의 주인이 무엇이고, mappedBy는 왜 쓰나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 연관관계의 주인은 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>연관관계의 주인은 양방향 관계에서 외래 키를 관리하는 쪽입니다. 테이블은 FK 하나로 관계를 표현하지만 객체는 양쪽에 참조가 있어서, 어느 쪽 값을 DB에 반영할지 하나로 정해야 합니다.</dd>
+        <dt>원리</dt><dd>FK가 있는 테이블의 엔티티, 일대다에서는 @ManyToOne 쪽을 주인으로 두고, 반대쪽은 mappedBy로 주인 필드를 가리켜 읽기 전용으로 만듭니다. 주인이 아닌 컬렉션에만 추가하면 FK가 null로 저장되고, 빼도 관계가 끊기지 않습니다.</dd>
+        <dt>트레이드오프</dt><dd>주인만 설정하면 DB는 맞지만 같은 트랜잭션의 컬렉션이 어긋나서, 편의 메서드로 양쪽을 함께 맞춥니다. 양방향은 직렬화 순환 같은 관리 비용이 있어서 다대일 단방향으로 시작하고 필요할 때만 추가합니다. 일대다 단방향은 추가 UPDATE가 나가서 피합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 팀 컬렉션에만 추가해서 FK가 null로 저장되던 문제를 changeTeam 편의 메서드로 바꿔 해결했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: "FK가 있는 쪽이 주인", "mappedBy 쪽은 읽기 전용"을 말했나요? 편의 메서드가 필요한 이유(메모리 일관성)를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>Spring Boot 3.5(Hibernate 6.6)와 실제 PostgreSQL(Testcontainers)에서 FK는 네이티브 쿼리로 DB에서 직접 읽고, SQL은 실제로 나간 문장을 세요.</p>
+    <ul>
+      <li>주인이 아닌 쪽에만 추가: team_id null</li>
+      <li>주인만 설정: team_id 저장, 같은 트랜잭션의 team.members는 비어 있음, 새 트랜잭션에서는 1명</li>
+      <li>편의 메서드: team_id 저장, 같은 트랜잭션에서도 members에 보임</li>
+      <li>주인이 아닌 쪽 clear: team_id 그대로, 주인을 null로: team_id null</li>
+      <li>일대다 단방향 멤버 2명 저장: INSERT 2, UPDATE 2 / 양방향 다대일: UPDATE 0</li>
+    </ul>
+    <p><a href={`${testDir}/AssociationOwnerTest.java`}>AssociationOwnerTest</a></p>
+  </section>
+
+  <footer>
+    근거: Hibernate ORM 6.6 User Guide의 Associations(@OneToMany), Jakarta Persistence 3.1 OneToMany API(mappedBy). 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .lab-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lab-actions .btn { font-family: var(--mono, monospace); font-size: 13px; }
+  .lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .lab-box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; overflow-x: auto; }
+  .obj { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--code-bg); font-size: 14px; }
+  .obj .tag { font-size: 12px; color: var(--muted); }
+  .obj .tag.owner { color: var(--accent); font-weight: 700; }
+  .lab-box table { width: 100%; font-size: 14px; }
+  #db-fk.null { color: var(--query); font-weight: 700; }
+  #db-fk.set { color: var(--ok); font-weight: 700; }
+  #db-fk.flash, #o-members.flash, #o-team.flash { outline: 2px solid var(--accent); border-radius: 4px; }
+  @media (max-width: 760px) { .lab-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var labels = { id: '팀의 id', null: 'null', error: '저장할 때 예외' };
+  var pred = { p1: store('assoc-p1'), p2: store('assoc-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "null"이에요. 예외도 나지 않아요. 2장에서 "team.getMembers().add(kim)" → "커밋"을 눌러 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('assoc-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 객체와 테이블 */
+  var st;
+  function reset() { st = { inList: false, owner: false, fk: null, committed: false }; }
+  function act(a) {
+    switch (a) {
+      case 'reset': reset(); return '처음 상태예요. kim은 아직 아무 팀에도 속하지 않아요.';
+      case 'addMirror': st.inList = true; return '거울(team.members)에 kim을 넣었어요. 메모리에서는 팀에 속한 것처럼 보여요. 커밋해 보세요.';
+      case 'setOwner': st.owner = true; return '주인(kim.team)을 설정했어요. 그런데 team.members는 그대로예요. 메모리가 어긋났어요.';
+      case 'helper': st.owner = true; st.inList = true; return '편의 메서드가 주인과 거울을 함께 맞췄어요.';
+      case 'removeMirror': st.inList = false; return '거울에서 뺐어요. 주인(kim.team)은 그대로예요. 커밋해 보세요.';
+      case 'clearOwner': st.owner = false; st.inList = false; return '편의 메서드로 주인을 null로 바꾸고 거울에서도 뺐어요.';
+      case 'commit':
+        st.fk = st.owner ? 10 : null; st.committed = true;
+        if (st.inList && !st.owner) return '커밋! team_id는 null이에요. JPA는 주인(kim.team)만 보고 FK를 정해요. 거울에 넣은 건 무시됐어요.';
+        if (!st.inList && st.owner) return '커밋! team_id = 10. 주인 값이 그대로 FK가 됐어요. 거울(team.members)이 비어 있었던 건 DB와 상관없어요. 다만 같은 트랜잭션 안에서는 팀 인원 계산이 틀렸을 거예요.';
+        if (st.inList && st.owner) return '커밋! team_id = 10. 객체와 DB가 모두 일치해요.';
+        return '커밋! 주인이 null이라 team_id는 null이에요.';
+      case 'reload':
+        if (!st.committed) return '아직 커밋하지 않아서 DB에는 저장된 게 없어요.';
+        st.owner = st.fk !== null; st.inList = st.fk !== null;
+        return '새 영속성 컨텍스트에서 DB 값(team_id = ' + (st.fk === null ? 'null' : st.fk) + ')으로 객체를 만들었어요. 이제 양쪽이 DB와 일치해요.';
+    }
+    return '';
+  }
+  function render(msg, a) {
+    document.getElementById('o-members').textContent = st.inList ? '[kim]' : '[]';
+    document.getElementById('o-team').textContent = st.owner ? 'team(10)' : 'null';
+    var fk = document.getElementById('db-fk');
+    fk.textContent = st.committed ? (st.fk === null ? 'null' : String(st.fk)) : '(커밋 전)';
+    fk.className = st.committed ? (st.fk === null ? 'null' : 'set') : '';
+    document.getElementById('db-note').textContent = st.committed ? '' : 'INSERT는 커밋(flush) 때 주인 값으로 나가요.';
+    var mismatch = st.inList !== st.owner;
+    document.getElementById('lab-msg').textContent = msg + (mismatch ? ' (지금 메모리의 양쪽이 서로 달라요.)' : '');
+    if (a === 'commit') { fk.classList.add('flash'); setTimeout(function () { fk.classList.remove('flash'); }, 700); }
+  }
+  reset();
+  render('트랜잭션 안이에요. 0장 코드처럼 "team.getMembers().add(kim)"부터 눌러 보세요.');
+  document.querySelector('.lab-actions').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-act]'); if (!b) return;
+    var a = b.dataset.act; render(act(a), a);
+  });
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: 'Team.members에 mappedBy = "team"이 있다. 연관관계의 주인은?', o: ['Team.members', 'Member.team'], a: 1, e: 'mappedBy는 "주인은 저쪽 필드"라는 뜻이에요. FK가 있는 member 테이블의 엔티티가 주인이에요.' },
+    { q: 'team.getMembers().remove(member)만 하고 커밋하면 member의 team_id는?', o: ['null이 된다', '그대로다'], a: 1, e: '주인이 아닌 쪽의 변경은 DB에 반영되지 않아요. 관계를 끊으려면 member.team을 바꿔야 해요.' },
+    { q: '일대다 단방향(@OneToMany + @JoinColumn)으로 멤버 3명을 저장하면 member 테이블에 나가는 SQL은?', o: ['INSERT 3번', 'INSERT 3번 + UPDATE 3번'], a: 1, e: '팀 엔티티가 다른 테이블의 FK를 관리해서, INSERT 뒤에 UPDATE로 FK를 채워요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('assoc-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('assoc-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
