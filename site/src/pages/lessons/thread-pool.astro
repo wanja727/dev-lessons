@@ -1,6 +1,8 @@
 ---
 import Base from '../../layouts/Base.astro';
 import '../../styles/lesson.css';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
 
 const repo = 'https://github.com/wanja727/dev-lessons';
 const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/concurrency/ThreadPoolTest.java`;
@@ -97,6 +99,8 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
       </div>
       <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 직접 확인할 수 있어요.</p>
     </div>
+    <p>예측을 골랐다면 실제 JVM의 답을 보세요. 같은 풀에 작업을 7개까지 넣으며 넣을 때마다 스레드와 큐 수를 찍은 출력이에요.</p>
+    <CiOutput lesson="thread-pool" key="predict" label="실제 JVM 출력 보기 (예측한 뒤에)" source="ThreadPoolOutputTest.predictExample" />
   </section>
 
   <section id="background" class="read">
@@ -213,6 +217,8 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
         </tbody>
       </table>
     </div>
+    <p><strong>먼저 어림해 보세요.</strong> 200ms 동안 기다리기만 하는 작업 8개를 스레드 1개 풀로 돌리면 약 1600ms예요. 스레드 2개, 4개, 8개면 각각 얼마쯤일까요?</p>
+    <CiOutput lesson="thread-pool" key="timing" label="실제로 잰 시간 보기" source="ThreadPoolOutputTest.measuredTiming" />
     <p>어느 경우든 출발점일 뿐이고, 부하 테스트로 처리량과 대기 시간을 재서 정해요. 자바 21부터는 기다리는 시간이 긴 작업에 가상 스레드도 선택지예요(별도 레슨에서 다룰 예정).</p>
   </section>
 
@@ -252,6 +258,7 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
       <li>execute의 예외는 UncaughtExceptionHandler로, submit의 예외는 get()까지 Future 안에</li>
     </ul>
     <p><a href={test}>ThreadPoolTest</a></p>
+    <RunLocally tests={['lab.devlessons.concurrency.ThreadPoolTest', 'lab.devlessons.concurrency.ThreadPoolOutputTest']} />
   </section>
 
   <footer>
