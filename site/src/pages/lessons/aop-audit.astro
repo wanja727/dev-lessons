@@ -1,0 +1,426 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const testDir = `${repo}/blob/main/verification/src/test/java/lab/devlessons/audit`;
+const mainDir = `${repo}/blob/main/verification/src/main/java/lab/devlessons/audit`;
+
+const codeBefore = `@Transactional
+public void changeLimit(Long accountId, int limit) {
+    Account account = accountRepository.findById(accountId).orElseThrow();
+    String before = "dailyLimit=" + account.getDailyLimit();   // 감사용
+    account.changeLimit(limit);                                // 진짜 일
+    auditRepository.save(new AuditLog(currentUser(), "CHANGE_LIMIT",
+            accountId, before, "dailyLimit=" + limit));        // 감사용
+}
+// 이런 메서드가 30개라면? 하나라도 빠뜨리면 기록이 없어요.`;
+
+const codeAnnotation = `@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Audited {
+    String action();
+    boolean failureInNewTx() default true;
+}
+
+// 서비스: 감사 코드가 한 줄도 없어요
+@Transactional
+@Audited(action = "CHANGE_LIMIT")
+public void changeLimit(Long accountId, int limit) {
+    accounts.findById(accountId).orElseThrow().changeLimit(limit);
+}`;
+
+const codeAspect = `@Aspect
+@Component
+@Order(10)                                   // 트랜잭션(0)보다 안쪽
+public class AuditAspect {
+
+    @Around("@annotation(audited)")          // @Audited가 붙은 메서드만
+    public Object audit(ProceedingJoinPoint pjp, Audited audited) throws Throwable {
+        Long targetId = (Long) pjp.getArgs()[0];
+        String before = snapshot(targetId);
+        try {
+            Object result = pjp.proceed();   // 진짜 메서드 실행
+            writer.writeInCurrentTx(log(audited, targetId, before, snapshot(targetId), "SUCCESS"));
+            return result;
+        } catch (RuntimeException e) {
+            AuditLog failure = log(audited, targetId, before, null, "FAILED");
+            if (audited.failureInNewTx()) writer.writeInNewTx(failure);   // REQUIRES_NEW
+            else writer.writeInCurrentTx(failure);                          // REQUIRED
+            throw e;                         // 예외는 삼키지 않고 다시 던진다
+        }
+    }
+}`;
+
+const codeWriter = `@Component
+public class AuditWriter {
+    @Transactional(propagation = Propagation.REQUIRED)       // 본 작업과 운명 공동체
+    public void writeInCurrentTx(AuditLog log) { repository.save(log); }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)   // 따로 커밋
+    public void writeInNewTx(AuditLog log) { repository.save(log); }
+}`;
+
+const codeOrder = `@Configuration
+@EnableTransactionManagement(order = 0)   // 트랜잭션 어드바이스를 가장 바깥에
+public class AuditTxConfig { }`;
+---
+<Base title="AOP와 감사 로그 · Dev Lessons" description="스프링 AOP로 서비스 코드를 건드리지 않고 감사 로그를 남기고, 실패 기록이 롤백과 함께 사라지는 함정과 REQUIRES_NEW, 어드바이스 순서를 시뮬레이터로 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a> (프록시)</p>
+    <h1>AOP와 감사 로그</h1>
+    <p class="lede">금융, 결제, 관리자 기능에는 "누가, 언제, 무엇을, 어떻게 바꿨나"를 남기는 <strong>감사 로그</strong>가 필요해요. 메서드마다 직접 쓰면 빠뜨리고, 실패한 시도는 롤백과 함께 기록까지 사라져요. AOP로 한 곳에 모으고, 트랜잭션과의 관계를 시뮬레이터로 확인해요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#why"><span>1</span>왜 AOP인가</a>
+      <a href="#aspect"><span>2</span>애스펙트 만들기</a>
+      <a href="#sim"><span>3</span>시뮬레이터</a>
+      <a href="#order"><span>4</span>어드바이스 순서</a>
+      <a href="#traps"><span>5</span>함정</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>실패한 시도는 기록될까요?</h2>
+    <p>관리자가 계좌 한도를 -1로 바꾸려다 예외가 났어요. 서비스 메서드에는 @Transactional이 있고, 감사 로그는 같은 트랜잭션에서 <code>auditRepository.save()</code>로 남겨요(예외를 잡아 FAILED로 저장한 뒤 다시 던짐).</p>
+    <div class="panel">
+      <div class="field">
+        <span class="label">요청이 끝나면 audit_log에는</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="kept" aria-pressed="false">FAILED 기록이 남는다</button>
+          <button class="chip" type="button" data-v="lost" aria-pressed="false">아무것도 없다</button>
+          <button class="chip" type="button" data-v="success" aria-pressed="false">SUCCESS가 남는다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="why" class="read">
+    <p class="eyebrow">1 · 왜 AOP인가</p>
+    <h2>감사 로그는 "모든 곳에 똑같이" 필요한 일이에요</h2>
+    <p>감사 로그를 서비스마다 직접 쓰면 이렇게 돼요.</p>
+    <pre set:text={codeBefore} />
+    <ul>
+      <li>진짜 일은 한 줄인데 감사 코드가 더 길어요.</li>
+      <li>새 메서드를 만들 때 하나라도 빠뜨리면 기록이 없어요. 감사에서 "기록이 없다"는 사고예요.</li>
+      <li>형식(전후 값을 어떻게 남길지)이 메서드마다 조금씩 달라져요.</li>
+    </ul>
+    <p>트랜잭션, 로그, 권한 검사처럼 여러 곳에 똑같이 필요한 기능을 <strong>횡단 관심사</strong>라고 해요. AOP는 이걸 <strong>애스펙트</strong> 한 곳에 모아 두고, 프록시가 메서드 호출 앞뒤에 끼워 넣게 해요. @Transactional도 같은 방식으로 동작해요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>용어</th><th>뜻</th><th>이 레슨에서</th></tr></thead>
+        <tbody>
+          <tr><td>애스펙트 (Aspect)</td><td>횡단 관심사를 모은 클래스</td><td>AuditAspect</td></tr>
+          <tr><td>포인트컷 (Pointcut)</td><td>어디에 적용할지 고르는 식</td><td><code>@annotation(audited)</code>: @Audited가 붙은 메서드</td></tr>
+          <tr><td>어드바이스 (Advice)</td><td>무엇을, 언제 할지</td><td>@Around: 실행 전후를 모두 감쌈</td></tr>
+          <tr><td>조인 포인트 (Join point)</td><td>끼어드는 지점</td><td>스프링 AOP에서는 메서드 실행</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="aspect" class="read">
+    <p class="eyebrow">2 · 애스펙트 만들기</p>
+    <h2>어노테이션 하나로 감사 대상을 표시해요</h2>
+    <p>먼저 "이 메서드는 감사 대상"이라는 표시를 만들고, 서비스에는 그 표시만 붙여요.</p>
+    <pre set:text={codeAnnotation} />
+    <p>애스펙트는 @Around로 메서드 실행을 감싸요. <code>pjp.proceed()</code>가 진짜 메서드를 실행하는 줄이에요. 그 앞에서 변경 전 값을, 뒤에서 변경 후 값을 읽어요.</p>
+    <pre set:text={codeAspect} />
+    <p>누가 했는지는 보통 Spring Security의 SecurityContext에서 꺼내요. 이 레슨의 검증 코드는 간단하게 ThreadLocal(<code>CurrentActor</code>)을 써요.</p>
+    <p>저장은 별도 빈에 맡겨요. 같은 애스펙트 안의 메서드에 @Transactional을 붙이면 <a href="/dev-lessons/lessons/transactional-proxy/">내부 호출</a>이라 적용되지 않기 때문이에요.</p>
+    <pre set:text={codeWriter} />
+    <p class="callout"><strong>예외는 꼭 다시 던져요.</strong> 애스펙트가 예외를 삼키면 바깥의 트랜잭션 프록시는 정상 종료로 보고 커밋해 버려요. 감사 로그 때문에 비즈니스 동작이 바뀌면 안 돼요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 시뮬레이터</p>
+      <h2>요청이 끝난 뒤 DB에 무엇이 남나</h2>
+      <p>계좌의 처음 한도는 100이에요. 조건을 바꿔 가며 결과를 보세요. 안쪽 상자부터 실행되고, 바깥 상자가 마지막에 커밋하거나 롤백해요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">호출 경로</span>
+        <div class="seg" id="s-path">
+          <button type="button" data-v="proxy" aria-pressed="true">컨트롤러 → 서비스 (프록시 경유)</button>
+          <button type="button" data-v="self" aria-pressed="false">같은 클래스 안에서 호출</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">요청</span>
+        <div class="seg" id="s-input">
+          <button type="button" data-v="ok" aria-pressed="true">한도 500으로 변경 (성공)</button>
+          <button type="button" data-v="fail" aria-pressed="false">한도 -1로 변경 (예외)</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">실패 기록 방식</span>
+        <div class="seg" id="s-mode">
+          <button type="button" data-v="new" aria-pressed="true">REQUIRES_NEW (새 트랜잭션)</button>
+          <button type="button" data-v="same" aria-pressed="false">REQUIRED (같은 트랜잭션)</button>
+        </div>
+      </div>
+
+      <div class="layers" aria-hidden="true">
+        <div class="layer" id="l-tx"><span class="tag">트랜잭션 어드바이스 · order 0</span>
+          <div class="layer" id="l-audit"><span class="tag">감사 애스펙트 · order 10</span>
+            <div class="layer" id="l-target"><span class="tag">changeLimit() 본문</span></div>
+          </div>
+        </div>
+        <div class="layer side" id="l-new"><span class="tag">REQUIRES_NEW 트랜잭션 (따로 커밋)</span></div>
+      </div>
+
+      <ol class="path-steps" id="sim-steps"></ol>
+
+      <div class="db">
+        <div>
+          <span class="label">limit_account</span>
+          <table><thead><tr><th>id</th><th>daily_limit</th></tr></thead><tbody id="db-account"></tbody></table>
+        </div>
+        <div>
+          <span class="label">audit_log</span>
+          <table><thead><tr><th>actor</th><th>action</th><th>before → after</th><th>status</th></tr></thead><tbody id="db-audit"></tbody></table>
+        </div>
+      </div>
+      <p class="callout" id="sim-result" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section id="order" class="read">
+    <p class="eyebrow">4 · 어드바이스 순서</p>
+    <h2>트랜잭션이 감사 애스펙트를 감싸야 해요</h2>
+    <p>한 메서드에 프록시 기능이 여러 개 걸리면 <strong>order 값이 작은 쪽이 바깥</strong>에서 먼저 시작하고 마지막에 끝나요. 순서를 정하지 않으면 스프링은 순서를 보장하지 않아요. 그래서 둘 다 명시해요.</p>
+    <pre set:text={codeOrder} />
+    <p>이 순서(트랜잭션 0, 감사 10)일 때 얻는 것:</p>
+    <ul>
+      <li><strong>성공 기록이 본 작업과 원자적이에요.</strong> SUCCESS 로그는 같은 트랜잭션(REQUIRED)에 저장돼요. 로그 저장이 실패하면 본 작업도 롤백돼요. "기록 없는 변경"이 생기지 않아요.</li>
+      <li><strong>실패 기록은 골라야 해요.</strong> 예외가 감사 애스펙트를 지나갈 때 트랜잭션은 아직 열려 있고, 곧 롤백돼요. 같은 트랜잭션에 쓰면 함께 사라지고, REQUIRES_NEW로 쓰면 따로 커밋돼서 남아요.</li>
+    </ul>
+    <p>REQUIRES_NEW는 바깥 트랜잭션을 잠시 멈추고 <strong>DB 커넥션을 하나 더</strong> 써요. 실패할 때만 쓰니 부담은 작지만, 커넥션 풀이 작은데 동시 실패가 몰리면 풀이 마를 수 있다는 점은 알아 두세요.</p>
+  </section>
+
+  <section id="traps" class="read">
+    <p class="eyebrow">5 · 함정</p>
+    <h2>감사 로그가 조용히 빠지는 경우</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>결과</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><td>실패 기록을 같은 트랜잭션에 저장</td><td>롤백과 함께 사라짐. "누가 시도했는지"를 모름</td><td>실패 기록은 REQUIRES_NEW</td></tr>
+          <tr><td>같은 클래스 안에서 @Audited 메서드 호출</td><td>변경은 되는데 기록이 없음</td><td>감사 대상은 밖에서 부르도록 구조를 나눔</td></tr>
+          <tr><td>private 메서드, new로 만든 객체</td><td>프록시가 없어 기록 없음</td><td>public 빈 메서드에만 붙임</td></tr>
+          <tr><td>애스펙트에서 예외를 삼킴</td><td>트랜잭션이 커밋되어 실패한 변경이 반영됨</td><td>기록 후 반드시 다시 던짐</td></tr>
+          <tr><td>순서를 정하지 않음</td><td>환경에 따라 트랜잭션 안팎이 바뀜</td><td>@Order와 @EnableTransactionManagement(order) 명시</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>JPA 엔티티의 변경 이력만 필요하다면 Hibernate Envers나 Spring Data의 @CreatedBy, @LastModifiedDate 같은 도구도 있어요. 다만 이것들은 "성공한 변경"만 남기고, 실패한 시도나 조회 기록(누가 개인정보를 열람했나)은 남기지 못해요. 그래서 업무 단위 감사에는 AOP 방식을 함께 써요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "감사 로그를 어떻게 남기셨나요? AOP로 할 때 주의할 점은?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 감사 로그는 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>감사 로그는 누가, 언제, 어떤 대상을, 어떤 값에서 어떤 값으로 바꿨는지와 성공 여부를 남기는 기록이고, 여러 서비스에 똑같이 필요한 횡단 관심사라 AOP로 한 곳에 모았습니다.</dd>
+        <dt>원리</dt><dd>@Audited 어노테이션을 포인트컷으로 쓰는 @Around 애스펙트가 실행 전후 값을 읽어 기록합니다. 트랜잭션 어드바이스를 바깥(order 0), 감사 애스펙트를 안쪽(order 10)에 두어 성공 기록은 본 작업과 같은 트랜잭션에 원자적으로 남기고, 실패 기록은 롤백과 함께 사라지지 않도록 REQUIRES_NEW로 따로 커밋합니다. 예외는 기록 후 다시 던집니다.</dd>
+        <dt>트레이드오프</dt><dd>프록시 기반이라 같은 클래스 안의 호출이나 private 메서드는 기록되지 않고, REQUIRES_NEW는 커넥션을 하나 더 씁니다. 엔티티 변경 이력만 필요하면 Envers도 있지만 실패한 시도는 남지 않습니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 권한 변경 실패 시도가 기록에 없던 문제를 찾아 실패 기록을 REQUIRES_NEW로 분리했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 어드바이스 순서(트랜잭션이 바깥)와 실패 기록의 트랜잭션 분리를 말했나요? 내부 호출에서 빠진다는 한계를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>Spring Boot 3.5와 실제 PostgreSQL(Testcontainers)에서 요청이 끝난 뒤 DB에 남은 행으로 확인해요.</p>
+    <ul>
+      <li>@Audited 메서드를 부르면 actor, action, 변경 전후 값(100 → 500), SUCCESS가 남음</li>
+      <li>서비스 빈은 프록시이고, 서비스 코드에는 감사 코드가 없음</li>
+      <li>실패 기록을 같은 트랜잭션에 쓰면 본 작업과 함께 롤백되어 audit_log가 비어 있음 (애스펙트가 트랜잭션 안쪽이라는 증거)</li>
+      <li>실패 기록을 REQUIRES_NEW로 쓰면 한도는 100 그대로, FAILED 행과 에러 메시지는 남음</li>
+      <li>같은 클래스 안에서 부르면 한도는 바뀌지만 audit_log는 비어 있음</li>
+    </ul>
+    <p><a href={`${testDir}/AuditAspectTest.java`}>AuditAspectTest</a> · <a href={`${mainDir}/AuditAspect.java`}>AuditAspect</a></p>
+  </section>
+
+  <footer>
+    근거: Spring Framework 참조 문서의 @AspectJ support, Declaring Advice(Advice Ordering), Transaction Propagation. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .layers { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 10px; }
+  .layer { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.2s, background 0.2s; }
+  .layer .tag { font-size: 13px; color: var(--muted); }
+  .layer.on { border-color: var(--accent); background: var(--accent-soft); }
+  .layer.on > .tag { color: var(--ink); font-weight: 700; }
+  .layer.commit { border-color: var(--ok); }
+  .layer.rollback { border-color: var(--query); border-style: dashed; }
+  .layer.off { opacity: 0.4; }
+  .layer.side { align-self: start; }
+  .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .db { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 12px; }
+  .db > div { min-width: 0; overflow-x: auto; }
+  .db table { width: 100%; font-size: 13px; }
+  .db td.empty { color: var(--muted); }
+  .db .st-ok { color: var(--ok); font-weight: 700; }
+  .db .st-fail { color: var(--query); font-weight: 700; }
+  @media (max-width: 760px) {
+    .layers, .db { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var labels = { kept: 'FAILED 기록이 남는다', lost: '아무것도 없다', success: 'SUCCESS가 남는다' };
+  var pred = { p1: store('aop-p1'), p2: store('aop-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "아무것도 없다"예요. FAILED 행도 같은 트랜잭션이라 롤백과 함께 사라져요. 3장에서 "REQUIRED"를 골라 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('aop-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 시뮬레이터 */
+  var st = { path: 'proxy', input: 'ok', mode: 'new' };
+  function simulate() {
+    var steps = [], limit = 100, logs = [], layers = { tx: 'on', audit: 'on', target: 'on', neu: 'off' }, result;
+    var ok = st.input === 'ok', newLimit = ok ? 500 : -1;
+    if (st.path === 'self') {
+      layers.audit = 'off';
+      steps.push('컨트롤러가 같은 클래스의 다른 @Transactional 메서드를 불러요. 프록시가 트랜잭션을 열어요.');
+      steps.push('그 안에서 this.changeLimit()을 불러요. 진짜 객체 안이라 감사 애스펙트를 거치지 않아요.');
+      if (ok) {
+        steps.push('한도가 ' + newLimit + '(으)로 바뀌고 트랜잭션이 커밋돼요.');
+        limit = newLimit; layers.tx = 'commit';
+        result = '한도는 바뀌었는데 감사 로그는 없어요. 가장 위험한 경우예요. 테스트 selfInvocationIsNotAudited가 확인해요.';
+      } else {
+        steps.push('예외가 나서 트랜잭션이 롤백돼요. 애스펙트를 거치지 않았으니 FAILED 기록도 없어요.');
+        layers.tx = 'rollback';
+        result = '변경도 기록도 없어요. 누가 시도했는지 알 수 없어요.';
+      }
+      return { steps: steps, limit: limit, logs: logs, layers: layers, result: result };
+    }
+    steps.push('트랜잭션 프록시(order 0)가 트랜잭션을 열어요.');
+    steps.push('감사 애스펙트(order 10)가 변경 전 값을 읽어요: dailyLimit=100.');
+    if (ok) {
+      steps.push('pjp.proceed()로 본문 실행. 한도가 500으로 바뀌어요(아직 커밋 전).');
+      steps.push('애스펙트가 변경 후 값을 읽고 SUCCESS 행을 같은 트랜잭션(REQUIRED)에 저장해요.');
+      steps.push('트랜잭션 프록시가 커밋해요. 한도 변경과 SUCCESS 기록이 함께 반영돼요.');
+      limit = 500; logs.push(['admin-kim', 'CHANGE_LIMIT', 'dailyLimit=100 → dailyLimit=500', 'SUCCESS']);
+      layers.tx = 'commit';
+      result = '변경과 기록이 한 트랜잭션이에요. 기록 저장이 실패하면 변경도 롤백되니 "기록 없는 변경"이 생기지 않아요.';
+    } else {
+      steps.push('pjp.proceed()에서 예외: 한도는 0 이상이어야 합니다.');
+      if (st.mode === 'new') {
+        steps.push('애스펙트가 예외를 잡고 FAILED 행을 REQUIRES_NEW로 저장해요. 바깥 트랜잭션은 잠시 멈추고, 새 트랜잭션이 바로 커밋돼요.');
+        steps.push('애스펙트가 예외를 다시 던져요.');
+        steps.push('트랜잭션 프록시가 예외를 보고 롤백해요. 한도 변경만 취소돼요.');
+        logs.push(['admin-kim', 'CHANGE_LIMIT', 'dailyLimit=100 → (없음)', 'FAILED']);
+        layers.neu = 'commit';
+        result = '한도는 100 그대로, FAILED 기록은 남아요. "누가 언제 무엇을 시도했고 왜 실패했나"를 알 수 있어요.';
+      } else {
+        steps.push('애스펙트가 예외를 잡고 FAILED 행을 같은 트랜잭션(REQUIRED)에 저장해요.');
+        steps.push('애스펙트가 예외를 다시 던져요.');
+        steps.push('트랜잭션 프록시가 롤백해요. 방금 저장한 FAILED 행도 같은 트랜잭션이라 함께 사라져요.');
+        result = 'audit_log가 비어 있어요. 기록 코드는 실행됐는데 남지 않았어요. 0장의 정답이에요.';
+      }
+      layers.tx = 'rollback';
+    }
+    return { steps: steps, limit: limit, logs: logs, layers: layers, result: result };
+  }
+  function render() {
+    var r = simulate();
+    var map = { tx: 'l-tx', audit: 'l-audit', target: 'l-target', neu: 'l-new' };
+    Object.keys(map).forEach(function (k) {
+      var el = document.getElementById(map[k]);
+      el.classList.remove('on', 'commit', 'rollback', 'off');
+      var s = r.layers[k];
+      el.classList.add(s);
+      if (s === 'commit' || s === 'rollback') el.classList.add('on');
+    });
+    document.getElementById('sim-steps').innerHTML = r.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+    document.getElementById('db-account').innerHTML = '<tr><td>1</td><td>' + r.limit + '</td></tr>';
+    document.getElementById('db-audit').innerHTML = r.logs.length
+      ? r.logs.map(function (l) { return '<tr><td>' + esc(l[0]) + '</td><td>' + esc(l[1]) + '</td><td>' + esc(l[2]) + '</td><td class="' + (l[3] === 'SUCCESS' ? 'st-ok' : 'st-fail') + '">' + l[3] + '</td></tr>'; }).join('')
+      : '<tr><td class="empty" colspan="4">(행 없음)</td></tr>';
+    document.getElementById('sim-result').innerHTML = '<strong>결과:</strong> ' + esc(r.result);
+    document.getElementById('s-mode').closest('.field').style.opacity = (st.input === 'fail' && st.path === 'proxy') ? '1' : '0.5';
+  }
+  pressGroup(document.getElementById('s-path'), function (v) { st.path = v; render(); });
+  pressGroup(document.getElementById('s-input'), function (v) { st.input = v; render(); });
+  pressGroup(document.getElementById('s-mode'), function (v) { st.mode = v; render(); });
+  render();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: '트랜잭션이 감사 애스펙트를 감싸는 순서에서, 실패 기록을 같은 트랜잭션(REQUIRED)에 저장하면?', o: ['FAILED 기록이 남는다', '롤백과 함께 사라진다'], a: 1, e: '예외가 애스펙트를 지날 때 트랜잭션은 아직 열려 있고, 곧 통째로 롤백돼요. 실패 기록은 REQUIRES_NEW로 따로 커밋해야 남아요.' },
+    { q: '애스펙트가 예외를 잡아 기록한 뒤 다시 던지지 않으면?', o: ['트랜잭션 프록시가 정상 종료로 보고 커밋한다', '트랜잭션이 자동으로 롤백된다'], a: 0, e: '바깥의 트랜잭션 프록시는 예외를 보지 못하니 커밋해요. 감사 기능이 비즈니스 결과를 바꾸면 안 돼요.' },
+    { q: '@Audited 메서드를 같은 클래스의 다른 public 메서드에서 부르면?', o: ['감사 로그가 남는다', '변경은 되지만 감사 로그는 남지 않는다'], a: 1, e: '감사 애스펙트도 프록시로 동작해요. this 호출은 프록시를 거치지 않아요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('aop-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('aop-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
