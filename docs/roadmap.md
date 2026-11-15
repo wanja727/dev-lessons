@@ -5,30 +5,30 @@
 
 ```mermaid
 flowchart LR
-  PC[영속성 컨텍스트] --> PX[프록시와 지연 로딩]
+  PC[영속성 컨텍스트 ✅] --> PX[프록시와 지연 로딩 ✅]
   PX --> N1[N+1 문제 ✅]
-  PC --> AM[연관관계 매핑]
-  TX[@Transactional 동작 원리] --> TP[전파와 롤백 규칙]
-  TX --> OSIV[OSIV]
+  PC --> AM[연관관계 매핑 ✅]
+  TX[@Transactional 동작 원리 ✅] --> TP[전파와 롤백 규칙 ✅]
+  TX --> OSIV[OSIV ✅]
   PX --> OSIV
-  ISO[격리 수준] --> LOCK[낙관적 락 vs 비관적 락]
+  ISO[격리 수준 ✅] --> LOCK[낙관적 락 vs 비관적 락 ✅]
   PC --> LOCK
-  IDX[인덱스와 실행계획]
-  TX --> IDEM[멱등성과 중복 요청 방지]
-  TX --> BATCH[스프링 배치]
-  ISO --> DML[대량 DML]
-  TX --> AOP[AOP와 감사 로그]
-  PT[프로세스와 스레드] --> EX[스레드 풀과 ExecutorService]
-  PT --> FU[Future와 Callable]
+  IDX[인덱스와 실행계획 ✅]
+  TX --> IDEM[멱등성과 중복 요청 방지 ✅]
+  TX --> BATCH[스프링 배치 ✅]
+  ISO --> DML[대량 DML ✅]
+  TX --> AOP[AOP와 감사 로그 ✅]
+  PT[프로세스와 스레드 ✅] --> EX[스레드 풀과 ExecutorService ✅]
+  PT --> FU[Future와 Callable ✅]
   EX --> FU
-  FU --> CF[CompletableFuture]
-  PT --> SYNC[동기화: synchronized, volatile, 원자적 연산]
+  FU --> CF[CompletableFuture ✅]
+  PT --> SYNC[동기화: synchronized, volatile, 원자적 연산 ✅]
   SYNC --> LOCK
 ```
 
 ## 제작 순서
 
-4주 학습 계획(1주 멱등성·트랜잭션, 2주 동시성·락, 3주 조회 성능·인덱스, 4주 스프링 배치)과 KG 2차 면접 대비에 맞춘 순서. 레슨마다 PR을 열어 두고 다음 레슨으로 넘어가며, 검수와 병합은 몰아서 한다.
+4주 학습 계획(1주 멱등성·트랜잭션, 2주 동시성·락, 3주 조회 성능·인덱스, 4주 스프링 배치)과 KG 2차 면접 대비에 맞춘 순서. 레슨마다 PR을 열어 두고 다음 레슨으로 넘어가며, 검수와 병합은 몰아서 한다. 2026-11-15에 1~15번을 모두 공개했다.
 
 | 순서 | 레슨 | 단원 | 선수 | 이슈 | 상태 |
 | --- | --- | --- | --- | --- | --- |
@@ -36,20 +36,20 @@ flowchart LR
 | - | N+1 문제 | JPA | 프록시와 지연 로딩 | #10 | 공개 |
 | - | 프로세스와 스레드 | 운영체제 | 없음 | #12 | 공개 |
 | - | Future와 Callable | 동시성 | 프로세스와 스레드 | #13 | 공개 |
-| 1 | 스레드 풀과 ExecutorService | 동시성 | 프로세스와 스레드 | #14 | 대기 |
-| 2 | @Transactional 동작 원리와 내부 호출 | Spring | 없음 | #2 | 대기 |
-| 3 | 멱등성과 중복 요청 방지 | Spring | @Transactional | #18 | 대기 |
-| 4 | 동기화 (synchronized, volatile, 원자적 연산) | 동시성 | 프로세스와 스레드 | #16 | 대기 |
-| 5 | 격리 수준과 이상 현상 | DB | 없음 | #4 | 대기 |
-| 6 | 낙관적 락 vs 비관적 락 | 동시성 | 격리 수준, 영속성 컨텍스트 | #5 | 대기 |
-| 7 | 스프링 배치: 청크 처리와 재시작 | Batch | @Transactional | #19 | 대기 |
-| 8 | 대량 DML 안전하게 하기 | DB | 격리 수준 | #20 | 대기 |
-| 9 | CompletableFuture | 동시성 | Future와 Callable | #15 | 대기 |
-| 10 | 인덱스와 실행계획 | DB | 없음 | #6 | 대기 |
-| 11 | AOP와 감사 로그 | Spring | @Transactional | #21 | 대기 |
-| 12 | 트랜잭션 전파와 롤백 규칙 | Spring | @Transactional | #3 | 대기 |
-| 13 | 프록시와 지연 로딩 | JPA | 영속성 컨텍스트 | #7 | 대기 |
-| 14 | OSIV | Spring | @Transactional, 프록시 | #8 | 대기 |
-| 15 | 연관관계 주인과 양방향 매핑 | JPA | 영속성 컨텍스트 | #9 | 대기 |
+| 1 | 스레드 풀과 ExecutorService | 동시성 | 프로세스와 스레드 | #14 | 공개 |
+| 2 | @Transactional 동작 원리와 내부 호출 | Spring | 없음 | #2 | 공개 |
+| 3 | 멱등성과 중복 요청 방지 | Spring | @Transactional | #18 | 공개 |
+| 4 | 동기화 (synchronized, volatile, 원자적 연산) | 동시성 | 프로세스와 스레드 | #16 | 공개 |
+| 5 | 격리 수준과 이상 현상 | DB | 없음 | #4 | 공개 |
+| 6 | 낙관적 락 vs 비관적 락 | 동시성 | 격리 수준, 영속성 컨텍스트 | #5 | 공개 |
+| 7 | 스프링 배치: 청크 처리와 재시작 | Batch | @Transactional | #19 | 공개 |
+| 8 | 대량 DML 안전하게 하기 | DB | 격리 수준 | #20 | 공개 |
+| 9 | CompletableFuture | 동시성 | Future와 Callable | #15 | 공개 |
+| 10 | 인덱스와 실행계획 | DB | 없음 | #6 | 공개 |
+| 11 | AOP와 감사 로그 | Spring | @Transactional | #21 | 공개 |
+| 12 | 트랜잭션 전파와 롤백 규칙 | Spring | @Transactional | #3 | 공개 |
+| 13 | 프록시와 지연 로딩 | JPA | 영속성 컨텍스트 | #7 | 공개 |
+| 14 | OSIV | Spring | @Transactional, 프록시 | #8 | 공개 |
+| 15 | 연관관계 주인과 양방향 매핑 | JPA | 영속성 컨텍스트 | #9 | 공개 |
 
 KG파이낸셜 1차 면접에서 막힌 주제: 프로세스와 스레드, Future, 스프링 배치, 대량 DML, AOP와 감사 로그 (`priority:interview-gap` 라벨).
