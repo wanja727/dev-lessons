@@ -113,20 +113,20 @@ class RedisRankingTest {
         redis.zadd("plain", 100, "bob");
         List<String> plain = redis.zrevrange("plain", 0, -1);
 
-        // bob이 먼저(10시), alice가 나중(11시) 100점 달성: 점수 = 포인트 x 10^10 + (기준 시각 - 달성 시각)
+        // alice가 먼저(10시), bob이 나중(11시) 100점 달성. 이름 순서(bob 먼저)와 반대: 점수 = 포인트 x 10^10 + (기준 시각 - 달성 시각)
         long base = 9_999_999_999L;
-        long bobAt = 1_700_000_000L; // 초 단위 시각
-        long aliceAt = 1_700_003_600L;
+        long aliceAt = 1_700_000_000L; // 초 단위 시각
+        long bobAt = 1_700_003_600L;
         redis.zadd("tiebreak", 100 * 10_000_000_000d + (base - bobAt), "bob");
         redis.zadd("tiebreak", 100 * 10_000_000_000d + (base - aliceAt), "alice");
         redis.zadd("tiebreak", 99 * 10_000_000_000d + (base - 1_600_000_000L), "carol");
         List<String> withTime = redis.zrevrange("tiebreak", 0, -1);
 
         assertThat(plain).containsExactly("bob", "alice");
-        assertThat(withTime).containsExactly("bob", "alice", "carol");
-        CiOutput.record(LESSON, "tie", "[둘 다 100점, bob이 1시간 먼저 달성]\n"
+        assertThat(withTime).containsExactly("alice", "bob", "carol");
+        CiOutput.record(LESSON, "tie", "[둘 다 100점, alice가 1시간 먼저 달성]\n"
                 + "점수만: ZREVRANGE → " + plain + " (이름 사전 역순)\n"
-                + "점수 + 시간: ZREVRANGE → " + withTime + " (먼저 달성한 bob 앞, 99점 carol은 뒤)");
+                + "점수 + 시간: ZREVRANGE → " + withTime + " (먼저 달성한 alice 앞, 99점 carol은 뒤)");
     }
 
     @Test
