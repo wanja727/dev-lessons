@@ -94,7 +94,7 @@ class TransactionalOutboxTest {
     }
 
     @Test
-    @DisplayName("AFTER_COMMIT 리스너: 커밋 뒤 보내기가 실패하면 주문은 남고 메시지는 사라진다")
+    @DisplayName("AFTER_COMMIT 리스너: 커밋 뒤 보내기가 실패하면 주문은 남고 메시지는 사라진다. 호출한 쪽은 예외를 받지 않는다")
     void afterCommitLosesMessageWhenBrokerDown() {
         broker.setDown(true);
 
@@ -107,6 +107,7 @@ class TransactionalOutboxTest {
         }
         broker.setDown(false);
 
+        assertThat(outcome).contains("예외 없이"); // 커밋 뒤 리스너의 예외는 스프링이 로그로만 남긴다
         assertThat(orders.count()).isEqualTo(1);
         assertThat(broker.received()).isEmpty();
         CiOutput.record(LESSON, "after-commit-lost", "[AFTER_COMMIT + 브로커 장애]\n" + outcome + "\n" + state());
