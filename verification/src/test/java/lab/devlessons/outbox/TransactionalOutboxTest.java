@@ -113,6 +113,14 @@ class TransactionalOutboxTest {
     }
 
     @Test
+    @DisplayName("AFTER_COMMIT 리스너: 트랜잭션 밖에서 발행한 이벤트는 기본 설정에서 아무 일도 하지 않는다")
+    void afterCommitIgnoresEventWithoutTransaction() {
+        afterCommit.publishWithoutTransaction("{\"orderId\":0}");
+
+        assertThat(broker.received()).isEmpty();
+    }
+
+    @Test
     @DisplayName("아웃박스: 롤백되면 주문과 아웃박스 행이 함께 사라진다")
     void outboxRollsBackTogether() {
         assertThatThrownBy(() -> outboxService.place("커피", true)).isInstanceOf(IllegalStateException.class);

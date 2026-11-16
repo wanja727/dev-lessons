@@ -62,6 +62,11 @@ public final class OrderServices {
             }
             return order.getId();
         }
+
+        /** 트랜잭션 없이 이벤트를 발행한다 (함정 재현용) */
+        public void publishWithoutTransaction(String payload) {
+            events.publishEvent(new OrderPlaced(null, payload));
+        }
     }
 
     public record OrderPlaced(Long orderId, String payload) {
