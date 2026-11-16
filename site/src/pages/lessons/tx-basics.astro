@@ -1,0 +1,464 @@
+---
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/txbasics/TransactionBasicsTest.java`;
+
+const codePredict = `-- 처음: kim 잔액 50, lee 잔액 0
+-- 잔액은 0보다 작아질 수 없다 (CHECK (balance >= 0))
+-- kim이 lee에게 100을 보낸다
+
+UPDATE account SET balance = balance + 100 WHERE owner = 'lee';  -- ① lee에게 더하기
+UPDATE account SET balance = balance - 100 WHERE owner = 'kim';  -- ② kim에게서 빼기 → 잔액 부족으로 실패`;
+
+const codeTx = `BEGIN;                                                            -- 트랜잭션 시작
+UPDATE account SET balance = balance + 100 WHERE owner = 'lee';
+UPDATE account SET balance = balance - 100 WHERE owner = 'kim';
+COMMIT;                                                           -- 둘 다 확정
+-- 중간에 실패했다면 COMMIT 대신 ROLLBACK;                        -- 둘 다 취소`;
+
+const codeJdbc = `Connection conn = dataSource.getConnection();
+conn.setAutoCommit(false);          // 자동 커밋 끄기 = 트랜잭션 시작
+try {
+    deposit(conn, "lee", 100);
+    withdraw(conn, "kim", 100);
+    conn.commit();                  // 둘 다 확정
+} catch (SQLException e) {
+    conn.rollback();                // 둘 다 취소
+    throw e;
+}`;
+
+const codeSpring = `@Service
+public class TransferService {
+
+    @Transactional                  // 메서드 시작에 BEGIN, 정상 종료면 COMMIT,
+    public void transfer(long from, long to, int amount) {   // 런타임 예외면 ROLLBACK
+        jdbc.update("UPDATE account SET balance = balance + ? WHERE id = ?", amount, to);
+        jdbc.update("UPDATE account SET balance = balance - ? WHERE id = ?", amount, from);
+    }
+}`;
+---
+<Base title="트랜잭션 기초 · Dev Lessons" description="계좌 이체 예제로 트랜잭션, 커밋, 롤백, 자동 커밋, 커밋 전 변경의 가시성을 직접 실행하며 배워요. 스프링·JPA 트랜잭션 레슨의 출발점.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">DB · 기초 · 약 25분 · 선수 레슨 없음</p>
+    <h1>트랜잭션 기초</h1>
+    <p class="lede">돈을 보내는 일은 SQL 두 줄이에요. 한쪽에 더하고, 한쪽에서 빼요. 그런데 첫 줄만 되고 둘째 줄이 실패하면? 이 레슨은 여러 SQL을 <strong>"전부 아니면 전무"</strong>로 묶는 방법, 트랜잭션을 처음부터 다뤄요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> SQL의 SELECT와 UPDATE, 자바의 예외(try-catch). 나머지는 여기서 설명해요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#why"><span>1</span>트랜잭션이란</a>
+      <a href="#sim"><span>2</span>이체 실행해 보기</a>
+      <a href="#visible"><span>3</span>커밋 전에는 남에게 안 보여요</a>
+      <a href="#run"><span>4</span>진짜 PostgreSQL로 실행</a>
+      <a href="#code"><span>5</span>코드에서는</a>
+      <a href="#acid"><span>6</span>ACID와 함정</a>
+      <a href="#check"><span>7</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>둘째 줄이 실패하면 잔액은?</h2>
+    <p>DB에 SQL을 한 줄씩 보냈어요. 아무 설정도 하지 않았어요.</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">②가 실패한 뒤 잔액은</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="orig" aria-pressed="false">kim 50, lee 0 (처음 그대로)</button>
+          <button class="chip" type="button" data-v="half" aria-pressed="false">kim 50, lee 100</button>
+          <button class="chip" type="button" data-v="neg" aria-pressed="false">kim -50, lee 100</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 한 줄씩 실행해 확인할 수 있어요.</p>
+    </div>
+    <CiOutput lesson="tx-basics" key="autocommit" label="실제 PostgreSQL 결과 보기 (예측한 뒤에)" source="TransactionBasicsTest.autoCommitLeavesHalfDone" />
+  </section>
+
+  <section id="why" class="read">
+    <p class="eyebrow">1 · 트랜잭션이란</p>
+    <h2>여러 SQL을 한 덩어리로 묶는 것</h2>
+    <p>0장처럼 아무 설정 없이 보내면, DB는 SQL <strong>한 줄이 끝날 때마다 바로 확정</strong>해요. 이걸 <strong>자동 커밋</strong>이라고 해요. 그래서 ①은 이미 확정됐고, ②만 실패해요. 결과는 kim 50, lee 100. <strong>없던 돈 100이 생겼어요.</strong></p>
+    <p><strong>트랜잭션</strong>은 여러 SQL을 하나의 작업 단위로 묶는 거예요. 묶인 SQL은 모두 반영되거나, 하나도 반영되지 않아요. 중간 상태는 남지 않아요.</p>
+    <pre set:text={codeTx} />
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>용어</th><th>뜻</th></tr></thead>
+        <tbody>
+          <tr><td><code>BEGIN</code></td><td>트랜잭션을 시작해요. 이제부터의 변경은 "임시"예요.</td></tr>
+          <tr><td><strong>커밋</strong> (<code>COMMIT</code>)</td><td>임시 변경을 모두 확정해요. 이제 다른 사람에게도 보이고, 서버가 꺼져도 남아요.</td></tr>
+          <tr><td><strong>롤백</strong> (<code>ROLLBACK</code>)</td><td>임시 변경을 모두 취소하고 BEGIN 전으로 돌아가요.</td></tr>
+          <tr><td><strong>자동 커밋</strong></td><td>BEGIN 없이 보낸 SQL은 한 줄마다 바로 커밋돼요. 대부분의 DB와 JDBC의 기본값이에요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>은행 창구로 비유하면, 트랜잭션은 전표 한 장이에요. 입금과 출금을 한 전표에 적고, 둘 다 처리할 수 있을 때만 도장을 찍어요(커밋). 하나라도 안 되면 전표를 찢어요(롤백).</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · 이체 실행해 보기</p>
+      <h2>한 줄씩 보내고, 무엇이 확정되는지 보기</h2>
+      <p>방식과 잔액을 고르고 "다음"을 눌러 보세요. 왼쪽은 아직 확정 안 된 <strong>내 작업</strong>, 오른쪽은 다른 사람도 보는 <strong>확정된 DB</strong>예요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">방식</span>
+        <div class="seg" id="s-mode">
+          <button type="button" data-v="auto" aria-pressed="true">자동 커밋 (설정 없음)</button>
+          <button type="button" data-v="tx" aria-pressed="false">트랜잭션 (BEGIN … COMMIT)</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">kim의 처음 잔액</span>
+        <div class="seg" id="s-bal">
+          <button type="button" data-v="50" aria-pressed="true">50 (부족해서 실패)</button>
+          <button type="button" data-v="150" aria-pressed="false">150 (충분)</button>
+        </div>
+      </div>
+      <div class="tx-grid">
+        <div class="tx-box" id="box-work"><span class="label">내 작업 (커밋 전)</span><div id="work"></div></div>
+        <div class="tx-box" id="box-db"><span class="label">확정된 DB (다른 사람이 보는 값)</span><div id="db"></div></div>
+      </div>
+      <ol class="steps" id="steps"></ol>
+      <div class="step-nav">
+        <button class="btn" type="button" id="prev">이전</button>
+        <button class="btn primary" type="button" id="next">다음</button>
+      </div>
+      <p class="callout" id="result" hidden></p>
+    </div>
+    <div class="read stack">
+      <p>시뮬레이터와 같은 상황을 실제 PostgreSQL에서 돌린 결과예요.</p>
+      <CiOutput lesson="tx-basics" key="transaction" label="트랜잭션으로 묶었을 때 실제 결과 보기" source="TransactionBasicsTest.transactionRollsBackAll" />
+    </div>
+  </section>
+
+  <section id="visible" class="read">
+    <p class="eyebrow">3 · 커밋 전에는 남에게 안 보여요</p>
+    <h2>내 임시 변경은 커밋해야 공개돼요</h2>
+    <p>DB에는 여러 사용자가 동시에 접속해요. 접속 하나하나를 <strong>연결</strong>(커넥션)이라고 해요. 연결 A가 트랜잭션 안에서 잔액을 바꾸고 아직 커밋하지 않았다면, 연결 B가 같은 행을 읽으면 무엇이 보일까요? <strong>먼저 예측해 보고</strong> 실제 결과를 확인하세요.</p>
+    <CiOutput lesson="tx-basics" key="visibility" label="두 연결로 실험한 실제 결과 보기" source="TransactionBasicsTest.uncommittedChangesAreInvisible" />
+    <ul>
+      <li>커밋 전 변경은 <strong>나에게만</strong> 보여요. 다른 연결은 확정된 옛 값을 봐요.</li>
+      <li>커밋하는 순간 다른 연결에도 보여요.</li>
+      <li>롤백한 변경은 끝까지 아무에게도 보이지 않아요.</li>
+    </ul>
+    <p>여러 트랜잭션이 동시에 같은 데이터를 다룰 때 서로 얼마나 보이게 할지는 <a href="/dev-lessons/lessons/isolation-level/">격리 수준</a> 레슨에서 이어서 다뤄요. 연결이 무엇이고 왜 아껴 써야 하는지는 다음 기초 레슨 "DB 커넥션과 커넥션 풀"에서 다뤄요.</p>
+  </section>
+
+  <section id="run">
+    <div class="read stack">
+      <p class="eyebrow">4 · 진짜 PostgreSQL로 실행</p>
+      <h2>BEGIN, COMMIT, ROLLBACK을 직접 쳐 보기</h2>
+      <p>브라우저 안의 진짜 PostgreSQL(<a href="https://pglite.dev/">PGlite</a>)에 계좌 표를 만들어요. 서버로 보내는 건 없고, 처음 한 번 약 13MB를 받아요. 아래 칸의 SQL은 <strong>한 줄씩 차례로</strong> 보내요. 실제 프로그램이 DB에 보내는 방식과 같아요.</p>
+    </div>
+    <div class="panel">
+      <div><button class="btn primary" type="button" id="pg-start">PostgreSQL 시작하기</button></div>
+      <p class="muted" id="pg-status" aria-live="polite">아직 시작하지 않았어요.</p>
+      <div class="field">
+        <span class="label">예제 (누르면 아래 칸에 들어가요)</span>
+        <div class="choice-row" id="pg-presets"></div>
+      </div>
+      <label class="label" for="pg-sql">SQL (세미콜론으로 끝나는 문장을 한 줄씩 보내요)</label>
+      <textarea id="pg-sql" class="pg-sql" spellcheck="false"></textarea>
+      <div><button class="btn" type="button" id="pg-run" disabled>실행</button></div>
+      <pre id="pg-out" class="pg-out"></pre>
+    </div>
+  </section>
+
+  <section id="code" class="read">
+    <p class="eyebrow">5 · 코드에서는</p>
+    <h2>자바(JDBC)와 스프링에서 트랜잭션 쓰기</h2>
+    <p>자바에서 DB에 SQL을 보내는 표준 방법이 <strong>JDBC</strong>예요. JDBC 연결도 기본은 자동 커밋이라, 트랜잭션을 쓰려면 직접 꺼야 해요.</p>
+    <pre set:text={codeJdbc} />
+    <p>매번 이렇게 쓰면 실수하기 쉬워서, 스프링에서는 메서드에 <code>@Transactional</code>을 붙여요. 메서드가 시작할 때 트랜잭션을 열고, 정상으로 끝나면 커밋, 런타임 예외가 나면 롤백해 줘요.</p>
+    <pre set:text={codeSpring} />
+    <p>이 레슨의 검증 테스트도 같은 서비스로 확인해요. 같은 두 줄인데 <code>@Transactional</code>이 없으면 lee 100(없던 돈), 있으면 처음 그대로예요. 어노테이션이 실제로 어떻게 동작하는지, 언제 조용히 빠지는지는 <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a>에서 다뤄요.</p>
+  </section>
+
+  <section id="acid" class="read">
+    <p class="eyebrow">6 · ACID와 함정</p>
+    <h2>면접에서 묻는 네 가지 성질</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>성질</th><th>뜻</th><th>이 레슨에서</th></tr></thead>
+        <tbody>
+          <tr><td><strong>A</strong>tomicity 원자성</td><td>전부 반영되거나 하나도 반영되지 않아요</td><td>2장: 실패하면 lee의 +100까지 취소</td></tr>
+          <tr><td><strong>C</strong>onsistency 일관성</td><td>트랜잭션 전후로 규칙(제약 조건)이 지켜져요</td><td>잔액은 0 이상(CHECK), 합계 50 유지</td></tr>
+          <tr><td><strong>I</strong>solation 격리성</td><td>동시에 실행되는 트랜잭션이 서로의 중간 상태를 보지 않아요</td><td>3장: 커밋 전 변경은 다른 연결에 안 보임 (자세히는 <a href="/dev-lessons/lessons/isolation-level/">격리 수준</a>)</td></tr>
+          <tr><td><strong>D</strong>urability 지속성</td><td>커밋된 내용은 서버가 꺼져도 남아요</td><td>DB가 디스크 로그로 보장 (테스트하지 않음)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>자주 하는 실수</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>문제</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><td>DB 툴에서 자동 커밋이 켜진 채로 운영 데이터 수정</td><td>WHERE를 잘못 쓴 UPDATE가 바로 확정</td><td>툴의 자동 커밋을 끄고 BEGIN으로 시작, 확인 후 COMMIT</td></tr>
+          <tr><td>트랜잭션 안에서 메일 발송, 외부 API 호출</td><td>DB는 롤백돼도 메일은 이미 나감</td><td>되돌릴 수 없는 일은 커밋 뒤에</td></tr>
+          <tr><td>트랜잭션을 너무 오래 열어 둠</td><td>바꾼 행이 잠겨 다른 요청이 기다리고, 연결을 오래 붙잡음</td><td>트랜잭션은 필요한 SQL만 짧게</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">7 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "트랜잭션이 무엇이고 왜 필요한가요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 트랜잭션은 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>트랜잭션은 여러 SQL을 하나의 작업 단위로 묶어, 모두 반영(커밋)되거나 모두 취소(롤백)되게 하는 것입니다.</dd>
+        <dt>원리</dt><dd>BEGIN 이후의 변경은 커밋 전까지 임시 상태라 다른 연결에 보이지 않고, 실패하면 롤백으로 시작 전 상태로 돌아갑니다. 설정하지 않으면 DB와 JDBC는 문장마다 바로 커밋하는 자동 커밋이라, 계좌 이체처럼 여러 문장이 함께 성공해야 하는 작업은 중간 실패 시 돈이 생기거나 사라질 수 있습니다. 이런 성질을 ACID(원자성, 일관성, 격리성, 지속성)로 설명합니다.</dd>
+        <dt>트레이드오프</dt><dd>트랜잭션이 길면 바꾼 행의 락과 DB 연결을 오래 붙잡아 다른 요청이 기다리게 되므로 필요한 SQL만 짧게 묶고, 메일이나 외부 API처럼 롤백되지 않는 일은 트랜잭션 밖이나 커밋 뒤에 둡니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 이체 로직에 @Transactional을 두고, 출금 실패 시 입금까지 롤백되는 것을 테스트로 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: "전부 아니면 전무"와 자동 커밋의 위험을 말했나요? 커밋 전 변경이 남에게 안 보인다는 점을 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL에서 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>트랜잭션 없이 이체하다 둘째 문장이 실패: kim 50, lee 100 (없던 돈 100)</li>
+      <li>한 트랜잭션으로 이체하다 실패: kim 50, lee 0 (처음 그대로)</li>
+      <li>잔액이 충분하면 두 문장이 함께 커밋, 합계 유지</li>
+      <li>커밋 전 변경은 다른 연결에 안 보이고, 커밋 후 보이며, 롤백한 변경은 끝까지 안 보임</li>
+      <li>롤백은 INSERT, UPDATE, DELETE를 모두 되돌림. JDBC 연결의 기본은 자동 커밋</li>
+    </ul>
+    <p><a href={test}>TransactionBasicsTest</a></p>
+    <RunLocally tests={['lab.devlessons.txbasics.TransactionBasicsTest']} docker={true} />
+  </section>
+
+  <footer>
+    근거: PostgreSQL 16 튜토리얼의 Transactions, Oracle Java Tutorials의 Using Transactions(JDBC), Spring Framework 참조 문서의 Using @Transactional. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .assume { font-size: 15px; border-left: 3px solid var(--accent); padding-left: 10px; }
+  .tx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tx-box { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .tx-box.active { border-color: var(--accent); background: var(--accent-soft); }
+  .tx-box.dim { opacity: 0.45; }
+  .acct { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 15px; }
+  .acct b.changed { color: var(--accent); }
+  .acct b.bad { color: var(--query); }
+  .steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .steps li { color: var(--muted); }
+  .steps li.done { color: var(--ink); }
+  .steps li.now { color: var(--accent); font-weight: 700; }
+  .step-nav { display: flex; gap: 8px; }
+  .pg-sql { font-family: var(--font-mono); font-size: 14px; min-height: 120px; line-height: 1.5; }
+  .pg-out { white-space: pre-wrap; font-size: 13px; min-height: 60px; }
+  @media (max-width: 760px) { .tx-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var labels = { orig: 'kim 50, lee 0', half: 'kim 50, lee 100', neg: 'kim -50, lee 100' };
+  var pred = { p1: store('txb-p1'), p2: store('txb-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "kim 50, lee 100"이에요. ①은 이미 확정됐고 ②만 실패했어요. 없던 돈 100이 생긴 거예요. -50은 CHECK 제약이 막아요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('txb-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 이체 시뮬레이터 */
+  var mode = 'auto', start = 50, i = 0, steps;
+  function build() {
+    var fail = start < 100;
+    var s = [];
+    var db = { kim: start, lee: 0 };
+    if (mode === 'auto') {
+      s.push({ t: '① lee에게 +100을 보내요. 자동 커밋이라 끝나자마자 확정돼요.', work: null, db: { kim: start, lee: 100 }, ch: ['lee'] });
+      if (fail) {
+        s.push({ t: '② kim에게서 -100. 잔액 ' + start + '에서 빼면 음수라 CHECK 제약 위반으로 실패해요.', work: null, db: { kim: start, lee: 100 }, bad: ['kim'] });
+        s.push({ t: '①은 이미 확정이라 되돌릴 방법이 없어요.', work: null, db: { kim: start, lee: 100 }, bad: ['lee'] });
+        steps = { s: s, result: '결과: kim ' + start + ', lee 100. 합계가 ' + start + ' → ' + (start + 100) + '. 없던 돈 100이 생겼어요.' };
+      } else {
+        s.push({ t: '② kim에게서 -100. 성공하고 바로 확정돼요.', work: null, db: { kim: start - 100, lee: 100 }, ch: ['kim'] });
+        steps = { s: s, result: '결과: kim ' + (start - 100) + ', lee 100. 이번엔 둘 다 성공해서 문제가 없어 보이지만, ②가 실패하는 순간 0장처럼 돼요.' };
+      }
+    } else {
+      s.push({ t: 'BEGIN. 이제부터의 변경은 내 작업 공간에만 있어요.', work: { kim: start, lee: 0 }, db: db });
+      s.push({ t: '① lee에게 +100. 내 작업에서는 lee 100이지만, 확정된 DB는 아직 0이에요.', work: { kim: start, lee: 100 }, db: db, ch: ['lee'] });
+      if (fail) {
+        s.push({ t: '② kim에게서 -100 → CHECK 제약 위반으로 실패해요.', work: { kim: start, lee: 100 }, db: db, bad: ['kim'] });
+        s.push({ t: 'ROLLBACK. 내 작업을 통째로 버려요. ①의 +100도 함께 사라져요.', work: null, db: db });
+        steps = { s: s, result: '결과: kim ' + start + ', lee 0. 처음 그대로예요. 실패한 이체는 아무 흔적도 남기지 않아요.' };
+      } else {
+        s.push({ t: '② kim에게서 -100. 내 작업에서는 kim ' + (start - 100) + '.', work: { kim: start - 100, lee: 100 }, db: db, ch: ['kim'] });
+        s.push({ t: 'COMMIT. 내 작업이 한꺼번에 확정돼요. 다른 사람에게도 이제 보여요.', work: null, db: { kim: start - 100, lee: 100 }, ch: ['kim', 'lee'] });
+        steps = { s: s, result: '결과: kim ' + (start - 100) + ', lee 100. 합계 ' + start + ' 그대로. 두 줄이 한꺼번에 반영됐어요.' };
+      }
+    }
+    i = 0; render();
+  }
+  function accts(o, ch, bad) {
+    if (!o) return '<span class="muted">(진행 중인 트랜잭션 없음)</span>';
+    return ['kim', 'lee'].map(function (n) {
+      var cls = bad && bad.indexOf(n) >= 0 ? 'bad' : ch && ch.indexOf(n) >= 0 ? 'changed' : '';
+      return '<div class="acct"><span>' + n + '</span><b class="' + cls + '">' + o[n] + '</b></div>';
+    }).join('');
+  }
+  function render() {
+    var st = steps.s[i];
+    document.getElementById('work').innerHTML = mode === 'auto' ? '<span class="muted">자동 커밋: 작업 공간 없이 바로 확정돼요</span>' : accts(st.work, st.ch, st.bad);
+    document.getElementById('db').innerHTML = accts(st.db, st.work ? null : st.ch, st.work ? null : st.bad);
+    document.getElementById('box-work').className = 'tx-box' + (st.work ? ' active' : ' dim');
+    document.getElementById('box-db').className = 'tx-box' + (st.work ? '' : ' active');
+    document.getElementById('steps').innerHTML = steps.s.map(function (x, k) {
+      return '<li class="' + (k < i ? 'done' : k === i ? 'now' : '') + '">' + esc(k <= i ? x.t : '…') + '</li>';
+    }).join('');
+    document.getElementById('prev').disabled = i === 0;
+    document.getElementById('next').disabled = i === steps.s.length - 1;
+    var r = document.getElementById('result');
+    if (i === steps.s.length - 1) { r.hidden = false; r.textContent = steps.result; } else r.hidden = true;
+  }
+  document.getElementById('next').addEventListener('click', function () { if (i < steps.s.length - 1) { i++; render(); } });
+  document.getElementById('prev').addEventListener('click', function () { if (i > 0) { i--; render(); } });
+  pressGroup(document.getElementById('s-mode'), function (v) { mode = v; build(); });
+  pressGroup(document.getElementById('s-bal'), function (v) { start = +v; build(); });
+  build();
+
+  /* 7. 확인 문제 */
+  var quiz = [
+    { q: 'BEGIN 없이 UPDATE 두 줄을 보냈는데 둘째 줄이 실패했다. 첫째 줄은?', o: ['이미 반영돼 있다', '함께 취소된다'], a: 0, e: '자동 커밋이라 첫째 줄은 끝나자마자 확정됐어요.' },
+    { q: '연결 A가 BEGIN 후 UPDATE하고 아직 커밋하지 않았다. 연결 B가 같은 행을 읽으면?', o: ['A가 바꾼 값', '확정된 옛 값'], a: 1, e: '커밋 전 변경은 바꾼 연결에만 보여요.' },
+    { q: '트랜잭션 안에서 메일을 보낸 뒤 오류로 롤백했다. 메일은?', o: ['취소된다', '이미 나갔다'], a: 1, e: '롤백은 DB 변경만 되돌려요. 되돌릴 수 없는 일은 커밋 뒤에 해요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('txb-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('txb-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
+
+<script is:inline type="module">
+  // 4장: 브라우저 안의 PostgreSQL(PGlite). 문장을 한 줄씩 보내서 자동 커밋을 그대로 재현한다
+  const PGLITE = 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.16/dist/index.js';
+  const RESET = `drop table if exists account;
+create table account (owner text primary key, balance int not null check (balance >= 0));
+insert into account values ('kim', 50), ('lee', 0);`;
+  const presets = [
+    ['자동 커밋으로 이체 (실패)', "update account set balance = balance + 100 where owner = 'lee';\nupdate account set balance = balance - 100 where owner = 'kim';\nselect * from account order by owner;"],
+    ['트랜잭션으로 이체 (실패)', "begin;\nupdate account set balance = balance + 100 where owner = 'lee';\nupdate account set balance = balance - 100 where owner = 'kim';\nselect * from account order by owner;"],
+    ['실패한 트랜잭션 정리', "rollback;\nselect * from account order by owner;"],
+    ['30 보내고 커밋', "begin;\nupdate account set balance = balance + 30 where owner = 'lee';\nupdate account set balance = balance - 30 where owner = 'kim';\ncommit;\nselect * from account order by owner;"],
+    ['바꾸고 롤백', "begin;\nupdate account set balance = 0 where owner = 'kim';\nselect * from account order by owner;\nrollback;\nselect * from account order by owner;"],
+    ['처음 상태로', RESET + "\nselect * from account order by owner;"]
+  ];
+  const $ = (id) => document.getElementById(id);
+  const sql = $('pg-sql'), out = $('pg-out'), status = $('pg-status'), runBtn = $('pg-run'), startBtn = $('pg-start');
+  sql.value = presets[0][1];
+  presets.forEach(([label, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = label;
+    b.addEventListener('click', () => { sql.value = text; });
+    $('pg-presets').appendChild(b);
+  });
+  let db = null;
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    try {
+      status.textContent = 'PostgreSQL을 내려받는 중… (처음 한 번 약 13MB)';
+      const { PGlite } = await import(PGLITE);
+      db = await PGlite.create();
+      await db.exec(RESET);
+      status.textContent = '준비됐어요. account 표: kim 50, lee 0. 예제를 고르고 실행해 보세요.';
+      startBtn.textContent = '실행 중';
+      runBtn.disabled = false;
+    } catch (e) {
+      status.textContent = '시작하지 못했어요: ' + e.message;
+      startBtn.disabled = false;
+    }
+  });
+  function table(r) {
+    if (!r.fields || r.fields.length === 0) return '';
+    const names = r.fields.map((f) => f.name);
+    return '\n   ' + names.join(' | ') + '\n' + r.rows.map((x) => '   ' + names.map((n) => String(x[n])).join(' | ')).join('\n');
+  }
+  runBtn.addEventListener('click', async () => {
+    if (!db) return;
+    runBtn.disabled = true;
+    const stmts = sql.value.split(';').map((s) => s.trim()).filter(Boolean);
+    const lines = [];
+    for (const s of stmts) {
+      try {
+        const r = await db.query(s);
+        const first = s.split(/\s+/)[0].toUpperCase();
+        const note = first === 'UPDATE' ? `→ ${r.affectedRows}행 바뀜` : first === 'SELECT' ? '→' : '→ 완료';
+        lines.push(`${s};  ${note}${table(r)}`);
+      } catch (e) {
+        let hint = '';
+        if (/check constraint/i.test(e.message)) hint = ' (잔액이 0보다 작아질 수 없어요)';
+        if (/current transaction is aborted/i.test(e.message)) hint = ' (오류가 난 트랜잭션은 ROLLBACK 전까지 아무것도 못 해요. "실패한 트랜잭션 정리"를 실행해 보세요)';
+        lines.push(`${s};  → 오류: ${e.message}${hint}`);
+      }
+    }
+    out.textContent = lines.join('\n');
+    runBtn.disabled = false;
+  });
+</script>
