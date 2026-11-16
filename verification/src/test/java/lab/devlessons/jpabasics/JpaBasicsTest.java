@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import lab.devlessons.support.SqlCapture;
-import org.hibernate.Session;
+import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,10 +116,11 @@ class JpaBasicsTest {
     @Test
     @DisplayName("JPA는 표준(인터페이스)이고 실제로 일하는 구현은 Hibernate다 (출력 공개)")
     void hibernateIsTheImplementation() {
-        String impl = tx.execute(s -> em.unwrap(Session.class).getClass().getName());
+        // 스프링이 EntityManager를 프록시로 한 번 감싸므로, 팩토리를 풀어 실제 구현 클래스를 본다
+        String impl = em.getEntityManagerFactory().unwrap(SessionFactory.class).getClass().getName();
 
         assertThat(impl).startsWith("org.hibernate");
         CiOutput.record("jpa-basics", "impl",
-                "jakarta.persistence.EntityManager (JPA 표준 인터페이스)\n→ 실제 구현: " + impl);
+                "jakarta.persistence.EntityManagerFactory (JPA 표준 인터페이스)\n→ 실제 구현: " + impl);
     }
 }
