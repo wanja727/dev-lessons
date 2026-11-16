@@ -42,7 +42,7 @@ return redis.call('DECRBY', KEYS[1], ARGV[1])`;
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">동시성 · 개념 학습 · 약 35분 · 선수 레슨: <a href="/dev-lessons/lessons/locking/">낙관적 락 vs 비관적 락</a>, <a href="/dev-lessons/lessons/idempotency/">멱등성</a></p>
+    <p class="eyebrow">동시성·분산 · 개념 학습 · 약 35분 · 선수 레슨: <a href="/dev-lessons/lessons/locking/">낙관적 락 vs 비관적 락</a>, <a href="/dev-lessons/lessons/idempotency/">멱등성</a></p>
     <h1>재고 차감 동시성 (DB 락 vs Redis)</h1>
     <p class="lede">한정판 운동화 50켤레에 주문 100건이 동시에 들어와요. 51번째 손님에게 "주문 완료"를 보내면 환불과 사과가 기다려요. 커머스 면접 단골 질문인 재고 차감을 다섯 가지 방법으로 직접 비교해요.</p>
     <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 갱신 손실(<a href="/dev-lessons/lessons/isolation-level/">격리 수준</a>), 비관적 락과 낙관적 락(<a href="/dev-lessons/lessons/locking/">낙관적 락 vs 비관적 락</a>), 변경 감지(<a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a>). Redis는 이 레슨에서 처음부터 설명해요.</p>
