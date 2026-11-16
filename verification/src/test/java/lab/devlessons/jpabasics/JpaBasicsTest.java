@@ -120,7 +120,7 @@ class JpaBasicsTest {
         String provider = info.getPersistenceProvider().getClass().getName();
 
         assertThat(impl).startsWith("org.hibernate");
-        assertThat(provider).startsWith("org.hibernate");
+        assertThat(info.getPersistenceProvider()).isInstanceOf(org.hibernate.jpa.HibernatePersistenceProvider.class);
         CiOutput.record("jpa-basics", "impl",
                 "jakarta.persistence.EntityManagerFactory (JPA 표준 인터페이스)\n→ 실제 구현: " + impl
                         + "\nJPA 구현체(PersistenceProvider): " + provider);
