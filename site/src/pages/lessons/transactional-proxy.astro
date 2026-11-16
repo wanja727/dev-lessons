@@ -66,9 +66,10 @@ const codeFix3 = `public void placeOrder(Order order) {
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a> (변경 감지)</p>
+    <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>, <a href="/dev-lessons/lessons/spring-beans/">스프링 빈과 의존성 주입</a>, <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a> (변경 감지)</p>
     <h1>@Transactional 동작 원리와 내부 호출</h1>
     <p class="lede">@Transactional을 붙였는데 트랜잭션이 없다면? 예외도 나지 않고, 데이터만 조용히 빠져요. 이 버그를 이해하려면 "어노테이션이 붙어 있다"가 아니라 <strong>"누가 그 메서드를 어떤 경로로 불렀나"</strong>를 봐야 해요. 호출 경로를 한 단계씩 따라가며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 트랜잭션·커밋·롤백(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>), 빈과 생성자 주입(<a href="/dev-lessons/lessons/spring-beans/">스프링 빈</a>), 변경 감지(<a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a>), 자바의 상속과 오버라이드.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#proxy"><span>1</span>프록시가 하는 일</a>
@@ -109,7 +110,7 @@ const codeFix3 = `public void placeOrder(Order order) {
   <section id="proxy" class="read">
     <p class="eyebrow">1 · 프록시가 하는 일</p>
     <h2>내가 주입받은 건 진짜 객체가 아니에요</h2>
-    <p>스프링은 @Transactional이 붙은 빈을 만들 때 진짜 객체를 감싼 <strong>프록시</strong>(대리 객체)를 하나 더 만들고, 다른 빈에는 이 프록시를 주입해요. 스프링 부트의 기본은 클래스를 상속해서 만드는 <strong>CGLIB 프록시</strong>예요. 그래서 <code>orderService.getClass()</code>를 찍어 보면 <code>OrderService$$SpringCGLIB$$0</code> 같은 이름이 나와요.</p>
+    <p>스프링은 @Transactional이 붙은 빈을 만들 때 진짜 객체를 감싼 <strong>프록시</strong>(대리 객체)를 하나 더 만들고, 다른 빈에는 이 프록시를 주입해요. 스프링 부트는 기본적으로 원래 클래스를 <strong>상속</strong>한 프록시 클래스를 만들어요(이 방식을 CGLIB 프록시라고 불러요). 그래서 <code>orderService.getClass()</code>를 찍어 보면 <code>OrderService$$SpringCGLIB$$0</code> 같은 이름이 나와요.</p>
     <p>프록시는 메서드 호출을 가로채서 앞뒤로 트랜잭션 일을 해요. 개념적으로는 이런 코드예요.</p>
     <pre set:text={codeProxy} />
     <p>이렇게 핵심 로직 바깥에서 공통 기능(트랜잭션, 로그, 권한 등)을 끼워 넣는 방식을 <strong>AOP</strong>(관점 지향 프로그래밍)라고 해요. 핵심은 하나예요. <strong>트랜잭션을 여는 건 어노테이션이 아니라 프록시이고, 프록시를 거친 호출에만 적용돼요.</strong></p>
@@ -151,7 +152,7 @@ const codeFix3 = `public void placeOrder(Order order) {
     <ul>
       <li>그래서 <code>addPoint</code>는 트랜잭션 없이 실행돼요.</li>
       <li>트랜잭션이 없으니 커밋도 없고, <a href="/dev-lessons/lessons/jpa-persistence-context/">변경 감지</a>로 UPDATE를 보낼 시점(flush)도 오지 않아요.</li>
-      <li><code>orderRepository.save()</code>는 Spring Data JPA 리포지토리 자체에 트랜잭션이 있어서 따로 저장되고 커밋돼요.</li>
+      <li><code>orderRepository.save()</code>는 리포지토리 메서드가 각자 자기 트랜잭션 안에서 실행되기 때문에(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>) 따로 저장되고 커밋돼요.</li>
       <li>결과적으로 <strong>예외 없이 주문만 저장되고 포인트는 빠져요.</strong> 가장 찾기 어려운 종류의 버그예요.</li>
     </ul>
     <p>같은 이유로 프록시가 가로챌 수 없는 메서드에도 @Transactional은 효과가 없어요. 대표적으로 <strong>private 메서드</strong>는 상속으로 덮어쓸 수 없어서 프록시가 끼어들지 못해요.</p>
@@ -179,7 +180,7 @@ const codeFix3 = `public void placeOrder(Order order) {
         </tbody>
       </table>
     </div>
-    <p class="muted">자기 자신을 주입받거나 <code>AopContext.currentProxy()</code>를 쓰는 방법도 있지만 구조가 꼬여서 잘 권하지 않아요.</p>
+    <details class="more"><summary>더 알아보기: 다른 해결 방법</summary><p>자기 자신을 주입받거나 <code>AopContext.currentProxy()</code>를 쓰는 방법도 있지만 구조가 꼬여서 잘 권하지 않아요.</p></details>
   </section>
 
   <section id="traps" class="read">
@@ -224,7 +225,7 @@ const codeFix3 = `public void placeOrder(Order order) {
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5와 실제 PostgreSQL(Testcontainers)에서 메서드 안의 트랜잭션 여부와 DB 결과를 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 스프링 부트와 PostgreSQL에서, 메서드 안의 트랜잭션 여부와 DB 결과로 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>@Transactional 빈에는 CGLIB 프록시가 주입됨</li>
       <li>밖에서 부르면 트랜잭션 있음, 같은 객체 안에서 부르면 어노테이션이 있어도 없음, TransactionTemplate은 프록시 없이 트랜잭션을 엶</li>
