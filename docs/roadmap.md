@@ -1,15 +1,15 @@
-# 로드맵
+공개 |공개 |공개 |공개 |# 로드맵
 
 첫 목표는 백엔드 면접에서 자주 나오는 JPA·Spring·DB·Java 동시성 개념. 실제 면접에서 답하지 못한 주제를 가장 먼저 만든다. 화살표는 선수 관계(먼저 배우면 좋은 레슨)다.
 우선순위 = 면접 빈도 × 헷갈리기 쉬운 정도. 각 레슨은 GitHub 이슈(`lesson` 라벨)로 관리한다.
 
 ```mermaid
 flowchart LR
-  TXB[트랜잭션 기초] --> CONN[DB 커넥션과 커넥션 풀]
+  TXB[트랜잭션 기초 ✅] --> CONN[DB 커넥션과 커넥션 풀 ✅]
   TXB --> ISO
   TXB --> TX
-  BEAN[스프링 빈과 의존성 주입] --> TX
-  TXB --> JPA0[JPA 첫걸음]
+  BEAN[스프링 빈과 의존성 주입 ✅] --> TX
+  TXB --> JPA0[JPA 첫걸음 ✅]
   BEAN --> JPA0
   JPA0 --> PC
   CONN --> OSIV
