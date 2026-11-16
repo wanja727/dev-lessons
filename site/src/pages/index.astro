@@ -4,9 +4,19 @@ import Base from '../layouts/Base.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const repo = 'https://github.com/wanja727/dev-lessons';
-const lessons = (await getCollection('lessons')).sort(
-  (a, b) => b.data.updated.valueOf() - a.data.updated.valueOf(),
-);
+// 배우는 순서대로. 단계마다 묶어서 보여준다
+const lessons = (await getCollection('lessons')).sort((a, b) => a.data.order - b.data.order);
+const stageNotes: Record<string, string> = {
+  '기초': '처음이라면 여기서 시작하세요. 자바와 SQL 기초만 알면 돼요.',
+  '동시성': '스레드가 여럿일 때 생기는 일. 기초와 별개로 먼저 봐도 돼요.',
+  '트랜잭션과 JPA': '스프링에서 DB를 다루는 핵심. 기초 4개를 본 뒤에 보세요.',
+  'DB와 운영': '동시에 고치는 데이터, 성능, 대량 작업.',
+};
+const stages = [...new Set(lessons.map((l) => l.data.stage))].map((stage) => ({
+  stage,
+  note: stageNotes[stage],
+  items: lessons.filter((l) => l.data.stage === stage),
+}));
 const fileName = (p: string) => p.split('/').pop();
 ---
 <Base title="Dev Lessons" description="백엔드 개발 개념을 직접 조작하며 배우는 레슨. 레슨의 주장은 테스트로 검증합니다.">
@@ -17,26 +27,29 @@ const fileName = (p: string) => p.split('/').pop();
       <p class="lede">백엔드 개발자에게 필요한 개념을 처음 배우는 사람도 따라올 수 있게 만든 대화형 레슨이에요. 레슨에 적힌 동작(예: 쿼리가 몇 번 나가는지)은 저장소의 테스트로 증명하고, 코드가 바뀔 때마다 CI에서 다시 확인해요.</p>
     </header>
 
-    <section aria-labelledby="list-title">
-      <h2 id="list-title">레슨</h2>
-      <ul class="lessons">
-        {lessons.map((l) => (
-          <li>
-            <a class="card" href={`${base}/lessons/${l.data.page}/`}>
-              <span class="meta"><span class="unit">{l.data.unit}</span> · 약 {l.data.minutes}분</span>
-              <span class="title">{l.data.title}</span>
-              <span class="summary">{l.data.summary}</span>
-            </a>
-            <p class="verified">
-              검증 테스트:{' '}
-              {l.data.verifiedBy.map((p) => (
-                <a href={`${repo}/blob/main/${p}`}>{fileName(p)}</a>
-              ))}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </section>
+    {stages.map((s, si) => (
+      <section aria-labelledby={`stage-${si}`}>
+        <h2 id={`stage-${si}`}><span class="step">{si + 1}단계</span> {s.stage}</h2>
+        {s.note && <p class="stage-note">{s.note}</p>}
+        <ol class="lessons">
+          {s.items.map((l) => (
+            <li>
+              <a class="card" href={`${base}/lessons/${l.data.page}/`}>
+                <span class="meta"><span class="num">{l.data.order}</span> <span class="unit">{l.data.unit}</span> · 약 {l.data.minutes}분</span>
+                <span class="title">{l.data.title}</span>
+                <span class="summary">{l.data.summary}</span>
+              </a>
+              <p class="verified">
+                검증 테스트:{' '}
+                {l.data.verifiedBy.map((p) => (
+                  <a href={`${repo}/blob/main/${p}`}>{fileName(p)}</a>
+                ))}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
 
     <footer>
       <a href={repo}>GitHub 저장소</a> · 오류를 발견하면 이슈로 알려 주세요.
@@ -64,6 +77,9 @@ const fileName = (p: string) => p.split('/').pop();
   .card:hover { border-color: var(--accent); }
   .meta { font-size: 13px; color: var(--muted); }
   .unit { font-family: var(--font-mono); color: var(--accent); }
+  .num { display: inline-block; min-width: 1.8em; padding: 0 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-mono); font-weight: 700; text-align: center; }
+  .step { font-family: var(--font-mono); font-size: 14px; color: var(--accent); margin-right: 4px; }
+  .stage-note { margin: -4px 0 12px; color: var(--muted); font-size: 15px; }
   .title { font-size: 20px; font-weight: 700; }
   .summary { color: var(--muted); }
   .verified { margin: 8px 0 0 4px; font-size: 14px; color: var(--muted); }

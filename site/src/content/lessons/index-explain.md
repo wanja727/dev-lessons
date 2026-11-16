@@ -1,6 +1,8 @@
 ---
 title: 인덱스와 실행계획
 unit: DB
+order: 21
+stage: DB와 운영
 summary: 인덱스가 조회를 빠르게 하는 원리와, 인덱스가 있어도 쓰이지 않는 경우(함수, 앞쪽 와일드카드, 낮은 선택도, 복합 인덱스 순서)를 PostgreSQL EXPLAIN 실험실에서 직접 확인해요.
 minutes: 30
 page: index-explain

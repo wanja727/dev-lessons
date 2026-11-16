@@ -1,6 +1,8 @@
 ---
 title: "@Transactional 동작 원리와 내부 호출"
 unit: Spring
+order: 14
+stage: 트랜잭션과 JPA
 summary: 트랜잭션을 여는 건 어노테이션이 아니라 프록시예요. 호출 경로를 한 단계씩 따라가며 내부 호출에서 트랜잭션이 빠지는 이유를 보고, 해결 방법 세 가지의 트랜잭션 범위 차이까지 배워요.
 minutes: 30
 page: transactional-proxy
