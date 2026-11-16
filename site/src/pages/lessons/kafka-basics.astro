@@ -1,0 +1,325 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/kafka/KafkaBasicsTest.java`;
+
+const codePredict = `// 파티션이 3개인 토픽. 배송 서비스 서버 4대가 같은 컨슈머 그룹으로 읽는다
+consumer.subscribe(List.of("orders"));   // group.id = shipping`;
+
+const codeProducer = `producer.send(new ProducerRecord<>("orders", orderId, json));
+//                                   토픽     키       값
+// 같은 키(orderId)는 같은 파티션으로 간다 → 한 주문의 이벤트는 순서대로 읽힌다`;
+
+const codeConsumer = `props.put("group.id", "shipping");             // 컨슈머 그룹
+props.put("enable.auto.commit", "false");       // 오프셋 커밋을 직접
+
+while (running) {
+    for (ConsumerRecord<String, String> r : consumer.poll(Duration.ofMillis(200))) {
+        handle(r);                    // 1. 처리 (멱등하게: event_id로 중복 거르기)
+    }
+    consumer.commitSync();            // 2. 처리한 뒤 커밋 → 최소 한 번
+}`;
+---
+<Base title="메시지 큐 기초 (Kafka) · Dev Lessons" description="Kafka의 토픽, 파티션, 키와 순서, 컨슈머 그룹, 오프셋 커밋을 실제 Kafka 브로커로 확인해요. 커밋 시점에 따라 메시지가 중복되거나 사라지는 것과 멱등 컨슈머를 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">동시성·분산 · 개념 학습 · 약 35분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-outbox/">트랜잭셔널 아웃박스</a></p>
+    <h1>메시지 큐 기초 (Kafka)</h1>
+    <p class="lede">주문이 생기면 배송, 알림, 포인트 서비스가 각자 할 일을 해요. 주문 서비스가 셋을 직접 부르는 대신 "주문됨" 이벤트를 한 곳에 올려 두면, 각 서비스가 알아서 가져가요. 커머스와 핀테크에서 가장 많이 쓰는 메시지 브로커 Kafka를 실제 브로커로 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 이벤트, 메시지 브로커, 최소 한 번 전달과 멱등 컨슈머(<a href="/dev-lessons/lessons/transactional-outbox/">트랜잭셔널 아웃박스</a>), 스레드가 여럿이면 순서가 섞일 수 있다는 것(<a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a>).</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>토픽과 파티션</a>
+      <a href="#sim"><span>2</span>키와 컨슈머 그룹</a>
+      <a href="#offset"><span>3</span>오프셋 커밋</a>
+      <a href="#choose"><span>4</span>함정과 선택 기준</a>
+      <a href="#check"><span>5</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>서버를 4대로 늘리면 4배로 빨라질까요?</h2>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="all" aria-pressed="false">4대가 모두 나눠서 읽는다</button>
+          <button class="chip" type="button" data-v="idle" aria-pressed="false">1대는 아무것도 읽지 않는다</button>
+          <button class="chip" type="button" data-v="dup" aria-pressed="false">4대가 같은 메시지를 모두 받는다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 직접 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 토픽과 파티션</p>
+    <h2>끝에만 덧붙이는 기록장</h2>
+    <p><strong>Kafka</strong>는 메시지를 받아 디스크에 차례로 쌓아 두고, 읽는 쪽이 원하는 위치부터 꺼내 가게 하는 메시지 브로커예요. 메시지를 보내는 쪽을 <strong>프로듀서</strong>, 읽는 쪽을 <strong>컨슈머</strong>라고 해요.</p>
+    <ul>
+      <li><strong>토픽</strong>(topic): 메시지 종류별 이름표예요. 예: <code>orders</code>.</li>
+      <li><strong>파티션</strong>(partition): 토픽을 나눈 칸이에요. 파티션마다 메시지를 끝에 덧붙이기만 하고, 각 메시지는 0, 1, 2…로 늘어나는 번호(<strong>오프셋</strong>, offset)를 받아요.</li>
+      <li>컨슈머가 메시지를 읽어도 지워지지 않아요. 보관 기간 동안 남아 있어서 다른 서비스가 같은 메시지를 따로 읽을 수 있어요.</li>
+    </ul>
+    <div class="diagram" role="img" aria-label="토픽 orders는 파티션 3개로 나뉘고, 각 파티션은 오프셋 0부터 메시지가 쌓인다">
+      <svg viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
+        <text class="svg-tb" x="20" y="24">토픽 orders</text>
+        <text class="svg-t" x="20" y="62">파티션 0</text><text class="svg-t" x="20" y="112">파티션 1</text><text class="svg-t" x="20" y="162">파티션 2</text>
+        <g>
+          <rect class="svg-box" x="110" y="42" width="60" height="32" rx="4" /><text class="svg-t" x="140" y="63" text-anchor="middle">0</text>
+          <rect class="svg-box" x="174" y="42" width="60" height="32" rx="4" /><text class="svg-t" x="204" y="63" text-anchor="middle">1</text>
+          <rect class="svg-box" x="238" y="42" width="60" height="32" rx="4" /><text class="svg-t" x="268" y="63" text-anchor="middle">2</text>
+          <rect class="svg-box" x="110" y="92" width="60" height="32" rx="4" /><text class="svg-t" x="140" y="113" text-anchor="middle">0</text>
+          <rect class="svg-box" x="174" y="92" width="60" height="32" rx="4" /><text class="svg-t" x="204" y="113" text-anchor="middle">1</text>
+          <rect class="svg-box" x="110" y="142" width="60" height="32" rx="4" /><text class="svg-t" x="140" y="163" text-anchor="middle">0</text>
+          <rect class="svg-box" x="174" y="142" width="60" height="32" rx="4" /><text class="svg-t" x="204" y="163" text-anchor="middle">1</text>
+          <rect class="svg-box" x="238" y="142" width="60" height="32" rx="4" /><text class="svg-t" x="268" y="163" text-anchor="middle">2</text>
+          <rect class="svg-box" x="302" y="142" width="60" height="32" rx="4" /><text class="svg-t" x="332" y="163" text-anchor="middle">3</text>
+        </g>
+        <path class="svg-acc" d="M380 110 L470 110" /><text class="svg-m" x="380" y="96">새 메시지는 끝에 덧붙임</text>
+        <text class="svg-m" x="380" y="160">칸 안의 숫자 = 오프셋</text>
+      </svg>
+    </div>
+    <p>파티션을 나누는 이유는 <strong>나눠서 동시에 처리</strong>하기 위해서예요. 파티션 하나는 한 컨슈머가 차례로 읽으니, 파티션이 많을수록 여러 컨슈머가 동시에 일할 수 있어요.</p>
+    <pre set:text={codeProducer} />
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · 키와 컨슈머 그룹</p>
+      <h2>같은 키는 같은 칸, 같은 그룹은 칸을 나눠요</h2>
+      <p>주문 이벤트를 보내고, 배송 그룹의 컨슈머 수를 바꿔 보세요. 같은 주문의 이벤트가 어느 파티션에, 어느 컨슈머에게 가는지 보세요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">이벤트 보내기 (키 = 주문 번호)</span>
+        <div class="choice-row" id="send"></div>
+      </div>
+      <div class="field">
+        <span class="label">배송 그룹 컨슈머 수: <strong id="cn-v">2</strong></span>
+        <input type="range" id="cn" min="1" max="4" value="2" />
+      </div>
+      <div class="kf-parts" id="parts"></div>
+      <div class="kf-cons" id="cons"></div>
+      <p class="verdict" id="kf-verdict"></p>
+      <div class="step-nav"><button class="btn" type="button" id="kf-reset">처음으로</button></div>
+    </div>
+    <div class="read stack">
+      <ul>
+        <li><strong>순서는 파티션 안에서만</strong> 보장돼요. 키를 주문 번호로 주면 한 주문의 "생성 → 결제 → 배송"이 같은 파티션에서 순서대로 읽혀요. 다른 주문끼리의 순서는 보장하지 않아요.</li>
+        <li><strong>컨슈머 그룹</strong>(consumer group)은 같은 일을 나눠 하는 컨슈머 묶음이에요. 그룹 안에서 파티션 하나는 컨슈머 하나에게만 배정돼요. 그래서 컨슈머가 파티션보다 많으면 남는 컨슈머는 놀아요.</li>
+        <li>다른 그룹(알림 서비스)은 같은 메시지를 처음부터 따로 받아요. 그룹마다 어디까지 읽었는지를 따로 기억하거든요.</li>
+      </ul>
+      <CiOutput lesson="kafka-basics" key="key-order" label="실제 결과 보기: 키별 파티션과 순서" source="KafkaBasicsTest.sameKeySamePartitionInOrder" />
+      <CiOutput lesson="kafka-basics" key="group" label="실제 결과 보기: 컨슈머 4개, 파티션 3개" source="KafkaBasicsTest.consumerGroupSplitsPartitions" />
+    </div>
+  </section>
+
+  <section id="offset" class="read">
+    <p class="eyebrow">3 · 오프셋 커밋</p>
+    <h2>"어디까지 읽었다"를 언제 적느냐</h2>
+    <p>컨슈머 그룹은 파티션마다 "다음에 읽을 오프셋"을 Kafka에 기록해요. 이 기록을 <strong>오프셋 커밋</strong>이라고 해요. 컨슈머가 죽고 다른 컨슈머가 이어받으면 커밋된 위치부터 읽어요. 그래서 <strong>처리와 커밋 중 무엇을 먼저 하느냐</strong>가 전달 보장을 정해요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>순서</th><th>그 사이에 죽으면</th><th>전달 보장</th></tr></thead>
+        <tbody>
+          <tr><td>처리 → 커밋</td><td>처리는 했는데 커밋 안 됨 → 재시작 후 <strong>같은 메시지를 다시 받음</strong></td><td>최소 한 번 (중복 가능)</td></tr>
+          <tr><td>커밋 → 처리</td><td>커밋은 했는데 처리 안 됨 → 재시작 후 <strong>그 메시지는 다시 오지 않음</strong></td><td>최대 한 번 (유실 가능)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <CiOutput lesson="kafka-basics" key="at-least-once" label="실제 결과 보기: 처리 → 커밋 전에 종료" source="KafkaBasicsTest.processThenCrashBeforeCommitRedelivers" />
+    <CiOutput lesson="kafka-basics" key="at-most-once" label="실제 결과 보기: 커밋 → 처리 전에 종료" source="KafkaBasicsTest.commitThenCrashLosesMessage" />
+    <p>주문, 결제, 포인트처럼 잃으면 안 되는 메시지는 <strong>처리한 뒤 커밋</strong>하고, 다시 오는 메시지는 <strong>멱등 컨슈머</strong>로 걸러요. 메시지마다 고유한 event_id를 넣고, 처리한 id를 DB에 유니크 제약으로 기록해 두면 같은 메시지가 두 번 와도 한 번만 반영돼요(<a href="/dev-lessons/lessons/idempotency/">멱등성</a>).</p>
+    <pre set:text={codeConsumer} />
+    <details class="more"><summary>더 알아보기: 자동 커밋과 "정확히 한 번"</summary>
+      <p>기본 설정(<code>enable.auto.commit=true</code>)은 일정 간격(기본 5초)마다 마지막으로 받은 위치를 자동으로 커밋해요. 편하지만 처리 도중 죽으면 중복이나 유실이 섞일 수 있어서, 중요한 메시지는 직접 커밋하는 경우가 많아요.</p>
+      <p>Kafka에는 트랜잭션을 써서 "Kafka에서 읽고 Kafka로 쓰는" 흐름을 정확히 한 번으로 만드는 기능이 있어요. 하지만 DB나 외부 API처럼 Kafka 밖으로 나가는 처리까지 정확히 한 번으로 만들어 주지는 않아요. 그래서 실무에서는 "최소 한 번 + 멱등 처리"가 기본이에요.</p>
+    </details>
+  </section>
+
+  <section id="choose" class="read">
+    <p class="eyebrow">4 · 함정과 선택 기준</p>
+    <h2>파티션 수, 키, 그리고 보내는 쪽</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>무슨 일이</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><td>컨슈머를 파티션보다 많이 띄움</td><td>남는 컨슈머는 놀아요</td><td>최대 동시 처리 수를 생각해 파티션 수를 정해요. 파티션은 늘릴 수는 있어도 줄일 수 없어요</td></tr>
+          <tr><td>파티션 수를 늘림</td><td>키가 가는 파티션이 바뀌어, 늘리기 전후 메시지의 순서가 섞일 수 있어요</td><td>처음부터 여유 있게 정하거나, 순서가 중요하면 늘릴 때를 조심해요</td></tr>
+          <tr><td>키 없이 보냄</td><td>메시지가 여러 파티션에 흩어져 순서를 보장할 단위가 없어요</td><td>순서가 필요한 단위(주문, 계좌)를 키로 줘요</td></tr>
+          <tr><td>한 키에 메시지가 몰림</td><td>그 파티션만 바쁘고 다른 컨슈머는 놀아요</td><td>키를 더 잘게 나눠요</td></tr>
+          <tr><td>DB 커밋 후 Kafka 발행 실패</td><td>주문은 있는데 이벤트가 없어요</td><td><a href="/dev-lessons/lessons/transactional-outbox/">트랜잭셔널 아웃박스</a></td></tr>
+          <tr><td>처리 중 계속 실패하는 메시지</td><td>같은 메시지에서 멈춰 뒤 메시지를 못 읽어요</td><td>몇 번 재시도 후 실패 전용 토픽(DLT)으로 보내고 다음으로 넘어가요</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">5 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "Kafka에서 메시지 순서와 중복은 어떻게 다루나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: Kafka는 파티션 안에서만 순서를 보장하므로 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>Kafka는 토픽을 파티션으로 나눠 저장하고, 순서는 파티션 안에서만 보장합니다. 컨슈머 그룹은 파티션을 나눠 가지고, 오프셋 커밋으로 어디까지 읽었는지 기록합니다.</dd>
+        <dt>원리</dt><dd>순서가 필요한 단위(주문 번호)를 키로 주면 같은 파티션으로 가서 순서대로 읽힙니다. 컨슈머는 처리한 뒤 오프셋을 커밋해 유실을 막고(최소 한 번), 커밋 전에 죽으면 같은 메시지가 다시 오므로 event_id로 중복을 거르는 멱등 컨슈머로 만듭니다. 보내는 쪽은 아웃박스로 DB 커밋과 발행을 맞춥니다.</dd>
+        <dt>트레이드오프</dt><dd>커밋을 먼저 하면 중복은 없지만 유실될 수 있습니다. 파티션을 늘리면 처리량은 늘지만 키 배정이 바뀌어 순서가 섞일 수 있고 줄일 수 없습니다. 컨슈머가 파티션보다 많으면 남는 컨슈머는 놀고, 계속 실패하는 메시지는 DLT로 빼야 뒤가 막히지 않습니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 실제 Kafka로 처리 후 커밋 전에 종료하면 같은 오프셋을 다시 받는 것을 확인하고, event_id로 걸러 포인트가 한 번만 적립되게 했습니다. 파티션 3개에 컨슈머 4개면 하나가 노는 것도 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 파티션 안 순서와 키, 컨슈머 그룹 배정, 커밋 시점과 전달 보장, 멱등 컨슈머, 아웃박스를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 Kafka 3.8 브로커(Testcontainers)와 kafka-clients로 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>같은 키는 같은 파티션으로 가고, 보낸 순서대로 읽힌다 (파티션 3개, 키 3개, 15건)</li>
+      <li>파티션 3개에 같은 그룹 컨슈머 4개: 파티션 합 3, 한 컨슈머는 배정 없음. 다른 그룹은 메시지 6개를 모두 받음</li>
+      <li>처리 후 커밋 전에 종료하면 재시작한 컨슈머가 같은 오프셋을 받는다. event_id로 거르면 한 번만 반영</li>
+      <li>커밋 후 처리 전에 종료하면 그 메시지는 다시 오지 않는다</li>
+      <li>acks=all로 보내면 오프셋 0, 1을 돌려받는다</li>
+    </ul>
+    <p class="muted">시뮬레이터는 키를 파티션에 고정으로 배정해 보여줘요. 실제 Kafka는 키의 해시값으로 파티션을 정해요.</p>
+    <p><a href={test}>KafkaBasicsTest</a></p>
+    <RunLocally tests={['lab.devlessons.kafka.KafkaBasicsTest']} docker />
+  </section>
+
+  <footer>
+    근거: Apache Kafka 문서(Introduction의 개념과 용어, Message Delivery Semantics), Testcontainers Kafka 모듈 문서. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .kf-parts { display: flex; flex-direction: column; gap: 8px; }
+  .kf-part { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+  .kf-part .name { font-family: var(--font-mono); color: var(--muted); }
+  .kf-msgs { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; border: 1px dashed var(--line); border-radius: 6px; padding: 3px; }
+  .kf-msg { font-family: var(--font-mono); font-size: 11.5px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); }
+  .kf-msg.k1 { background: var(--accent-soft); } .kf-msg.k2 { background: var(--ok-soft); } .kf-msg.k3 { background: var(--warn-soft); }
+  .kf-cons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .kf-con { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+  .kf-con.idle { opacity: 0.55; border-style: dashed; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('kf-p1'), p2: store('kf-p2') };
+  var LABEL = { all: '4대가 모두 나눠서 읽는다', idle: '1대는 아무것도 읽지 않는다', dup: '4대가 같은 메시지를 모두 받는다' };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "1대는 아무것도 읽지 않는다"예요. 2장에서 컨슈머를 4개로 늘려 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('kf-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 파티션과 컨슈머 그룹 시뮬레이터 */
+  var P = 3, KEYS = { 'order-1': 0, 'order-2': 2, 'order-3': 1 }, STEPS = ['생성', '결제', '배송'];
+  var sendEl = document.getElementById('send');
+  Object.keys(KEYS).forEach(function (k, i) { var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.k = k; b.dataset.i = i + 1; b.textContent = k + ' 이벤트'; sendEl.appendChild(b); });
+  var parts, counters, consumers = 2;
+  function reset() { parts = [[], [], []]; counters = {}; render(); }
+  function assign(n) {
+    var out = []; for (var c = 0; c < n; c++) out.push([]);
+    for (var p = 0; p < P; p++) out[p % n].push(p);    // 파티션을 컨슈머에게 차례로 나눔
+    return out;
+  }
+  function render() {
+    var a = assign(consumers), owner = {};
+    a.forEach(function (ps, c) { ps.forEach(function (p) { owner[p] = c; }); });
+    document.getElementById('parts').innerHTML = parts.map(function (msgs, p) {
+      return '<div class="kf-part"><span class="name">파티션 ' + p + '<br>→ 컨슈머 ' + (owner[p] + 1) + '</span><div class="kf-msgs">' +
+        (msgs.length ? msgs.map(function (m, off) { return '<span class="kf-msg k' + m.cls + '" title="offset ' + off + '">' + off + ' ' + esc(m.text) + '</span>'; }).join('') : '<span class="muted">비어 있음</span>') + '</div></div>';
+    }).join('');
+    document.getElementById('cons').innerHTML = a.map(function (ps, c) {
+      return '<div class="kf-con' + (ps.length ? '' : ' idle') + '">컨슈머 ' + (c + 1) + ': ' + (ps.length ? '파티션 ' + ps.join(', ') : '배정 없음 (대기)') + '</div>';
+    }).join('');
+    var idle = a.filter(function (ps) { return !ps.length; }).length;
+    document.getElementById('kf-verdict').textContent = idle ? '컨슈머가 파티션보다 많아 ' + idle + '개는 놀아요. 파티션 하나는 그룹 안에서 컨슈머 하나만 읽어요.' : '같은 키의 이벤트는 늘 같은 파티션에 쌓여, 한 컨슈머가 순서대로 읽어요.';
+  }
+  sendEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-k]'); if (!b) return;
+    var k = b.dataset.k, n = counters[k] || 0;
+    counters[k] = n + 1;
+    parts[KEYS[k]].push({ text: k.replace('order-', '#') + ' ' + STEPS[n % 3], cls: b.dataset.i });
+    render();
+  });
+  document.getElementById('cn').addEventListener('input', function (e) { consumers = +e.target.value; document.getElementById('cn-v').textContent = consumers; render(); });
+  document.getElementById('kf-reset').addEventListener('click', reset);
+  reset();
+
+  /* 5. 확인 문제 */
+  var quiz = [
+    { q: 'Kafka가 순서를 보장하는 범위는?', o: ['토픽 전체', '파티션 하나 안', '컨슈머 그룹 전체'], a: 1, e: '순서가 필요한 단위를 키로 줘서 같은 파티션에 모아요.' },
+    { q: '처리한 뒤 커밋하기 전에 컨슈머가 죽었다. 재시작하면?', o: ['그 메시지를 다시 받는다', '그 메시지는 사라진다', '다음 메시지부터 받는다'], a: 0, e: '커밋된 위치부터 다시 읽으니 같은 메시지가 와요. 그래서 멱등 컨슈머가 필요해요.' },
+    { q: '알림 서비스(다른 그룹)를 새로 붙였다. 배송 그룹이 이미 읽은 메시지는?', o: ['알림 서비스는 받지 못한다', '알림 서비스도 따로 받는다', '배송 그룹과 나눠 받는다'], a: 1, e: '그룹마다 읽은 위치를 따로 기록해요. 메시지는 읽어도 지워지지 않아요(보관 기간 동안).' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('kf-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('kf-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
