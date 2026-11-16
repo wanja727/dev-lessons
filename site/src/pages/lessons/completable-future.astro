@@ -39,6 +39,7 @@ CompletableFuture.supplyAsync(() -> slowApi.call(), apiPool);`;
     <p class="eyebrow">Java 동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/future-and-callable/">Future와 Callable</a></p>
     <h1>CompletableFuture</h1>
     <p class="lede"><a href="/dev-lessons/lessons/future-and-callable/">Future</a>는 결과를 받으려면 결국 get()으로 기다려야 했어요. CompletableFuture는 "끝나면 이걸 해 줘"를 미리 등록해서 <strong>기다리지 않고</strong> 결과를 이어 붙이고 합쳐요. 여러 외부 API를 조합하는 화면을 직접 만들어 보며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> <a href="/dev-lessons/lessons/future-and-callable/">Future와 Callable</a>, 람다, 체크 예외와 런타임 예외의 차이.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#why"><span>1</span>Future와 무엇이 다른가</a>
@@ -90,7 +91,7 @@ CompletableFuture.supplyAsync(() -> slowApi.call(), apiPool);`;
         </tbody>
       </table>
     </div>
-    <p>CompletableFuture는 Future를 구현하면서 <code>CompletionStage</code>(단계 연결)도 구현해요. 그래서 get()도 쓸 수 있지만, 진짜 쓰임새는 단계를 이어 붙이는 데 있어요.</p>
+    <p>CompletableFuture는 Future이면서, 단계를 이어 붙이는 기능도 함께 가져요(<code>CompletionStage</code> 인터페이스). 그래서 get()도 쓸 수 있지만, 진짜 쓰임새는 단계를 이어 붙이는 데 있어요.</p>
   </section>
 
   <section id="ops" class="read">
@@ -99,8 +100,8 @@ CompletableFuture.supplyAsync(() -> slowApi.call(), apiPool);`;
     <pre set:text={codeOps} />
     <ul>
       <li><strong>supplyAsync / runAsync:</strong> 비동기로 시작. 결과가 있으면 supply, 없으면 run.</li>
-      <li><strong>thenApply:</strong> 값을 바꿔요 (<code>map</code>과 비슷).</li>
-      <li><strong>thenCompose:</strong> 앞 결과로 <strong>또 다른 CompletableFuture</strong>를 만드는 호출을 이어요 (<code>flatMap</code>과 비슷). 여기에 thenApply를 쓰면 <code>CompletableFuture&lt;CompletableFuture&lt;T&gt;&gt;</code>처럼 겹쳐요.</li>
+      <li><strong>thenApply:</strong> 결과 값을 다른 값으로 바꿔요. 예: 달러 → 원.</li>
+      <li><strong>thenCompose:</strong> 앞 결과로 <strong>또 다른 비동기 호출</strong>(CompletableFuture를 돌려주는 호출)을 이어요. 여기에 thenApply를 쓰면 <code>CompletableFuture&lt;CompletableFuture&lt;T&gt;&gt;</code>처럼 겹쳐요.</li>
       <li><strong>thenCombine:</strong> 서로 상관없는 두 작업이 둘 다 끝나면 합쳐요. 두 작업은 동시에 실행돼요.</li>
       <li><strong>thenAccept / thenRun:</strong> 결과를 쓰기만 하고 끝내요.</li>
     </ul>
@@ -158,7 +159,7 @@ CompletableFuture.supplyAsync(() -> slowApi.call(), apiPool);`;
       </table>
     </div>
     <ul>
-      <li><strong>join()과 get():</strong> 실패한 결과를 꺼내면 <code>join()</code>은 언체크 예외 <code>CompletionException</code>, <code>get()</code>은 체크 예외 <code>ExecutionException</code>으로 감싸 던져요. 람다 안에서는 join이 편해요.</li>
+      <li><strong>join()과 get():</strong> 실패한 결과를 꺼내면 <code>join()</code>은 언체크 예외(RuntimeException 계열이라 try-catch를 강제하지 않는 예외) <code>CompletionException</code>, <code>get()</code>은 체크 예외 <code>ExecutionException</code>으로 감싸 던져요. 람다 안에서는 join이 편해요.</li>
       <li><strong>타임아웃:</strong> 외부 API는 언제든 느려질 수 있어요. <code>orTimeout</code>은 실패로, <code>completeOnTimeout</code>은 기본값으로 끝내요. 타임아웃을 두지 않으면 느린 API 하나에 화면 전체가 묶여요.</li>
       <li><strong>아무도 결과를 안 꺼내면</strong> 예외가 조용히 사라져요. 마지막에 exceptionally나 whenComplete로 기록해 두세요.</li>
     </ul>
@@ -169,7 +170,7 @@ CompletableFuture.supplyAsync(() -> slowApi.call(), apiPool);`;
     <h2>기본 풀을 조심하세요</h2>
     <ul>
       <li><strong>executor를 안 넘기면</strong> supplyAsync는 JVM 전체가 함께 쓰는 <code>ForkJoinPool.commonPool()</code>에서 돌아요. 이 풀은 CPU 계산용으로 크기가 작아요(보통 코어 수 - 1).</li>
-      <li>여기서 외부 API처럼 <strong>기다리는 작업</strong>을 돌리면 몇 개만으로 풀이 꽉 차고, 같은 풀을 쓰는 다른 코드(병렬 스트림 등)까지 느려져요.</li>
+      <li>여기서 외부 API처럼 <strong>기다리는 작업</strong>을 돌리면 몇 개만으로 풀이 꽉 차고, 같은 풀을 쓰는 다른 코드(예: <code>parallelStream()</code>)까지 느려져요.</li>
       <li><strong>thenApply</strong>(Async 없음)는 앞 단계를 완료시킨 스레드나 등록한 스레드에서 바로 실행돼요. 무거운 작업이면 <strong>thenApplyAsync(fn, executor)</strong>로 풀을 지정해요.</li>
     </ul>
     <pre set:text={codePool} />

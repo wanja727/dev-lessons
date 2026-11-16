@@ -62,6 +62,7 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
     <p class="eyebrow">Java 동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a></p>
     <h1>스레드 풀과 ExecutorService</h1>
     <p class="lede">스레드 풀은 "스레드를 미리 만들어 두고 돌려 쓰는 것" 정도로만 알기 쉬워요. 하지만 면접과 장애에서 중요한 건 <strong>작업이 몰릴 때 풀이 어떤 순서로 반응하는지</strong>예요. 스레드가 언제 늘어나고, 언제 작업이 거절되는지 직접 넣어 보며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 자바 기초와 람다(<code>() -&gt; ...</code>), <a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a>.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#background"><span>1</span>왜 풀을 쓰나</a>
@@ -112,7 +113,7 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
       <li><strong>재사용:</strong> 스레드 생성 비용을 아껴요. 작업 20개를 스레드 2개가 나눠서 처리해요.</li>
       <li><strong>상한:</strong> 동시에 도는 스레드 수와 기다리는 작업 수에 한계를 둬서, 몰리는 요청이 서버 전체를 무너뜨리지 않게 해요.</li>
     </ul>
-    <p>자바에서는 <code>ExecutorService</code>가 스레드 풀의 인터페이스이고, 실제 구현은 대부분 <code>ThreadPoolExecutor</code>예요. 톰캣의 요청 스레드, Spring의 <code>@Async</code>도 내부에서 이런 풀을 써요.</p>
+    <p>자바에서는 <code>ExecutorService</code>가 스레드 풀의 인터페이스이고, 실제 구현은 대부분 <code>ThreadPoolExecutor</code>예요. 웹 서버 톰캣이 요청을 처리하는 스레드, 스프링에서 메서드를 다른 스레드로 실행하게 하는 <code>@Async</code>도 내부에서 이런 풀을 써요.</p>
   </section>
 
   <section id="rules" class="read">
@@ -196,10 +197,10 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
     <pre set:text={codeShutdown} />
     <ul>
       <li><strong>shutdown():</strong> 새 작업은 거절하고, 이미 받은 작업(큐에 있는 것 포함)은 끝까지 처리해요.</li>
-      <li><strong>shutdownNow():</strong> 실행 중인 작업에 인터럽트를 걸고, 아직 시작 못 한 작업 목록을 돌려줘요.</li>
-      <li>Spring 빈으로 등록한 <code>ThreadPoolTaskExecutor</code>는 컨테이너가 종료 시점에 닫아 줘요.</li>
+      <li><strong>shutdownNow():</strong> 실행 중인 작업에 <strong>인터럽트</strong>(스레드에게 "하던 일을 멈춰 달라"고 보내는 신호. 작업 코드가 확인해야 실제로 멈춰요)를 걸고, 아직 시작 못 한 작업 목록을 돌려줘요.</li>
+      <li>스프링 <a href="/dev-lessons/lessons/spring-beans/">빈</a>으로 등록한 <code>ThreadPoolTaskExecutor</code>는 스프링이 앱을 종료할 때 닫아 줘요.</li>
     </ul>
-    <p>예외도 <code>execute</code>와 <code>submit</code>이 다르게 다뤄요.</p>
+    <p>예외도 <code>execute</code>와 <code>submit</code>이 다르게 다뤄요. <code>submit</code>은 작업 결과를 나중에 꺼낼 수 있는 <code>Future</code>를 돌려줘요(다음 레슨 <a href="/dev-lessons/lessons/future-and-callable/">Future와 Callable</a>).</p>
     <pre set:text={codeException} />
     <p><code>submit</code>으로 넣고 결과를 확인하지 않으면 작업이 실패해도 로그 한 줄 남지 않을 수 있어요. 결과가 필요 없는 작업이라도 작업 안에서 예외를 잡아 기록해 두는 게 안전해요.</p>
   </section>
@@ -213,7 +214,7 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
         <tbody>
           <tr><td>CPU를 계속 쓰는 작업 (계산, 압축)</td><td>코어 수 근처</td><td>코어보다 많으면 컨텍스트 스위칭만 늘어요</td></tr>
           <tr><td>기다리는 시간이 긴 작업 (외부 API, DB)</td><td>코어 수보다 많이</td><td>기다리는 동안 다른 스레드가 CPU를 쓸 수 있어요</td></tr>
-          <tr><td>DB를 쓰는 작업</td><td>커넥션 풀 크기도 함께</td><td>스레드가 많아도 커넥션이 모자라면 거기서 기다려요</td></tr>
+          <tr><td>DB를 쓰는 작업</td><td><a href="/dev-lessons/lessons/connection-pool/">커넥션 풀</a> 크기도 함께</td><td>스레드가 많아도 커넥션이 모자라면 거기서 기다려요</td></tr>
         </tbody>
       </table>
     </div>
@@ -247,7 +248,7 @@ Future<?> f = pool.submit(() -> { throw new IllegalStateException(); });
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>JDK 21의 ThreadPoolExecutor로 직접 확인해요. 코드가 바뀔 때마다 GitHub Actions에서 다시 실행돼요.</p>
+    <p>이 레슨에서 말한 동작은 JDK 21의 ThreadPoolExecutor로, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>작업 20개를 스레드 2개가 나눠 처리 (재사용)</li>
       <li>core 2, max 4, 큐 2: 작업 2개까지 스레드 2, 4개까지 큐 2, 6개에서 스레드 4, 7번째는 RejectedExecutionException</li>

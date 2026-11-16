@@ -216,3 +216,10 @@ footer { color: var(--muted); font-size: 14px; max-width: 720px; }
 [hidden] { display: none !important; }
 .back { font-size: 14px; color: var(--muted); text-decoration: none; }
 .back:hover { color: var(--accent); }
+
+/* 레슨 첫머리의 "알고 있다고 보는 것" */
+.assume { font-size: 15px; border-left: 3px solid var(--accent); padding-left: 10px; }
+/* 몰라도 되는 세부를 접어 두는 "더 알아보기" */
+details.more { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+details.more > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+details.more[open] > summary { margin-bottom: 6px; }
