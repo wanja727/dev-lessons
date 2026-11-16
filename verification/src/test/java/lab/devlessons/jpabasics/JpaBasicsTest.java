@@ -2,13 +2,13 @@ package lab.devlessons.jpabasics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.stream.Collectors;
 import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import lab.devlessons.support.SqlCapture;
-import org.hibernate.SessionFactory;
+import jakarta.persistence.EntityManagerFactory;
+import org.springframework.orm.jpa.EntityManagerFactoryInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /** 레슨 "JPA 첫걸음"의 주장을 Hibernate 6.6과 PostgreSQL 16에서 실제로 나간 SQL로 검증한다. */
 @SpringBootTest
@@ -25,8 +24,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class JpaBasicsTest {
 
     @Autowired CafeMenuRepository menus;
-    @Autowired EntityManager em;
-    @Autowired TransactionTemplate tx;
+    @Autowired EntityManagerFactory emf;
     @Autowired JdbcTemplate jdbc;
 
     @BeforeEach
@@ -116,11 +114,15 @@ class JpaBasicsTest {
     @Test
     @DisplayName("JPA는 표준(인터페이스)이고 실제로 일하는 구현은 Hibernate다 (출력 공개)")
     void hibernateIsTheImplementation() {
-        // 스프링이 EntityManager를 프록시로 한 번 감싸므로, 팩토리를 풀어 실제 구현 클래스를 본다
-        String impl = em.getEntityManagerFactory().unwrap(SessionFactory.class).getClass().getName();
+        // 스프링이 JPA 객체를 프록시로 한 번 감싸므로, 스프링이 제공하는 EntityManagerFactoryInfo로 원본을 꺼낸다
+        EntityManagerFactoryInfo info = (EntityManagerFactoryInfo) emf;
+        String impl = info.getNativeEntityManagerFactory().getClass().getName();
+        String provider = info.getPersistenceProvider().getClass().getName();
 
         assertThat(impl).startsWith("org.hibernate");
+        assertThat(provider).startsWith("org.hibernate");
         CiOutput.record("jpa-basics", "impl",
-                "jakarta.persistence.EntityManagerFactory (JPA 표준 인터페이스)\n→ 실제 구현: " + impl);
+                "jakarta.persistence.EntityManagerFactory (JPA 표준 인터페이스)\n→ 실제 구현: " + impl
+                        + "\nJPA 구현체(PersistenceProvider): " + provider);
     }
 }
