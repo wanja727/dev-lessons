@@ -8,7 +8,7 @@ import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.TreeMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -57,7 +57,7 @@ class InventoryConcurrencyTest {
     static StatefulRedisConnection<String, String> redisConnection;
     static RedisCommands<String, String> redis;
     /** 실행 결과를 모아 마지막에 표로 남긴다 */
-    static final Map<String, String> summary = new LinkedHashMap<>();
+    static final Map<String, String> summary = new TreeMap<>(); // 1~6번 순서로
 
     /** 재고가 요청 수량 이상일 때만 줄인다. 모자라면 -1. 스크립트 전체가 한 번에 실행된다 */
     static final String LUA_DECREASE = """
