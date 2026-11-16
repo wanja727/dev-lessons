@@ -60,9 +60,10 @@ public void rename(Long id) {
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">JPA 단원 · 개념 학습 · 약 30분 · 선수 레슨 없음</p>
+    <p class="eyebrow">JPA 단원 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>, <a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a></p>
     <h1>영속성 컨텍스트</h1>
     <p class="lede">save()를 부르지 않았는데 UPDATE가 나가고, 같은 조회를 두 번 했는데 SQL은 한 번만 나가요. JPA의 거의 모든 동작은 영속성 컨텍스트라는 작업 공간에서 시작해요. N+1, 지연 로딩, 락을 배우기 전에 먼저 알아야 하는 개념이에요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 엔티티, 리포지토리(findById, save), JPQL(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 트랜잭션과 커밋(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>).</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#background"><span>1</span>작업 공간</a>
@@ -110,7 +111,7 @@ public void rename(Long id) {
   <section id="background" class="read">
     <p class="eyebrow">1 · 배경 지식</p>
     <h2>엔티티를 담아 두는 작업 공간</h2>
-    <p><strong>영속성 컨텍스트</strong>는 JPA가 조회하거나 저장한 엔티티를 담아 두는 작업 공간이에요. 코드에서는 <code>EntityManager</code>를 통해 다루고, 스프링에서는 기본적으로 <strong>트랜잭션 하나와 수명이 같아요.</strong> 트랜잭션이 시작되면 생기고, 커밋하면 사라져요.</p>
+    <p><strong>영속성 컨텍스트</strong>는 JPA가 조회하거나 저장한 엔티티를 담아 두는 작업 공간이에요. 코드에서는 <code>EntityManager</code>(엔티티를 저장하고 찾는 JPA의 기본 객체. 리포지토리도 안에서 이걸 써요)를 통해 다루고, 스프링에서는 기본적으로 <strong>트랜잭션 하나와 수명이 같아요.</strong> 트랜잭션이 시작되면 생기고, 커밋하면 사라져요.</p>
     <p>작업 공간 안에는 세 가지가 있어요.</p>
     <div class="panel diagram" aria-label="애플리케이션과 DB 사이의 영속성 컨텍스트 구조">
       <svg viewBox="0 0 680 230" role="img" aria-labelledby="pc-dg">
@@ -252,7 +253,7 @@ public void rename(Long id) {
       <article class="panel">
         <h3>JPQL 실행 전에 자동으로 flush해요</h3>
         <pre set:text={trapAutoFlush} />
-        <p>쓰기 지연 저장소에만 있는 데이터는 DB에 없어서, 그대로 조회하면 결과가 틀려요. 그래서 기본 설정(FlushMode AUTO)에서는 JPQL을 실행하기 전에 flush부터 해요.</p>
+        <p>쓰기 지연 저장소에만 있는 데이터는 DB에 없어서, 그대로 조회하면 결과가 틀려요. 그래서 기본 설정에서는 JPQL을 실행하기 전에 flush부터 해요.</p>
       </article>
       <article class="panel">
         <h3>트랜잭션이 끝난 엔티티는 바꿔도 소용없어요</h3>
@@ -275,7 +276,7 @@ public void rename(Long id) {
         <thead><tr><th>기능</th><th>하는 일</th><th>주의</th></tr></thead>
         <tbody>
           <tr><td>1차 캐시</td><td>같은 트랜잭션 안에서 id 조회는 SQL 한 번, 같은 id는 같은 객체</td><td>트랜잭션이 끝나면 사라지는 캐시라 애플리케이션 전체 캐시가 아님. JPQL은 SQL을 먼저 보냄</td></tr>
-          <tr><td>쓰기 지연</td><td>INSERT·UPDATE를 모아 flush 때 보냄. 설정하면 JDBC 배치로 묶을 수도 있음</td><td>IDENTITY는 persist 즉시 INSERT. JPQL 전에는 자동 flush</td></tr>
+          <tr><td>쓰기 지연</td><td>INSERT·UPDATE를 모아 flush 때 보냄</td><td>IDENTITY는 persist 즉시 INSERT. JPQL 전에는 자동 flush</td></tr>
           <tr><td>변경 감지</td><td>스냅샷과 비교해 save() 없이 UPDATE</td><td>영속 상태 + 트랜잭션 안에서만. readOnly에서는 하지 않음</td></tr>
         </tbody>
       </table>
@@ -308,7 +309,7 @@ public void rename(Long id) {
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>실제 PostgreSQL(Testcontainers)에서 Spring Boot 3.5(Hibernate 6.6)로 SQL을 세어 확인해요. 코드가 바뀔 때마다 GitHub Actions에서 다시 실행돼요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL에서 나간 SQL을 세어, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>같은 id로 두 번 find: SELECT 1번, 같은 객체</li>
       <li>JPQL: SELECT가 나가지만 같은 객체. clear() 뒤 find는 다시 SELECT</li>

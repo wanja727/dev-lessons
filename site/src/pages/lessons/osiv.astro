@@ -43,6 +43,7 @@ public PlayerView findPlayerView(Long id) {
     <p class="eyebrow">JPA · 개념 학습 · 약 25분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a>, <a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a></p>
     <h1>OSIV (Open Session In View)</h1>
     <p class="lede">지난 레슨에서 트랜잭션 밖의 지연 로딩은 LazyInitializationException이라고 배웠어요. 그런데 스프링 부트 기본 설정에서는 컨트롤러에서도 지연 로딩이 <strong>돼요.</strong> 그 이유가 OSIV이고, 그 대가는 <strong>DB 커넥션</strong>이에요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> <a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a>(LazyInitializationException), <a href="/dev-lessons/lessons/connection-pool/">DB 커넥션과 커넥션 풀</a>, 컨트롤러 → 서비스 흐름(<a href="/dev-lessons/lessons/spring-beans/">스프링 빈</a>).</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#what"><span>1</span>OSIV가 하는 일</a>
@@ -119,13 +120,13 @@ public PlayerView findPlayerView(Long id) {
     <div class="read stack">
       <p class="eyebrow">3 · 커넥션 비용</p>
       <h2>왜 끄라고 할까: 커넥션을 오래 쥐면 동시 처리량이 준다</h2>
-      <p>DB 커넥션 풀은 크기가 정해져 있어요(HikariCP 기본 10개). 요청이 커넥션을 쥐고 있는 시간이 길수록, 같은 풀로 동시에 처리할 수 있는 요청이 줄어요. 아래는 <strong>단순한 모형 계산</strong>이에요. 실제 수치는 부하 테스트로 확인해야 해요.</p>
+      <p>DB <a href="/dev-lessons/lessons/connection-pool/">커넥션 풀</a>은 크기가 정해져 있어요(스프링 부트 기본 10개). 요청이 커넥션을 쥐고 있는 시간이 길수록, 같은 풀로 동시에 처리할 수 있는 요청이 줄어요. 아래는 <strong>단순한 모형 계산</strong>이에요. 실제 수치는 부하 테스트로 확인해야 해요.</p>
     </div>
     <div class="panel">
       <div class="sliders">
         <label>커넥션 풀 크기 <b id="v-pool"></b><input type="range" id="s-pool" min="5" max="50" step="5" value="10"></label>
         <label>트랜잭션 안 DB 작업 시간 <b id="v-db"></b><input type="range" id="s-db" min="10" max="200" step="10" value="30"></label>
-        <label>트랜잭션 밖 작업 시간 (외부 API, 렌더링) <b id="v-ext"></b><input type="range" id="s-ext" min="0" max="2000" step="50" value="300"></label>
+        <label>트랜잭션 밖 작업 시간 (외부 API 호출, 화면 만들기) <b id="v-ext"></b><input type="range" id="s-ext" min="0" max="2000" step="50" value="300"></label>
       </div>
       <div class="pool-out">
         <div><span class="label">OSIV 켜짐: 요청당 커넥션 점유</span><b id="o-on-hold"></b><span class="muted">초당 최대 요청 (커넥션 기준)</span><b id="o-on-rps" class="big"></b></div>
@@ -150,7 +151,7 @@ public PlayerView findPlayerView(Long id) {
     <p class="eyebrow">5 · 끄고 나서</p>
     <h2>지연 로딩은 서비스 안에서 끝낸다</h2>
     <pre set:text={codeOff} />
-    <p>끄면 컨트롤러와 뷰에서 지연 로딩이 안 되니, 화면에 필요한 데이터는 서비스가 트랜잭션 안에서 모두 준비해야 해요.</p>
+    <p>끄면 컨트롤러와 뷰(서버에서 HTML 화면을 만드는 템플릿)에서 지연 로딩이 안 되니, 화면에 필요한 데이터는 서비스가 트랜잭션 안에서 모두 준비해야 해요.</p>
     <pre set:text={codeFix} />
     <div class="table-wrap">
       <table>
@@ -192,7 +193,7 @@ public PlayerView findPlayerView(Long id) {
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5, MockMvc, 실제 PostgreSQL(Testcontainers)에서 같은 컨트롤러를 OSIV 켜고 끈 두 설정으로 호출해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 스프링 부트와 PostgreSQL에서, 같은 컨트롤러를 OSIV를 켜고 끈 두 설정으로 호출해 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>꺼짐: 컨트롤러 지연 로딩은 LazyInitializationException / 켜짐: "레드" 반환</li>
       <li>서비스 호출 직후 HikariCP 사용 중 커넥션: 꺼짐 0개 / 켜짐 1개</li>

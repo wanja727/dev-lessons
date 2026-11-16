@@ -57,6 +57,7 @@ public class Team {
     <p class="eyebrow">JPA · 개념 학습 · 약 25분 · 선수 레슨: <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a></p>
     <h1>연관관계 주인과 양방향 매핑</h1>
     <p class="lede">객체는 참조가 양쪽에 있을 수 있지만, 테이블의 FK는 <strong>한 곳</strong>에만 있어요. 그래서 JPA는 양방향 관계에서 FK를 관리할 쪽을 하나 정해요. 그게 <strong>연관관계의 주인</strong>이에요. 이걸 모르면 "분명 추가했는데 FK가 null"인 버그를 만나요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 엔티티와 리포지토리(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 트랜잭션 안의 변경이 커밋 때 반영된다는 것(<a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a>), SQL의 외래 키(FK).</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#owner"><span>1</span>주인과 mappedBy</a>
@@ -204,7 +205,7 @@ public class Team {
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5(Hibernate 6.6)와 실제 PostgreSQL(Testcontainers)에서 FK는 네이티브 쿼리로 DB에서 직접 읽고, SQL은 실제로 나간 문장을 세요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL에서, 코드가 바뀔 때마다 다시 확인해요. FK 값은 JPA를 거치지 않고 DB에서 SQL로 직접 읽고, 나간 SQL은 실제 문장을 세요.</p>
     <ul>
       <li>주인이 아닌 쪽에만 추가: team_id null</li>
       <li>주인만 설정: team_id 저장, 같은 트랜잭션의 team.members는 비어 있음, 새 트랜잭션에서는 1명</li>

@@ -224,9 +224,10 @@ footer { color: var(--muted); font-size: 14px; max-width: 720px; }
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">JPA 단원 · 개념 학습 · 약 30분</p>
+    <p class="eyebrow">JPA 단원 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a></p>
     <h1>JPA N+1 문제</h1>
     <p class="lede">JPA를 처음 보는 사람도 끝까지 따라올 수 있게 만든 학습 페이지예요. 읽기만 하지 말고, 중간중간 예측하고 직접 눌러 보세요. 예측이 틀려도 괜찮아요. 틀린 예측이 오히려 더 오래 남아요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 엔티티, 리포지토리, JPQL(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 프록시와 지연 로딩(<a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a>), SQL의 JOIN과 LIMIT.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#background"><span>1</span>JPA와 연관관계</a>
@@ -410,7 +411,7 @@ footer { color: var(--muted); font-size: 14px; max-width: 720px; }
     <div class="read" style="display:flex;flex-direction:column;gap:16px">
       <p class="eyebrow">4 · EAGER의 함정</p>
       <h2>EAGER로 바꿔도 해결되지 않는 이유</h2>
-      <p>3장에서 EAGER로 바꿔도 쿼리 수가 그대로였죠. 이유는 JPA가 일하는 순서에 있어요. 단계를 하나씩 넘겨 보세요.</p>
+      <p>3장에서 EAGER로 바꿔도 쿼리 수가 그대로였죠. 이유는 JPA가 일하는 순서에 있어요. <code>findAll()</code>은 안에서 JPQL(엔티티를 대상으로 쓰는 조회 언어, <a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>)을 만들어 실행해요. 단계를 하나씩 넘겨 보세요.</p>
     </div>
     <div class="panel stepper">
       <div class="step-dots" id="step-dots" role="group" aria-label="단계"></div>
@@ -575,7 +576,7 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>아래 동작은 저장소의 <a href="https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java">NPlusOneTest</a>가 실제 PostgreSQL(Testcontainers)에서 SQL을 세어서 확인해요. 코드가 바뀔 때마다 GitHub Actions에서 다시 실행돼요.</p>
+    <p>아래 동작은 저장소의 <a href="https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java">NPlusOneTest</a>가 실제 PostgreSQL에서 나간 SQL을 세어, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>LAZY, 팀 10개, 멤버에 접근: 쿼리 11번</li>
       <li>LAZY, 멤버에 접근하지 않음: 1번</li>

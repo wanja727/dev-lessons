@@ -10,7 +10,7 @@ public Player findPlayer(Long id) {
     return playerRepository.findById(id).orElseThrow();   // team은 LAZY
 }
 
-// 컨트롤러 (트랜잭션 밖, OSIV 꺼짐)
+// 컨트롤러 (트랜잭션 밖. OSIV 설정은 꺼져 있다고 가정: OSIV 레슨에서 다뤄요)
 Player player = playerService.findPlayer(1L);
 Long teamId = player.getTeam().getId();       // ①
 String teamName = player.getTeam().getName(); // ②`;
@@ -67,6 +67,7 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
     <p class="eyebrow">JPA · 개념 학습 · 약 25분 · 선수 레슨: <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a> · 다음 레슨: <a href="/dev-lessons/lessons/jpa-n-plus-1/">N+1 문제</a></p>
     <h1>프록시와 지연 로딩</h1>
     <p class="lede">플레이어를 조회하면 팀도 같이 조회될까요? LAZY라면 팀 자리에는 <strong>프록시</strong>라는 가짜 객체가 들어가요. 프록시가 언제 진짜 데이터를 가져오는지 알면 N+1도, LazyInitializationException도 설명할 수 있어요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a>(1차 캐시, 트랜잭션 범위), 엔티티와 리포지토리(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 자바의 상속.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#proxy"><span>1</span>프록시란</a>
@@ -107,6 +108,7 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
     <p class="eyebrow">1 · 프록시란</p>
     <h2>진짜 엔티티 대신 들어가는 빈 껍데기</h2>
     <pre set:text={codeEntity} />
+    <p><code>@ManyToOne</code>은 "여러 플레이어가 한 팀에 속한다"(다대일) 관계를 뜻하고, 플레이어 테이블의 <code>team_id</code> 컬럼(외래 키)으로 이어져요. <code>fetch = FetchType.LAZY</code>는 연관된 팀을 "필요할 때 나중에" 불러오라는 설정이에요.</p>
     <p>LAZY로 설정하면 플레이어를 조회할 때 팀 테이블은 SELECT하지 않아요. 그런데 <code>player.team</code> 필드를 null로 둘 수는 없으니, Hibernate는 <strong>Team을 상속한 프록시 객체</strong>를 넣어 둬요. 플레이어 행에 있는 team_id(FK) 값만 들고 있는 껍데기예요.</p>
     <pre set:text={codeProxy} />
     <ul>
@@ -177,7 +179,7 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
     <p>0장의 정답은 "②에서만 예외"예요. ①의 getId()는 프록시가 이미 아는 값이라 괜찮아요.</p>
     <h3>해결: 트랜잭션 안에서 필요한 만큼 미리 로딩</h3>
     <pre set:text={codeFix} />
-    <p>실무에서 가장 권하는 건 3번이에요. 화면에 필요한 데이터를 서비스 안에서 DTO로 만들어 반환하면, 어디까지 로딩해야 하는지가 서비스 코드에 드러나요. 트랜잭션 밖까지 영속성 컨텍스트를 열어 두는 OSIV라는 방법도 있는데, 다음 레슨에서 비용과 함께 다뤄요.</p>
+    <p>실무에서 가장 권하는 건 3번이에요. 화면에 필요한 데이터를 서비스 안에서 DTO(화면에 필요한 값만 담아 옮기는 단순한 객체)로 만들어 반환하면, 어디까지 로딩해야 하는지가 서비스 코드에 드러나요. 트랜잭션 밖까지 영속성 컨텍스트를 열어 두는 OSIV라는 방법도 있는데, 다음 레슨에서 비용과 함께 다뤄요.</p>
     <p class="muted">LAZY를 EAGER로 바꾸는 건 해결이 아니에요. 필요 없는 곳에서도 항상 조회하고, JPQL에서는 <a href="/dev-lessons/lessons/jpa-n-plus-1/">N+1</a>을 만들어요.</p>
   </section>
 
@@ -190,7 +192,7 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
         <tbody>
           <tr><td><code>getClass() ==</code>로 타입 비교</td><td>프록시는 하위 클래스라 false</td><td>instanceof, Hibernate.getClass()</td></tr>
           <tr><td>equals에서 필드 직접 접근 (<code>other.name</code>)</td><td>프록시의 필드는 비어 있음</td><td>getter로 접근</td></tr>
-          <tr><td>엔티티 클래스나 메서드를 final로</td><td>상속할 수 없어 프록시를 만들지 못함</td><td>final 금지 (Kotlin은 allopen 플러그인)</td></tr>
+          <tr><td>엔티티 클래스나 메서드를 final로</td><td>상속할 수 없어 프록시를 만들지 못함</td><td>final 금지</td></tr>
           <tr><td>toString, JSON 직렬화에 연관 필드 포함</td><td>트랜잭션 밖에서 LazyInitializationException, 안에서는 의도치 않은 SELECT</td><td>엔티티를 직접 응답하지 않고 DTO로</td></tr>
           <tr><td>반복문 안에서 프록시 초기화</td><td>N+1</td><td>fetch join, 배치 사이즈</td></tr>
         </tbody>
@@ -224,7 +226,7 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5(Hibernate 6.6)와 실제 PostgreSQL(Testcontainers)에서 실제로 나간 SELECT 수를 세서 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL에서 나간 SELECT 수를 세어, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>find는 즉시 SELECT 1번, 진짜 클래스</li>
       <li>getReference는 SELECT 0번, 다른 클래스지만 instanceof는 참. getId()도 0번, getName()에서 1번, 다시 읽어도 1번</li>
