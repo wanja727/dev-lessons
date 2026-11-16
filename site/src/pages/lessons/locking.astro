@@ -55,6 +55,7 @@ Optional<Stock> findForUpdate(@Param("id") Long id);
     <p class="eyebrow">동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/isolation-level/">격리 수준과 이상 현상</a>, <a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a></p>
     <h1>낙관적 락 vs 비관적 락</h1>
     <p class="lede"><a href="/dev-lessons/lessons/isolation-level/">격리 수준 레슨</a>에서 "읽고 계산해서 쓰면" 갱신 손실이 난다는 걸 봤어요. JPA의 변경 감지가 바로 이 패턴이라, 재고·잔액·좌석처럼 동시에 줄어드는 값에는 락이 필요해요. 두 가지 락이 충돌을 어떻게 다르게 다루는지 직접 따라가 봐요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 갱신 손실(<a href="/dev-lessons/lessons/isolation-level/">격리 수준</a>), 변경 감지(<a href="/dev-lessons/lessons/jpa-persistence-context/">영속성 컨텍스트</a>), 트랜잭션과 커밋(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>).</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#two"><span>1</span>두 가지 철학</a>
@@ -173,7 +174,7 @@ Optional<Stock> findForUpdate(@Param("id") Long id);
         </tbody>
       </table>
     </div>
-    <p>두 락 모두 DB가 판정하니 <strong>서버가 여러 대여도</strong> 동작해요. 자바의 synchronized와 다른 점이에요. DB 밖의 자원(외부 API 호출 등)까지 한 번에 하나만 처리해야 할 때는 Redis 같은 분산 락을 검토하지만, 이 레슨의 범위는 DB 락까지예요.</p>
+    <p>두 락 모두 DB가 판정하니 <strong>서버가 여러 대여도</strong> 동작해요. 자바의 synchronized와 다른 점이에요. DB 밖의 자원(외부 API 호출 등)까지 한 번에 하나만 처리해야 할 때는 Redis 같은 저장소로 여러 서버가 함께 쓰는 락(분산 락)을 검토하지만, 이 레슨의 범위는 DB 락까지예요.</p>
   </section>
 
   <section id="check" class="read">

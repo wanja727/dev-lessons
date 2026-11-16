@@ -30,9 +30,10 @@ public void transfer(...) { ... }
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨 없음 (트랜잭션 기본 개념은 알고 있다고 가정)</p>
+    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a></p>
     <h1>격리 수준과 이상 현상</h1>
     <p class="lede">트랜잭션은 "동시에 실행돼도 서로 간섭하지 않는다"고 배우지만, 실제 DB는 성능 때문에 어느 정도의 간섭을 허용해요. 얼마나 허용할지 정하는 게 <strong>격리 수준</strong>이에요. 두 트랜잭션을 직접 번갈아 실행해 보며 어떤 일이 생기는지 확인해요. 모든 결과는 PostgreSQL 16에서 테스트로 확인했어요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 트랜잭션, 커밋, 롤백, 커밋 전 변경은 다른 연결에 안 보인다는 것(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>). SQL의 SELECT와 UPDATE.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#levels"><span>1</span>격리 수준 네 가지</a>
@@ -141,8 +142,8 @@ public void transfer(...) { ... }
         <thead><tr><th>방법</th><th>결과</th><th>대가</th></tr></thead>
         <tbody>
           <tr><td>원자적 UPDATE (<code>balance = balance + 30</code>)</td><td>180. 뒤 트랜잭션이 행 락을 기다렸다가 최신 값에 더함</td><td>계산을 SQL로 표현할 수 있을 때만</td></tr>
-          <tr><td>REPEATABLE READ</td><td>뒤 트랜잭션이 직렬화 오류(SQLSTATE 40001)로 실패, 최종 150</td><td>실패한 트랜잭션을 앱이 다시 시도해야 함</td></tr>
-          <tr><td>비관적 락 (<code>SELECT ... FOR UPDATE</code>)</td><td>읽을 때부터 락을 잡아 뒤 트랜잭션이 기다림</td><td>대기 시간, 데드락 주의</td></tr>
+          <tr><td>REPEATABLE READ</td><td>뒤 트랜잭션이 직렬화 오류("다른 트랜잭션과 겹쳐서 이 트랜잭션은 진행할 수 없다"는 DB 오류)로 실패, 최종 150</td><td>실패한 트랜잭션을 앱이 다시 시도해야 함</td></tr>
+          <tr><td>비관적 락 (<code>SELECT ... FOR UPDATE</code>)</td><td>읽을 때부터 락을 잡아 뒤 트랜잭션이 기다림</td><td>대기 시간, 데드락(두 트랜잭션이 서로 상대가 잡은 락을 기다리며 멈춤) 주의</td></tr>
           <tr><td>낙관적 락 (<code>@Version</code>)</td><td>버전이 바뀌었으면 쓰기 실패</td><td>충돌 시 재시도</td></tr>
         </tbody>
       </table>
@@ -160,7 +161,7 @@ public void transfer(...) { ... }
         <tbody>
           <tr><td>기본 격리 수준</td><td>READ COMMITTED</td><td>REPEATABLE READ</td></tr>
           <tr><td>READ UNCOMMITTED</td><td>READ COMMITTED와 같게 동작 (Dirty Read 없음)</td><td>Dirty Read 가능</td></tr>
-          <tr><td>REPEATABLE READ의 Phantom</td><td>스냅샷으로 막음</td><td>일반 조회는 스냅샷으로 막고, 잠금 조회는 갭 락으로 막음</td></tr>
+          <tr><td>REPEATABLE READ의 Phantom</td><td>스냅샷으로 막음</td><td>일반 조회는 스냅샷으로 막고, 잠금 조회는 행 사이 범위에 락(갭 락)을 걸어 막음</td></tr>
           <tr><td>REPEATABLE READ의 동시 수정</td><td>뒤 트랜잭션을 직렬화 오류로 실패시킴</td><td>기다렸다가 최신 값을 기준으로 진행</td></tr>
         </tbody>
       </table>
@@ -194,7 +195,7 @@ public void transfer(...) { ... }
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>PostgreSQL 16(Testcontainers)에 커넥션 두 개를 열어 트랜잭션 순서를 직접 정해 실행해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL 16에 연결 두 개를 열고 트랜잭션 순서를 직접 정해, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>기본 격리 수준은 read committed</li>
       <li>READ UNCOMMITTED로 열어도 커밋 전 값은 안 보임</li>
