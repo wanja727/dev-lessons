@@ -301,8 +301,8 @@ const codeRepo = `public interface CafeMenuRepository extends JpaRepository<Cafe
     save: [
       ['자바 코드', 'cafeMenuRepository.save(new ' + E + '("mocha", 5800))'],
       ['Spring Data JPA', 'id가 없는 새 엔티티 → entityManager.persist(...)'],
-      ['Hibernate가 만든 SQL', 'insert into ' + T + ' (' + C + ', ' + P + ') values (?, ?) returning id'],
-      ['결과', '새 행이 생기고, DB가 만든 id가 객체에 채워져요']
+      ['Hibernate가 만든 SQL', 'insert into ' + T + ' (' + C + ', ' + P + ') values (?, ?)'],
+      ['결과', '새 행이 생기고, DB가 만든 id를 JDBC로 받아 객체에 채워요']
     ],
     findById: [
       ['자바 코드', 'cafeMenuRepository.findById(2L)'],
