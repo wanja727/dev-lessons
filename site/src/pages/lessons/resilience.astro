@@ -123,7 +123,7 @@ Runnable call = CircuitBreaker.decorateRunnable(cb, () -> pay(key));`;
           <div class="cb-state" id="cb-state">CLOSED</div>
           <span class="label">최근 호출 (최대 10번)</span>
           <div class="lane" id="cb-window"></div>
-          <p class="formula" id="cb-rate">실패율: -</p>
+          <p class="muted" id="cb-rate">실패율: -</p>
         </div>
         <div class="pane">
           <span class="label">호출 기록</span>
@@ -238,6 +238,7 @@ Runnable call = CircuitBreaker.decorateRunnable(cb, () -> pay(key));`;
   .tick.fail { background: var(--query); }
   .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
   .path-steps li { color: var(--ink); }
+  #cb-log { list-style: none; padding-left: 0; }
   .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
   @media (max-width: 760px) { .cb-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
