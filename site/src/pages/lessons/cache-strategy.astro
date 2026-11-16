@@ -1,0 +1,362 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/cache/CacheStrategyTest.java`;
+const impl = `${repo}/blob/main/verification/src/test/java/lab/devlessons/cache/PriceCache.java`;
+
+const codeAside = `long get(long id) {
+    String cached = redis.get("price:" + id);         // 1. 캐시부터 본다
+    if (cached != null) {
+        return Long.parseLong(cached);                 // 캐시 적중 (hit)
+    }
+    long price = loadFromDb(id);                       // 2. 없으면 DB (miss)
+    redis.set("price:" + id, String.valueOf(price),
+              SetArgs.Builder.px(ttlMillis));          // 3. TTL과 함께 넣는다
+    return price;
+}`;
+
+const codePredict = `// 상품 가격을 cache-aside로 캐시하고 있다 (TTL 1시간)
+cache.get(1);                                   // 10,000원, 캐시에 들어감
+jdbc.update("UPDATE product SET price = 8000 WHERE id = 1");
+cache.get(1);                                   // 몇 원?`;
+
+const codeInvalidate = `// 권장 순서: DB를 먼저 바꾸고, 커밋한 뒤 캐시를 지운다
+void updatePrice(long id, long price) {
+    jdbc.update("UPDATE product SET price = ? WHERE id = ?", price, id);
+    redis.del("price:" + id);
+}`;
+
+const codeSingleFlight = `// 같은 키를 동시에 놓친 요청들은 첫 요청의 DB 조회를 함께 기다린다 (서버 한 대 안에서)
+CompletableFuture<Long> mine = new CompletableFuture<>();
+CompletableFuture<Long> existing = inFlight.putIfAbsent(id, mine);
+if (existing != null) {
+    return existing.join();          // 이미 누가 DB로 갔다: 그 결과를 기다린다
+}
+try {
+    long price = loadFromDb(id);     // 나만 DB로 간다
+    redis.set(key(id), String.valueOf(price), SetArgs.Builder.px(ttlMillis));
+    mine.complete(price);
+    return price;
+} finally {
+    inFlight.remove(id);
+}`;
+---
+<Base title="캐시 전략과 무효화 · Dev Lessons" description="cache-aside와 write-through, TTL, 캐시 무효화 순서, 캐시 스탬피드를 실제 Redis와 PostgreSQL로 재현하며 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨 없음</p>
+    <h1>캐시 전략과 무효화</h1>
+    <p class="lede">상품 상세 페이지는 초당 수천 번 열리는데, 가격은 하루에 한 번 바뀌어요. 매번 DB에 묻는 대신 캐시에 두면 빨라지지만, 이번엔 "가격을 바꿨는데 옛 가격이 보여요"라는 문의가 와요. 캐시를 쓰는 법과 캐시가 틀리는 순간을 함께 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> SQL의 SELECT와 UPDATE, 스레드가 여럿이면 일이 동시에 일어난다는 것(<a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a>). Redis는 <a href="/dev-lessons/lessons/stock-concurrency/">재고 차감 동시성</a>에서 처음 나왔지만, 여기서 다시 설명해요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>캐시와 TTL</a>
+      <a href="#patterns"><span>2</span>cache-aside와 write-through</a>
+      <a href="#sim"><span>3</span>무효화 순서</a>
+      <a href="#stampede"><span>4</span>캐시 스탬피드</a>
+      <a href="#choose"><span>5</span>함정과 선택 기준</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>가격을 바꿨는데 뭐가 보일까요?</h2>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="8000" aria-pressed="false">8,000원</button>
+          <button class="chip" type="button" data-v="10000" aria-pressed="false">10,000원</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 캐시와 TTL</p>
+    <h2>원본보다 가까운 곳에 사본을 둬요</h2>
+    <p><strong>캐시</strong>는 자주 읽는 데이터의 사본을 원본(DB)보다 빠른 곳에 두는 거예요. 여기서는 메모리에 데이터를 두는 키-값 저장소 <strong>Redis</strong>를 써요. 찾는 값이 캐시에 있으면 <strong>적중</strong>(hit), 없으면 <strong>실패</strong>(miss)라고 해요.</p>
+    <div class="diagram" role="img" aria-label="앱이 먼저 Redis를 보고, 없으면 DB를 읽어 Redis에 넣는다">
+      <svg viewBox="0 0 640 170" xmlns="http://www.w3.org/2000/svg">
+        <rect class="svg-box" x="20" y="60" width="120" height="50" rx="10" /><text class="svg-tb" x="80" y="90" text-anchor="middle">앱</text>
+        <rect class="svg-box" x="260" y="20" width="140" height="50" rx="10" /><text class="svg-tb" x="330" y="50" text-anchor="middle">Redis (캐시)</text>
+        <rect class="svg-box" x="260" y="105" width="140" height="50" rx="10" /><text class="svg-tb" x="330" y="135" text-anchor="middle">DB (원본)</text>
+        <path class="svg-acc" d="M140 75 L257 45" /><text class="svg-t" x="150" y="40">① 먼저 캐시</text>
+        <path class="svg-line" d="M140 95 L257 128" /><text class="svg-t" x="140" y="140">② 없으면 DB</text>
+        <path class="svg-line" d="M400 130 C 470 130, 470 45, 403 45" /><text class="svg-t" x="460" y="92">③ 캐시에 넣기</text>
+      </svg>
+    </div>
+    <p>캐시의 숙제는 <strong>원본이 바뀌었을 때</strong>예요. 사본을 지우거나 고치는 것을 <strong>무효화</strong>(invalidation)라고 해요. 무효화를 놓쳐도 영원히 틀리지 않게, 키마다 수명을 정해 두는데 이것이 <strong>TTL</strong>(time to live)이에요. TTL이 지나면 Redis가 키를 지워요.</p>
+  </section>
+
+  <section id="patterns" class="read">
+    <p class="eyebrow">2 · cache-aside와 write-through</p>
+    <h2>읽을 때 채우기, 쓸 때 채우기</h2>
+    <p><strong>cache-aside</strong>(lazy loading)는 앱이 캐시를 먼저 보고, 없으면 DB에서 읽어 캐시에 넣는 방식이에요. 가장 흔해요.</p>
+    <pre set:text={codeAside} />
+    <CiOutput lesson="cache-strategy" key="hit" label="실제 결과 보기: 두 번 조회한 시간" source="CacheStrategyTest.cacheAsideHitsCacheAfterFirstRead" />
+    <p class="muted">검증 테스트는 DB 조회에 50ms를 더해 느린 원본을 흉내 내요.</p>
+    <p><strong>write-through</strong>는 값을 쓸 때 DB와 캐시를 <strong>함께</strong> 바꾸는 방식이에요. 쓴 직후 조회도 캐시에서 새 값을 줘요. 대신 한 번도 읽히지 않을 값까지 캐시에 넣고, DB와 캐시 둘 중 하나만 성공하는 경우를 따로 다뤄야 해요.</p>
+    <div class="pc">
+      <div class="pro"><h4>cache-aside</h4><ul><li>읽히는 것만 캐시에 들어가요</li><li>캐시가 죽어도 DB로 동작해요</li><li>첫 조회와 무효화 직후 조회는 느려요</li></ul></div>
+      <div class="con"><h4>write-through</h4><ul><li>쓴 직후에도 캐시가 맞아요</li><li>쓰기가 느려지고, 안 읽힐 값도 캐시에 들어가요</li><li>DB와 캐시 중 하나만 성공하면 어긋나요</li></ul></div>
+    </div>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 무효화 순서</p>
+      <h2>지우는 순서가 결과를 바꿔요</h2>
+      <p>가격을 10,000원에서 8,000원으로 바꿔요. 쓰기 방식을 고르고 "다음"을 눌러 보세요. "캐시 먼저 삭제"에서는 가격 변경 도중 조회 요청이 하나 끼어들어요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">쓰기 방식</span>
+        <div class="seg" id="mode">
+          <button type="button" data-v="none" aria-pressed="true">DB만 바꿈</button>
+          <button type="button" data-v="delfirst" aria-pressed="false">캐시 먼저 삭제 → DB 갱신</button>
+          <button type="button" data-v="dbfirst" aria-pressed="false">DB 갱신 → 캐시 삭제</button>
+          <button type="button" data-v="through" aria-pressed="false">write-through</button>
+        </div>
+      </div>
+      <div class="ca-grid">
+        <div class="pane">
+          <span class="label">진행</span>
+          <ol class="path-steps" id="steps"></ol>
+        </div>
+        <div class="pane">
+          <div class="svc-list">
+            <div class="svc"><span class="svc-name">DB 가격</span><span class="svc-state" id="v-db">10,000</span></div>
+            <div class="svc"><span class="svc-name">캐시 가격</span><span class="svc-state" id="v-cache">10,000</span></div>
+          </div>
+          <p class="verdict" id="sim-verdict"></p>
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn" type="button" id="s-reset">처음으로</button>
+        <button class="btn primary" type="button" id="s-next">다음</button>
+        <button class="btn" type="button" id="s-all">끝까지</button>
+      </div>
+    </div>
+    <div class="read stack">
+      <p>"캐시 먼저 삭제"의 경쟁을 실제 Redis와 PostgreSQL에서 재현한 결과예요. 조회 요청이 DB에서 옛 가격을 읽은 직후, 가격 변경이 캐시를 지우고 DB를 바꾸게 순서를 맞췄어요.</p>
+      <CiOutput lesson="cache-strategy" key="stale-race" label="실제 결과 보기: 캐시 먼저 삭제의 경쟁" source="CacheStrategyTest.deleteThenUpdateRaceLeavesStaleCache" />
+      <p>그래서 보통 <strong>DB를 먼저 바꾸고 캐시를 지워요.</strong> 이 순서에도 아주 드문 경쟁(조회가 옛 값을 읽고 아주 늦게 캐시에 넣음)이 남지만, 그 틈은 훨씬 좁고 TTL이 마지막 안전망이 돼요.</p>
+      <pre set:text={codeInvalidate} />
+    </div>
+  </section>
+
+  <section id="stampede" class="read">
+    <p class="eyebrow">4 · 캐시 스탬피드</p>
+    <h2>만료되는 순간, 모두가 DB로 달려가요</h2>
+    <p>인기 상품의 캐시가 만료된 순간 요청 100건이 동시에 오면, 100건 모두 "캐시 없음"을 보고 DB로 가요. DB가 감당 못 하면 응답이 느려지고, 그동안 캐시는 여전히 비어 있어 더 많은 요청이 DB로 몰려요. 이를 <strong>캐시 스탬피드</strong>(cache stampede, 우르르 몰림)라고 해요.</p>
+    <CiOutput lesson="cache-strategy" key="stampede" label="실제 결과 보기: 동시 조회 100건의 DB 조회 수" source="CacheStrategyTest.stampedeAndSingleFlight" />
+    <p>막는 방법은 "같은 키는 한 요청만 DB로 보내기"예요. 아래는 서버 한 대 안에서 묶는 <strong>단일 로드</strong>(single flight) 코드예요.</p>
+    <pre set:text={codeSingleFlight} />
+    <details class="more"><summary>더 알아보기: 서버가 여러 대일 때, 다른 방법들</summary>
+      <ul>
+        <li><strong>분산 락:</strong> Redis에 <code>SET lock:price:1 ... NX PX 3000</code>(없을 때만 쓰기)으로 락을 잡은 서버만 DB를 읽고, 나머지는 잠시 기다렸다 캐시를 다시 봐요.</li>
+        <li><strong>TTL에 무작위 값 더하기:</strong> 같은 시각에 만든 키들이 한꺼번에 만료되지 않게 TTL을 조금씩 다르게 줘요.</li>
+        <li><strong>미리 갱신:</strong> 만료 직전에 백그라운드에서 다시 읽어 캐시를 채워 두면 사용자 요청은 만료를 만나지 않아요.</li>
+      </ul>
+    </details>
+    <p class="muted">전체 코드: <a href={impl}>PriceCache.java</a></p>
+  </section>
+
+  <section id="choose" class="read">
+    <p class="eyebrow">5 · 함정과 선택 기준</p>
+    <h2>무엇을, 얼마나 오래 캐시할까</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>데이터</th><th>추천</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td>상품 정보, 카테고리, 설정값</td><td>cache-aside + 변경 시 삭제 + TTL</td><td>읽기가 압도적으로 많고 조금 늦어도 괜찮아요</td></tr>
+          <tr><td>쓴 직후 바로 읽히는 값 (프로필 수정 후 화면)</td><td>write-through 또는 쓰기 후 삭제</td><td>바로 다음 조회가 새 값을 봐야 해요</td></tr>
+          <tr><td>잔액, 재고, 결제 상태</td><td>캐시하지 않거나 아주 짧은 TTL</td><td>틀린 값이 돈 문제로 이어져요. 원본(DB)을 읽어요</td></tr>
+          <tr><td>인기 상품 하나에 요청이 몰림</td><td>단일 로드 또는 분산 락, 미리 갱신</td><td>만료 순간 스탬피드를 막아요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>트랜잭션 안에서 캐시 삭제:</strong> 커밋 전에 캐시를 지우면, 커밋 전 다른 조회가 옛 DB 값을 캐시에 다시 넣을 수 있어요. 삭제는 커밋 뒤에 해요(<a href="/dev-lessons/lessons/transactional-outbox/">@TransactionalEventListener(AFTER_COMMIT)</a>를 쓸 수 있어요).</li>
+      <li><strong>캐시가 죽으면:</strong> cache-aside는 DB로 버티지만, 모든 요청이 DB로 가니 DB가 버틸 수 있는지 미리 생각해 둬요.</li>
+      <li><strong>스프링의 @Cacheable:</strong> 스프링은 <code>@Cacheable</code>, <code>@CacheEvict</code>로 cache-aside를 어노테이션으로 쓰게 해 줘요. 프록시로 동작하니 <a href="/dev-lessons/lessons/transactional-proxy/">내부 호출</a>에서는 적용되지 않아요.</li>
+    </ul>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "캐시를 쓸 때 DB와 데이터가 어긋나지 않게 하려면?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 보통 cache-aside로 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>캐시는 원본의 사본이라 원본이 바뀌면 어긋날 수 있습니다. 완벽한 일치보다 "얼마나 늦어도 되는가"를 정하고, 무효화와 TTL로 그 범위 안에 둡니다.</dd>
+        <dt>원리</dt><dd>읽기는 cache-aside로 캐시를 먼저 보고 없으면 DB에서 읽어 TTL과 함께 넣습니다. 쓰기는 DB를 먼저 바꾸고 커밋 후 캐시를 지웁니다. 캐시를 먼저 지우면 그 사이 조회가 옛 값을 다시 넣어 TTL 동안 남기 때문입니다. TTL은 무효화를 놓쳤을 때의 안전망입니다.</dd>
+        <dt>트레이드오프</dt><dd>TTL이 짧으면 정확하지만 DB 부하가 늘고, 길면 반대입니다. write-through는 쓴 직후도 맞지만 쓰기가 느려지고 안 읽힐 값도 캐시합니다. 인기 키는 만료 순간 스탬피드가 생기므로 단일 로드나 분산 락, TTL 분산으로 막고, 잔액·재고처럼 틀리면 안 되는 값은 캐시하지 않습니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 캐시 먼저 삭제 순서에서 옛 가격이 다시 캐시되는 경쟁을 테스트로 재현했고, 만료 순간 동시 조회 100건이 DB로 몰리는 것을 단일 로드로 1번까지 줄였습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 무효화 순서와 그 이유, TTL의 역할, 스탬피드, 캐시하면 안 되는 데이터를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL과 Redis 7을 띄워 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>cache-aside: 첫 조회만 DB를 읽고 두 번째는 캐시에서</li>
+      <li>DB만 바꾸면 캐시가 살아 있는 동안 옛 가격</li>
+      <li>DB 갱신 후 캐시 삭제: 다음 조회는 새 가격</li>
+      <li>캐시 먼저 삭제 후 DB 갱신: 그 사이 조회가 옛 가격을 다시 캐시에 넣는다</li>
+      <li>TTL이 지나면 키가 사라지고 DB를 다시 읽는다</li>
+      <li>write-through: 쓴 직후 조회도 DB 없이 새 값</li>
+      <li>만료 순간 동시 조회 100건은 DB 조회 10번 넘게, 단일 로드는 1번</li>
+    </ul>
+    <p><a href={test}>CacheStrategyTest</a></p>
+    <RunLocally tests={['lab.devlessons.cache.CacheStrategyTest']} docker />
+  </section>
+
+  <footer>
+    근거: Redis 문서(SET의 PX 옵션, EXPIRE), Spring Framework 캐시 추상화 문서, AWS ElastiCache 캐싱 전략 문서. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .ca-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .svc-list { display: flex; flex-direction: column; gap: 8px; }
+  .svc { display: flex; justify-content: space-between; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+  .svc-name { color: var(--muted); }
+  .svc-state { font-family: var(--font-mono); font-weight: 700; text-align: right; }
+  .svc-state.bad { color: var(--query); }
+  .svc-state.ok { color: var(--ok); }
+  .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .path-steps li { color: var(--muted); }
+  .path-steps li.done { color: var(--ink); }
+  .path-steps li.now { color: var(--accent); font-weight: 700; }
+  .path-steps .who { font-family: var(--font-mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--code-bg); margin-right: 4px; }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .ca-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('ca-p1'), p2: store('ca-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '10000' ? '10,000원' : '8,000원') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "10,000원"이에요. 캐시가 살아 있는 동안은 옛 가격이 보여요. 3장의 "DB만 바꿈"으로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('ca-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 시뮬레이터: [누가, 설명, DB값, 캐시값] (null이면 그대로, '' 이면 비어 있음) */
+  var S = {
+    none: [['쓰기', 'UPDATE price = 8,000, 커밋', 8000, null], ['조회', '캐시 적중: 10,000 돌려줌', null, null]],
+    delfirst: [
+      ['쓰기', '캐시 삭제', null, ''], ['조회', '캐시 없음 → DB에서 읽음: 10,000 (아직 안 바뀜)', null, null],
+      ['쓰기', 'UPDATE price = 8,000, 커밋', 8000, null], ['조회', '읽어 둔 10,000을 캐시에 넣음', null, 10000],
+      ['다음 조회', '캐시 적중: 10,000. TTL이 끝날 때까지 옛 가격', null, null]
+    ],
+    dbfirst: [['쓰기', 'UPDATE price = 8,000, 커밋', 8000, null], ['쓰기', '캐시 삭제', null, ''], ['조회', '캐시 없음 → DB에서 8,000 읽어 캐시에 넣음', null, 8000]],
+    through: [['쓰기', 'UPDATE price = 8,000, 커밋', 8000, null], ['쓰기', '캐시에도 8,000을 씀', null, 8000], ['조회', '캐시 적중: 8,000 (DB를 거치지 않음)', null, null]]
+  };
+  var V = {
+    none: 'DB는 8,000인데 캐시는 10,000. 무효화를 하지 않으면 TTL이 끝날 때까지 틀려요.',
+    delfirst: '삭제와 갱신 사이에 끼어든 조회가 옛 가격을 다시 캐시에 넣었어요.',
+    dbfirst: 'DB와 캐시가 맞아요. 무효화 직후 조회 한 번은 DB를 읽어요.',
+    through: 'DB와 캐시가 맞고, 쓴 직후 조회도 캐시에서 바로 나와요.'
+  };
+  var mode = 'none', idx = -1;
+  function fmt(v) { return v === '' ? '(비어 있음)' : v.toLocaleString('ko-KR'); }
+  function render() {
+    var st = S[mode], db = 10000, ca = 10000;
+    for (var i = 0; i <= idx; i++) { if (st[i][2] !== null) db = st[i][2]; if (st[i][3] !== null) ca = st[i][3]; }
+    document.getElementById('steps').innerHTML = st.map(function (s, i) {
+      return '<li class="' + (i < idx ? 'done' : i === idx ? 'now' : '') + '">' + (i <= idx ? '<span class="who">' + esc(s[0]) + '</span>' + esc(s[1]) : '…') + '</li>';
+    }).join('');
+    document.getElementById('v-db').textContent = fmt(db);
+    var c = document.getElementById('v-cache');
+    c.textContent = fmt(ca);
+    c.className = 'svc-state' + (ca !== '' && ca !== db ? ' bad' : ca === db && idx === st.length - 1 ? ' ok' : '');
+    document.getElementById('sim-verdict').textContent = idx === st.length - 1 ? V[mode] : '';
+    document.getElementById('s-next').disabled = idx >= st.length - 1;
+  }
+  function reset() { idx = -1; render(); }
+  document.getElementById('s-next').addEventListener('click', function () { if (idx < S[mode].length - 1) { idx++; render(); } });
+  document.getElementById('s-all').addEventListener('click', function () { idx = S[mode].length - 1; render(); });
+  document.getElementById('s-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('mode'), function (v) { mode = v; reset(); });
+  reset();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: 'cache-aside에서 가격을 바꿀 때 권장 순서는?', o: ['캐시 삭제 → DB 갱신', 'DB 갱신(커밋) → 캐시 삭제', 'DB만 갱신하고 TTL을 기다림'], a: 1, e: '캐시를 먼저 지우면 그 사이 조회가 옛 값을 다시 캐시에 넣을 수 있어요.' },
+    { q: 'TTL의 역할로 가장 맞는 것은?', o: ['캐시를 빠르게 만든다', '무효화를 놓쳐도 일정 시간 뒤에는 맞아지게 하는 안전망', '스탬피드를 완전히 막는다'], a: 1, e: 'TTL이 지나면 키가 사라져 다음 조회가 원본을 다시 읽어요. 오히려 만료 순간이 스탬피드의 원인이 되기도 해요.' },
+    { q: '인기 키가 만료된 순간 동시 요청이 모두 DB로 가는 현상과 대책은?', o: ['캐시 관통 / TTL을 0으로', '캐시 스탬피드 / 같은 키는 한 요청만 DB로 보내기', '갱신 손실 / 비관적 락'], a: 1, e: '단일 로드, 분산 락, TTL 분산, 미리 갱신으로 막아요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('ca-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('ca-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
