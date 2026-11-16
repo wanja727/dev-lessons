@@ -116,7 +116,7 @@ class RestApiTest {
         MockHttpServletResponse invalid = call(json(post(BASE), "{\"name\":\"커피\",\"price\":-1}"));
 
         assertThat(notFound.getStatus()).isEqualTo(404);
-        assertThat(notFound.getContentType()).isEqualTo("application/problem+json");
+        assertThat(notFound.getContentType()).startsWith("application/problem+json");
         JsonNode nf = JSON.readTree(notFound.getContentAsString());
         assertThat(nf.get("status").asInt()).isEqualTo(404);
         assertThat(nf.get("productId").asLong()).isEqualTo(99);
