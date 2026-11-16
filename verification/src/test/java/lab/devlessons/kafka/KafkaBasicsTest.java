@@ -154,8 +154,9 @@ class KafkaBasicsTest {
             }));
         }
         subscribed.await(10, TimeUnit.SECONDS);
-        // 배정이 안정될 때까지 기다린다: 4개 컨슈머의 파티션 합이 정확히 3개
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
+        // 재배정이 끝날 때까지 기다린다: 4개 모두 참여했고, 3개가 파티션 1개씩, 1개는 0개인 상태가 1.5초 유지
+        // (그룹에 늦게 들어온 컨슈머가 있으면 잠깐 한 컨슈머가 파티션을 모두 가진 상태가 보인다)
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         Map<Integer, Set<Integer>> snapshot = Map.of();
         while (System.nanoTime() < deadline) {
             synchronized (assigned) {
@@ -164,8 +165,9 @@ class KafkaBasicsTest {
             int total = snapshot.values().stream().mapToInt(Set::size).sum();
             Set<Integer> union = new HashSet<>();
             snapshot.values().forEach(union::addAll);
-            if (snapshot.size() == consumers && total == 3 && union.size() == 3) {
-                Thread.sleep(1_000); // 1초 더 같은지 본다
+            int max = snapshot.values().stream().mapToInt(Set::size).max().orElse(0);
+            if (snapshot.size() == consumers && total == 3 && union.size() == 3 && max == 1) {
+                Thread.sleep(1_500); // 1.5초 더 같은지 본다
                 synchronized (assigned) {
                     if (assigned.equals(snapshot)) {
                         break;
