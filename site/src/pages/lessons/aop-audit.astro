@@ -72,6 +72,7 @@ public class AuditTxConfig { }`;
     <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a> (프록시)</p>
     <h1>AOP와 감사 로그</h1>
     <p class="lede">금융, 결제, 관리자 기능에는 "누가, 언제, 무엇을, 어떻게 바꿨나"를 남기는 <strong>감사 로그</strong>가 필요해요. 메서드마다 직접 쓰면 빠뜨리고, 실패한 시도는 롤백과 함께 기록까지 사라져요. AOP로 한 곳에 모으고, 트랜잭션과의 관계를 시뮬레이터로 확인해요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a>(프록시, 내부 호출), <a href="/dev-lessons/lessons/tx-propagation/">트랜잭션 전파</a>(REQUIRES_NEW), 자바 어노테이션.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#why"><span>1</span>왜 AOP인가</a>
@@ -139,7 +140,7 @@ public class AuditTxConfig { }`;
     <pre set:text={codeAnnotation} />
     <p>애스펙트는 @Around로 메서드 실행을 감싸요. <code>pjp.proceed()</code>가 진짜 메서드를 실행하는 줄이에요. 그 앞에서 변경 전 값을, 뒤에서 변경 후 값을 읽어요.</p>
     <pre set:text={codeAspect} />
-    <p>누가 했는지는 보통 Spring Security의 SecurityContext에서 꺼내요. 이 레슨의 검증 코드는 간단하게 ThreadLocal(<code>CurrentActor</code>)을 써요.</p>
+    <p>누가 했는지는 보통 로그인 정보를 다루는 Spring Security에서 꺼내요. 이 레슨의 검증 코드는 간단하게, 스레드마다 값을 따로 보관하는 자바의 <code>ThreadLocal</code>에 사용자 이름을 넣어 둬요(<code>CurrentActor</code>). 요청 하나는 스레드 하나가 처리하니까요.</p>
     <p>저장은 별도 빈에 맡겨요. 같은 애스펙트 안의 메서드에 @Transactional을 붙이면 <a href="/dev-lessons/lessons/transactional-proxy/">내부 호출</a>이라 적용되지 않기 때문이에요.</p>
     <pre set:text={codeWriter} />
     <p class="callout"><strong>예외는 꼭 다시 던져요.</strong> 애스펙트가 예외를 삼키면 바깥의 트랜잭션 프록시는 정상 종료로 보고 커밋해 버려요. 감사 로그 때문에 비즈니스 동작이 바뀌면 안 돼요.</p>
@@ -227,7 +228,7 @@ public class AuditTxConfig { }`;
         </tbody>
       </table>
     </div>
-    <p>JPA 엔티티의 변경 이력만 필요하다면 Hibernate Envers나 Spring Data의 @CreatedBy, @LastModifiedDate 같은 도구도 있어요. 다만 이것들은 "성공한 변경"만 남기고, 실패한 시도나 조회 기록(누가 개인정보를 열람했나)은 남기지 못해요. 그래서 업무 단위 감사에는 AOP 방식을 함께 써요.</p>
+    <details class="more"><summary>더 알아보기: 엔티티 변경 이력 도구</summary><p>JPA 엔티티의 변경 이력만 필요하다면 Hibernate Envers나 Spring Data의 @CreatedBy, @LastModifiedDate 같은 도구도 있어요. 다만 이것들은 "성공한 변경"만 남기고, 실패한 시도나 조회 기록(누가 개인정보를 열람했나)은 남기지 못해요. 그래서 업무 단위 감사에는 AOP 방식을 함께 써요.</p></details>
   </section>
 
   <section id="check" class="read">
@@ -255,7 +256,7 @@ public class AuditTxConfig { }`;
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5와 실제 PostgreSQL(Testcontainers)에서 요청이 끝난 뒤 DB에 남은 행으로 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 스프링 부트와 PostgreSQL에서, 요청이 끝난 뒤 DB에 남은 행으로 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>@Audited 메서드를 부르면 actor, action, 변경 전후 값(100 → 500), SUCCESS가 남음</li>
       <li>서비스 빈은 프록시이고, 서비스 코드에는 감사 코드가 없음</li>
