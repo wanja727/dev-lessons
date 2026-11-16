@@ -1,6 +1,8 @@
 ---
 title: CompletableFuture
 unit: 동시성·분산
+order: 8
+stage: 동시성
 summary: Future의 한계를 넘어 비동기 결과를 이어 붙이고(thenApply, thenCompose), 합치고(thenCombine, allOf), 실패와 타임아웃을 처리해요. 주문 화면 조합 시뮬레이터로 블로킹 없는 조합을 직접 확인해요.
 minutes: 30
 page: completable-future

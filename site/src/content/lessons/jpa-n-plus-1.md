@@ -1,6 +1,8 @@
 ---
 title: JPA N+1 문제
 unit: JPA
+order: 12
+stage: 트랜잭션과 JPA
 summary: 목록 조회 1번 뒤에 N번이 더 나가는 이유를 직접 쿼리를 세어 보며 배워요. 지연 로딩, EAGER의 함정, fetch join과 배치 페치, 페이징 함정까지.
 minutes: 30
 page: jpa-n-plus-1

@@ -34,7 +34,7 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 4. 메타데이터
 
-`site/src/content/lessons/<slug>.md` 프론트매터: title, unit, summary, minutes, page, verifiedBy(테스트 경로, 1개 이상 필수), sources(공식 문서 URL), updated.
+`site/src/content/lessons/<slug>.md` 프론트매터: title, unit, order(배우는 순서 번호, 선수 레슨보다 뒤), stage(기초·동시성·트랜잭션과 JPA·DB와 운영 중 하나), summary, minutes, page, verifiedBy(테스트 경로, 1개 이상 필수), sources(공식 문서 URL), updated.
 출처 URL은 `curl -o /dev/null -w '%{http_code}'`로 200인지 확인한다.
 
 ## 5. 문제 초안

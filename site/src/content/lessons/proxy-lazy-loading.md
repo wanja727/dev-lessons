@@ -1,6 +1,8 @@
 ---
 title: "프록시와 지연 로딩"
 unit: JPA
+order: 11
+stage: 트랜잭션과 JPA
 summary: 연관 엔티티 자리에 들어가는 가짜 객체, 프록시가 언제 SELECT를 보내는지 버튼으로 직접 호출해 보며 확인해요. find와 getReference의 차이, LazyInitializationException이 나는 이유와 해결법까지 배워요.
 minutes: 25
 page: proxy-lazy-loading

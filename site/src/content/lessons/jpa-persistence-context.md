@@ -1,6 +1,8 @@
 ---
 title: 영속성 컨텍스트
 unit: JPA
+order: 10
+stage: 트랜잭션과 JPA
 summary: save()를 안 불렀는데 UPDATE가 나가는 이유. 1차 캐시, 쓰기 지연, 변경 감지를 작업 공간 시뮬레이터로 직접 들여다보고, 준영속과 readOnly 같은 함정까지 배워요.
 minutes: 30
 page: jpa-persistence-context

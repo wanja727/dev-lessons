@@ -7,6 +7,9 @@ const lessons = defineCollection({
   schema: z.object({
     title: z.string(),
     unit: z.enum(['Java', 'Spring', 'JPA', 'DB', '운영체제', '동시성·분산', '네트워크·웹']),
+    // 배우는 순서(선수 레슨을 지키는 순서)와 첫 화면에서 묶는 단계
+    order: z.number().int().positive(),
+    stage: z.enum(['기초', '동시성', '트랜잭션과 JPA', 'DB와 운영']),
     summary: z.string(),
     minutes: z.number().int().positive(),
     page: z.string(),
