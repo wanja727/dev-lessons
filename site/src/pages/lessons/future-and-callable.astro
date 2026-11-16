@@ -73,6 +73,7 @@ const codeBug = ` 1  ExecutorService pool = Executors.newFixedThreadPool(3);
     <p class="eyebrow">Java 동시성 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/process-and-thread/">프로세스와 스레드</a></p>
     <h1>Future와 Callable</h1>
     <p class="lede">외부 API 세 개를 호출해야 하는데 하나에 1초씩 걸린다면, 차례로 부르면 3초예요. 다른 스레드들에 동시에 맡기면 1초면 되죠. 그때 "맡긴 작업의 결과를 나중에 받는 방법"이 Future예요. 결과를 받는 순간 무슨 일이 생기는지 타임라인으로 직접 확인해요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 자바 기초, 람다, 체크 예외와 try-catch, <a href="/dev-lessons/lessons/thread-pool/">스레드 풀</a>.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#background"><span>1</span>작업을 맡기는 법</a>
@@ -193,7 +194,7 @@ const codeBug = ` 1  ExecutorService pool = Executors.newFixedThreadPool(3);
     <pre set:text={codeException} />
     <ul>
       <li><strong>TimeoutException:</strong> 기다리기를 포기한 것일 뿐, 작업은 계속 돌아요. 필요 없으면 <code>cancel(true)</code>로 정리해요.</li>
-      <li><strong>cancel(true):</strong> 실행 중인 스레드에 인터럽트를 걸어요. 작업 코드가 인터럽트에 반응해야(sleep, 블로킹 I/O 등) 실제로 멈춰요. 취소된 Future의 get()은 <code>CancellationException</code>이에요.</li>
+      <li><strong>cancel(true):</strong> 실행 중인 스레드에 <strong>인터럽트</strong>를 걸어요. 인터럽트는 스레드에게 "하던 일을 멈춰 달라"고 보내는 신호예요. 작업 코드가 인터럽트에 반응해야(sleep, 블로킹 I/O 등) 실제로 멈춰요. 취소된 Future의 get()은 <code>CancellationException</code>이에요.</li>
       <li><strong>InterruptedException:</strong> 기다리는 중에 내 스레드가 인터럽트되면 나요. 삼키지 말고 인터럽트 상태를 다시 설정해요.</li>
     </ul>
   </section>
@@ -272,7 +273,7 @@ const codeBug = ` 1  ExecutorService pool = Executors.newFixedThreadPool(3);
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>JDK 21에서 실제 스레드 풀로 확인해요. 코드가 바뀔 때마다 GitHub Actions에서 다시 실행돼요.</p>
+    <p>이 레슨에서 말한 동작은 JDK 21의 실제 스레드 풀로, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>submit은 즉시 Future를 돌려주고, 작업 중에는 isDone()이 false</li>
       <li>get()은 작업이 끝날 때까지 블로킹, get(timeout)은 TimeoutException이고 작업은 계속 남음</li>
