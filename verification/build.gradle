@@ -35,6 +35,14 @@ dependencies {
 
     // AOP와 감사 로그 레슨 (@Aspect)
     implementation 'org.springframework.boot:spring-boot-starter-aop'
+
+    // 실무 레슨 16~25: Redis, Kafka, 회복성 라이브러리
+    // 스프링 자동 설정을 켜지 않으려고 스타터 대신 클라이언트 라이브러리만 쓴다 (다른 레슨 테스트에 영향 없음)
+    testImplementation 'io.lettuce:lettuce-core'
+    testImplementation 'org.apache.kafka:kafka-clients'
+    testImplementation 'org.testcontainers:kafka'
+    testImplementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+    testImplementation 'io.github.resilience4j:resilience4j-retry:2.2.0'
 }
 
 tasks.named('test') {
