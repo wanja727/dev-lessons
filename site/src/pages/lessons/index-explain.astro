@@ -32,6 +32,7 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
     <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨 없음</p>
     <h1>인덱스와 실행계획</h1>
     <p class="lede">"인덱스를 걸면 빨라진다"까지는 다들 알아요. 면접과 실무에서 차이를 만드는 건 <strong>인덱스가 있는데도 안 쓰이는 경우</strong>를 알고, 그걸 <strong>실행계획으로 확인</strong>하는 습관이에요. 모든 결과는 PostgreSQL 16에서 실제 EXPLAIN으로 확인했어요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> SQL의 SELECT, WHERE, ORDER BY, LIKE.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#what"><span>1</span>인덱스가 하는 일</a>
@@ -153,8 +154,8 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
         <thead><tr><th>경우</th><th>예</th><th>이유와 대응</th></tr></thead>
         <tbody>
           <tr><td>컬럼에 함수·연산</td><td><code>lower(email) = ...</code>, <code>created_at::date = ...</code></td><td>인덱스는 원래 값으로 정렬돼 있어요. 같은 식으로 <strong>함수 인덱스</strong>를 만들거나, 조건을 범위로 바꿔요 (<code>created_at &gt;= '06-01' AND &lt; '06-02'</code>)</td></tr>
-          <tr><td>앞쪽 와일드카드</td><td><code>LIKE '%@example.com'</code></td><td>시작 글자를 몰라 정렬된 목차를 쓸 수 없어요. 전문 검색이나 다른 설계가 필요해요</td></tr>
-          <tr><td>접두어 LIKE와 정렬 규칙</td><td><code>LIKE 'user12%'</code></td><td>PostgreSQL은 DB 정렬 규칙(collation)이 C가 아니면 일반 인덱스로 LIKE를 못 써요. <code>text_pattern_ops</code>로 만든 인덱스가 필요해요</td></tr>
+          <tr><td>앞쪽 와일드카드</td><td><code>LIKE '%@example.com'</code></td><td>시작 글자를 몰라 정렬된 목차를 쓸 수 없어요. 문장 속 단어를 찾는 전문 검색 기능이나 다른 설계가 필요해요</td></tr>
+          <tr><td>접두어 LIKE와 정렬 규칙</td><td><code>LIKE 'user12%'</code></td><td>PostgreSQL은 DB의 정렬 규칙(collation: 글자를 어떤 순서로 정렬할지 정한 규칙)에 따라 일반 인덱스로 LIKE를 못 쓰기도 해요. 패턴 검색용 인덱스(<code>text_pattern_ops</code>)를 따로 만들어요</td></tr>
           <tr><td>낮은 선택도</td><td><code>status = 'PAID'</code> (99%)</td><td>거의 다 읽어야 하면 인덱스를 거쳐 하나씩 읽는 것보다 전체를 읽는 게 싸요. 플래너가 일부러 안 써요</td></tr>
           <tr><td>복합 인덱스의 선두 컬럼 누락</td><td>(status, created_at)인데 created_at만 조건</td><td>5장</td></tr>
         </tbody>
@@ -199,7 +200,7 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>PostgreSQL 16(Testcontainers)에 20만 건을 넣고 EXPLAIN 결과를 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL 16에 20만 건을 넣고 EXPLAIN 결과로, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>인덱스 없음: Seq Scan. member_id 인덱스 생성 후: 인덱스 사용</li>
       <li>lower(email) 조건: email 인덱스는 못 쓰고 Seq Scan, 함수 인덱스는 사용</li>

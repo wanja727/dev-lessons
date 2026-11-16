@@ -41,9 +41,10 @@ UPDATE orders o SET status = b.status
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/isolation-level/">격리 수준과 이상 현상</a></p>
+    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a></p>
     <h1>대량 DML 안전하게 하기</h1>
     <p class="lede">운영 DB에서 수만 건을 고치는 일은 SQL 한 줄이지만, 잘못되면 되돌릴 수 없어요. 면접에서 "대량 데이터를 수정해야 하면 어떻게 하나요?"라고 묻는 건 SQL 문법이 아니라 <strong>절차</strong>를 묻는 거예요. 백업, 건수 확인, 분할 커밋, 원복까지 하나씩 왜 필요한지 확인해요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 커밋과 롤백, 자동 커밋(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>), SQL의 UPDATE·JOIN. 이 레슨의 <strong>DML</strong>은 데이터를 바꾸는 SQL(INSERT, UPDATE, DELETE)을 말해요.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#risk"><span>1</span>한 줄의 위험</a>
@@ -91,7 +92,7 @@ UPDATE orders o SET status = b.status
           <tr><td>조건 실수</td><td>날짜 하나만 틀려도 엉뚱한 수만 건이 바뀌어요. 이미 커밋했다면 무엇이 원래 값이었는지 알 수 없어요.</td></tr>
           <tr><td>긴 트랜잭션과 락</td><td>커밋 전까지 바뀐 행이 모두 잠겨요. 그동안 같은 행을 고치려는 서비스 요청이 기다리거나 타임아웃으로 실패해요.</td></tr>
           <tr><td>끝에서 실패</td><td>한 트랜잭션이라 마지막에 실패하면 전부 롤백돼요. 오래 기다린 작업이 0이 돼요.</td></tr>
-          <tr><td>DB 부하</td><td>한 번에 많은 변경이 몰려 디스크 쓰기, 복제 지연이 생길 수 있어요.</td></tr>
+          <tr><td>DB 부하</td><td>한 번에 많은 변경이 몰려 디스크 쓰기가 늘고, 예비 DB가 원본을 따라잡는 시간(복제 지연)이 길어질 수 있어요.</td></tr>
         </tbody>
       </table>
     </div>
@@ -197,7 +198,7 @@ UPDATE orders o SET status = b.status
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>PostgreSQL(Testcontainers)에 주문 10,000건(대상 5,000건)을 만들어 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL에 주문 10,000건(대상 5,000건)을 만들어, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>백업 테이블 건수 = 대상 건수</li>
       <li>UPDATE가 바꾼 건수 = 사전 건수, 실행 후 대상 조건은 0건</li>

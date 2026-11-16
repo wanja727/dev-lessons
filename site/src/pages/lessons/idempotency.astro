@@ -49,6 +49,7 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
     <p class="eyebrow">Spring · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a></p>
     <h1>멱등성과 중복 요청 방지</h1>
     <p class="lede">결제 버튼을 한 번 눌렀는데 돈이 두 번 빠졌다면 서비스는 끝이에요. 그런데 네트워크에서는 같은 요청이 두 번 오는 일이 생각보다 흔해요. 핀테크와 커머스 면접의 단골인 이 주제를, 요청이 겹치는 순간을 직접 재현하며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 트랜잭션과 커밋(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>), 리포지토리의 save(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), SQL의 UNIQUE 제약, HTTP의 GET과 POST.</p>
     <nav class="toc" aria-label="목차">
       <a href="#predict"><span>0</span>먼저 예측</a>
       <a href="#background"><span>1</span>멱등성이란</a>
@@ -107,7 +108,7 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
           <tr><td>응답 유실 후 재시도</td><td>서버는 결제를 마쳤는데 응답이 타임아웃으로 사라짐. 클라이언트는 실패로 알고 다시 보냄</td><td>순차 (앞 요청 처리 후)</td></tr>
           <tr><td>더블 클릭</td><td>사용자가 버튼을 빠르게 두 번 누름</td><td>거의 동시</td></tr>
           <tr><td>게이트웨이·SDK 자동 재시도</td><td>중간 계층이 실패로 보고 자동으로 다시 보냄</td><td>순차 또는 동시</td></tr>
-          <tr><td>메시지 재전달</td><td>메시지 큐가 "최소 한 번" 전달이라 같은 메시지를 다시 줌</td><td>순차</td></tr>
+          <tr><td>메시지 재전달</td><td>서버끼리 메시지를 주고받는 메시지 큐는 보통 "최소 한 번" 전달(유실은 막되 중복은 허용)이라 같은 메시지를 다시 줌</td><td>순차</td></tr>
         </tbody>
       </table>
     </div>
@@ -182,7 +183,7 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
         <tbody>
           <tr><td>키 범위</td><td>키는 사용자(또는 가맹점)별로 유일하면 충분해요. 유니크 제약을 (user_id, idempotency_key)로 걸기도 해요.</td></tr>
           <tr><td>처음 응답 저장</td><td>결제 id뿐 아니라 처음 돌려준 응답 전체(상태 코드, 본문)를 저장해 두고 재요청에 그대로 돌려주면 클라이언트가 같은 결과를 받아요.</td></tr>
-          <tr><td>처리 중 상태</td><td>첫 요청이 외부 PG사 호출로 오래 걸리는 동안 같은 키가 또 오면? "처리 중"으로 기록해 두고 409나 잠시 후 재시도를 안내해요.</td></tr>
+          <tr><td>처리 중 상태</td><td>첫 요청이 외부 결제 대행사(PG사) 호출로 오래 걸리는 동안 같은 키가 또 오면? "처리 중"으로 기록해 두고 409나 잠시 후 재시도를 안내해요.</td></tr>
           <tr><td>보관 기간</td><td>키를 영원히 둘 필요는 없어요. 재시도가 일어날 만한 기간(예: 24시간)만 보관하고 정리해요.</td></tr>
           <tr><td>외부 연동</td><td>PG사 같은 외부 API에도 멱등 키를 넘겨서, 우리 쪽 재시도가 외부에서 이중 결제가 되지 않게 해요.</td></tr>
         </tbody>
@@ -216,7 +217,7 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
   <section class="read" id="verified">
     <p class="eyebrow">검증</p>
     <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>Spring Boot 3.5와 실제 PostgreSQL(Testcontainers)에서 여러 스레드로 동시에 요청해 확인해요.</p>
+    <p>이 레슨에서 말한 동작은 실제 스프링 부트와 PostgreSQL에서 여러 스레드로 동시에 요청해, 코드가 바뀔 때마다 다시 확인해요.</p>
     <ul>
       <li>대책 없음: 같은 요청 두 번이면 결제 2건</li>
       <li>먼저 조회 후 저장: 순차 재시도는 1건, 두 요청이 동시에 조회를 통과하면 2건</li>
