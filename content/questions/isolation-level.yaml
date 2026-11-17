@@ -1,0 +1,125 @@
+# 격리 수준과 이상 현상 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: isolation-level
+  title: 격리 수준과 이상 현상
+  unit: DB
+  order: 19
+concepts:
+  - key: core
+    name: 격리 수준과 이상 현상
+questions:
+  - key: q-8efd2597
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 트랜잭션 격리 수준에 대해 1분 안에 설명해 보세요
+    explanation: |-
+      - 네 단계가 Dirty / Non-Repeatable / Phantom을 차례로 막음. MVCC 스냅샷으로 구현. PG 기본 RC, InnoDB 기본 RR
+      - 높일수록 실패·재시도·대기 증가. 갱신 손실은 격리 수준과 별개로 원자적 UPDATE나 락으로 막음
+    checklist:
+      - 네 단계를 말했다
+      - 세 현상을 정확히 구분했다
+      - MVCC/스냅샷을 말했다
+      - DB마다 기본값이 다르다고 말했다
+      - 높일수록의 비용과 갱신 손실을 말했다
+    source: https://www.postgresql.org/docs/16/transaction-iso.html
+  - key: q-a62e4bc3
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: Non-Repeatable Read와 Phantom Read의 차이를 예시와 함께 비교해 보세요
+    explanation: |-
+      - Non-Repeatable: 같은 행의 값이 두 번 읽을 때 달라짐 (UPDATE 커밋)
+      - Phantom: 같은 조건의 결과 행 수가 달라짐 (INSERT/DELETE 커밋)
+      - 표준 RR은 Non-Repeatable만 막고 Phantom은 허용, PostgreSQL RR은 둘 다 막음
+    checklist:
+      - Non-Repeatable은 같은 행의 값 변화라고 말했다
+      - Phantom은 행 수 변화라고 말했다
+      - 각각을 일으키는 연산(UPDATE / INSERT·DELETE)을 말했다
+      - 각각을 막는 격리 수준을 말했다
+      - DB에 따른 차이(PG RR)를 말했다
+    source: https://www.postgresql.org/docs/16/transaction-iso.html
+  - key: q-f9394c7f
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 동시 입금 시 가끔 잔액이 한 번의 입금만큼 모자라다는 제보가 왔다(PostgreSQL, JPA 변경 감지로 잔액 수정). 원인과 해결 방법을 말해 보세요
+    explanation: |-
+      - 원인: 변경 감지는 조회 → 값 계산 → UPDATE(계산된 값 덮어쓰기). 기본 READ COMMITTED는 갱신 손실을 막지 않는다
+      - 해결: 원자적 UPDATE(balance = balance + n), 비관적 락(FOR UPDATE), 낙관적 락(@Version + 재시도), REPEATABLE READ + 재시도
+      - 재현: 동시 트랜잭션 테스트
+    checklist:
+      - 갱신 손실이라고 이름을 말했다
+      - 변경 감지가 읽고-계산-덮어쓰기라고 말했다
+      - 기본 격리 수준이 막지 않는다고 말했다
+      - 해결책을 2개 이상 말했다
+      - 재현 테스트를 말했다
+    source: https://www.postgresql.org/docs/16/transaction-iso.html
+  - key: q-24254496
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"PostgreSQL에서 READ UNCOMMITTED로 트랜잭션을 열면 다른 트랜잭션이 커밋하지 않은 값을 읽을 수 있다\""
+    answer: X
+    explanation: |-
+      - PostgreSQL은 READ UNCOMMITTED를 READ COMMITTED처럼 처리해 Dirty Read가 없다 (MySQL InnoDB는 가능)
+      - 검증: IsolationLevelTest (noDirtyRead)
+    source: https://www.postgresql.org/docs/16/transaction-iso.html
+  - key: q-4ff76156
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: PostgreSQL 기본 설정에서 잔액 100에 T1이 "UPDATE balance = balance + 50"(커밋 전), T2가 "UPDATE balance = balance + 30"을 실행했다. T1이 커밋하면?
+    choices:
+      - T2는 바로 실행되어 최종 130
+      - T2는 기다렸다가 최신 값에 더해 최종 180
+      - T2는 직렬화 오류로 실패, 최종 150
+      - 데드락
+    answer: "2"
+    explanation: |-
+      - 기본 READ COMMITTED에서 T2는 행 락을 기다렸다가, T1 커밋 후 최신 값(150)을 다시 읽고 더한다. REPEATABLE READ였다면 보기 3
+      - 검증: IsolationLevelTest (atomicUpdateWaitsAndApplies, atomicUpdateAtRepeatableReadFails)
+    source: https://www.postgresql.org/docs/16/transaction-iso.html
+  - key: q-ea27b887
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: PostgreSQL과 MySQL InnoDB의 기본 격리 수준을 바르게 짝지은 것은?
+    choices:
+      - 둘 다 READ COMMITTED
+      - PostgreSQL READ COMMITTED, MySQL REPEATABLE READ
+      - PostgreSQL REPEATABLE READ, MySQL READ COMMITTED
+      - 둘 다 SERIALIZABLE
+    answer: "2"
+    explanation: "- 검증: IsolationLevelTest (defaultIsReadCommitted, PostgreSQL). MySQL은 공식 문서 근거"
+    source: https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html
+  - key: q-127458b7
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 8-A] PostgreSQL 기본 설정, 두 요청이 동시에 deposit()을 부르면 입금이 사라질 수 있다. 원인이 되는 줄은?"
+    code: |-
+      @Transactional
+      public void deposit(Long id, int amount) {
+          Account account = accountRepository.findById(id).orElseThrow();
+          int balance = account.getBalance();
+          account.setBalance(balance + amount);
+      }   // 커밋 시 변경 감지로 UPDATE
+    answer: "5"
+    explanation: |-
+      - 읽은 값(4번)으로 계산해 덮어쓴다. 두 요청이 같은 잔액을 읽으면 나중 커밋이 앞의 입금을 덮는다(갱신 손실)
+      - 고치기: 원자적 UPDATE 쿼리, FOR UPDATE 조회, @Version
+      - 검증: 같은 패턴을 IsolationLevelTest (lostUpdateWithReadModifyWrite)가 SQL로 확인
+    source: https://www.postgresql.org/docs/16/transaction-iso.html

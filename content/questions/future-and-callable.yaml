@@ -1,0 +1,129 @@
+# Future와 Callable 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: future-and-callable
+  title: Future와 Callable
+  unit: 동시성·분산
+  order: 7
+concepts:
+  - key: core
+    name: Future와 Callable
+questions:
+  - key: q-85e5f3a0
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 자바의 Future 인터페이스에 대해 1분 안에 설명해 보세요
+    explanation: |-
+      - 비동기로 실행 중인 작업의 결과를 나타내는 인터페이스. ExecutorService에 Callable을 submit하면 즉시 Future를 받는다
+      - get()은 끝날 때까지 블로킹, get(timeout)으로 제한. 작업 예외는 ExecutionException, cancel(true)는 인터럽트
+      - 한계: 결과를 쓰려면 블로킹, 조합·콜백 불가 → CompletableFuture
+    checklist:
+      - 비동기 작업의 결과를 나타낸다고 정의했다 (submit으로 받음)
+      - get()이 블로킹이라고 말했다
+      - get(timeout)과 TimeoutException을 말했다
+      - 예외가 ExecutionException으로 감싸진다고 말했다
+      - 한계와 CompletableFuture를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  - key: q-89ab3137
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: Runnable과 Callable, Future와 CompletableFuture의 차이를 각각 말해 보세요
+    explanation: |-
+      - Runnable: 결과 없음, 체크 예외 못 던짐 (submit한 Future의 get()은 null). Callable: 결과 반환, 예외 던질 수 있음
+      - Future: get()으로 기다려서 받음, 조합·콜백 불가. CompletableFuture: thenApply·thenCombine·allOf로 이어 붙이고 exceptionally로 예외 처리, executor를 지정하지 않으면 공용 풀
+    checklist:
+      - Callable은 결과를 돌려주고 Runnable은 없다고 말했다
+      - Callable은 예외를 던질 수 있다고 말했다
+      - Future는 get()으로 기다려야 한다고 말했다
+      - CompletableFuture의 조합(thenCombine 등)과 예외 처리(exceptionally)를 말했다
+      - CompletableFuture의 기본 실행 풀과 별도 executor 지정을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: q-362f69a9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 주문 화면이 외부 API 3개(각 1초)를 차례로 호출해 응답이 3초 걸린다. 개선 방법과 주의할 점을 말해 보세요
+    explanation: |-
+      - 세 호출을 스레드 풀에 모두 submit한 뒤 결과를 받는다 → 약 1초 (가장 긴 호출)
+      - 주의: submit 직후 get()하면 다시 순차. 항상 get(timeout), 타임아웃 시 cancel(true)
+      - 실패 처리: ExecutionException을 다루거나 CompletableFuture의 exceptionally로 기본값
+      - 풀 크기가 작으면 큐에서 대기, I/O 작업은 별도 풀로 분리
+    checklist:
+      - 모두 submit한 뒤 get하는 병렬 호출을 말했다
+      - 총 시간이 가장 긴 호출 수준이 된다고 말했다
+      - 타임아웃을 말했다
+      - 실패 처리(예외, 기본값)를 말했다
+      - 풀 크기나 별도 풀을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  - key: q-f9950f95
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 4-A] 세 API를 병렬로 부르려고 스레드 풀을 만들었는데 총 시간이 세 호출의 합만큼 걸린다. 원인이 되는 줄을 모두 고르세요"
+    code: |-
+      ExecutorService pool = Executors.newFixedThreadPool(3);
+
+      Future<Rate> rate = pool.submit(() -> rateApi.fetch());
+      Rate r = rate.get();
+      Future<Price> price = pool.submit(() -> priceApi.fetch());
+      Price p = price.get();
+      Future<News> news = pool.submit(() -> newsApi.fetch());
+      News n = news.get();
+    answer: 4, 6
+    explanation: |-
+      - submit 직후 바로 get()으로 기다려서 다음 작업을 앞 작업이 끝난 뒤에야 맡긴다. 세 작업을 모두 submit한 뒤 get()해야 한다. 8번 줄은 마지막이라 순서상 문제가 없다
+      - 검증: FutureTest (submitThenGetImmediately, submitAllThenGet)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  - key: q-329be5ff
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스레드 2개짜리 풀에 1초짜리 작업 3개를 모두 submit한 뒤 차례로 get()했다. 마지막 get()이 끝나는 시간은?
+    choices:
+      - 약 1초
+      - 약 2초
+      - 약 3초
+      - 약 6초
+    answer: "2"
+    explanation: |-
+      - 처음 1초 동안 두 작업이 실행되고, 세 번째 작업은 큐에서 기다렸다가 다음 1초에 실행된다
+      - 검증: FutureTest (extraTasksWaitInQueue)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  - key: q-8cc780f8
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"future.get(1, SECONDS)에서 TimeoutException이 나면 작업도 자동으로 취소된다\""
+    answer: X
+    explanation: |-
+      - 기다리기를 포기한 것뿐 작업은 계속 실행된다(isDone()은 false). 필요 없으면 cancel(true)로 정리한다
+      - 검증: FutureTest (getWithTimeout)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  - key: q-65bd9964
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: Callable 안에서 IllegalStateException이 났다. 이 작업의 Future에 get()을 부르면 어떻게 되나?
+    choices:
+      - IllegalStateException이 그대로 던져진다
+      - ExecutionException이 던져지고, getCause()가 IllegalStateException이다
+      - 예외 없이 null을 돌려준다
+      - submit하는 줄에서 이미 예외가 났다
+    answer: "2"
+    explanation: |-
+      - 작업은 다른 스레드에서 실행되어 예외가 Future에 보관되고, get()에서 ExecutionException으로 감싸져 나온다. submit은 예외 없이 바로 돌아온다
+      - 검증: FutureTest (exceptionIsWrapped)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html

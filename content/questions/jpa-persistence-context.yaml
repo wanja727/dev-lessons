@@ -1,0 +1,148 @@
+# 영속성 컨텍스트 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: jpa-persistence-context
+  title: 영속성 컨텍스트
+  unit: JPA
+  order: 10
+concepts:
+  - key: core
+    name: 영속성 컨텍스트
+questions:
+  - key: q-7b01da4d
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 영속성 컨텍스트가 무엇이고 어떤 이점이 있는지 1분 안에 설명해 보세요
+    explanation: |-
+      - JPA가 엔티티를 관리하는 작업 공간. 스프링에서는 기본적으로 트랜잭션과 수명이 같다
+      - 1차 캐시(id 조회 재사용, 동일성 보장), 쓰기 지연(flush 때 SQL 전송), 변경 감지(스냅샷 비교로 save 없이 UPDATE)
+      - 조건: 영속 상태 + 트랜잭션 안
+    checklist:
+      - 엔티티를 관리하는 작업 공간이고 트랜잭션 범위라고 말했다
+      - 1차 캐시와 동일성 보장을 말했다
+      - 쓰기 지연과 flush를 말했다
+      - 스냅샷 비교로 변경 감지한다고 말했다
+      - "\"영속 상태 + 트랜잭션 안\"이라는 조건을 말했다"
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#pc
+  - key: q-e345c172
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: flush와 commit의 차이를 설명하고, flush가 일어나는 시점을 말해 보세요
+    explanation: |-
+      - flush: 영속성 컨텍스트의 변경을 SQL로 DB에 보내는 것. 트랜잭션은 끝나지 않고, 롤백하면 취소된다
+      - commit: 트랜잭션을 확정하는 것. 커밋 직전에 자동으로 flush한다
+      - flush 시점: em.flush() 직접 호출, 커밋 직전, JPQL 실행 직전(FlushMode AUTO)
+    checklist:
+      - flush는 SQL을 보내는 것이지 트랜잭션을 끝내는 게 아니라고 말했다
+      - flush한 내용도 롤백하면 취소된다고 말했다
+      - 커밋 직전 자동 flush를 말했다
+      - JPQL 실행 전 자동 flush와 그 이유를 말했다
+      - flush해도 1차 캐시는 비워지지 않는다고 말했다
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#flushing
+  - key: q-eee97975
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: "\"엔티티 값을 바꿨는데 DB에 반영되지 않는다\"는 버그 리포트를 받았다. 예외는 없었다. 의심할 원인과 확인 방법을 말해 보세요"
+    explanation: |-
+      - 트랜잭션 밖에서 바꿈: 트랜잭션이 끝난 뒤 돌려받은 엔티티(준영속)를 수정
+      - readOnly 트랜잭션 안에서 바꿈: 스냅샷과 flush가 없다
+      - @Transactional 메서드를 내부 호출해서 트랜잭션이 없었음
+      - detach/clear로 관리 대상에서 빠짐, 또는 flush 전에 clear해서 변경이 버려짐
+      - 확인: SQL 로그에 UPDATE가 있는지, 트랜잭션 경계(로그 레벨 org.springframework.orm.jpa 등)와 readOnly 여부, 호출이 프록시를 거치는지. 재현 테스트를 작성한다
+    checklist:
+      - 트랜잭션 밖(준영속) 수정을 말했다
+      - readOnly 트랜잭션을 말했다
+      - 내부 호출로 트랜잭션이 빠진 경우를 말했다
+      - 변경 감지의 조건(영속 + 트랜잭션)으로 묶어 설명했다
+      - SQL 로그나 재현 테스트로 확인하는 방법을 말했다
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#pc
+  - key: q-314b4a14
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 하나의 트랜잭션 안에서 em.find(Book.class, 1L) → em.clear() → em.find(Book.class, 1L) → JPQL로 id가 1인 책 조회. book 테이블 SELECT는 몇 번인가?
+    choices:
+      - 1번
+      - 2번
+      - 3번
+      - 4번
+    answer: "3"
+    explanation: |-
+      - 첫 find: SELECT. clear()로 1차 캐시가 비었으니 두 번째 find도 SELECT. JPQL은 캐시와 상관없이 항상 SELECT
+      - 검증: PersistenceContextTest (clearThenFind, jpqlAlwaysQueries)
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#pc
+  - key: q-435ad21c
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"IDENTITY 전략 엔티티도 쓰기 지연으로 INSERT를 flush할 때까지 모아 둘 수 있다\""
+    answer: X
+    explanation: |-
+      - IDENTITY는 DB가 INSERT 때 id를 만든다. 영속 상태가 되려면 id가 필요해서 persist 즉시 INSERT가 나간다
+      - 검증: PersistenceContextTest (identityInsertsImmediately)
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#flushing
+  - key: q-44cc85f4
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 3
+    body: "[코드 2-A] 외부에서 rename()과 renameQuietly()를 각각 호출했다. 제목 변경이 DB에 반영되지 않는 줄은?"
+    code: |-
+      @Service
+      public class BookService {
+          private final BookRepository bookRepository;
+          // 생성자 생략
+
+          @Transactional(readOnly = true)
+          public Book find(Long id) {
+              return bookRepository.findById(id).orElseThrow();
+          }
+
+          @Transactional
+          public void rename(Long id, String title) {
+              Book book = find(id);
+              book.changeTitle(title);
+          }
+
+          @Transactional(readOnly = true)
+          public void renameQuietly(Long id, String title) {
+              Book book = bookRepository.findById(id).orElseThrow();
+              book.changeTitle(title);
+          }
+      }
+    answer: "20"
+    explanation: |-
+      - 20번: readOnly 트랜잭션이라 변경 감지를 하지 않는다
+      - 14번은 반영된다. 13번 줄의 find()는 내부 호출이라 프록시를 거치지 않아 readOnly가 적용되지 않는다. rename의 쓰기 트랜잭션 안에서 조회했으니 엔티티는 영속 상태다
+      - 핵심: 어노테이션이 아니라 "실제로 열린 트랜잭션"과 "엔티티 상태"를 본다
+      - 검증: PersistenceContextScopeTest (readOnlySkipsDirtyChecking, internalReadOnlyCallStillManaged)
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+  - key: q-884318b2
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 트랜잭션 안에서 SEQUENCE 전략 엔티티를 em.persist()한 다음, 바로 JPQL "select b from Book b"를 실행했다. DB로 나가는 SQL 순서는?
+    choices:
+      - SELECT만 (INSERT는 커밋 때)
+      - SELECT → INSERT
+      - INSERT → SELECT
+      - INSERT만 (SELECT는 1차 캐시에서)
+    answer: "3"
+    explanation: |-
+      - JPQL을 실행하기 전에 자동으로 flush한다(FlushMode AUTO). 쓰기 지연 저장소에만 있는 새 책이 조회 결과에서 빠지지 않게 하기 위해서다
+      - 4번: JPQL은 1차 캐시를 먼저 보지 않고 항상 SQL을 보낸다
+      - 검증: PersistenceContextTest (autoFlushBeforeJpql)
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#flushing

@@ -1,0 +1,139 @@
+# 스프링 배치: 청크 처리와 재시작 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: spring-batch
+  title: "스프링 배치: 청크 처리와 재시작"
+  unit: Spring
+  order: 23
+concepts:
+  - key: core
+    name: "스프링 배치: 청크 처리와 재시작"
+questions:
+  - key: q-5c72980c
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 스프링 배치의 청크 처리와 실패 시 재시작이 어떻게 동작하는지 1분 안에 설명해 보세요
+    explanation: |-
+      - Reader→Processor로 한 건씩 모아 청크 크기만큼 Writer로 쓰고 커밋. 청크 = 트랜잭션
+      - 커밋 때 읽은 위치를 ExecutionContext에 저장(JobRepository 메타 테이블)
+      - 실패하면 그 청크만 롤백, 같은 파라미터로 재실행하면 같은 JobInstance의 새 JobExecution으로 마지막 커밋 다음부터
+    checklist:
+      - 청크 단위로 커밋한다고 말했다
+      - 실패하면 그 청크만 롤백된다고 말했다
+      - ExecutionContext/JobRepository를 말했다
+      - 같은 JobParameters여야 이어서 한다고 말했다
+      - 청크 크기의 트레이드오프나 멱등한 writer를 말했다
+    source: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing.html
+  - key: q-70bf15c6
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: JobInstance, JobExecution, StepExecution, ExecutionContext의 관계를 비교해 보세요
+    explanation: |-
+      - JobInstance = Job + JobParameters (논리적 실행, 예: 11/16자 정산)
+      - JobExecution = 그 인스턴스를 실제로 돌린 시도. 재시작하면 하나 더
+      - StepExecution = Step별 실행 기록(읽은/쓴/건너뛴 건수)
+      - ExecutionContext = 어디까지 했는지 저장하는 키-값 공간
+    checklist:
+      - JobInstance = Job + 파라미터라고 말했다
+      - JobExecution은 시도이고 재시작하면 늘어난다고 말했다
+      - StepExecution의 건수 기록을 말했다
+      - ExecutionContext가 재시작 위치를 저장한다고 말했다
+      - 이 기록이 DB에 남는다고 말했다
+    source: https://docs.spring.io/spring-batch/reference/domain.html
+  - key: q-694d0a71
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 새벽 배치가 50만 건 중 30만 건째에서 죽었다. 다시 돌리기 전에 확인할 것과 재시작 방법을 말해 보세요
+    explanation: |-
+      - 실패 원인(로그, 실패 청크의 데이터)과 메타 테이블의 상태(FAILED, 읽은 위치) 확인
+      - 원인 해결 후 같은 JobParameters로 재실행 → 마지막 커밋 다음부터
+      - 실패 청크에서 외부 부수 효과가 있었는지(메일, API) 확인, writer 멱등성
+      - 리더가 상태를 저장하는지, 처리 중 조회 조건이 바뀌는 페이징인지
+      - 작업 시간대·운영 DB 부하
+    checklist:
+      - 실패 원인과 메타데이터 확인을 말했다
+      - 같은 파라미터로 재시작을 말했다
+      - 이미 커밋된 30만 건은 다시 처리하지 않는다고 말했다
+      - 외부 부수 효과와 멱등성을 말했다
+      - 리더 상태 저장이나 페이징 주의를 말했다
+    source: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/restart.html
+  - key: q-9591ead3
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 청크 크기 100으로 1,000건을 처리하다 450번째에서 실패했다. DB에 남는 건수는?
+    choices:
+      - 0건
+      - 400건
+      - 449건
+      - 450건
+    answer: "2"
+    explanation: |-
+      - 1~400은 네 청크로 커밋, 401~500 청크는 통째로 롤백
+      - 검증: SpringBatchTest (failureRollsBackOnlyCurrentChunk, 25건·청크 10·17번째 실패로 같은 원리)
+    source: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing.html
+  - key: q-9e2ca27d
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"완료(COMPLETED)된 Job을 같은 JobParameters로 다시 실행하면 처음부터 다시 처리한다\""
+    answer: X
+    explanation: |-
+      - 완료된 JobInstance는 다시 실행할 수 없고 JobInstanceAlreadyCompleteException이 난다. 다시 돌리려면 파라미터를 바꾼 새 인스턴스로
+      - 검증: SpringBatchTest (completedInstanceCannotRerun)
+    source: https://docs.spring.io/spring-batch/reference/domain.html
+  - key: q-5671138b
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 실패한 Job을 원인을 고친 뒤 같은 JobParameters로 다시 실행했다(25건, 청크 10, 17번째에서 실패했었음). 두 번째 실행에서 읽는 건수는?
+    choices:
+      - 25건
+      - 15건
+      - 9건
+      - 0건
+    answer: "2"
+    explanation: |-
+      - ExecutionContext의 read.count = 10을 보고 11번부터 25번까지 읽는다. 같은 JobInstance의 새 JobExecution
+      - 검증: SpringBatchTest (restartResumesFromLastCommit)
+    source: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/restart.html
+  - key: q-6be39814
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 3
+    body: "[코드 10-A] 실패 후 재시작했더니 처음부터 다시 읽어 중복 키 오류가 난다. 원인이 되는 줄은?"
+    code: |-
+      @Bean
+      ItemReader<Order> orderReader(OrderRepository repo) {
+          Iterator<Order> it = repo.findAllByDate(LocalDate.now()).iterator();
+          return () -> it.hasNext() ? it.next() : null;
+      }
+
+      @Bean
+      Step settleStep(JobRepository jobRepository, PlatformTransactionManager tx,
+                      ItemReader<Order> orderReader, ItemWriter<Settlement> writer) {
+          return new StepBuilder("settleStep", jobRepository)
+                  .<Order, Settlement>chunk(100, tx)
+                  .reader(orderReader).processor(this::settle).writer(writer)
+                  .build();
+      }
+    answer: "4"
+    explanation: |-
+      - 람다 리더는 ItemStream이 아니라서 읽은 위치를 ExecutionContext에 저장하지 않는다. 재시작해도 처음부터 읽는다
+      - 고치기: 상태를 저장하는 리더(JdbcPagingItemReader, AbstractItemCountingItemStreamItemReader 등) + @StepScope. 3번 줄의 LocalDate.now()도 재시작 날 다른 대상을 읽게 되니 기준일은 JobParameters로 받는 게 맞다 (부차적 문제)
+      - 근거: 상태를 저장하는 리더의 재시작은 SpringBatchTest로 검증. 람다 리더 실패 자체는 테스트하지 않음
+    source: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/restart.html

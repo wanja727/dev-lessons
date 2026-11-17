@@ -1,0 +1,130 @@
+# 스프링 빈과 의존성 주입 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: spring-beans
+  title: 스프링 빈과 의존성 주입
+  unit: Spring
+  order: 3
+concepts:
+  - key: core
+    name: 스프링 빈과 의존성 주입
+questions:
+  - key: q-70ef544a
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 스프링 빈과 의존성 주입이 무엇이고 왜 쓰는지 1분 안에 설명해 보세요
+    explanation: |-
+      - 빈: 스프링 컨테이너가 만들고 관리하는 객체. @Component 계열이 붙은 클래스를 찾아 만든다
+      - 의존성 주입: 필요한 객체를 직접 new 하지 않고 생성자로 받는다. 컨테이너가 필요한 것부터 만들어 넣는다
+      - 이점: 구현 교체, 테스트에서 가짜 주입, 생성 순서 신경 안 씀
+      - 기본은 싱글톤이라 요청별 상태를 필드에 두지 않는다
+    checklist:
+      - 빈과 컨테이너를 말했다
+      - 생성자 주입을 말했다
+      - 쓰는 이유(교체, 테스트)를 말했다
+      - 싱글톤을 말했다
+      - 싱글톤 상태 주의를 말했다
+    source: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+  - key: q-d67eb814
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 생성자 주입과 필드 주입을 비교해 보세요
+    explanation: |-
+      - 생성자 주입: final로 둘 수 있고, 스프링 없이 new로 가짜를 넣어 테스트 가능, 필요한 의존성이 생성자에 드러남. 생성자가 하나면 @Autowired 생략
+      - 필드 주입: 짧지만 new로 만들면 null, 테스트에서 가짜를 넣기 어려움, final 불가
+      - 그래서 생성자 주입을 권장
+    checklist:
+      - 생성자 주입의 테스트 이점
+      - final
+      - 필드 주입은 new로 만들면 null
+      - 의존성이 드러난다
+      - 생성자 주입 권장
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  - key: q-2a1ec6f6
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 동시에 여러 사용자가 주문하면 주문 번호가 가끔 꼬인다. 서비스 클래스에 private int lastOrderNo 필드가 있다. 원인과 해결을 말해 보세요
+    explanation: |-
+      - 서비스 빈은 싱글톤이라 모든 요청 스레드가 같은 필드를 함께 씀 → 경쟁 상태
+      - 해결: 요청별 값은 지역 변수나 매개변수로, 번호 발급은 DB 시퀀스나 원자적 UPDATE로. 서버가 여러 대면 메모리 값은 공유되지 않음
+    checklist:
+      - 싱글톤을 원인으로 짚었다
+      - 여러 스레드가 같은 필드를 쓴다고 말했다
+      - 지역 변수/매개변수를 말했다
+      - DB 시퀀스 등 DB로 옮기기를 말했다
+      - 서버 여러 대의 문제를 말했다
+    source: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html
+  - key: q-a5403e89
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"@Service가 붙은 클래스의 빈을 컨테이너에서 두 번 꺼내면 서로 다른 객체가 나온다\""
+    answer: X
+    explanation: |-
+      - 기본 스코프가 싱글톤이라 같은 객체다. prototype으로 지정하면 매번 새 객체
+      - 검증: SpringBeansTest (singletonByDefault, prototypeIsNewEachTime)
+    source: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html
+  - key: q-c707417d
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "@Autowired 필드가 있는 FieldInjectedService를 new FieldInjectedService()로 만들고 sender()를 부르면?"
+    choices:
+      - SmsNoticeSender
+      - "null"
+      - 컴파일 오류
+      - 컨테이너가 새로 만들어 넣는다
+    answer: "2"
+    explanation: |-
+      - 컨테이너가 만든 객체에만 주입이 일어난다. new로 만든 객체는 컨테이너가 모른다
+      - 검증: SpringBeansTest (newObjectIsNotInjected)
+    source: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
+  - key: q-6a187d5c
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: CoffeeController(CoffeeService 필요), CoffeeService(리포지토리와 NoticeSender 필요)가 있을 때 스프링이 가장 나중에 만드는 빈은?
+    choices:
+      - CoffeeMenuRepository
+      - SmsNoticeSender
+      - CoffeeService
+      - CoffeeController
+    answer: "4"
+    explanation: |-
+      - 필요한 것부터 만들어 넣는다. 리포지토리·알림 → 서비스 → 컨트롤러
+      - 검증: SpringBeansTest (creationOrder)
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  - key: q-1cbc82bc
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 21-A] 테스트에서 알림을 가짜로 바꾸려는데 방법이 없다. 원인이 되는 줄은?"
+    code: |-
+      @Service
+      public class CoffeeService {
+          private final CoffeeMenuRepository menu;
+          private final NoticeSender sender = new SmsNoticeSender();
+
+          public CoffeeService(CoffeeMenuRepository menu) {
+              this.menu = menu;
+          }
+      }
+    answer: "4"
+    explanation: |-
+      - 의존 객체를 직접 new 해서 바꿀 방법이 없다. NoticeSender를 생성자 매개변수로 받으면(생성자 주입) 테스트에서 가짜를 넣을 수 있다
+      - 검증: SpringBeansTest (constructorInjectionWithoutSpring)
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html

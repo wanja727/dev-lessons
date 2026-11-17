@@ -1,0 +1,111 @@
+# 결제 시스템 흐름 (승인, 매입, 취소, 정산) 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: payment-flow
+  title: 결제 시스템 흐름 (승인, 매입, 취소, 정산)
+  unit: Spring
+  order: 33
+concepts:
+  - key: core
+    name: 결제 시스템 흐름 (승인, 매입, 취소, 정산)
+questions:
+  - key: q-d5195429
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 카드 결제의 승인, 매입, 정산을 설명하고, 승인과 매입을 나누는 이유를 말해 보세요
+    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
+    checklist:
+      - "승인: 카드사가 한도를 확인하고 금액을 묶어 둔다"
+      - "매입: 가맹점이 승인 건을 실제 청구로 확정한다"
+      - "정산: PG가 매입액에서 수수료를 빼고 가맹점에 지급한다"
+      - "나누는 이유: 재고 확인·발송 뒤 매입하면 그 전 취소는 승인만 풀면 된다"
+      - 자동 매입(승인과 동시) 방식도 있다고 말했다
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  - key: q-54880793
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 승인 타임아웃 때 '망 취소'와 '거래 상태 조회 후 진행'을 비교해 보세요
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: PaymentFlowTest (netCancelOnTimeout)
+    checklist:
+      - 둘 다 타임아웃을 "모름(UNKNOWN)"으로 다룬다고 말했다
+      - "망 취소: 단순·안전, 대신 실제 승인도 취소돼 고객이 다시 결제"
+      - "조회 후 진행: 사용자 경험이 좋지만 조회도 타임아웃 가능, PG마다 API가 다름"
+      - 둘 다 주문 번호(멱등 키)로 재시도한다고 말했다
+      - 대사를 마지막 안전망으로 말했다
+    source: https://docs.tosspayments.com/resources/glossary/transaction
+  - key: q-c8cf442f
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 아침 대사에서 "PG에만 승인이 있는 건"이 10건 나왔습니다. 원인을 추정하고 처리와 재발 방지를 말해 보세요
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: PaymentFlowTest (timeoutAsFailureLeavesOrphanApproval)
+    checklist:
+      - 승인 타임아웃을 실패로 처리했거나 망 취소가 실패했을 가능성을 말했다
+      - 고객 돈이 묶여 있으니 PG에서 취소하거나 우리 기록을 바로잡는다고 말했다
+      - 타임아웃을 UNKNOWN으로 두는 코드로 고친다고 말했다
+      - 망 취소 재시도(멱등)와 알림을 말했다
+      - 타임아웃 값과 PG 응답 시간을 점검한다고 말했다
+    source: https://docs.tosspayments.com/resources/glossary/settlement
+  - key: q-4a0fed45
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 승인 요청이 타임아웃 났을 때 "결제 실패"로 저장하면 고객 카드에는 아무 일도 없다
+    answer: X
+    explanation: |-
+      - PG에서는 승인돼 돈이 묶여 있을 수 있다
+      - 검증: PaymentFlowTest (timeoutAsFailureLeavesOrphanApproval)
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  - key: q-d97931ad
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 결제 10,000원에 부분 취소 6,000원 두 건이 동시에 왔다. 조건부 UPDATE로 처리하면?
+    choices:
+      - 둘 다 성공
+      - 한 건만 성공
+      - 둘 다 실패
+    answer: "2"
+    explanation: |-
+      - WHERE canceled_amount + 6000 &lt;= amount. 누적 6,000
+      - 검증: PaymentFlowTest (concurrentPartialCancels)
+    source: https://docs.stripe.com/refunds
+  - key: q-09f6a6e8
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 카드 결제에서 가맹점이 승인 건을 실제 청구로 확정하는 단계는?
+    choices:
+      - 승인
+      - 매입
+      - 정산
+    answer: "2"
+    explanation: "정답: (2)"
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  - key: q-e893ff40
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 승인 금액보다 큰 금액으로 매입할 수 있다
+    answer: X
+    explanation: |-
+      - 매입은 승인 금액 이하. 상태 전이 조건으로 막는다
+      - 검증: PaymentFlowTest (approveThenCapture)
+    source: https://docs.stripe.com/payments/place-a-hold-on-a-payment-method

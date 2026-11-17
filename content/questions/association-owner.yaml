@@ -1,0 +1,129 @@
+# 연관관계 주인과 양방향 매핑 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: association-owner
+  title: 연관관계 주인과 양방향 매핑
+  unit: JPA
+  order: 13
+concepts:
+  - key: core
+    name: 연관관계 주인과 양방향 매핑
+questions:
+  - key: q-386b53d9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 연관관계의 주인이 무엇이고 mappedBy는 왜 쓰는지 1분 안에 설명해 보세요
+    explanation: |-
+      - 테이블은 FK 하나, 객체는 참조 둘 → FK를 관리할 쪽(주인)을 하나로 정함
+      - FK가 있는 테이블의 엔티티(@ManyToOne)가 주인. 반대쪽은 mappedBy로 주인 필드를 가리키는 읽기 전용
+      - 주인이 아닌 쪽만 바꾸면 DB에 반영 안 됨 → 편의 메서드로 양쪽 맞춤
+    checklist:
+      - FK는 한 곳, 참조는 두 곳이라는 문제를 말했다
+      - FK가 있는 쪽이 주인이라고 말했다
+      - mappedBy 쪽은 읽기 전용이라고 말했다
+      - 주인이 아닌 쪽만 바꾸면 반영 안 된다고 말했다
+      - 편의 메서드를 말했다
+    source: https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/OneToMany.html
+  - key: q-45880018
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 다대일 단방향, 양방향(다대일+mappedBy), 일대다 단방향(@JoinColumn)을 비교해 보세요
+    explanation: |-
+      - 다대일 단방향: 가장 단순, FK와 주인이 같은 쪽. 기본 선택
+      - 양방향: 반대 방향 탐색 가능. 편의 메서드, 직렬화 순환 등 관리 비용
+      - 일대다 단방향: 팀이 다른 테이블의 FK를 관리 → INSERT 뒤 멤버 수만큼 UPDATE. 피함
+    checklist:
+      - 다대일 단방향을 기본으로 말했다
+      - 양방향의 장점과 비용을 말했다
+      - 일대다 단방향의 추가 UPDATE를 말했다
+      - 각각 주인이 어디인지 말했다
+      - 언제 양방향을 추가하는지 말했다
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#associations-one-to-many
+  - key: q-9c35b3be
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 팀 가입 API 테스트에서 가입 직후 team.getMembers().size()가 0인데, DB에는 team_id가 제대로 들어가 있다. 원인과 해결을 말해 보세요
+    explanation: |-
+      - 원인: 주인(member.team)만 설정해서 FK는 맞지만, 같은 영속성 컨텍스트의 team 객체는 DB를 다시 읽지 않아 members가 비어 있음
+      - 해결: changeTeam 같은 편의 메서드로 양쪽을 함께 맞춤. 테스트에서는 flush/clear 후 다시 조회해 DB 상태를 확인하는 방법도 있음
+    checklist:
+      - 주인만 설정했다고 진단했다
+      - 영속성 컨텍스트가 메모리 객체를 그대로 돌려준다고 말했다
+      - 편의 메서드를 말했다
+      - 편의 메서드는 한쪽에만 둔다고 말했다
+      - flush/clear 후 재조회를 말했다
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#associations-one-to-many
+  - key: q-64878331
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"양방향 연관관계에서 mappedBy가 붙은 쪽 컬렉션에 엔티티를 추가하면 FK가 저장된다\""
+    answer: X
+    explanation: |-
+      - mappedBy 쪽은 읽기 전용 거울이다. 주인(member.team)이 null이면 team_id는 null로 저장된다
+      - 검증: AssociationOwnerTest (nonOwnerSideOnlyIsIgnored)
+    source: https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/OneToMany.html
+  - key: q-e14d242d
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: team.getMembers().remove(member)만 하고 커밋했다(Team.members는 mappedBy). member의 team_id는?
+    choices:
+      - "null"
+      - 그대로 (팀 id)
+      - member 행이 삭제된다
+      - 예외
+    answer: "2"
+    explanation: |-
+      - 주인이 아닌 쪽의 변경은 무시된다. 관계를 끊으려면 member.team을 바꿔야 한다 (행 삭제는 orphanRemoval을 켜야 일어남)
+      - 검증: AssociationOwnerTest (removingFromNonOwnerDoesNothing)
+    source: https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/OneToMany.html
+  - key: q-c0c19300
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 일대다 단방향(@OneToMany + @JoinColumn)으로 팀과 멤버 2명을 저장할 때 member 테이블에 나가는 SQL은?
+    choices:
+      - INSERT 2
+      - INSERT 2 + UPDATE 2
+      - INSERT 2 + UPDATE 1
+      - UPDATE 2
+    answer: "2"
+    explanation: |-
+      - 팀 엔티티가 member 테이블의 FK를 관리해서, 멤버 INSERT 때는 team_id를 모르고 뒤에 UPDATE로 채운다. 양방향 다대일은 UPDATE 0
+      - 검증: AssociationOwnerTest (unidirectionalOneToManyIssuesExtraUpdates, bidirectionalManyToOneNoExtraUpdates)
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#associations-one-to-many
+  - key: q-93514208
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 18-A] 팀에 가입시켰는데 member 테이블의 team_id가 null로 저장된다. 원인이 되는 줄은?"
+    code: |-
+      // Team: @OneToMany(mappedBy = "team") List<Member> members
+      // Member: @ManyToOne @JoinColumn(name = "team_id") Team team
+      @Transactional
+      public void join(Long teamId, String name) {
+          Team team = teamRepository.findById(teamId).orElseThrow();
+          Member member = new Member(name);
+          team.getMembers().add(member);
+          memberRepository.save(member);
+      }
+    answer: "7"
+    explanation: |-
+      - mappedBy 쪽(거울)에만 추가했다. 주인인 member.team이 null이라 FK도 null. 고치기: member.changeTeam(team) 편의 메서드
+      - 검증: AssociationOwnerTest (nonOwnerSideOnlyIsIgnored, convenienceMethodKeepsBothSides)
+    source: https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/OneToMany.html

@@ -39,7 +39,7 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 5. 문제 초안
 
-표준 4장 규칙으로 연습 3개 이상, 판정 4개 이상을 만든다. 사용자의 개인 노션 문제 DB가 연결돼 있으면 거기에 "초안" 상태로 넣고, 아니면 PR 설명에 적는다.
+표준 4장 규칙으로 연습 3개 이상, 판정 4개 이상을 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 형식은 https://github.com/wanja727/kok/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식을 검사한다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
 
 ## 6. 마무리
 

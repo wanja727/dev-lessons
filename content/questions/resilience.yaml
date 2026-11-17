@@ -1,0 +1,117 @@
+# 외부 API 타임아웃, 재시도, 서킷 브레이커 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: resilience
+  title: 외부 API 타임아웃, 재시도, 서킷 브레이커
+  unit: Spring
+  order: 28
+concepts:
+  - key: core
+    name: 외부 API 타임아웃, 재시도, 서킷 브레이커
+questions:
+  - key: q-deea404f
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 외부 API에 타임아웃을 걸지 않으면 우리 서버 전체가 멈출 수 있는 이유를 설명해 보세요
+    explanation: |-
+      - CI 실측: 요청 스레드 10개, PG 3초 → 상품 조회 2999ms 대기. 타임아웃 300ms면 296ms
+      - 검증: ResilienceTest (noTimeoutExhaustsThreads)
+    checklist:
+      - 호출한 스레드가 응답을 기다리며 멈춘다고 말했다
+      - 요청 스레드 풀이 정해져 있다고 말했다
+      - 상관없는 요청도 빈 스레드를 기다린다고 말했다
+      - 장애 전파라는 말을 썼다
+      - 연결·응답 타임아웃(또는 벼크헤드)으로 막는다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
+  - key: q-a758a384
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 서킷 브레이커의 세 상태(CLOSED, OPEN, HALF_OPEN)와 상태가 바뀌는 조건을 설명해 보세요
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: ResilienceTest (circuitBreakerOpensAndCloses)
+    checklist:
+      - "CLOSED: 평소처럼 호출하며 실패율을 본다고 말했다"
+      - 실패율이 기준을 넘으면 OPEN이라고 말했다
+      - OPEN에서는 호출하지 않고 바로 실패(대체 응답)라고 말했다
+      - 대기 시간 뒤 HALF_OPEN에서 시험 호출을 한다고 말했다
+      - 시험 호출 성공이면 CLOSED, 실패면 다시 OPEN이라고 말했다
+    source: https://resilience4j.readme.io/docs/circuitbreaker
+  - key: q-68a805c1
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: PG 결제 요청이 타임아웃 났습니다. 고객에게 뭐라고 응답하고, 서버는 무엇을 해야 하나요?
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: ResilienceTest (timeoutDoesNotMeanFailure)
+    checklist:
+      - 타임아웃은 실패가 아니라 "모름"이라고 말했다
+      - 고객에게 "처리 중/확인 중"으로 응답한다고 말했다
+      - 거래 상태 조회로 처리 여부를 확인한다고 말했다
+      - 재시도한다면 같은 멱등 키로 한다고 말했다
+      - 확인이 안 되면 망 취소 또는 나중에 대사로 맞춘다고 말했다
+    source: https://resilience4j.readme.io/docs/retry
+  - key: q-3e767bef
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 결제 API 호출이 타임아웃 났다면 결제는 실패한 것이다
+    answer: X
+    explanation: |-
+      - 기다리기를 그만둔 것뿐, PG는 이미 처리했을 수 있다
+      - 검증: ResilienceTest (timeoutDoesNotMeanFailure)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
+  - key: q-65952420
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: PG 응답 500ms, 타임아웃 200ms, 멱등 키 없이 최대 2번 시도하면 PG가 결제를 처리한 횟수는?
+    choices:
+      - "0"
+      - "1"
+      - "2"
+    answer: "3"
+    explanation: |-
+      - 두 요청 모두 PG에서는 처리됐다. 같은 멱등 키로 재시도하면 1
+      - 검증: ResilienceTest (retryNeedsIdempotencyKey)
+    source: https://resilience4j.readme.io/docs/retry
+  - key: q-b770f7e1
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서킷 브레이커가 OPEN일 때 호출하면?
+    choices:
+      - PG를 부르고 기다린다
+      - PG를 부르지 않고 바로 실패한다
+      - 자동으로 3번 재시도한다
+    answer: "2"
+    explanation: |-
+      - CallNotPermittedException. PG에 요청이 가지 않는다 (CI 실측 351μs)
+      - 검증: ResilienceTest (circuitBreakerOpensAndCloses)
+    source: https://resilience4j.readme.io/docs/circuitbreaker
+  - key: q-8b4b4788
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 재시도하면 안 되는 것은?
+    choices:
+      - 503 응답
+      - 연결 타임아웃(멱등 키 있음)
+      - 400 Bad Request
+    answer: "3"
+    explanation: "- 4xx는 요청이 틀린 것이라 다시 보내도 같다"
+    source: https://resilience4j.readme.io/docs/retry

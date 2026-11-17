@@ -1,0 +1,125 @@
+# CompletableFuture 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: completable-future
+  title: CompletableFuture
+  unit: 동시성·분산
+  order: 8
+concepts:
+  - key: core
+    name: CompletableFuture
+questions:
+  - key: q-39a61cfd
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: CompletableFuture를 Future 대신 쓰는 이유를 1분 안에 설명해 보세요
+    explanation: |-
+      - Future는 get()으로 블로킹해야 결과를 쓰고 조합이 어렵다
+      - CompletableFuture는 thenApply/thenCompose/thenCombine/allOf로 다음 할 일을 미리 등록하고, exceptionally/handle로 복구, orTimeout으로 시간 제한
+      - 주의: executor 없으면 commonPool, I/O는 전용 풀
+    checklist:
+      - Future의 블로킹 한계를 말했다
+      - 단계 연결(thenApply 등)을 말했다
+      - 조합(thenCombine, allOf)을 말했다
+      - 예외 처리와 타임아웃을 말했다
+      - 전용 executor를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: q-25e6ed5b
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: thenApply, thenCompose, thenCombine의 차이를 예시와 함께 비교해 보세요
+    explanation: |-
+      - thenApply: 값 변환 (map)
+      - thenCompose: 앞 결과로 다음 비동기 호출 (flatMap), thenApply로 하면 CF가 겹침. 예: 회원 id → 등급 조회
+      - thenCombine: 독립된 두 작업을 동시에 돌려 합침. 예: 환율 + 시세
+    checklist:
+      - thenApply는 값 변환이라고 말했다
+      - thenCompose는 의존적인 비동기 호출 연결이라고 말했다
+      - thenApply로 하면 겹친다고 말했다
+      - thenCombine은 독립 작업을 동시에 합친다고 말했다
+      - 각각 알맞은 예시를 들었다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
+  - key: q-055cac26
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 여러 외부 API를 CompletableFuture로 조합한 화면이 트래픽이 늘자 전체적으로 느려지고, 병렬 스트림을 쓰는 다른 기능까지 느려졌다. 원인과 해결을 말해 보세요
+    explanation: |-
+      - 원인: executor 없이 supplyAsync를 써서 외부 API(블로킹 I/O)가 ForkJoinPool.commonPool을 차지. 공용 풀은 작고 병렬 스트림과 공유
+      - 해결: I/O 전용 풀을 만들어 넘기기, 타임아웃(orTimeout/completeOnTimeout), 풀 크기·큐 모니터링
+    checklist:
+      - commonPool을 원인으로 말했다
+      - 공용 풀이 다른 기능과 공유된다고 말했다
+      - 전용 executor를 말했다
+      - 타임아웃을 말했다
+      - 풀 크기 설정이나 모니터링을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html
+  - key: q-952305c5
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"CompletableFuture 체인의 중간 단계에서 예외가 나도 그 뒤의 thenApply는 실행된다\""
+    answer: X
+    explanation: |-
+      - 예외를 담은 채 다음 단계로 넘어가고 thenApply 같은 일반 단계는 건너뛴다. exceptionally나 handle에서 복구
+      - 검증: CompletableFutureTest (exceptionSkipsLaterStages)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
+  - key: q-33d4b9fb
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: executor 없이 CompletableFuture.supplyAsync(...)를 부르면 작업은 어디서 실행되나?
+    choices:
+      - 호출한 스레드
+      - ForkJoinPool.commonPool
+      - 작업마다 새 스레드
+      - 톰캣 요청 스레드 풀
+    answer: "2"
+    explanation: |-
+      - (코어가 1개인 환경에서는 작업마다 새 스레드를 쓰기도 한다)
+      - 검증: CompletableFutureTest (defaultPoolIsCommonPool)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: q-4fdf7455
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 실패한 CompletableFuture에서 join()과 get()이 던지는 예외를 바르게 짝지은 것은?
+    choices:
+      - "join: ExecutionException / get: CompletionException"
+      - "join: CompletionException / get: ExecutionException"
+      - 둘 다 원래 예외를 그대로
+      - 둘 다 null을 돌려준다
+    answer: "2"
+    explanation: |-
+      - join은 언체크 CompletionException, get은 체크 ExecutionException. 원인은 getCause()
+      - 검증: CompletableFutureTest (getVsJoin)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: q-bfdf4f95
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 12-A] 등급 조회 결과가 CompletableFuture<CompletableFuture<Grade>>가 되어 다루기 어렵다. 고쳐야 할 줄은?"
+    code: |-
+      CompletableFuture<Long> memberId =
+          CompletableFuture.supplyAsync(() -> memberApi.findId(token), apiPool);
+
+      var grade = memberId.thenApply(id ->
+          CompletableFuture.supplyAsync(() -> gradeApi.find(id), apiPool));
+    answer: "4"
+    explanation: |-
+      - 앞 결과로 또 다른 CompletableFuture를 만드는 호출은 thenCompose를 써야 한 겹으로 펼쳐진다
+      - 검증: CompletableFutureTest (thenCompose)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html

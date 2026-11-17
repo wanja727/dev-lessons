@@ -1,0 +1,113 @@
+# 트랜잭셔널 아웃박스 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: transactional-outbox
+  title: 트랜잭셔널 아웃박스
+  unit: 동시성·분산
+  order: 24
+concepts:
+  - key: core
+    name: 트랜잭셔널 아웃박스
+questions:
+  - key: q-f20f5ad8
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 이중 쓰기 문제가 무엇인지, 어떤 두 방향으로 어긋날 수 있는지 설명해 보세요
+    explanation: "- DB 저장과 브로커 발행은 서로 다른 시스템이라 한 트랜잭션으로 묶이지 않는다. 하나만 성공하면 어긋난다"
+    checklist:
+      - "@Transactional은 DB 연결 하나만 커밋·롤백한다고 말했다"
+      - 유령 메시지(메시지는 나갔는데 DB 롤백)를 말했다
+      - 메시지 유실(DB는 커밋됐는데 발행 실패)을 말했다
+      - 각각의 결과(없는 주문 배송, 결제를 아무도 모름)를 예로 들었다
+      - 해결로 아웃박스를 언급했다
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html
+  - key: q-f26f6ace
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: "@TransactionalEventListener(AFTER_COMMIT)로 발행하는 방식과 아웃박스 + 릴레이 방식을 비교해 보세요"
+    explanation: |-
+      - AFTER_COMMIT: 롤백 시 발행 안 함(유령 메시지 방지), 커밋 후 발행 실패 시 메시지 유실
+      - 아웃박스: 같은 트랜잭션으로 기록해 유실 없음, 대신 중복 발행 가능과 운영 부담
+    checklist:
+      - AFTER_COMMIT은 롤백되면 실행되지 않는다고 말했다
+      - AFTER_COMMIT은 커밋 후 실패 시 다시 보낼 기록이 없다고 말했다
+      - 아웃박스는 업무 데이터와 같은 트랜잭션으로 기록한다고 말했다
+      - 아웃박스는 최소 한 번이라 중복이 생길 수 있다고 말했다
+      - 어울리는 상황(놓쳐도 되는 알림 vs 주문·결제)을 구분했다
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/event/TransactionalEventListener.html
+  - key: q-d9e4b842
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 아웃박스 릴레이가 메시지를 보낸 직후, 보냈다는 표시를 하기 전에 서버가 꺼졌습니다. 무슨 일이 생기고 어떻게 대비하나요?
+    explanation: |-
+      - 재시작한 릴레이가 같은 행을 다시 보내 중복이 생긴다. 받는 쪽이 event_id로 거른다
+      - 검증: TransactionalOutboxTest (relayCrashSendsDuplicate)
+    checklist:
+      - published_at이 비어 있어 같은 메시지를 다시 보낸다고 말했다
+      - 이것이 최소 한 번(at-least-once) 전달이라고 말했다
+      - 받는 쪽이 event_id(고유 id)로 중복을 거른다고 말했다
+      - 처리한 id를 기록하는 방법(테이블, 유니크 제약)을 말했다
+      - 릴레이 여러 대면 SKIP LOCKED 등으로 같은 행 동시 처리를 막는다고 말했다
+    source: https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html
+  - key: q-07c4110a
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "@Transactional 메서드 안에서 브로커로 메시지를 보낸 뒤 예외가 나 롤백되면, 이미 보낸 메시지도 취소된다"
+    answer: X
+    explanation: |-
+      - 트랜잭션은 DB만 되돌린다. 브로커에 보낸 메시지는 그대로 남아 유령 메시지가 된다
+      - 검증: TransactionalOutboxTest (directPublishLeaksOnRollback)
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html
+  - key: q-dc56b301
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "@TransactionalEventListener(AFTER_COMMIT) 리스너에서 브로커로 보낼 때, 커밋 직후 브로커가 죽어 있으면?"
+    choices:
+      - 주문도 롤백
+      - 주문은 남고 메시지는 사라짐
+      - 스프링이 자동으로 다시 보냄
+    answer: "2"
+    explanation: |-
+      - 커밋은 이미 끝났고, 다시 보낼 기록이 어디에도 없다
+      - 검증: TransactionalOutboxTest (afterCommitLosesMessageWhenBrokerDown)
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/event/TransactionalEventListener.html
+  - key: q-d73dc3d8
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 2
+    body: 트랜잭션이 없는 메서드에서 publishEvent를 하면, @TransactionalEventListener(기본 설정) 리스너는 바로 실행된다
+    answer: X
+    explanation: |-
+      - 트랜잭션이 없으면 이벤트는 버려진다(예외도 없음). fallbackExecution = true일 때만 실행된다
+      - 검증: TransactionalOutboxTest (afterCommitIgnoresEventWithoutTransaction)
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/event/TransactionalEventListener.html
+  - key: q-0b4e835d
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 아웃박스 패턴에서 주문 저장 후 재고 부족 예외로 롤백되면 아웃박스 테이블에는?
+    choices:
+      - 행이 남아 릴레이가 보낸다
+      - 주문과 함께 사라진다
+      - published_at만 채워진다
+    answer: "2"
+    explanation: |-
+      - 주문과 아웃박스 행은 같은 트랜잭션이라 함께 롤백된다
+      - 검증: TransactionalOutboxTest (outboxRollsBackTogether)
+    source: https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html

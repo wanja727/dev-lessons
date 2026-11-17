@@ -1,0 +1,137 @@
+# OSIV (Open Session In View) 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: osiv
+  title: OSIV (Open Session In View)
+  unit: JPA
+  order: 16
+concepts:
+  - key: core
+    name: OSIV (Open Session In View)
+questions:
+  - key: q-fa934d44
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: OSIV가 무엇이고, API 서버에서 왜 끄라고 하는지 1분 안에 설명해 보세요
+    explanation: |-
+      - 영속성 컨텍스트를 요청 시작부터 응답까지 열어 둠. 부트 기본값 true
+      - 트랜잭션은 그대로, 컨트롤러/뷰에서 지연 로딩 가능
+      - 대가: 처음 DB를 쓴 시점부터 응답까지 커넥션 점유 → 외부 API 등이 길면 풀 고갈
+      - 끄고 서비스에서 fetch join + DTO
+    checklist:
+      - 영속성 컨텍스트 범위를 요청으로 늘린다고 말했다
+      - 부트 기본값이 켜져 있다고 말했다
+      - 트랜잭션은 그대로라고 구분했다
+      - 커넥션 점유와 풀 고갈을 말했다
+      - 끈 뒤의 대안(fetch join, DTO)을 말했다
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view
+  - key: q-ba225e36
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: OSIV 켜짐과 꺼짐을 영속성 컨텍스트 범위, 커넥션 점유, 컨트롤러에서의 지연 로딩으로 비교해 보세요
+    explanation: |-
+      - 영속성 컨텍스트: 켜짐 요청 전체 / 꺼짐 트랜잭션 범위
+      - 커넥션: 켜짐 처음 쓴 시점부터 응답까지 / 꺼짐 트랜잭션 동안만
+      - 컨트롤러 지연 로딩: 켜짐 됨 / 꺼짐 LazyInitializationException
+      - 켜짐은 컨트롤러에서 바꾼 엔티티가 이후 쓰기 트랜잭션에서 반영될 수 있음
+    checklist:
+      - 영속성 컨텍스트 범위 차이를 말했다
+      - 커넥션 점유 차이를 말했다
+      - 지연 로딩 차이를 말했다
+      - 변경 감지 함정을 말했다
+      - 각각 어울리는 곳을 말했다
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view
+  - key: q-f6a8a010
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 외부 결제 API가 느려지자 DB는 한가한데 'Connection is not available, request timed out' 오류가 쏟아진다. 원인과 대응을 말해 보세요
+    explanation: |-
+      - 의심: OSIV가 켜져 있어 커넥션을 얻은 요청이 외부 API를 기다리는 동안에도 커넥션을 쥐고 있음. 또는 트랜잭션 안에서 외부 API 호출
+      - 확인: Hikari active/pending 지표, 스레드 덤프에서 외부 호출 대기 중인 요청 스레드, open-in-view 설정
+      - 대응: open-in-view false, 외부 호출을 트랜잭션 밖으로, 타임아웃 설정. 풀 크기만 늘리는 건 근본 해결이 아님
+    checklist:
+      - OSIV의 커넥션 점유를 의심했다
+      - 트랜잭션 안 외부 호출도 의심했다
+      - 확인 방법(풀 지표, 스레드 덤프)을 말했다
+      - OSIV 끄기를 말했다
+      - 풀 크기만 늘리는 것의 한계를 말했다
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view
+  - key: q-8818e170
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"OSIV를 켜면 @Transactional 트랜잭션도 요청 끝까지 이어진다\""
+    answer: X
+    explanation: |-
+      - 트랜잭션은 서비스 범위 그대로. 영속성 컨텍스트만 요청 끝까지 열려 있고, 그 밖의 지연 로딩은 트랜잭션 없이 실행된다
+      - 검증: OsivOnTest (lazyLoadingInControllerWorks)
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/orm/jpa/support/OpenEntityManagerInViewInterceptor.html
+  - key: q-35ea0fb0
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: OSIV가 켜진 상태에서 컨트롤러가 서비스(@Transactional)를 호출한 직후, 이 요청이 쥐고 있는 DB 커넥션은?
+    code: |-
+      @GetMapping("/players/{id}")
+      public int afterService(@PathVariable Long id) {
+          service.findPlayer(id);                 // @Transactional
+          return hikari.getHikariPoolMXBean().getActiveConnections();
+      }
+    choices:
+      - 0개 (트랜잭션이 끝났으니 반납)
+      - 1개 (요청이 끝날 때까지 쥐고 있음)
+      - 2개
+      - 예외
+    answer: "2"
+    explanation: |-
+      - 열려 있는 영속성 컨텍스트가 커넥션을 쥐고 응답까지 간다. OSIV를 끄면 0개
+      - 검증: OsivOnTest (connectionHeldUntilRequestEnds), OsivOffTest (connectionReleasedAfterService)
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view
+  - key: q-ebbd53b3
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: OSIV가 켜져 있을 때만 생기는 일은?
+    choices:
+      - 서비스 트랜잭션 안에서 변경 감지가 동작한다
+      - 컨트롤러에서 바꾼 엔티티가, 이후 호출한 상관없는 쓰기 트랜잭션 커밋 때 반영된다
+      - 서비스에서 fetch join으로 조회할 수 있다
+      - 서비스 안에서 지연 로딩이 된다
+    answer: "2"
+    explanation: |-
+      - 컨트롤러의 엔티티가 여전히 영속 상태라 다음 커밋의 flush에 포함된다. 나머지는 켜고 끄는 것과 상관없이 된다
+      - 검증: OsivOnTest (controllerChangeFlushedByLaterTransaction), OsivOffTest (controllerChangeNotFlushed)
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view
+  - key: q-5feb7215
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 3
+    body: "[코드 17-A] OSIV가 켜진 서버에서 미리보기 API를 부르면 플레이어 이름이 실제로 바뀐다. 바뀐 값이 DB에 UPDATE되는 시점은 어느 줄이 끝날 때인가?"
+    code: |-
+      @PostMapping("/players/{id}/preview")
+      public String preview(@PathVariable Long id, @RequestParam String name) {
+          Player player = playerService.findPlayer(id);   // @Transactional
+          player.rename(name);                            // 미리보기용
+          visitService.recordVisit();                     // @Transactional 쓰기
+          return "ok";
+      }
+    answer: "5"
+    explanation: |-
+      - 4번에서는 메모리만 바뀜다. 5번의 쓰기 트랜잭션이 같은 영속성 컨텍스트에서 커밋되며 flush할 때 변경 감지로 UPDATE가 나간다
+      - 고치기: OSIV 끄기, 미리보기는 엔티티가 아닌 DTO로
+      - 검증: OsivOnTest (controllerChangeFlushedByLaterTransaction)
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view

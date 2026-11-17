@@ -1,0 +1,115 @@
+# HTTP와 REST API 설계 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: rest-api
+  title: HTTP와 REST API 설계
+  unit: 네트워크·웹
+  order: 30
+concepts:
+  - key: core
+    name: HTTP와 REST API 설계
+questions:
+  - key: q-52138e9b
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: HTTP 메서드의 안전성과 멱등성을 설명하고, GET·POST·PUT·PATCH·DELETE를 분류해 보세요
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: RestApiTest
+    checklist:
+      - 안전 = 서버 상태를 바꾸지 않음 (GET)이라고 말했다
+      - 멱등 = 여러 번 보내도 서버 상태가 같음이라고 말했다
+      - PUT, DELETE는 멱등, POST는 아님을 말했다
+      - PATCH는 멱등이 보장되지 않는다고 말했다
+      - "멱등은 응답이 아니라 상태에 대한 약속(DELETE 두 번: 204, 404)이라고 말했다"
+    source: https://www.rfc-editor.org/rfc/rfc9110.html
+  - key: q-3cf05dc4
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: offset 페이지네이션과 cursor 페이지네이션을 비교해 보세요
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: RestApiTest (offsetDuplicatesCursorDoesNot)
+    checklist:
+      - offset은 앞에서 n개 건너뛰기, cursor는 마지막 항목 다음부터라고 말했다
+      - offset은 중간 변경에 밀려 중복·누락이 생긴다고 말했다
+      - offset은 깊은 페이지일수록 느려진다고 말했다
+      - cursor는 임의 페이지 이동이 어렵다고 말했다
+      - 정렬 키가 유일해야 한다고 말했다
+    source: https://www.rfc-editor.org/rfc/rfc9110.html
+  - key: q-ca3804ba
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: "모든 API가 200을 돌려주고 본문에 {\"success\": false}를 담는 기존 서비스를 맡았습니다. 무엇이 문제이고 어떻게 바꾸겠어요?"
+    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
+    checklist:
+      - 모니터링·재시도 도구가 오류를 모른다고 말했다
+      - 400/404/409/500 등 알맞은 상태 코드를 쓴다고 말했다
+      - 에러 본문을 RFC 9457 Problem Details로 통일한다고 말했다
+      - 기존 클라이언트가 깨지지 않게 새 버전(/v2)으로 낸다고 말했다
+      - 4xx는 재시도하지 않고 5xx는 재시도할 만하다는 구분을 말했다
+    source: https://www.rfc-editor.org/rfc/rfc9457.html
+  - key: q-ccc7695f
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 2
+    body: DELETE를 두 번 보냈더니 204 다음 404가 왔다. 응답이 다르므로 DELETE는 멱등이 아니다
+    answer: X
+    explanation: |-
+      - 멱등은 서버 상태에 대한 약속이다. 상품은 여전히 없다
+      - 검증: RestApiTest (deleteTwice)
+    source: https://www.rfc-editor.org/rfc/rfc9110.html
+  - key: q-23ed94d8
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 같은 본문으로 POST /products를 두 번, PUT /products/7을 두 번 보냈다. 각각 상품 수는?
+    choices:
+      - 1, 1
+      - 2, 1
+      - 2, 2
+    answer: "2"
+    explanation: |-
+      - POST는 201 두 번(Location 1, 2), PUT은 201 다음 200
+      - 검증: RestApiTest (postIsNotIdempotentButPutIs)
+    source: https://www.rfc-editor.org/rfc/rfc9110.html
+  - key: q-9a5b1da6
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 새 자원을 만든 POST의 알맞은 응답은?
+    choices:
+      - 200 OK
+      - 201 Created + Location 헤더
+      - 204 No Content
+    answer: "2"
+    explanation: "- Location에 새 자원의 주소를 담는다"
+    source: https://www.rfc-editor.org/rfc/rfc9110.html
+  - key: q-788da7f6
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 최신순 3개씩 offset 페이지네이션. 1페이지 [6, 5, 4]를 본 뒤 새 글(7)이 생겼다. 2페이지는?
+    choices:
+      - "[3, 2, 1]"
+      - "[4, 3, 2]"
+      - "[7, 6, 5]"
+    answer: "2"
+    explanation: |-
+      - 한 칸씩 밀려 4번이 또 나온다. cursor(id &lt; 4)면 [3, 2, 1]
+      - 검증: RestApiTest (offsetDuplicatesCursorDoesNot)
+    source: https://www.rfc-editor.org/rfc/rfc9110.html

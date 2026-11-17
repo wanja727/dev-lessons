@@ -1,0 +1,134 @@
+# 낙관적 락 vs 비관적 락 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: locking
+  title: 낙관적 락 vs 비관적 락
+  unit: 동시성·분산
+  order: 20
+concepts:
+  - key: core
+    name: 낙관적 락 vs 비관적 락
+questions:
+  - key: q-976818f9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 낙관적 락과 비관적 락의 차이와 선택 기준을 1분 안에 설명해 보세요
+    explanation: |-
+      - 낙관적: @Version으로 쓸 때 충돌 감지, 실패하면 재시도. 충돌 드문 때
+      - 비관적: FOR UPDATE로 읽을 때 잠금, 뒤 트랜잭션 대기. 충돌 잦을 때, 대기·데드락 주의
+    checklist:
+      - 감지(낙관적) vs 차단(비관적)을 말했다
+      - "@Version과 UPDATE 조건을 말했다"
+      - FOR UPDATE와 대기를 말했다
+      - 충돌 빈도에 따른 선택 기준을 말했다
+      - 재시도나 데드락 같은 비용을 말했다
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
+  - key: q-72283f86
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 재고 차감에서 원자적 UPDATE, 낙관적 락, 비관적 락을 비교해 보세요
+    explanation: |-
+      - 원자적 UPDATE: 가장 가볍고 정확, 조건(quantity >= n)을 SQL에. 복잡한 도메인 로직은 표현하기 어려움
+      - 낙관적: 엔티티 로직 그대로, 충돌 드물면 좋음. 인기 상품은 재시도 폭증
+      - 비관적: 충돌 잦아도 정확, 대기·커넥션 점유·데드락 주의
+    checklist:
+      - 원자적 UPDATE의 장단점을 말했다
+      - 낙관적 락의 재시도 폭증을 말했다
+      - 비관적 락의 대기 비용을 말했다
+      - 트래픽 패턴에 따른 선택을 말했다
+      - 여러 서버에서도 동작한다는 점을 말했다
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: q-db6699e9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 비관적 락을 도입한 뒤 주문 API의 응답 시간이 길어지고 가끔 데드락 오류가 난다. 확인할 것과 개선 방법을 말해 보세요
+    explanation: |-
+      - 락을 쥐 채 외부 API 호출 등 긴 작업을 하는지, 트랜잭션 범위를 줄이기
+      - 여러 행을 잠글 때 순서가 제각각인지 → id 오름차순 등 일정한 순서로
+      - 락 타임아웃/NOWAIT, 단순 수량이면 원자적 UPDATE로 대체
+    checklist:
+      - 락을 쥐 구간(트랜잭션 길이)을 줄인다고 말했다
+      - 락을 쥐 채 외부 호출을 피한다고 말했다
+      - 잠금 순서를 맞춘다고 말했다
+      - 타임아웃이나 NOWAIT를 말했다
+      - 다른 방식(원자적 UPDATE)으로의 대체를 말했다
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: q-7b36e348
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"낙관적 락은 읽을 때 행을 잠가서 다른 트랜잭션이 기다리게 한다\""
+    answer: X
+    explanation: |-
+      - 그건 비관적 락이다. 낙관적 락은 잠그지 않고 쓸 때 버전으로 충돌을 감지해 나중 쪽을 실패시킨다
+      - 검증: LockingTest (optimisticSecondCommitFails)
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
+  - key: q-e8a16e2a
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "@Version이 있는 재고(100, version 0)를 두 트랜잭션이 동시에 읽고 각각 10씩 뺐다. 결과는?"
+    choices:
+      - 둘 다 성공, 재고 80
+      - 둘 다 성공, 재고 90
+      - 하나만 성공, 재고 90, 다른 하나는 ObjectOptimisticLockingFailureException
+      - 하나가 기다렸다가 둘 다 성공, 재고 80
+    answer: "3"
+    explanation: |-
+      - 나중 커밋의 UPDATE ... WHERE version = 0이 0건이라 실패. 재시도하면 80이 된다. 4번은 비관적 락의 동작
+      - 검증: LockingTest (optimisticSecondCommitFails)
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
+  - key: q-e0df4866
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "@Lock(PESSIMISTIC_WRITE) 조회에 락 타임아웃 0(NOWAIT)을 주었다. 다른 트랜잭션이 이미 그 행을 잠가 두었다면?"
+    choices:
+      - 락이 풀릴 때까지 기다린다
+      - 잠금을 무시하고 읽는다
+      - 바로 PessimisticLockingFailureException으로 실패한다
+      - ObjectOptimisticLockingFailureException으로 실패한다
+    answer: "3"
+    explanation: |-
+      - 기다리지 않고 바로 실패한다. 사용자에게 "잠시 후 다시"를 안내하거나 재시도한다
+      - 검증: LockingTest (noWaitFailsFast)
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
+  - key: q-fbd6fa74
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 3
+    body: "[코드 9-A] 낙관적 락 충돌을 재시도하도록 만들었는데, 충돌이 나면 재시도도 계속 실패한다. 원인이 되는 줄은?"
+    code: |-
+      @Transactional
+      public void order(Long id, int n) {
+          for (int attempt = 1; attempt <= 3; attempt++) {
+              try {
+                  Stock stock = stockRepository.findById(id).orElseThrow();
+                  stock.decrease(n);
+                  stockRepository.flush();
+                  return;
+              } catch (ObjectOptimisticLockingFailureException e) {
+                  // 다시 시도
+              }
+          }
+      }
+    answer: "1"
+    explanation: |-
+      - 재시도가 같은 트랜잭션 안에서 돈다. 5번 줄의 findById는 영속성 컨텍스트에 남은 옛 엔티티(옛 버전)를 돌려주고, 충돌로 트랜잭션은 이미 롤백 대상이다
+      - 고치기: @Transactional을 빼고, 재시도 루프는 바깥 빈에서 시도마다 새 트랜잭션 메서드를 호출
+      - 근거: 올바른 구조는 LockingTest (optimisticWithRetryIsExact)로 검증. 이 코드의 실패 자체는 테스트하지 않음
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html

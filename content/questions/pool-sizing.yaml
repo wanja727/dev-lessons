@@ -1,0 +1,111 @@
+# 커넥션 풀과 톰캣 스레드 풀 크기 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: pool-sizing
+  title: 커넥션 풀과 톰캣 스레드 풀 크기
+  unit: DB
+  order: 29
+concepts:
+  - key: core
+    name: 커넥션 풀과 톰캣 스레드 풀 크기
+questions:
+  - key: q-431f0dce
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 톰캣 요청 스레드 풀과 DB 커넥션 풀의 관계를 설명해 보세요 (기본값 포함)
+    explanation: |-
+      - 체크리스트 항목이 모범 답안의 요점이다
+      - 검증: PoolSizingTest (defaults, moreThreadsThanConnectionsWait)
+    checklist:
+      - 요청 하나를 스레드 하나가 처리한다고 말했다
+      - 기본값 톰캣 200, HikariCP 10을 말했다
+      - DB를 쓸 때만 커넥션을 빌리고, 없으면 기다린다고 말했다
+      - connection-timeout이 지나면 예외라고 말했다
+      - 커넥션 수가 DB 작업의 동시 처리량이라고 말했다
+    source: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
+  - key: q-61a8a467
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 커넥션 풀 크기를 크게 잡을 때와 작게 잡을 때의 문제를 비교하고, 크기를 정하는 방법을 말해 보세요
+    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
+    checklist:
+      - 크면 DB가 동시 쿼리로 경합해 느려진다고 말했다
+      - 서버 수 x 풀 크기가 DB 최대 연결 수를 넘을 수 있다고 말했다
+      - 작으면 커넥션 대기가 길어진다고 말했다
+      - 초당 작업 수 x 점유 시간(리틀의 법칙)을 말했다
+      - 점유 시간을 줄이는 것이 먼저라고 말했다
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  - key: q-45cb5592
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 트래픽이 몰리자 "Connection is not available, request timed out" 오류가 쏟아집니다. 무엇을 확인하고 어떻게 고치나요?
+    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
+    checklist:
+      - 요청 하나가 커넥션을 2개 이상 쥬는지(REQUIRES_NEW) 확인한다고 말했다
+      - 트랜잭션 안 외부 API 호출·느린 쿼리·OSIV를 확인한다고 말했다
+      - 커넥션 반납 누락(leak detection)을 말했다
+      - 대기 지표를 보고 필요하면 계산해 늘린다고 말했다
+      - 스레드만 늘리는 것은 해결이 아니라고 말했다
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  - key: q-27c6293d
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 커넥션 풀 2개, 동시 요청 2개가 각자 커넥션 1개를 쥔 채 REQUIRES_NEW로 1개 더 요청하면?
+    choices:
+      - 둘 다 성공
+      - 하나만 성공
+      - 둘 다 타임아웃
+    answer: "3"
+    explanation: |-
+      - 풀 고갈 데드락. 커넥션 3개면 둘 다 성공
+      - 검증: PoolSizingTest (poolLockingDeadlock)
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  - key: q-bba7f457
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 동시 스레드 8개, 스레드당 동시에 최대 3개의 커넥션을 쓸 때 데드락이 없는 최소 풀 크기는?
+    choices:
+      - "17"
+      - "24"
+      - "9"
+    answer: "1"
+    explanation: "- Tn x (Cm - 1) + 1 = 8 x 2 + 1 = 17"
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  - key: q-626e5e28
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 커넥션 풀은 톰캣 요청 스레드 수(200)만큼 늘리는 것이 가장 안전하다
+    answer: X
+    explanation: "- DB가 동시 쿼리로 경합해 느려지고 DB 최대 연결 수를 넘을 수 있다"
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  - key: q-1303bc64
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 스레드 6개가 동시에 200ms 쿼리를 하나씩 실행한다. 커넥션이 2개면 전체 시간은 대략?
+    choices:
+      - 200ms
+      - 400ms
+      - 600ms
+    answer: "3"
+    explanation: |-
+      - 2개씩 세 번 (CI 실측 606ms, 커넥션 6개면 202ms)
+      - 검증: PoolSizingTest (moreThreadsThanConnectionsWait)
+    source: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing

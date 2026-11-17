@@ -1,0 +1,128 @@
+# 동기화: synchronized, volatile, 원자적 연산 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: synchronization
+  title: "동기화: synchronized, volatile, 원자적 연산"
+  unit: 동시성·분산
+  order: 9
+concepts:
+  - key: core
+    name: "동기화: synchronized, volatile, 원자적 연산"
+questions:
+  - key: q-83cbf9a4
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: synchronized와 volatile의 차이를 1분 안에 설명해 보세요
+    explanation: |-
+      - synchronized: 락으로 원자성 + 가시성, 락 대기 비용
+      - volatile: 가시성만, count++ 같은 읽기-수정-쓰기는 격침. 한 쪽이 쓰고 나머지가 읽는 플래그에 적합
+    checklist:
+      - 원자성과 가시성을 나눠 말했다
+      - synchronized는 둘 다 보장한다고 말했다
+      - volatile은 가시성만이라고 말했다
+      - volatile count++가 왜 틀리는지 말했다
+      - 각각 쓰는 상황을 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: q-223772e9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: synchronized, AtomicInteger(CAS), LongAdder를 비교하고 각각 언제 쓰는지 말해 보세요
+    explanation: |-
+      - synchronized: 여러 값을 함께 바꾸는 복합 연산, 락 대기 비용
+      - AtomicInteger: 변수 하나의 원자적 연산, CAS 재시도로 락 없음
+      - LongAdder: 많은 스레드가 같은 카운터를 올릴 때 나눠 더했다가 합침, CAS 실패 감소
+    checklist:
+      - synchronized는 복합 연산에 쓴다고 말했다
+      - CAS의 동작(기대값 비교 후 변경, 실패 시 재시도)을 말했다
+      - Atomic은 변수 하나에만 원자적이라고 말했다
+      - 고경합에서 LongAdder를 말했다
+      - 락 대기 비용과 CAS 재시도 비용을 비교했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
+  - key: q-0e329af7
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 환율 캐시를 ConcurrentHashMap으로 만들었는데 같은 키의 외부 API가 가끔 두 번 호출된다. 원인과 해결을 말해 보세요
+    explanation: |-
+      - containsKey 후 put처럼 메서드를 이어 불렀을 가능성. 맵 메서드 하나하나는 안전해도 사이에 다른 스레드가 끼어든다(check-then-act)
+      - 해결: computeIfAbsent로 한 번에. (여러 서버면 서버마다 한 번씩은 호출됨을 알고, 필요하면 공유 캐시)
+    checklist:
+      - 맵 자체는 안전하다고 말했다
+      - 메서드를 이어 부르는 사이의 틈을 말했다
+      - check-then-act라는 패턴을 말했다
+      - computeIfAbsent(또는 putIfAbsent, compute)를 말했다
+      - 서버가 여러 대일 때의 한계를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ConcurrentHashMap.html
+  - key: q-0ce029aa
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"필드를 volatile로 선언하면 여러 스레드가 동시에 count++해도 값이 정확하다\""
+    answer: X
+    explanation: |-
+      - volatile은 가시성만 보장하고, 읽기·더하기·쓰기를 한 덩어리로 만들지 않는다
+      - 검증: SynchronizationTest (volatileIsNotAtomic)
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: q-a79e2a89
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: AtomicInteger stock = new AtomicInteger(10); stock.compareAndSet(10, 9); stock.compareAndSet(10, 8); 이후 stock.get()은?
+    choices:
+      - "10"
+      - "9"
+      - "8"
+      - 예외가 난다
+    answer: "2"
+    explanation: |-
+      - 첫 CAS는 10이 맞아서 9로 바뀌고 true, 두 번째는 이미 9라 실패하고 false. 예외는 없다
+      - 검증: SynchronizationTest (compareAndSet)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
+  - key: q-6527a402
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 다음 중 "한 스레드가 쓰고 다른 스레드는 읽기만 하는 종료 플래그"에 가장 알맞은 것은?
+    choices:
+      - 아무것도 붙이지 않은 boolean
+      - volatile boolean
+      - 호출마다 synchronized (new Object())
+      - ThreadLocal
+    answer: "2"
+    explanation: |-
+      - 쓰기와 읽기가 나뉘어 있어 가시성만 필요하다. 1번은 보인다는 보장이 없고, 3번은 락이 매번 달라 무의미, 4번은 스레드마다 따로 있어 다른 스레드가 못 본다
+      - 검증: SynchronizationTest (volatileVisibility)
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: q-7a305b1a
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 7-A] 두 스레드가 increment()를 동시에 수백만 번 부르면 값이 틀어진다. 원인이 되는 줄은?"
+    code: |-
+      class Counter {
+          private int count;
+
+          public void increment() {
+              synchronized (new Object()) {
+                  count++;
+              }
+          }
+      }
+    answer: "5"
+    explanation: |-
+      - 호출마다 새 객체를 락으로 잡아서 스레드들이 서로 기다리지 않는다. 고치기: 필드에 둔 하나의 락 객체(또는 synchronized 메서드), 혹은 AtomicInteger
+      - 검증: SynchronizationTest (differentLocksDoNotExclude, sameLockIsExact)
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/sync.html

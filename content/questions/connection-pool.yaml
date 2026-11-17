@@ -1,0 +1,130 @@
+# DB 커넥션과 커넥션 풀 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: connection-pool
+  title: DB 커넥션과 커넥션 풀
+  unit: DB
+  order: 2
+concepts:
+  - key: core
+    name: DB 커넥션과 커넥션 풀
+questions:
+  - key: q-1ca0e891
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 커넥션 풀을 왜 쓰는지, 풀이 모자라면 무슨 일이 생기는지 1분 안에 설명해 보세요
+    explanation: |-
+      - 연결 생성은 네트워크 접속, 인증, DB 서버 프로세스 준비라 비쌈 → 미리 만들어 빌려주고 반납받음
+      - 풀에서 빌린 연결의 close()는 반납
+      - 모두 쓰이면 다음 요청은 connection-timeout까지 기다리다 실패
+      - 스프링 기본 HikariCP, 크기 10
+    checklist:
+      - 연결 생성 비용을 말했다
+      - 빌리고 반납하는 구조를 말했다
+      - close()가 반납이라고 말했다
+      - 대기와 타임아웃을 말했다
+      - HikariCP와 기본값을 말했다
+    source: https://github.com/brettwooldridge/HikariCP
+  - key: q-dfd7f62a
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 커넥션 풀 크기를 작게 잡을 때와 크게 잡을 때의 문제를 비교해 보세요
+    explanation: |-
+      - 작으면: 대기, connection-timeout 실패
+      - 크면: DB 서버 연결 한계(PostgreSQL 기본 100)와 자원 초과, DB가 동시에 처리할 수 있는 양보다 많아져 오히려 느려짐
+      - 서버 대수 × 풀 크기가 DB 한계 안에. 작게 시작해서 측정
+      - 연결을 쥐는 시간(트랜잭션)을 줄이는 게 먼저
+    checklist:
+      - 작을 때 대기와 실패
+      - 클 때 DB 한계와 자원
+      - 서버 대수를 곱해야 한다고 말했다
+      - 측정으로 정한다고 말했다
+      - 트랜잭션 길이를 말했다
+    source: https://github.com/brettwooldridge/HikariCP
+  - key: q-3057c588
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: DB는 한가한데 'Connection is not available, request timed out after 30000ms'가 간헐적으로 난다. 무엇을 의심하고 어떻게 확인할지 말해 보세요
+    explanation: |-
+      - 연결을 오래 쥐는 곳: 트랜잭션 안의 외부 API 호출, OSIV, 긴 트랜잭션
+      - 연결 누수: close()하지 않는 코드 (HikariCP leakDetectionThreshold로 탐지)
+      - 확인: Hikari active/idle/pending 지표, 스레드 덤프에서 연결을 쥔 채 기다리는 스레드
+      - 풀 크기만 늘리는 건 근본 해결이 아님
+    checklist:
+      - 트랜잭션 안의 느린 작업을 의심했다
+      - 연결 누수를 의심했다
+      - 풀 지표 확인을 말했다
+      - 스레드 덤프를 말했다
+      - 풀 크기만 늘리는 것의 한계를 말했다
+    source: https://github.com/brettwooldridge/HikariCP
+  - key: q-be7e20b9
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"풀에서 빌린 Connection의 close()를 부르면 DB 연결이 끊어진다\""
+    answer: X
+    explanation: |-
+      - 끊지 않고 풀에 반납한다. 다시 빌리면 같은 DB 서버 프로세스
+      - 검증: ConnectionPoolTest (closeReturnsToPool)
+    source: https://github.com/brettwooldridge/HikariCP
+  - key: q-d4692514
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 풀 크기 2, connection-timeout 500ms. 두 요청이 연결을 쥔 채 오래 일하는 중에 세 번째 요청이 연결을 달라고 하면?
+    choices:
+      - 연결을 하나 더 만든다
+      - 바로 예외
+      - 약 500ms 기다린 뒤 SQLTransientConnectionException
+      - 무한정 기다린다
+    answer: "3"
+    explanation: |-
+      - 최대 크기를 넘겨 만들지 않고, 대기 한도까지 기다린 뒤 실패한다. 그 사이 반납되면 그 연결을 받는다
+      - 검증: ConnectionPoolTest (exhaustedPoolTimesOut, waiterGetsReturnedConnection)
+    source: https://github.com/brettwooldridge/HikariCP
+  - key: q-96e767fb
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "@Transactional 메서드에서 DB 연결을 쥐고 있는 시간은?"
+    choices:
+      - SQL 한 줄을 실행하는 동안만
+      - 처음 SQL을 보낸 뒤 커밋이나 롤백까지
+      - 애플리케이션이 끝날 때까지
+      - 연결을 쓰지 않는다
+    answer: "2"
+    explanation: |-
+      - 트랜잭션은 연결 하나 위에서 돌아서 끝날 때까지 연결을 쥔다. 그래서 트랜잭션 안의 느린 외부 호출이 풀을 비운다
+      - 검증: ConnectionPoolTest (transactionHoldsOneConnection)
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html
+  - key: q-1a470682
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 20-A] 요청이 몰리면 연결 대기 타임아웃이 나는데 DB는 한가하다. 원인이 되는 줄은?"
+    code: |-
+      @Transactional
+      public void order(Long id) {
+          Order order = orderRepository.findById(id).orElseThrow();
+          PaymentResult r = paymentApi.pay(order);   // 외부 결제 API, 2~5초
+          order.markPaid(r.txId());
+      }
+    answer: "4"
+    explanation: |-
+      - 3번에서 연결을 빌린 뒤 4번의 외부 호출 몇 초 동안 연결을 쥐고 있다. 결제 호출을 트랜잭션 밖으로 빼고 결과 반영만 짧은 트랜잭션으로
+      - 검증: ConnectionPoolTest (transactionHoldsOneConnection)
+    source: https://github.com/brettwooldridge/HikariCP

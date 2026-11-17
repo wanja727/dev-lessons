@@ -1,0 +1,35 @@
+name: Check questions
+
+# 문제 파일(content/questions)의 형식을 학습 앱 콕의 검사기로 확인한다.
+# 검사 규칙은 콕 저장소(wanja727/kok)에 하나만 두고 여기서는 내려받아 실행한다.
+on:
+  push:
+    branches: [main]
+    paths: ['content/**', '.github/workflows/questions.yml']
+  pull_request:
+    paths: ['content/**', '.github/workflows/questions.yml']
+  workflow_dispatch:
+    inputs:
+      kok_ref:
+        description: 검사기를 가져올 콕 저장소의 브랜치
+        default: main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: wanja727/kok
+          ref: ${{ inputs.kok_ref || 'main' }}
+          path: kok
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: 문제 파일 검사
+        run: gradle -p kok/backend checkContent --no-daemon -PcontentDir=$GITHUB_WORKSPACE/content/questions
