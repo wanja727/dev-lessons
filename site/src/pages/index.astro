@@ -11,6 +11,7 @@ const stageNotes: Record<string, string> = {
   '동시성': '스레드가 여럿일 때 생기는 일. 기초와 별개로 먼저 봐도 돼요.',
   '트랜잭션과 JPA': '스프링에서 DB를 다루는 핵심. 기초 4개를 본 뒤에 보세요.',
   'DB와 운영': '동시에 고치는 데이터, 성능, 대량 작업.',
+  '실무 시스템': '커머스·핀테크 서비스에서 만나는 설계 문제. 앞 단계를 본 뒤에 보세요.',
 };
 const stages = [...new Set(lessons.map((l) => l.data.stage))].map((stage) => ({
   stage,
