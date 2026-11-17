@@ -1,0 +1,327 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/payment/PaymentFlowTest.java`;
+
+const codePredict = `try {
+    pg.approve(orderId, 10_000);          // 응답이 3초 넘게 안 와서
+} catch (TimeoutException e) {
+    payment.markFailed();                 // "결제 실패"로 저장하고
+    return "결제에 실패했어요";              // 고객에게 안내
+}`;
+
+const codeTransition = `-- 상태 전이는 "지금 상태가 맞을 때만" 바꾼다
+UPDATE pay_payment SET status = 'CAPTURED', captured_amount = ?
+ WHERE order_id = ? AND status = 'AUTHORIZED' AND ? <= amount;   -- 0행이면 거절`;
+
+const codeNetCancel = `try {
+    pg.approve(orderId, amount);
+    payment.authorize();
+} catch (TimeoutException e) {
+    payment.markUnknown();          // 실패가 아니라 "모름"
+    pg.netCancel(orderId);          // 승인됐을지 모르니 취소를 보낸다 (승인이 없으면 아무 일도 없다)
+    payment.cancel();
+}`;
+
+const codePartial = `-- 누적 취소액이 결제 금액을 넘지 않을 때만 더한다 (동시에 와도 한 문장이라 안전)
+UPDATE pay_payment SET canceled_amount = canceled_amount + ?
+ WHERE order_id = ? AND status = 'CAPTURED' AND canceled_amount + ? <= amount;
+
+-- 마지막 방어선: 조건을 빼먹은 코드가 있어도 DB가 막는다
+CHECK (canceled_amount <= amount)`;
+---
+<Base title="결제 시스템 흐름 · Dev Lessons" description="카드 결제의 승인, 매입, 취소, 정산 흐름과 상태 전이를 배우고, 승인 응답 타임아웃의 망 취소, 동시 부분 취소, 대사(reconciliation)를 실제 PostgreSQL과 가짜 PG로 재현해요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">Spring · 개념 학습 · 약 40분 · 선수 레슨: <a href="/dev-lessons/lessons/idempotency/">멱등성</a>, <a href="/dev-lessons/lessons/saga/">분산 트랜잭션과 사가</a>, <a href="/dev-lessons/lessons/resilience/">외부 API 타임아웃과 재시도</a></p>
+    <h1>결제 시스템 흐름 (승인, 매입, 취소, 정산)</h1>
+    <p class="lede">핀테크 면접에서는 "결제 버튼을 누르면 무슨 일이 일어나나요?"를 깊게 물어요. 승인과 매입은 왜 나뉘는지, PG 응답이 끊기면 고객 돈은 어떻게 되는지, 매일 아침 정산 담당자가 맞춰 보는 대사는 무엇인지, 실제 DB로 재현하며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 멱등 키(<a href="/dev-lessons/lessons/idempotency/">멱등성</a>), 보상 트랜잭션(<a href="/dev-lessons/lessons/saga/">사가</a>), 타임아웃은 "모름"이라는 것(<a href="/dev-lessons/lessons/resilience/">외부 API 타임아웃</a>), 조건부 UPDATE(<a href="/dev-lessons/lessons/stock-concurrency/">재고 차감 동시성</a>).</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>승인, 매입, 정산</a>
+      <a href="#state"><span>2</span>상태 전이</a>
+      <a href="#sim"><span>3</span>망 취소</a>
+      <a href="#cancel"><span>4</span>취소와 부분 취소</a>
+      <a href="#recon"><span>5</span>대사</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>"결제 실패"라고 안내했는데</h2>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측: 고객의 카드는</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="none" aria-pressed="false">아무 일도 없다</button>
+          <button class="chip" type="button" data-v="held" aria-pressed="false">승인돼서 돈이 묶여 있을 수 있다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장에서 직접 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 승인, 매입, 정산</p>
+    <h2>돈은 세 번에 걸쳐 움직여요</h2>
+    <p>쇼핑몰(가맹점)은 카드사와 직접 연결하지 않고 <strong>PG사</strong>(Payment Gateway, 결제 대행사)를 통해요. 카드 결제는 보통 세 단계예요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>단계</th><th>무슨 일</th><th>고객 입장</th></tr></thead>
+        <tbody>
+          <tr><td><strong>승인</strong> (authorization)</td><td>카드사가 한도를 확인하고 그 금액을 묶어 둬요</td><td>"결제 완료" 문자. 한도가 줄어요</td></tr>
+          <tr><td><strong>매입</strong> (capture)</td><td>가맹점이 "이 승인 건을 실제로 청구할게요"라고 확정해요</td><td>카드 명세서에 청구로 잡혀요</td></tr>
+          <tr><td><strong>정산</strong> (settlement)</td><td>PG사가 매입된 금액에서 수수료를 빼고 가맹점에 지급해요</td><td>(가맹점 이야기)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>승인과 매입을 나누는 이유는 "돈을 묶어 두는 것"과 "실제로 가져가는 것" 사이에 시간이 필요할 때가 있어서예요. 예를 들어 재고를 확인하거나 상품을 발송한 뒤에 매입하면, 그 전에 주문이 취소돼도 승인만 풀면 돼요. 많은 PG사는 승인과 매입을 한 번에 하는 방식(자동 매입)도 제공해요.</p>
+  </section>
+
+  <section id="state" class="read">
+    <p class="eyebrow">2 · 상태 전이</p>
+    <h2>결제는 상태 기계예요</h2>
+    <p>결제 한 건은 정해진 순서로만 상태가 바뀌어야 해요. 승인되지 않은 결제를 매입하거나, 승인 금액보다 많이 매입하면 안 돼요. 이렇게 "어느 상태에서 어느 상태로 갈 수 있는지"를 정한 것을 <strong>상태 기계</strong>(state machine)라고 해요.</p>
+    <div class="flow" aria-label="결제 상태: READY에서 AUTHORIZED, CAPTURED로. 타임아웃이면 UNKNOWN을 거쳐 CANCELED">
+      <div class="node on">READY (결제 준비)</div>
+      <div class="arrow">↓ 승인 성공 / 타임아웃이면 UNKNOWN → 망 취소 → CANCELED</div>
+      <div class="node on">AUTHORIZED (승인됨, 돈이 묶임)</div>
+      <div class="arrow">↓ 매입 (승인 금액 이하)</div>
+      <div class="node on">CAPTURED (청구 확정) → 부분 취소·전체 취소</div>
+    </div>
+    <p>상태 전이는 "지금 상태가 맞을 때만" 바꾸는 조건부 UPDATE로 해요. 동시에 두 요청이 와도 한쪽만 성공해요.</p>
+    <pre set:text={codeTransition} />
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 망 취소</p>
+      <h2>모르면 취소한다</h2>
+      <p>승인 요청을 보냈는데 응답이 타임아웃되면, PG에서는 승인이 이미 됐을 수 있어요. 우리가 "실패"로 저장하면 고객 카드에는 돈이 묶인 채 남아요. 그래서 결과를 모르는 승인은 <strong>바로 취소 요청</strong>을 보내 "결제 없음"으로 맞춰요. 이를 <strong>망 취소</strong>(network cancel)라고 불러요. 승인이 실제로 없었다면 취소는 아무 일도 하지 않아요.</p>
+      <p>승인 응답 상태와 처리 방식을 골라 버튼을 눌러 보세요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">PG 승인 응답</span>
+        <div class="seg" id="resp">
+          <button type="button" data-v="ok" aria-pressed="true">제때 옴</button>
+          <button type="button" data-v="timeout" aria-pressed="false">타임아웃 (PG에서는 승인됨)</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">타임아웃이면</span>
+        <div class="seg" id="policy">
+          <button type="button" data-v="fail" aria-pressed="true">실패로 저장</button>
+          <button type="button" data-v="net" aria-pressed="false">망 취소</button>
+        </div>
+      </div>
+      <div class="pay-grid">
+        <div class="svc"><span class="svc-name">우리 DB</span><span class="svc-state" id="ours">READY</span></div>
+        <div class="svc"><span class="svc-name">PG</span><span class="svc-state" id="theirs">없음</span></div>
+        <div class="svc"><span class="svc-name">고객 카드</span><span class="svc-state" id="card">변화 없음</span></div>
+        <div class="svc"><span class="svc-name">대사</span><span class="svc-state" id="recon">-</span></div>
+      </div>
+      <div class="step-nav">
+        <button class="btn primary" type="button" id="b-approve">승인 요청</button>
+        <button class="btn" type="button" id="b-capture">매입</button>
+        <button class="btn" type="button" id="b-reset">처음으로</button>
+      </div>
+      <p class="verdict" id="pay-verdict"></p>
+    </div>
+    <div class="read stack">
+      <CiOutput lesson="payment-flow" key="orphan" label="실제 결과 보기: 타임아웃을 실패로 처리" source="PaymentFlowTest.timeoutAsFailureLeavesOrphanApproval" />
+      <CiOutput lesson="payment-flow" key="net-cancel" label="실제 결과 보기: 타임아웃이면 망 취소" source="PaymentFlowTest.netCancelOnTimeout" />
+      <pre set:text={codeNetCancel} />
+      <ul>
+        <li>망 취소도 응답이 끊길 수 있어요. 그래서 주문 번호(멱등 키)로 여러 번 보내도 안전해야 하고, 끝내 확인이 안 되면 5장의 대사로 찾아내요.</li>
+        <li>망 취소 대신 "주문 번호로 거래 상태를 조회"해서 승인됐으면 이어 가는 방식도 있어요. PG사마다 제공하는 API가 달라 연동 문서를 확인해요.</li>
+        <li>망 취소는 결제 단계에서 실패한 사가의 보상 트랜잭션이에요(<a href="/dev-lessons/lessons/saga/">사가</a>).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="cancel" class="read">
+    <p class="eyebrow">4 · 취소와 부분 취소</p>
+    <h2>여러 번 나눠 취소해도 합은 결제 금액 이하</h2>
+    <p>주문 상품 세 개 중 하나만 반품하면 <strong>부분 취소</strong>를 해요. 부분 취소는 여러 번 할 수 있지만 누적 취소액이 결제 금액을 넘으면 안 돼요. 고객센터 직원 둘이 동시에 같은 결제를 부분 취소하는 일도 생겨요.</p>
+    <pre set:text={codePartial} />
+    <CiOutput lesson="payment-flow" key="partial-cancel" label="실제 결과 보기: 동시 부분 취소" source="PaymentFlowTest.concurrentPartialCancels" />
+    <p>"현재 누적액을 읽고 → 더해서 → 저장"으로 짜면 <a href="/dev-lessons/lessons/stock-concurrency/">재고 차감</a>과 똑같이 두 요청이 같은 값을 읽어 둘 다 성공해요. 확인과 갱신을 한 문장으로 합치고, CHECK 제약을 마지막 방어선으로 둬요.</p>
+  </section>
+
+  <section id="recon" class="read">
+    <p class="eyebrow">5 · 대사</p>
+    <h2>매일 아침, 장부 두 개를 맞춰 봐요</h2>
+    <p>아무리 조심해도 네트워크와 서버는 실패해요. 그래서 결제 시스템은 <strong>대사</strong>(reconciliation)를 해요. PG사가 주는 거래 내역(파일이나 API)과 우리 DB를 주문 번호로 한 줄씩 맞춰 보고 다른 점을 찾는 작업이에요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>어긋남</th><th>흔한 원인</th><th>처리</th></tr></thead>
+        <tbody>
+          <tr><td>PG에만 승인 있음</td><td>타임아웃을 실패로 처리, 망 취소 실패</td><td>PG에서 취소하거나 우리 쪽을 승인으로 바로잡음</td></tr>
+          <tr><td>우리에게만 있음</td><td>PG 요청 전에 상태를 먼저 바꿈, PG 쪽 취소</td><td>원인 확인 후 우리 쪽 정정</td></tr>
+          <tr><td>금액 다름</td><td>부분 취소 누락, 할인·포인트 계산 차이</td><td>취소 내역 대조, 계산 로직 수정</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <CiOutput lesson="payment-flow" key="reconcile" label="실제 결과 보기: 대사로 찾은 어긋남" source="PaymentFlowTest.reconciliationFindsDifferences" />
+    <p>정산 금액은 대사로 맞춘 매입액에서 취소액과 수수료를 빼서 계산해요. 수수료율과 지급 주기는 PG사 계약마다 달라요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "결제 승인 요청이 타임아웃 나면 어떻게 처리하나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 타임아웃은 실패가 아니라 결과를 모르는 상태라서 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>승인 요청의 타임아웃은 실패가 아니라 결과를 모르는 상태입니다. PG에서는 이미 승인돼 고객 돈이 묶였을 수 있어, 실패로 단정하면 고객에게는 실패를 안내하고 카드는 승인된 채 남습니다.</dd>
+        <dt>원리</dt><dd>결제를 UNKNOWN 상태로 두고, 주문 번호로 망 취소를 보내 결과와 상관없이 "결제 없음"으로 맞추거나, 거래 조회 API로 실제 결과를 확인해 이어 갑니다. 망 취소와 조회도 실패할 수 있어 주문 번호를 멱등 키로 써 재시도하고, 매일 PG 거래 내역과 우리 DB를 대사해 남은 어긋남을 찾습니다. 상태 전이는 조건부 UPDATE로 해서 승인 전 매입, 금액 초과 매입, 누적 취소 초과를 막습니다.</dd>
+        <dt>트레이드오프</dt><dd>망 취소는 단순하고 안전하지만 실제로 승인된 결제도 취소해 고객이 다시 결제해야 합니다. 조회 후 진행은 사용자 경험이 좋지만 조회도 타임아웃날 수 있고 PG마다 API가 다릅니다. 어느 쪽이든 대사는 마지막 안전망으로 필요합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 가짜 PG로 응답을 지연시켜, 타임아웃을 실패로 처리하면 PG에만 승인이 남아 대사에서 드러나고, 망 취소를 하면 양쪽이 일치하는 것을 테스트로 확인했습니다. 동시 부분 취소는 조건부 UPDATE로 한 건만 성공시켰습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 타임아웃 = 모름, UNKNOWN 상태, 망 취소 또는 조회, 멱등 재시도, 대사를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 PostgreSQL의 결제 테이블과, 응답을 늦게 보낼 수 있는 가짜 PG로 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>승인 전 매입, 승인 금액 초과 매입은 거절되고, 승인 → 매입은 CAPTURED</li>
+      <li>타임아웃을 실패로 처리하면 PG에는 APPROVED가 남고 대사에서 "PG APPROVED / 우리 FAILED"로 드러남</li>
+      <li>타임아웃이면 망 취소: 양쪽 CANCELED, 대사 어긋남 0건</li>
+      <li>부분 취소 3,000 + 7,000은 되고 1원 더는 거절, 조건 없는 UPDATE는 CHECK 제약이 막음</li>
+      <li>부분 취소 6,000 두 건이 동시에 오면 한 건만 성공, 누적 6,000</li>
+      <li>대사: 금액 다름, 우리에게만 있음, PG에만 있음을 찾음</li>
+    </ul>
+    <p class="muted">PG의 실제 동작(망 취소 API 이름, 자동 매입 여부, 수수료)은 PG사마다 달라요. 이 레슨은 흐름과 상태 관리를 다뤄요.</p>
+    <p><a href={test}>PaymentFlowTest</a></p>
+    <RunLocally tests={['lab.devlessons.payment.PaymentFlowTest']} docker />
+  </section>
+
+  <footer>
+    근거: 토스페이먼츠 개발자센터 용어 사전(카드 결제, 거래, 정산), Stripe 문서(Place a hold on a payment method, Refunds). 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .pay-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .svc { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; min-width: 0; }
+  .svc-name { color: var(--muted); font-size: 13px; }
+  .svc-state { font-family: var(--font-mono); font-weight: 700; overflow-wrap: anywhere; }
+  .svc-state.ok { color: var(--ok); } .svc-state.bad { color: var(--query); } .svc-state.warn { color: var(--warn); }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('pf-p1'), p2: store('pf-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'held' ? '승인돼서 돈이 묶여 있을 수 있다' : '아무 일도 없다') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "승인돼서 돈이 묶여 있을 수 있다"예요. 3장에서 "타임아웃" + "실패로 저장"으로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('pf-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 결제 상태 시뮬레이터 */
+  var resp = 'ok', policy = 'fail', ours, theirs, msg;
+  function reset() { ours = 'READY'; theirs = '없음'; msg = ''; render(); }
+  function charged(s) { return s === 'AUTHORIZED' || s === 'CAPTURED'; }
+  function render() {
+    var card = theirs === 'APPROVED' ? '10,000원 묶임 (승인)' : theirs === 'CAPTURED' ? '10,000원 청구됨' : '변화 없음';
+    var pgCharged = theirs === 'APPROVED' || theirs === 'CAPTURED';
+    var recon = ours === 'READY' ? '-' : pgCharged === charged(ours) ? '일치' : '어긋남: PG ' + theirs + ' / 우리 ' + ours;
+    var set = function (id, t, cls) { var e = document.getElementById(id); e.textContent = t; e.className = 'svc-state' + (cls ? ' ' + cls : ''); };
+    set('ours', ours, ours === 'FAILED' ? 'bad' : charged(ours) ? 'ok' : ours === 'CANCELED' ? 'warn' : '');
+    set('theirs', theirs, pgCharged ? 'ok' : theirs === 'CANCELED' ? 'warn' : '');
+    set('card', card, '');
+    set('recon', recon, recon.indexOf('어긋남') === 0 ? 'bad' : recon === '일치' ? 'ok' : '');
+    document.getElementById('b-approve').disabled = ours !== 'READY';
+    document.getElementById('b-capture').disabled = ours !== 'AUTHORIZED';
+    document.getElementById('pay-verdict').textContent = msg;
+  }
+  document.getElementById('b-approve').addEventListener('click', function () {
+    theirs = 'APPROVED'; // PG에서는 어느 경우든 승인이 처리됨
+    if (resp === 'ok') { ours = 'AUTHORIZED'; msg = '승인 성공. 이제 매입할 수 있어요.'; }
+    else if (policy === 'fail') { ours = 'FAILED'; msg = '고객에게는 "실패"를 안내했는데 카드에는 승인이 남았어요. 대사에서야 드러나요.'; }
+    else { ours = 'CANCELED'; theirs = 'CANCELED'; msg = 'UNKNOWN으로 두고 망 취소를 보냈어요. 양쪽 모두 "결제 없음"으로 맞았어요. 고객에게는 다시 결제를 안내해요.'; }
+    render();
+  });
+  document.getElementById('b-capture').addEventListener('click', function () { ours = 'CAPTURED'; theirs = 'CAPTURED'; msg = '매입 완료. 정산 대상이 됐어요.'; render(); });
+  document.getElementById('b-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('resp'), function (v) { resp = v; reset(); });
+  pressGroup(document.getElementById('policy'), function (v) { policy = v; reset(); });
+  reset();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: '카드 결제에서 "한도를 확인하고 금액을 묶어 두는" 단계는?', o: ['승인', '매입', '정산'], a: 0, e: '매입은 그 승인 건을 실제 청구로 확정하고, 정산은 PG가 가맹점에 돈을 지급하는 단계예요.' },
+    { q: '승인 요청이 타임아웃 났을 때 가장 안전한 처리는?', o: ['실패로 저장하고 안내', '결과를 모름(UNKNOWN)으로 두고 망 취소 또는 거래 조회', '같은 요청을 새 주문 번호로 다시 승인'], a: 1, e: '새 주문 번호로 다시 승인하면 이중 결제가 될 수 있어요.' },
+    { q: '결제 10,000원에 부분 취소 6,000원 두 건이 동시에 왔다. 올바른 결과는?', o: ['둘 다 성공', '한 건만 성공', '둘 다 실패'], a: 1, e: '누적 취소액이 결제 금액을 넘을 수 없어요. 조건부 UPDATE로 한 건만 통과시켜요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('pf-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('pf-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
