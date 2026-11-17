@@ -1,0 +1,325 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/ranking/RedisRankingTest.java`;
+
+const codePredict = `ZADD ranking 100 alice
+ZADD ranking 100 bob
+ZREVRANGE ranking 0 -1     # 점수 높은 순으로 전부`;
+
+const codeRanking = `ZINCRBY ranking:2026-11-17 50 준호          # 준호 점수 +50 (없으면 0에서 시작)
+ZREVRANGE ranking:2026-11-17 0 9 WITHSCORES  # 상위 10명과 점수
+ZREVRANK ranking:2026-11-17 준호            # 준호의 순위 (0이 1위)
+ZSCORE ranking:2026-11-17 준호              # 준호의 점수`;
+
+const codeTie = `// 점수 = 포인트 x 10^10 + (기준 시각 - 달성 시각)
+// 포인트가 같으면 더 일찍 달성한 사람의 뒷자리가 커서 앞에 온다
+double score = points * 10_000_000_000d + (9_999_999_999L - achievedAtEpochSeconds);
+redis.zadd("ranking", score, userId);`;
+
+const codeWeekly = `EXPIRE ranking:2026-11-17 691200                     # 날짜별 키는 8일 뒤 자동 삭제
+ZUNIONSTORE ranking:week 7 ranking:2026-11-11 ... ranking:2026-11-17   # 7일 점수 합`;
+---
+<Base title="Redis 자료구조와 랭킹 · Dev Lessons" description="Redis의 다섯 가지 자료구조와 쓰임을 보고, Sorted Set으로 실시간 랭킹을 만들어요. 동점 처리, 명령을 하나씩 실행하는 Redis의 원자성, 일간·주간 랭킹을 실제 Redis로 확인해요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">DB · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/cache-strategy/">캐시 전략과 무효화</a></p>
+    <h1>Redis 자료구조와 랭킹</h1>
+    <p class="lede">"오늘의 XP 랭킹 상위 10명과 내 순위"를 보여 달래요. 사용자가 100만 명인데 점수가 바뀔 때마다 DB에서 <code>ORDER BY</code>로 정렬하면 버틸까요? Redis의 Sorted Set으로 실시간 랭킹을 만들며 Redis 자료구조를 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> Redis가 메모리에 데이터를 두는 키-값 저장소라는 것(<a href="/dev-lessons/lessons/cache-strategy/">캐시 전략</a>), SQL의 ORDER BY와 LIMIT. 재고 차감 레슨의 Redis 원자성을 봤다면 4장이 쉬워요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#types"><span>1</span>자료구조 다섯 가지</a>
+      <a href="#sim"><span>2</span>Sorted Set 랭킹</a>
+      <a href="#tie"><span>3</span>동점 처리</a>
+      <a href="#atomic"><span>4</span>하나씩 실행</a>
+      <a href="#ops"><span>5</span>운영과 선택 기준</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>점수가 같으면 누가 먼저일까요?</h2>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측: 결과는</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="ab" aria-pressed="false">alice, bob (먼저 넣은 순)</button>
+          <button class="chip" type="button" data-v="ba" aria-pressed="false">bob, alice</button>
+          <button class="chip" type="button" data-v="rand" aria-pressed="false">매번 다르다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 3장에서 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="types" class="read">
+    <p class="eyebrow">1 · 자료구조 다섯 가지</p>
+    <h2>값의 모양에 맞는 자료구조를 골라요</h2>
+    <p>Redis는 키 하나에 문자열만 두는 게 아니라, 값의 모양에 맞는 자료구조를 둘 수 있어요. 자료구조마다 전용 명령이 있어서, 서버에서 꺼내 고쳐 다시 넣지 않고 Redis 안에서 바로 바꿔요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>자료구조</th><th>모양</th><th>대표 명령</th><th>쓰임</th></tr></thead>
+        <tbody>
+          <tr><td>String</td><td>값 하나 (문자열, 숫자)</td><td>SET, GET, INCR</td><td>캐시, 조회수, 카운터</td></tr>
+          <tr><td>Hash</td><td>필드-값 묶음</td><td>HSET, HGET</td><td>사용자 프로필, 장바구니</td></tr>
+          <tr><td>List</td><td>순서 있는 목록 (양 끝에 넣고 빼기)</td><td>LPUSH, LRANGE, LTRIM</td><td>최근 본 상품, 간단한 작업 큐</td></tr>
+          <tr><td>Set</td><td>중복 없는 모음</td><td>SADD, SCARD, SISMEMBER</td><td>오늘 방문자, 좋아요 누른 사람</td></tr>
+          <tr><td>Sorted Set</td><td>점수로 정렬된 중복 없는 모음</td><td>ZADD, ZINCRBY, ZREVRANGE, ZREVRANK</td><td>랭킹, 우선순위 큐, 시간순 타임라인</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <CiOutput lesson="redis-ranking" key="structures" label="실제 결과 보기: 다섯 자료구조" source="RedisRankingTest.fiveDataStructures" />
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · Sorted Set 랭킹</p>
+      <h2>점수를 더하면 순위가 바로 바뀌어요</h2>
+      <p>Sorted Set은 멤버마다 점수를 갖고, 항상 점수 순서로 정렬된 상태를 유지해요. Redis 문서에 적힌 시간 복잡도로 점수 변경(ZINCRBY)과 순위 조회(ZREVRANK)는 O(log N)이라, 멤버가 많아도 빨라요.</p>
+      <pre set:text={codeRanking} />
+      <p>학습앱에서 문제를 풀어 XP를 얻는다고 해 봐요. 버튼을 눌러 점수를 더해 보세요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">XP 얻기 (ZINCRBY)</span>
+        <div class="choice-row" id="gain"></div>
+      </div>
+      <div class="field">
+        <span class="label">동점 처리</span>
+        <div class="seg" id="tiemode">
+          <button type="button" data-v="name" aria-pressed="true">점수만 (Redis 기본)</button>
+          <button type="button" data-v="time" aria-pressed="false">점수 + 먼저 달성한 순</button>
+        </div>
+      </div>
+      <div class="rk-grid">
+        <div class="pane">
+          <span class="label">ZREVRANGE ranking 0 -1 WITHSCORES</span>
+          <ol class="board" id="board"></ol>
+        </div>
+        <div class="pane">
+          <span class="label">보낸 명령</span>
+          <ol class="resp" id="cmds"></ol>
+        </div>
+      </div>
+      <div class="step-nav"><button class="btn" type="button" id="rk-reset">처음으로</button></div>
+    </div>
+    <div class="read stack">
+      <CiOutput lesson="redis-ranking" key="ranking" label="실제 결과 보기: 상위 3명과 내 순위" source="RedisRankingTest.ranking" />
+      <p>DB로 같은 일을 하면 점수가 바뀔 때마다 정렬하거나, 내 순위를 구하려고 "나보다 점수 높은 사람 수"를 세야 해요. 사용자가 많고 점수가 자주 바뀌면 부담이 커요. Sorted Set은 정렬된 상태를 계속 유지하니 상위 N명과 내 순위를 바로 꺼내요.</p>
+      <CiOutput lesson="redis-ranking" key="large" label="실제 결과 보기: 10만 명에서 순위 조회" source="RedisRankingTest.largeRanking" />
+    </div>
+  </section>
+
+  <section id="tie" class="read">
+    <p class="eyebrow">3 · 동점 처리</p>
+    <h2>점수가 같으면 이름 순서예요</h2>
+    <p>Sorted Set은 점수가 같으면 멤버 이름의 사전 순서로 놓아요. <code>ZREVRANGE</code>는 높은 점수부터 보여주면서 동점끼리도 <strong>사전 역순</strong>으로 놓아요. 그래서 예측의 답은 <strong>bob, alice</strong>예요. 넣은 순서와는 상관없어요.</p>
+    <p>"먼저 달성한 사람이 위"가 규칙이라면 시간을 점수에 섞어요. 점수는 64비트 실수(double)라 정수로는 약 9 x 10<sup>15</sup>까지 정확해요. 포인트를 앞자리, 시간을 뒷자리에 두되 자릿수가 겹치지 않게 해요.</p>
+    <pre set:text={codeTie} />
+    <CiOutput lesson="redis-ranking" key="tie" label="실제 결과 보기: 동점 처리" source="RedisRankingTest.tieBreaking" />
+    <p class="muted">화면에 점수를 보여줄 때는 <code>score / 10^10</code>의 정수 부분만 보여줘요.</p>
+  </section>
+
+  <section id="atomic" class="read">
+    <p class="eyebrow">4 · 하나씩 실행</p>
+    <h2>명령은 섞이지 않아요</h2>
+    <p>Redis는 명령을 실행하는 스레드가 하나라서, 여러 클라이언트가 동시에 보낸 명령도 <strong>하나씩 차례로</strong> 실행해요. 그래서 <code>ZINCRBY</code> 한 번은 다른 명령과 섞이지 않아요(원자적). 스레드 50개가 동시에 1,000번 더해도 점수는 정확히 1,000이에요(검증 테스트).</p>
+    <div class="flow" aria-label="여러 클라이언트의 명령이 한 줄로 서서 하나씩 실행된다">
+      <div class="node on">서버 A: ZINCRBY +10 · 서버 B: ZINCRBY +5 · 서버 C: ZREVRANGE</div>
+      <div class="arrow">↓ 한 줄로 서서</div>
+      <div class="node on">Redis 실행 스레드: 하나 끝나면 다음</div>
+    </div>
+    <ul>
+      <li><strong>명령 여러 개는 따로예요.</strong> "점수 확인 → 조건이면 더하기"처럼 두 명령을 이어 보내면 그 사이에 다른 명령이 끼어들 수 있어요. 한 번에 실행해야 하면 Lua 스크립트를 써요(<a href="/dev-lessons/lessons/stock-concurrency/">재고 차감 동시성</a>).</li>
+      <li><strong>느린 명령 하나가 모두를 멈춰요.</strong> 키 전체를 훑는 <code>KEYS *</code>나 아주 큰 컬렉션 전체를 읽는 명령은 그동안 다른 명령이 모두 기다려요. 운영에서는 <code>SCAN</code>으로 나눠 읽어요.</li>
+    </ul>
+  </section>
+
+  <section id="ops" class="read">
+    <p class="eyebrow">5 · 운영과 선택 기준</p>
+    <h2>일간·주간 랭킹, 그리고 원본은 어디에</h2>
+    <p>기간별 랭킹은 날짜마다 키를 따로 두고, 오래된 키는 <code>EXPIRE</code>로 지워지게 해요. 주간 랭킹은 날짜별 키를 <code>ZUNIONSTORE</code>로 합쳐 점수를 더해요.</p>
+    <pre set:text={codeWeekly} />
+    <CiOutput lesson="redis-ranking" key="weekly" label="실제 결과 보기: 이틀 합친 랭킹" source="RedisRankingTest.weeklyUnion" />
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>추천</th></tr></thead>
+        <tbody>
+          <tr><td>점수가 자주 바뀌고 순위를 실시간으로 보여줌</td><td>Redis Sorted Set</td></tr>
+          <tr><td>하루 한 번 집계해 보여줌</td><td>DB 집계 쿼리 + 결과 캐시로 충분해요</td></tr>
+          <tr><td>점수 자체가 돈이나 보상과 연결됨</td><td>원본은 DB(XP 원장)에 남기고, Redis는 보여주기용 사본</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Redis는 메모리 저장소라 설정에 따라 장애 때 최근 변경을 잃을 수 있어요. 랭킹이 사라져도 DB 원장에서 다시 만들 수 있게 해 두면 안전해요. 원장에 쓰고 Redis에 반영하는 흐름은 <a href="/dev-lessons/lessons/transactional-outbox/">아웃박스</a>로 이어 붙일 수 있어요.</p>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "실시간 랭킹을 어떻게 구현하나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: Redis의 Sorted Set을 써서 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>점수 순서가 계속 바뀌는 실시간 랭킹은 Redis의 Sorted Set으로 만듭니다. 멤버마다 점수를 두고 항상 정렬된 상태를 유지하는 자료구조입니다.</dd>
+        <dt>원리</dt><dd>점수가 생기면 ZINCRBY로 더하고, ZREVRANGE로 상위 N명, ZREVRANK로 내 순위를 꺼냅니다. 점수 변경과 순위 조회가 O(log N)이라 멤버가 많아도 빠릅니다. Redis는 명령을 하나씩 실행해 동시에 점수를 더해도 잃지 않습니다. 기간별 랭킹은 날짜별 키와 EXPIRE, 주간은 ZUNIONSTORE로 합칩니다.</dd>
+        <dt>트레이드오프</dt><dd>동점이면 멤버 이름 순서라서, 먼저 달성한 순 같은 규칙은 시간을 점수의 뒷자리에 섞어 표현합니다. Redis는 메모리 저장소라 원본 점수는 DB 원장에 두고 Redis는 다시 만들 수 있는 사본으로 씁니다. 여러 명령을 조건부로 묶어야 하면 Lua 스크립트가 필요하고, KEYS 같은 느린 명령은 피합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 학습앱 XP 랭킹을 Sorted Set으로 만들고, 동시 1,000번 ZINCRBY에도 점수가 정확한지, 동점 시 먼저 달성한 사용자가 앞에 오는지 테스트로 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: Sorted Set과 명령, 동점 규칙, 원자성, 기간별 랭킹, 원본 데이터 위치를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 Redis 7 컨테이너에서 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>String INCR, Hash HGET, List LPUSH + LTRIM(최근 5개), Set 중복 제거, Sorted Set 정렬</li>
+      <li>ZINCRBY 후 ZREVRANGE 상위 3명, ZREVRANK는 0부터</li>
+      <li>점수가 같으면 ZREVRANGE는 이름 사전 역순(bob, alice), 시간을 섞은 점수로는 먼저 달성한 순</li>
+      <li>스레드 50개가 ZINCRBY 1,000번 → 정확히 1,000점</li>
+      <li>ZUNIONSTORE로 이틀 점수 합산, EXPIRE로 수명 설정</li>
+      <li>10만 명에서 상위 10명과 내 순위 조회</li>
+    </ul>
+    <p class="muted">시간 복잡도 O(log N)은 Redis 명령 문서를 근거로 해요. 테스트는 10만 명에서 실제로 걸린 시간을 보여줘요.</p>
+    <p><a href={test}>RedisRankingTest</a></p>
+    <RunLocally tests={['lab.devlessons.ranking.RedisRankingTest']} docker />
+  </section>
+
+  <footer>
+    근거: Redis 문서(Data types, Sorted sets, ZREVRANGE, ZINCRBY, ZUNIONSTORE). 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .rk-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .board { margin: 0; padding-left: 26px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+  .board li .pts { color: var(--muted); margin-left: 6px; font-size: 14px; }
+  .board li.moved { color: var(--accent); font-weight: 700; }
+  .resp { margin: 0; padding-left: 0; list-style: none; font-family: var(--font-mono); font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; overflow-wrap: anywhere; }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .rk-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('rk-p1'), p2: store('rk-p2') };
+  var LABEL = { ab: 'alice, bob', ba: 'bob, alice', rand: '매번 다르다' };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "bob, alice"예요. 이유는 3장에 있어요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('rk-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 랭킹 시뮬레이터 */
+  var NAMES = ['minji', 'junho', 'seoyeon', 'jiwoo'];
+  var gainEl = document.getElementById('gain');
+  NAMES.forEach(function (n) { var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.n = n; b.textContent = n + ' +10'; gainEl.appendChild(b); });
+  var players, clock, cmds, tie = 'name', last;
+  function reset() {
+    clock = 0; cmds = []; last = null;
+    players = { minji: { pts: 30, at: 1 }, junho: { pts: 30, at: 2 }, seoyeon: { pts: 50, at: 3 }, jiwoo: { pts: 10, at: 4 } };
+    clock = 4; render();
+  }
+  function order() {
+    return NAMES.slice().sort(function (a, b) {
+      var pa = players[a], pb = players[b];
+      if (pb.pts !== pa.pts) return pb.pts - pa.pts;
+      if (tie === 'time') return pa.at - pb.at;          // 먼저 달성한 사람이 앞
+      return a < b ? 1 : a > b ? -1 : 0;                 // ZREVRANGE: 이름 사전 역순
+    });
+  }
+  function render() {
+    var o = order();
+    document.getElementById('board').innerHTML = o.map(function (n) {
+      return '<li class="' + (n === last ? 'moved' : '') + '">' + n + '<span class="pts">' + players[n].pts + ' XP' + (tie === 'time' ? ' · ' + players[n].at + '번째에 달성' : '') + '</span></li>';
+    }).join('');
+    document.getElementById('cmds').innerHTML = cmds.slice(0, 12).map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') || '<li class="muted">버튼을 눌러 보세요</li>';
+  }
+  gainEl.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-n]'); if (!b) return;
+    var n = b.dataset.n; clock++;
+    players[n].pts += 10; players[n].at = clock; last = n;
+    var rank = order().indexOf(n);
+    cmds.unshift('ZREVRANK ranking ' + n + ' → ' + rank);
+    cmds.unshift('ZINCRBY ranking 10 ' + n + ' → ' + players[n].pts);
+    render();
+  });
+  pressGroup(document.getElementById('tiemode'), function (v) { tie = v; render(); });
+  document.getElementById('rk-reset').addEventListener('click', reset);
+  reset();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: '"오늘 방문한 사람 수(중복 제외)"에 가장 알맞은 자료구조는?', o: ['List', 'Set', 'Hash'], a: 1, e: 'Set은 같은 멤버를 한 번만 둬요. SCARD로 개수를 바로 구해요.' },
+    { q: 'ZREVRANK의 결과가 0이면?', o: ['랭킹에 없다', '1위다', '꼴찌다'], a: 1, e: '순위는 0부터 세요. 랭킹에 없으면 nil이 와요.' },
+    { q: '두 서버가 동시에 같은 사용자에게 ZINCRBY +10을 보냈다. 결과는?', o: ['+10만 반영될 수 있다', '항상 +20', '오류가 난다'], a: 1, e: 'Redis는 명령을 하나씩 실행해 ZINCRBY 하나는 섞이지 않아요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('rk-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('rk-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
