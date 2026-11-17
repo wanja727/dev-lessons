@@ -16,7 +16,7 @@ questions:
   - key: q-5c72980c
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 배치의 청크 처리와 실패 시 재시작이 어떻게 동작하는지 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-70bf15c6
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: JobInstance, JobExecution, StepExecution, ExecutionContext의 관계를 비교해 보세요
     explanation: |-
@@ -51,7 +51,7 @@ questions:
   - key: q-694d0a71
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 새벽 배치가 50만 건 중 30만 건째에서 죽었다. 다시 돌리기 전에 확인할 것과 재시작 방법을 말해 보세요
     explanation: |-
@@ -70,7 +70,7 @@ questions:
   - key: q-9591ead3
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 청크 크기 100으로 1,000건을 처리하다 450번째에서 실패했다. DB에 남는 건수는?
     choices:
@@ -86,7 +86,7 @@ questions:
   - key: q-9e2ca27d
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"완료(COMPLETED)된 Job을 같은 JobParameters로 다시 실행하면 처음부터 다시 처리한다\""
     answer: X
@@ -97,7 +97,7 @@ questions:
   - key: q-5671138b
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 실패한 Job을 원인을 고친 뒤 같은 JobParameters로 다시 실행했다(25건, 청크 10, 17번째에서 실패했었음). 두 번째 실행에서 읽는 건수는?
     choices:
@@ -113,7 +113,7 @@ questions:
   - key: q-6be39814
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 10-A] 실패 후 재시작했더니 처음부터 다시 읽어 중복 키 오류가 난다. 원인이 되는 줄은?"
     code: |-

@@ -16,7 +16,7 @@ questions:
   - key: q-b85daeb5
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 감사 로그를 AOP로 남기는 방법과, 트랜잭션과 함께 쓸 때 주의할 점을 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-64c1efc5
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 감사 로그를 남기는 방법으로 서비스에 직접 작성, AOP, Hibernate Envers를 비교해 보세요
     explanation: |-
@@ -51,7 +51,7 @@ questions:
   - key: q-db057512
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 보안 감사에서 "권한 변경 실패 시도가 기록에 없다"는 지적을 받았다. 감사 로그는 AOP로 남기고 있다. 원인과 해결을 말해 보세요
     explanation: |-
@@ -68,7 +68,7 @@ questions:
   - key: q-d64e403b
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"감사 애스펙트가 예외를 잡아 FAILED 기록만 남기고 정상 반환해도, 바깥 트랜잭션은 롤백된다\""
     answer: X
@@ -79,7 +79,7 @@ questions:
   - key: q-8e5b3941
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 트랜잭션(order 0)이 감사 애스펙트(order 10)를 감싼다. 실패 기록을 REQUIRED로 저장하고 다시 던지면, 요청 후 audit_log는?
     choices:
@@ -95,7 +95,7 @@ questions:
   - key: q-3af68e5d
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "@Audited 메서드인데 감사 로그가 남지 않는 경우는?"
     choices:
@@ -111,7 +111,7 @@ questions:
   - key: q-cbeb7121
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 14-A] 한도 변경이 실패하면 FAILED 감사 로그를 남기려 한다. 그런데 실패 기록이 하나도 남지 않는다. 원인이 되는 줄은? (트랜잭션 order 0, 애스펙트 order 10)"
     code: |-

@@ -16,7 +16,7 @@ questions:
   - key: q-d5195429
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 카드 결제의 승인, 매입, 정산을 설명하고, 승인과 매입을 나누는 이유를 말해 보세요
     explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
@@ -30,7 +30,7 @@ questions:
   - key: q-54880793
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 승인 타임아웃 때 '망 취소'와 '거래 상태 조회 후 진행'을 비교해 보세요
     explanation: |-
@@ -46,7 +46,7 @@ questions:
   - key: q-c8cf442f
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 아침 대사에서 "PG에만 승인이 있는 건"이 10건 나왔습니다. 원인을 추정하고 처리와 재발 방지를 말해 보세요
     explanation: |-
@@ -62,7 +62,7 @@ questions:
   - key: q-4a0fed45
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 승인 요청이 타임아웃 났을 때 "결제 실패"로 저장하면 고객 카드에는 아무 일도 없다
     answer: X
@@ -73,7 +73,7 @@ questions:
   - key: q-d97931ad
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 결제 10,000원에 부분 취소 6,000원 두 건이 동시에 왔다. 조건부 UPDATE로 처리하면?
     choices:
@@ -88,7 +88,7 @@ questions:
   - key: q-09f6a6e8
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 카드 결제에서 가맹점이 승인 건을 실제 청구로 확정하는 단계는?
     choices:
@@ -101,7 +101,7 @@ questions:
   - key: q-e893ff40
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 승인 금액보다 큰 금액으로 매입할 수 있다
     answer: X

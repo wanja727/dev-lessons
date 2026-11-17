@@ -16,7 +16,7 @@ questions:
   - key: q-39a61cfd
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CompletableFuture를 Future 대신 쓰는 이유를 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-25e6ed5b
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: thenApply, thenCompose, thenCombine의 차이를 예시와 함께 비교해 보세요
     explanation: |-
@@ -50,7 +50,7 @@ questions:
   - key: q-055cac26
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 여러 외부 API를 CompletableFuture로 조합한 화면이 트래픽이 늘자 전체적으로 느려지고, 병렬 스트림을 쓰는 다른 기능까지 느려졌다. 원인과 해결을 말해 보세요
     explanation: |-
@@ -66,7 +66,7 @@ questions:
   - key: q-952305c5
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"CompletableFuture 체인의 중간 단계에서 예외가 나도 그 뒤의 thenApply는 실행된다\""
     answer: X
@@ -77,7 +77,7 @@ questions:
   - key: q-33d4b9fb
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: executor 없이 CompletableFuture.supplyAsync(...)를 부르면 작업은 어디서 실행되나?
     choices:
@@ -93,7 +93,7 @@ questions:
   - key: q-4fdf7455
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 실패한 CompletableFuture에서 join()과 get()이 던지는 예외를 바르게 짝지은 것은?
     choices:
@@ -109,7 +109,7 @@ questions:
   - key: q-bfdf4f95
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 12-A] 등급 조회 결과가 CompletableFuture<CompletableFuture<Grade>>가 되어 다루기 어렵다. 고쳐야 할 줄은?"
     code: |-

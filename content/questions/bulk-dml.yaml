@@ -16,7 +16,7 @@ questions:
   - key: q-736d4168
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 운영 DB에서 대량 데이터를 수정해야 할 때의 절차를 1분 안에 설명해 보세요
     explanation: "- 사전 건수 기록 → 백업 테이블(건수 확인) → 원복 SQL 미리 작성·검토 → id 범위 분할 커밋(대상 조건 유지 → 재실행 안전) → 사후 검증(합계 = 사전 건수, 대상 조건 0건)"
@@ -30,7 +30,7 @@ questions:
   - key: q-923e3409
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 대량 UPDATE를 한 트랜잭션으로 하는 것과 분할 커밋하는 것을 비교해 보세요
     explanation: |-
@@ -47,7 +47,7 @@ questions:
   - key: q-bdfc24a4
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 만료 처리 UPDATE를 실행했는데 예상(5천 건)보다 훨씬 많은 4만 건이 바뀌었다는 로그가 나왔다. 이미 커밋되었다. 어떻게 대응하고, 앞으로 어떻게 막을지 말해 보세요
     explanation: |-
@@ -63,7 +63,7 @@ questions:
   - key: q-3b06fe58
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"분할 UPDATE가 중간에 실패하면, 다시 돌리기 전에 반드시 앞서 바뀐 행을 원복해야 한다\""
     answer: X
@@ -74,7 +74,7 @@ questions:
   - key: q-5fd2e932
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 10,000건 중 대상 5,000건(홀수 id)을 id 1,000개 범위씩 분할 커밋하다 네 번째 묶음에서 장애가 났다. 바뀐 건수는?
     choices:
@@ -90,7 +90,7 @@ questions:
   - key: q-7159db5a
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커밋하지 않은 대량 UPDATE가 진행 중일 때, 같은 행을 고치려는 서비스 요청(lock_timeout 300ms)은?
     choices:
@@ -106,7 +106,7 @@ questions:
   - key: q-b293a913
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 11-A] 분할 UPDATE 스크립트가 중간에 죽어 처음부터 다시 돌렸더니 이미 처리한 행의 만료일이 다시 밀렸다. 원인이 되는 줄은?"
     code: |-

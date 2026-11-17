@@ -16,7 +16,7 @@ questions:
   - key: q-f20f5ad8
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 이중 쓰기 문제가 무엇인지, 어떤 두 방향으로 어긋날 수 있는지 설명해 보세요
     explanation: "- DB 저장과 브로커 발행은 서로 다른 시스템이라 한 트랜잭션으로 묶이지 않는다. 하나만 성공하면 어긋난다"
@@ -30,7 +30,7 @@ questions:
   - key: q-f26f6ace
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "@TransactionalEventListener(AFTER_COMMIT)로 발행하는 방식과 아웃박스 + 릴레이 방식을 비교해 보세요"
     explanation: |-
@@ -46,7 +46,7 @@ questions:
   - key: q-d9e4b842
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 아웃박스 릴레이가 메시지를 보낸 직후, 보냈다는 표시를 하기 전에 서버가 꺼졌습니다. 무슨 일이 생기고 어떻게 대비하나요?
     explanation: |-
@@ -62,7 +62,7 @@ questions:
   - key: q-07c4110a
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "@Transactional 메서드 안에서 브로커로 메시지를 보낸 뒤 예외가 나 롤백되면, 이미 보낸 메시지도 취소된다"
     answer: X
@@ -73,7 +73,7 @@ questions:
   - key: q-dc56b301
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "@TransactionalEventListener(AFTER_COMMIT) 리스너에서 브로커로 보낼 때, 커밋 직후 브로커가 죽어 있으면?"
     choices:
@@ -88,7 +88,7 @@ questions:
   - key: q-d73dc3d8
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 트랜잭션이 없는 메서드에서 publishEvent를 하면, @TransactionalEventListener(기본 설정) 리스너는 바로 실행된다
     answer: X
@@ -99,7 +99,7 @@ questions:
   - key: q-0b4e835d
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아웃박스 패턴에서 주문 저장 후 재고 부족 예외로 롤백되면 아웃박스 테이블에는?
     choices:

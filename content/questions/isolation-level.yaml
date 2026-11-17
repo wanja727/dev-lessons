@@ -16,7 +16,7 @@ questions:
   - key: q-8efd2597
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 트랜잭션 격리 수준에 대해 1분 안에 설명해 보세요
     explanation: |-
@@ -32,7 +32,7 @@ questions:
   - key: q-a62e4bc3
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Non-Repeatable Read와 Phantom Read의 차이를 예시와 함께 비교해 보세요
     explanation: |-
@@ -49,7 +49,7 @@ questions:
   - key: q-f9394c7f
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 동시 입금 시 가끔 잔액이 한 번의 입금만큼 모자라다는 제보가 왔다(PostgreSQL, JPA 변경 감지로 잔액 수정). 원인과 해결 방법을 말해 보세요
     explanation: |-
@@ -66,7 +66,7 @@ questions:
   - key: q-24254496
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"PostgreSQL에서 READ UNCOMMITTED로 트랜잭션을 열면 다른 트랜잭션이 커밋하지 않은 값을 읽을 수 있다\""
     answer: X
@@ -77,7 +77,7 @@ questions:
   - key: q-4ff76156
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: PostgreSQL 기본 설정에서 잔액 100에 T1이 "UPDATE balance = balance + 50"(커밋 전), T2가 "UPDATE balance = balance + 30"을 실행했다. T1이 커밋하면?
     choices:
@@ -93,7 +93,7 @@ questions:
   - key: q-ea27b887
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: PostgreSQL과 MySQL InnoDB의 기본 격리 수준을 바르게 짝지은 것은?
     choices:
@@ -107,7 +107,7 @@ questions:
   - key: q-127458b7
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 8-A] PostgreSQL 기본 설정, 두 요청이 동시에 deposit()을 부르면 입금이 사라질 수 있다. 원인이 되는 줄은?"
     code: |-

@@ -16,7 +16,7 @@ questions:
   - key: q-045e48f0
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: JPA 지연 로딩이 프록시로 어떻게 동작하는지, LazyInitializationException은 왜 나는지 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-a6142f6c
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: em.find()와 em.getReference()를 SELECT 시점, 돌려주는 것, 없는 id일 때로 비교해 보세요
     explanation: |-
@@ -52,7 +52,7 @@ questions:
   - key: q-011350e6
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 엔티티를 그대로 JSON 응답하는 API에서 LazyInitializationException이 났다(OSIV 꺼짐). 원인과 고치는 방법을 말해 보세요
     explanation: |-
@@ -69,7 +69,7 @@ questions:
   - key: q-fd2a9efb
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"초기화되지 않은 프록시에서 getId()를 호출하면 SELECT가 나간다\""
     answer: X
@@ -80,7 +80,7 @@ questions:
   - key: q-011293d4
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 같은 트랜잭션에서 em.getReference(Team, 10)을 먼저 하고 em.find(Team, 10)을 하면 find가 돌려주는 것은?
     choices:
@@ -96,7 +96,7 @@ questions:
   - key: q-7910b535
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: LazyInitializationException을 해결하는 방법으로 가장 권장되는 것은?
     choices:
@@ -112,7 +112,7 @@ questions:
   - key: q-c6a42d40
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 16-A] 컨트롤러에서 LazyInitializationException이 난다(OSIV 꺼짐). 예외가 나는 줄은?"
     code: |-

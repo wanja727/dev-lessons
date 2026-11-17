@@ -16,7 +16,7 @@ questions:
   - key: q-386b53d9
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 연관관계의 주인이 무엇이고 mappedBy는 왜 쓰는지 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-45880018
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 다대일 단방향, 양방향(다대일+mappedBy), 일대다 단방향(@JoinColumn)을 비교해 보세요
     explanation: |-
@@ -50,7 +50,7 @@ questions:
   - key: q-9c35b3be
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 팀 가입 API 테스트에서 가입 직후 team.getMembers().size()가 0인데, DB에는 team_id가 제대로 들어가 있다. 원인과 해결을 말해 보세요
     explanation: |-
@@ -66,7 +66,7 @@ questions:
   - key: q-64878331
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"양방향 연관관계에서 mappedBy가 붙은 쪽 컬렉션에 엔티티를 추가하면 FK가 저장된다\""
     answer: X
@@ -77,7 +77,7 @@ questions:
   - key: q-e14d242d
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: team.getMembers().remove(member)만 하고 커밋했다(Team.members는 mappedBy). member의 team_id는?
     choices:
@@ -93,7 +93,7 @@ questions:
   - key: q-c0c19300
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 일대다 단방향(@OneToMany + @JoinColumn)으로 팀과 멤버 2명을 저장할 때 member 테이블에 나가는 SQL은?
     choices:
@@ -109,7 +109,7 @@ questions:
   - key: q-93514208
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 18-A] 팀에 가입시켰는데 member 테이블의 team_id가 null로 저장된다. 원인이 되는 줄은?"
     code: |-

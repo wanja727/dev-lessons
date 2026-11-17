@@ -16,7 +16,7 @@ questions:
   - key: q-fa46b64b
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 인덱스가 조회를 빠르게 하는 원리와, 인덱스가 있어도 쓰이지 않는 경우를 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-4802e0cc
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Seq Scan, Index Scan, Bitmap Heap Scan, Index Only Scan을 비교해 보세요
     explanation: |-
@@ -51,7 +51,7 @@ questions:
   - key: q-01fa3098
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "\"주문 날짜별 조회\"가 느리다는 제보가 왔다. created_at에 인덱스는 있다. 어떻게 원인을 찾고 고칠지 말해 보세요"
     explanation: |-
@@ -68,7 +68,7 @@ questions:
   - key: q-cffe9cb1
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"인덱스가 있는 컬럼을 조건으로 쓰면 항상 인덱스로 찾는다\""
     answer: X
@@ -79,7 +79,7 @@ questions:
   - key: q-c8c44a8a
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 20만 건 중 99%가 PAID인 테이블에 status 인덱스가 있다. WHERE status = 'PAID'의 실행계획은?
     choices:
@@ -95,7 +95,7 @@ questions:
   - key: q-92351db0
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 복합 인덱스 (status, created_at)를 가장 효율적으로 쓰는 조건은?
     choices:
@@ -111,7 +111,7 @@ questions:
   - key: q-6b4ea2d1
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 13-A] 이메일 검색이 느리다. email에 일반 인덱스가 있는데도 Seq Scan이 나온다. 원인이 되는 줄은? (PostgreSQL, 정렬 규칙 en_US.utf8)"
     code: |-
