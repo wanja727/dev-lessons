@@ -16,7 +16,7 @@ questions:
   - key: q-019d9d9c
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 트랜잭션 전파 속성이 무엇인지, REQUIRED와 REQUIRES_NEW의 차이를 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-a51df2d6
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: REQUIRED로 합류한 안쪽 실패와 REQUIRES_NEW 안쪽 실패를, 바깥이 예외를 잡았을 때의 결과로 비교해 보세요
     explanation: |-
@@ -51,7 +51,7 @@ questions:
   - key: q-480d7655
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "운영 로그에 UnexpectedRollbackException: Transaction silently rolled back because it has been marked as rollback-only가 찍혔다. 어떻게 원인을 찾고 고칠지 말해 보세요"
     explanation: |-
@@ -68,7 +68,7 @@ questions:
   - key: q-2253e2cf
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"@Transactional 메서드에서 체크 예외가 던져지면 기본적으로 롤백된다\""
     answer: X
@@ -79,7 +79,7 @@ questions:
   - key: q-212fd92f
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 바깥 @Transactional이 다른 빈의 REQUIRES_NEW 메서드를 불러 커밋된 뒤, 바깥에서 런타임 예외가 나면 남는 데이터는?
     code: |-
@@ -102,7 +102,7 @@ questions:
   - key: q-2f56e2f6
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 바깥 트랜잭션이 저장하고 flush한(커밋 전) 행을, 다른 빈의 REQUIRES_NEW 메서드가 조회하면?
     choices:
@@ -118,7 +118,7 @@ questions:
   - key: q-44f50afd
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 15-A] 쿠폰이 실패해도 주문은 남기려 했는데, 쿠폰 실패 시 주문도 없고 UnexpectedRollbackException이 난다. 원인이 되는 줄은? (CouponService는 다른 빈)"
     code: |-

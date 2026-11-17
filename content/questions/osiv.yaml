@@ -16,7 +16,7 @@ questions:
   - key: q-fa934d44
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: OSIV가 무엇이고, API 서버에서 왜 끄라고 하는지 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-ba225e36
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV 켜짐과 꺼짐을 영속성 컨텍스트 범위, 커넥션 점유, 컨트롤러에서의 지연 로딩으로 비교해 보세요
     explanation: |-
@@ -52,7 +52,7 @@ questions:
   - key: q-f6a8a010
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 외부 결제 API가 느려지자 DB는 한가한데 'Connection is not available, request timed out' 오류가 쏟아진다. 원인과 대응을 말해 보세요
     explanation: |-
@@ -69,7 +69,7 @@ questions:
   - key: q-8818e170
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"OSIV를 켜면 @Transactional 트랜잭션도 요청 끝까지 이어진다\""
     answer: X
@@ -80,7 +80,7 @@ questions:
   - key: q-35ea0fb0
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV가 켜진 상태에서 컨트롤러가 서비스(@Transactional)를 호출한 직후, 이 요청이 쥐고 있는 DB 커넥션은?
     code: |-
@@ -102,7 +102,7 @@ questions:
   - key: q-ebbd53b3
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV가 켜져 있을 때만 생기는 일은?
     choices:
@@ -118,7 +118,7 @@ questions:
   - key: q-5feb7215
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 17-A] OSIV가 켜진 서버에서 미리보기 API를 부르면 플레이어 이름이 실제로 바뀐다. 바뀐 값이 DB에 UPDATE되는 시점은 어느 줄이 끝날 때인가?"
     code: |-

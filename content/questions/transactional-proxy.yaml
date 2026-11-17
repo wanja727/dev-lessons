@@ -16,7 +16,7 @@ questions:
   - key: q-7bac4206
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 1-A] 컨트롤러가 placeOrder()를 호출했다. addPoint()의 @Transactional이 적용되지 않게 만드는 줄은 몇 번인가?"
     code: |-
@@ -45,7 +45,7 @@ questions:
   - key: q-84177273
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 1-B] 같은 코드에서 placeOrder() 호출이 끝난 뒤 DB 상태는? (이후 다른 DB 작업은 없다)"
     choices:
@@ -63,7 +63,7 @@ questions:
   - key: q-a7d3c749
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 1-C] 같은 코드에서 포인트가 반영되지 않는 원인을 설명하고, 해결 방법 2가지와 그 차이를 말해 보세요"
     explanation: |-
@@ -81,7 +81,7 @@ questions:
   - key: q-d06ff1b4
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "@Transactional은 어떻게 동작하고, 같은 클래스에서 호출하면 왜 적용되지 않는지 1분 안에 설명해 보세요"
     explanation: |-
@@ -97,7 +97,7 @@ questions:
   - key: q-c2507cd8
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 내부 호출 문제의 해결 방법 세 가지(호출하는 쪽에 @Transactional, 다른 빈으로 분리, TransactionTemplate)를 트랜잭션 범위 관점에서 비교해 보세요
     explanation: |-
@@ -114,7 +114,7 @@ questions:
   - key: q-9f76b9d9
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"private 메서드에 @Transactional을 붙이면 그 메서드를 부를 때 트랜잭션이 열린다\""
     answer: X
@@ -125,7 +125,7 @@ questions:
   - key: q-fa12bd6a
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: placeOrder()가 주문을 저장한 뒤 다른 빈 pointService.addPoint()(@Transactional)를 부른다. placeOrder에는 @Transactional이 없다. addPoint에서 런타임 예외가 나면?
     choices:

@@ -16,7 +16,7 @@ questions:
   - key: q-7b01da4d
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 영속성 컨텍스트가 무엇이고 어떤 이점이 있는지 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-e345c172
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: flush와 commit의 차이를 설명하고, flush가 일어나는 시점을 말해 보세요
     explanation: |-
@@ -50,7 +50,7 @@ questions:
   - key: q-eee97975
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "\"엔티티 값을 바꿨는데 DB에 반영되지 않는다\"는 버그 리포트를 받았다. 예외는 없었다. 의심할 원인과 확인 방법을 말해 보세요"
     explanation: |-
@@ -69,7 +69,7 @@ questions:
   - key: q-314b4a14
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 하나의 트랜잭션 안에서 em.find(Book.class, 1L) → em.clear() → em.find(Book.class, 1L) → JPQL로 id가 1인 책 조회. book 테이블 SELECT는 몇 번인가?
     choices:
@@ -85,7 +85,7 @@ questions:
   - key: q-435ad21c
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"IDENTITY 전략 엔티티도 쓰기 지연으로 INSERT를 flush할 때까지 모아 둘 수 있다\""
     answer: X
@@ -96,7 +96,7 @@ questions:
   - key: q-44cc85f4
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 2-A] 외부에서 rename()과 renameQuietly()를 각각 호출했다. 제목 변경이 DB에 반영되지 않는 줄은?"
     code: |-
@@ -132,7 +132,7 @@ questions:
   - key: q-884318b2
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 트랜잭션 안에서 SEQUENCE 전략 엔티티를 em.persist()한 다음, 바로 JPQL "select b from Book b"를 실행했다. DB로 나가는 SQL 순서는?
     choices:

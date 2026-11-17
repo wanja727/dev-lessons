@@ -16,7 +16,7 @@ questions:
   - key: q-a1873582
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"읽고 확인하고 줄여 저장\"하는 재고 차감에서 초과 판매가 생기는 이유를 설명해 보세요"
     explanation: |-
@@ -32,7 +32,7 @@ questions:
   - key: q-8db20882
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 재고 차감에서 조건부 UPDATE, 비관적 락, 낙관적 락, Redis Lua를 비교해 보세요
     explanation: |-
@@ -48,7 +48,7 @@ questions:
   - key: q-d0759c2c
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 선착순 이벤트에서 Redis로 재고를 먼저 차감하고 DB에 주문을 저장하는데, DB 저장이 실패했습니다. 어떻게 대비하나요?
     explanation: "- Redis와 DB는 한 트랜잭션이 아니다. 실패 시 INCR로 되돌리고, 주기적으로 맞춰 본다"
@@ -62,7 +62,7 @@ questions:
   - key: q-91fa040e
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 재고 50개에 동시 주문 100건. "읽고 확인하고 줄여 저장"(락 없음)으로 처리하면 성공은 항상 정확히 50건이다
     answer: X
@@ -73,7 +73,7 @@ questions:
   - key: q-6b1eaa3b
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Redis에 stock=50을 넣고 DECR을 동시에 100번 하면 최종 값은?
     choices:
@@ -88,7 +88,7 @@ questions:
   - key: q-6bd16c1c
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 낙관적 락(@Version, 재시도 없음)으로 재고 50개에 동시 주문 100건을 처리하면?
     choices:
@@ -103,7 +103,7 @@ questions:
   - key: q-4d1b09d2
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 초과 판매를 막는 SQL은?
     choices:

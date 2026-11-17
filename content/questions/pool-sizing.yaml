@@ -16,7 +16,7 @@ questions:
   - key: q-431f0dce
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 톰캣 요청 스레드 풀과 DB 커넥션 풀의 관계를 설명해 보세요 (기본값 포함)
     explanation: |-
@@ -32,7 +32,7 @@ questions:
   - key: q-61a8a467
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커넥션 풀 크기를 크게 잡을 때와 작게 잡을 때의 문제를 비교하고, 크기를 정하는 방법을 말해 보세요
     explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
@@ -46,7 +46,7 @@ questions:
   - key: q-45cb5592
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 트래픽이 몰리자 "Connection is not available, request timed out" 오류가 쏟아집니다. 무엇을 확인하고 어떻게 고치나요?
     explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
@@ -60,7 +60,7 @@ questions:
   - key: q-27c6293d
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커넥션 풀 2개, 동시 요청 2개가 각자 커넥션 1개를 쥔 채 REQUIRES_NEW로 1개 더 요청하면?
     choices:
@@ -75,7 +75,7 @@ questions:
   - key: q-bba7f457
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 동시 스레드 8개, 스레드당 동시에 최대 3개의 커넥션을 쓸 때 데드락이 없는 최소 풀 크기는?
     choices:
@@ -88,7 +88,7 @@ questions:
   - key: q-626e5e28
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 커넥션 풀은 톰캣 요청 스레드 수(200)만큼 늘리는 것이 가장 안전하다
     answer: X
@@ -97,7 +97,7 @@ questions:
   - key: q-1303bc64
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 6개가 동시에 200ms 쿼리를 하나씩 실행한다. 커넥션이 2개면 전체 시간은 대략?
     choices:

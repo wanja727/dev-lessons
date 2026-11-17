@@ -16,7 +16,7 @@ questions:
   - key: q-bd663a78
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: cache-aside 패턴의 읽기·쓰기 흐름과 TTL의 역할을 설명해 보세요
     explanation: "- 읽기: 캐시 먼저, 없으면 DB에서 읽어 TTL과 함께 넣기. 쓰기: DB 갱신 후 캐시 삭제. TTL은 무효화를 놓쳤을 때의 안전망"
@@ -30,7 +30,7 @@ questions:
   - key: q-2f68a446
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: cache-aside와 write-through를 비교해 보세요
     explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
@@ -44,7 +44,7 @@ questions:
   - key: q-7f7a6826
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 인기 상품의 캐시가 만료될 때마다 DB CPU가 치솟습니다. 원인과 대책을 말해 보세요
     explanation: |-
@@ -60,7 +60,7 @@ questions:
   - key: q-e63a815f
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: cache-aside에서 가격을 바꿀 때 캐시를 먼저 지우고 DB를 갱신하면 항상 안전하다
     answer: X
@@ -71,7 +71,7 @@ questions:
   - key: q-bec2330d
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: cache-aside(TTL 1시간)로 가격 10,000을 캐시한 뒤 DB만 8,000으로 바꾸고 바로 조회하면?
     choices:
@@ -86,7 +86,7 @@ questions:
   - key: q-5c8db87b
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 다음 중 캐시하기 가장 조심해야 하는 데이터는?
     choices:
@@ -99,7 +99,7 @@ questions:
   - key: q-2253a4b5
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커밋 전에 캐시를 지우면 어떤 문제가 생길 수 있나?
     choices:

@@ -16,7 +16,7 @@ questions:
   - key: q-85e5f3a0
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 자바의 Future 인터페이스에 대해 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-89ab3137
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Runnable과 Callable, Future와 CompletableFuture의 차이를 각각 말해 보세요
     explanation: |-
@@ -49,7 +49,7 @@ questions:
   - key: q-362f69a9
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 주문 화면이 외부 API 3개(각 1초)를 차례로 호출해 응답이 3초 걸린다. 개선 방법과 주의할 점을 말해 보세요
     explanation: |-
@@ -67,7 +67,7 @@ questions:
   - key: q-f9950f95
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 4-A] 세 API를 병렬로 부르려고 스레드 풀을 만들었는데 총 시간이 세 호출의 합만큼 걸린다. 원인이 되는 줄을 모두 고르세요"
     code: |-
@@ -87,7 +87,7 @@ questions:
   - key: q-329be5ff
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스레드 2개짜리 풀에 1초짜리 작업 3개를 모두 submit한 뒤 차례로 get()했다. 마지막 get()이 끝나는 시간은?
     choices:
@@ -103,7 +103,7 @@ questions:
   - key: q-8cc780f8
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"future.get(1, SECONDS)에서 TimeoutException이 나면 작업도 자동으로 취소된다\""
     answer: X
@@ -114,7 +114,7 @@ questions:
   - key: q-65bd9964
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Callable 안에서 IllegalStateException이 났다. 이 작업의 Future에 get()을 부르면 어떻게 되나?
     choices:

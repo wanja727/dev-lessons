@@ -16,7 +16,7 @@ questions:
   - key: q-525f2f5f
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 결제 API에서 중복 결제를 어떻게 막는지 1분 안에 설명해 보세요
     explanation: |-
@@ -33,7 +33,7 @@ questions:
   - key: q-8754f4c8
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 중복 요청 방지 방법인 "먼저 조회 후 저장", "synchronized", "DB 유니크 제약"을 비교해 보세요
     explanation: |-
@@ -50,7 +50,7 @@ questions:
   - key: q-f983f53a
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 멱등 키로 중복 결제를 막는 API를 설계할 때, 키 하나 외에 더 챙겨야 할 것들을 말해 보세요
     explanation: "- 키 범위(사용자별 유니크), 처음 응답 저장과 재사용, 같은 키·다른 내용 거절, 처리 중 상태(외부 호출 중 재요청), 키 보관 기간, 외부 PG사에도 멱등 키 전달"
@@ -64,7 +64,7 @@ questions:
   - key: q-5fdcfdeb
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"먼저 같은 멱등 키가 있는지 조회하고 없을 때만 저장하면, 동시에 온 같은 키 요청도 항상 하나만 저장된다\""
     answer: X
@@ -75,7 +75,7 @@ questions:
   - key: q-17d9cdf2
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 같은 멱등 키로 결제 요청 10개가 동시에 왔다. 키 컬럼에 유니크 제약이 있고, 서버는 바로 INSERT하되 중복이면 처음 결제를 돌려준다. 결과는?
     choices:
@@ -91,7 +91,7 @@ questions:
   - key: q-2fa54686
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 다음 HTTP 메서드 중 RFC 9110상 멱등이 아닌 것은?
     choices:
@@ -107,7 +107,7 @@ questions:
   - key: q-b209211e
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "[코드 6-A] 멱등 처리를 넣었는데 중복 요청 때 \"현재 트랜잭션이 중단됨\" 오류가 난다. 원인이 되는 줄은?"
     code: |-

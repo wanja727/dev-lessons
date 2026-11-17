@@ -16,7 +16,7 @@ questions:
   - key: q-70ef544a
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스프링 빈과 의존성 주입이 무엇이고 왜 쓰는지 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-d67eb814
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 생성자 주입과 필드 주입을 비교해 보세요
     explanation: |-
@@ -51,7 +51,7 @@ questions:
   - key: q-2a1ec6f6
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 동시에 여러 사용자가 주문하면 주문 번호가 가끔 꼬인다. 서비스 클래스에 private int lastOrderNo 필드가 있다. 원인과 해결을 말해 보세요
     explanation: |-
@@ -67,7 +67,7 @@ questions:
   - key: q-a5403e89
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"@Service가 붙은 클래스의 빈을 컨테이너에서 두 번 꺼내면 서로 다른 객체가 나온다\""
     answer: X
@@ -78,7 +78,7 @@ questions:
   - key: q-c707417d
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "@Autowired 필드가 있는 FieldInjectedService를 new FieldInjectedService()로 만들고 sender()를 부르면?"
     choices:
@@ -94,7 +94,7 @@ questions:
   - key: q-6a187d5c
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CoffeeController(CoffeeService 필요), CoffeeService(리포지토리와 NoticeSender 필요)가 있을 때 스프링이 가장 나중에 만드는 빈은?
     choices:
@@ -110,7 +110,7 @@ questions:
   - key: q-1cbc82bc
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 21-A] 테스트에서 알림을 가짜로 바꾸려는데 방법이 없다. 원인이 되는 줄은?"
     code: |-

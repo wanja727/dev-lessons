@@ -16,7 +16,7 @@ questions:
   - key: q-52138e9b
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: HTTP 메서드의 안전성과 멱등성을 설명하고, GET·POST·PUT·PATCH·DELETE를 분류해 보세요
     explanation: |-
@@ -32,7 +32,7 @@ questions:
   - key: q-3cf05dc4
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: offset 페이지네이션과 cursor 페이지네이션을 비교해 보세요
     explanation: |-
@@ -48,7 +48,7 @@ questions:
   - key: q-ca3804ba
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "모든 API가 200을 돌려주고 본문에 {\"success\": false}를 담는 기존 서비스를 맡았습니다. 무엇이 문제이고 어떻게 바꾸겠어요?"
     explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
@@ -62,7 +62,7 @@ questions:
   - key: q-ccc7695f
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: DELETE를 두 번 보냈더니 204 다음 404가 왔다. 응답이 다르므로 DELETE는 멱등이 아니다
     answer: X
@@ -73,7 +73,7 @@ questions:
   - key: q-23ed94d8
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 같은 본문으로 POST /products를 두 번, PUT /products/7을 두 번 보냈다. 각각 상품 수는?
     choices:
@@ -88,7 +88,7 @@ questions:
   - key: q-9a5b1da6
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 새 자원을 만든 POST의 알맞은 응답은?
     choices:
@@ -101,7 +101,7 @@ questions:
   - key: q-788da7f6
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 최신순 3개씩 offset 페이지네이션. 1페이지 [6, 5, 4]를 본 뒤 새 글(7)이 생겼다. 2페이지는?
     choices:

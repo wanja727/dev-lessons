@@ -16,7 +16,7 @@ questions:
   - key: q-1ca0e891
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 커넥션 풀을 왜 쓰는지, 풀이 모자라면 무슨 일이 생기는지 1분 안에 설명해 보세요
     explanation: |-
@@ -34,7 +34,7 @@ questions:
   - key: q-dfd7f62a
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커넥션 풀 크기를 작게 잡을 때와 크게 잡을 때의 문제를 비교해 보세요
     explanation: |-
@@ -52,7 +52,7 @@ questions:
   - key: q-3057c588
     concept: core
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: DB는 한가한데 'Connection is not available, request timed out after 30000ms'가 간헐적으로 난다. 무엇을 의심하고 어떻게 확인할지 말해 보세요
     explanation: |-
@@ -70,7 +70,7 @@ questions:
   - key: q-be7e20b9
     concept: core
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"풀에서 빌린 Connection의 close()를 부르면 DB 연결이 끊어진다\""
     answer: X
@@ -81,7 +81,7 @@ questions:
   - key: q-d4692514
     concept: core
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 풀 크기 2, connection-timeout 500ms. 두 요청이 연결을 쥔 채 오래 일하는 중에 세 번째 요청이 연결을 달라고 하면?
     choices:
@@ -97,7 +97,7 @@ questions:
   - key: q-96e767fb
     concept: core
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "@Transactional 메서드에서 DB 연결을 쥐고 있는 시간은?"
     choices:
@@ -113,7 +113,7 @@ questions:
   - key: q-1a470682
     concept: core
     type: line_pick
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "[코드 20-A] 요청이 몰리면 연결 대기 타임아웃이 나는데 DB는 한가하다. 원인이 되는 줄은?"
     code: |-
