@@ -1,0 +1,466 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const testPath = 'verification/src/test/java/lab/devlessons/outbox/TransactionalOutboxTest.java';
+const test = `${repo}/blob/main/${testPath}`;
+const impl = `${repo}/tree/main/verification/src/main/java/lab/devlessons/outbox`;
+
+const codePredict = `@Transactional
+public Long place(String item) {
+    Order order = orders.save(new Order(item));
+    broker.send(new Message("OrderPlaced", order.getId()));  // 배송팀에 "주문됨" 알림
+    stock.decrease(item);   // 여기서 재고 부족 예외가 나면?
+    return order.getId();
+}`;
+
+const codeListener = `@Transactional
+public Long place(String item) {
+    Order order = orders.save(new Order(item));
+    events.publishEvent(new OrderPlaced(order.getId()));   // 스프링 안에서만 알림
+    stock.decrease(item);
+    return order.getId();
+}
+
+@Component
+class OrderPlacedListener {
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    void on(OrderPlaced event) {
+        broker.send(new Message("OrderPlaced", event.orderId()));  // 커밋된 뒤에 실행
+    }
+}`;
+
+const codeOutboxTable = `CREATE TABLE outbox_event (
+    id           BIGSERIAL PRIMARY KEY,
+    event_id     VARCHAR(255) NOT NULL UNIQUE,  -- 받는 쪽이 중복을 거를 때 쓰는 id
+    type         VARCHAR(255) NOT NULL,         -- 예: OrderPlaced
+    payload      VARCHAR(255) NOT NULL,         -- 보낼 내용 (JSON)
+    published_at TIMESTAMP                      -- 비어 있으면 아직 안 보냄
+);`;
+
+const codeOutboxService = `@Transactional
+public Long place(String item) {
+    Order order = orders.save(new Order(item));
+    outbox.save(new OutboxEvent("OrderPlaced", toJson(order)));  // 보내지 않고 "기록"만
+    stock.decrease(item);
+    return order.getId();
+}   // 주문과 아웃박스 행이 한 트랜잭션: 둘 다 커밋되거나 둘 다 롤백`;
+
+const codeRelay = `// 릴레이: 실무에서는 @Scheduled로 짧은 간격(예: 1초)마다 실행
+public int publishPending() {
+    int sent = 0;
+    for (OutboxEvent event : outbox.findTop100ByPublishedAtIsNullOrderByIdAsc()) {
+        try {
+            broker.send(event.toMessage());
+        } catch (BrokerUnavailableException e) {
+            return sent;            // 표시하지 않았으니 다음 실행에서 다시 보낸다
+        }
+        event.markPublished();      // published_at = now()
+        outbox.save(event);
+        sent++;
+    }
+    return sent;
+}`;
+
+const codeConsumer = `// 받는 쪽(배송 서비스): 처리한 event_id를 기록해 두고 이미 본 id는 건너뛴다
+@Transactional
+public void handle(Message m) {
+    if (!processedEvents.insertIfAbsent(m.eventId())) {
+        return;                     // 이미 처리한 메시지
+    }
+    shipping.prepare(m.orderId());
+}`;
+
+const codeSkipLocked = `-- 릴레이를 여러 대 띄울 때: 다른 릴레이가 잡은 행은 건너뛰고 읽는다
+SELECT * FROM outbox_event
+ WHERE published_at IS NULL
+ ORDER BY id
+ LIMIT 100
+ FOR UPDATE SKIP LOCKED;`;
+---
+<Base title="트랜잭셔널 아웃박스 · Dev Lessons" description="DB에 저장하고 메시지를 보내는 두 가지 일이 어긋나는 이중 쓰기 문제를 재현하고, @TransactionalEventListener와 아웃박스 테이블 + 릴레이로 해결하는 방법을 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">동시성·분산 · 개념 학습 · 약 35분 · 선수 레슨: <a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a>, <a href="/dev-lessons/lessons/tx-propagation/">트랜잭션 전파</a></p>
+    <h1>트랜잭셔널 아웃박스</h1>
+    <p class="lede">주문이 저장되면 배송팀과 알림 서비스에 "주문됨"을 알려야 해요. DB에 저장하기와 메시지 보내기, 두 가지 일이 어긋나면 없는 주문이 배송되거나, 결제된 주문이 아무에게도 알려지지 않아요. 커머스와 핀테크 면접에서 자주 나오는 이 문제를 직접 재현하며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 커밋과 롤백(<a href="/dev-lessons/lessons/tx-basics/">트랜잭션 기초</a>), @Transactional이 프록시로 트랜잭션을 연다는 것(<a href="/dev-lessons/lessons/transactional-proxy/">@Transactional 동작 원리</a>), 멱등성(<a href="/dev-lessons/lessons/idempotency/">멱등성과 중복 요청 방지</a>)은 읽어 두면 6장이 쉬워요.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#background"><span>1</span>이중 쓰기 문제</a>
+      <a href="#sim"><span>2</span>세 가지 방법 비교</a>
+      <a href="#after-commit"><span>3</span>커밋 뒤에 보내기</a>
+      <a href="#outbox"><span>4</span>아웃박스</a>
+      <a href="#duplicate"><span>5</span>중복은 남는다</a>
+      <a href="#choose"><span>6</span>함정과 선택 기준</a>
+      <a href="#check"><span>7</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>롤백되면 메시지도 취소될까요?</h2>
+    <p>주문을 저장하고, 배송팀에 메시지를 보내고, 재고를 줄여요. 재고가 부족해 예외가 나면 @Transactional이 주문을 롤백해요. 그럼 배송팀이 받은 메시지는 어떻게 될까요?</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="cancel" aria-pressed="false">메시지도 취소된다</button>
+          <button class="chip" type="button" data-v="sent" aria-pressed="false">메시지는 이미 나갔다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 2장에서 직접 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="background" class="read">
+    <p class="eyebrow">1 · 이중 쓰기 문제</p>
+    <h2>트랜잭션은 DB 하나만 묶어요</h2>
+    <p>서비스끼리 "이런 일이 있었다"를 알리는 메시지를 <strong>이벤트</strong>라고 해요. 이벤트는 보통 <strong>메시지 브로커</strong>(Kafka, RabbitMQ처럼 메시지를 받아 두었다가 받는 쪽에 전달하는 서버)를 거쳐 가요. 보내는 쪽은 받는 쪽이 지금 살아 있는지 몰라도 되고, 받는 쪽은 자기 속도로 꺼내 가요.</p>
+    <div class="diagram" role="img" aria-label="주문 서비스가 DB와 메시지 브로커 두 곳에 따로 쓴다. 트랜잭션은 DB만 감싼다.">
+      <svg viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg">
+        <rect class="svg-box" x="20" y="75" width="150" height="60" rx="10" />
+        <text class="svg-tb" x="95" y="110" text-anchor="middle">주문 서비스</text>
+        <rect x="230" y="12" width="190" height="86" rx="12" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6 5" />
+        <text class="svg-m" x="325" y="30" text-anchor="middle">@Transactional이 묶는 범위</text>
+        <rect class="svg-box" x="265" y="40" width="120" height="48" rx="8" />
+        <text class="svg-tb" x="325" y="69" text-anchor="middle">DB (주문)</text>
+        <rect class="svg-box" x="265" y="140" width="120" height="48" rx="8" />
+        <text class="svg-tb" x="325" y="169" text-anchor="middle">메시지 브로커</text>
+        <rect class="svg-box" x="480" y="140" width="140" height="48" rx="8" />
+        <text class="svg-tb" x="550" y="169" text-anchor="middle">배송·알림 서비스</text>
+        <path class="svg-acc" d="M170 95 L262 66" />
+        <path class="svg-line" d="M170 118 L262 160" />
+        <path class="svg-line" d="M385 164 L477 164" />
+        <text class="svg-m" x="200" y="68">① 저장</text>
+        <text class="svg-m" x="196" y="160">② 보내기</text>
+      </svg>
+    </div>
+    <p>문제는 ①과 ②가 <strong>서로 다른 시스템</strong>이라는 거예요. @Transactional은 DB 연결 하나를 커밋하거나 롤백할 뿐, 브로커에 이미 보낸 메시지를 되돌리지 못해요. 이렇게 두 곳에 따로 쓰다가 하나만 성공하는 문제를 <strong>이중 쓰기 문제</strong>(dual write)라고 해요.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>어긋나는 경우</th><th>결과</th></tr></thead>
+        <tbody>
+          <tr><td>메시지는 나갔는데 DB가 롤백</td><td><strong>유령 메시지:</strong> 없는 주문을 배송팀이 준비해요</td></tr>
+          <tr><td>DB는 커밋됐는데 메시지가 안 나감</td><td><strong>메시지 유실:</strong> 결제된 주문을 아무도 몰라요</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">2 · 세 가지 방법 비교</p>
+      <h2>사고를 하나 고르고 "다음"을 눌러 보세요</h2>
+      <p>방법과 사고를 골라 한 단계씩 진행해요. DB 테이블과 브로커가 받은 메시지가 서로 맞는지 보세요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">방법</span>
+        <div class="seg" id="method">
+          <button type="button" data-v="direct" aria-pressed="true">트랜잭션 안에서 바로 보내기</button>
+          <button type="button" data-v="after" aria-pressed="false">커밋 뒤에 보내기 (AFTER_COMMIT)</button>
+          <button type="button" data-v="outbox" aria-pressed="false">아웃박스 + 릴레이</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">사고</span>
+        <div class="seg" id="incident">
+          <button type="button" data-v="ok" aria-pressed="true">사고 없음</button>
+          <button type="button" data-v="rollback" aria-pressed="false">재고 부족으로 롤백</button>
+          <button type="button" data-v="down" aria-pressed="false">브로커 장애</button>
+        </div>
+      </div>
+      <div class="ob-grid">
+        <div class="pane">
+          <span class="label">진행</span>
+          <ol class="path-steps" id="steps"></ol>
+        </div>
+        <div class="pane">
+          <span class="label">DB: order</span>
+          <div class="table-wrap"><table class="mini"><thead><tr><th>id</th><th>item</th></tr></thead><tbody id="t-order"></tbody></table></div>
+          <span class="label" id="l-outbox">DB: outbox_event</span>
+          <div class="table-wrap" id="w-outbox"><table class="mini"><thead><tr><th>id</th><th>type</th><th>published_at</th></tr></thead><tbody id="t-outbox"></tbody></table></div>
+          <span class="label">브로커가 받은 메시지</span>
+          <div class="table-wrap"><table class="mini"><thead><tr><th>#</th><th>내용</th></tr></thead><tbody id="t-broker"></tbody></table></div>
+          <p class="verdict" id="sim-verdict"></p>
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn" type="button" id="s-reset">처음으로</button>
+        <button class="btn primary" type="button" id="s-next">다음</button>
+        <button class="btn" type="button" id="s-all">끝까지</button>
+      </div>
+    </div>
+    <div class="read stack">
+      <p>예측한 답을 확인해 보세요. 실제 PostgreSQL과 스프링에서 "바로 보내기 + 롤백"을 돌린 결과예요.</p>
+      <CiOutput lesson="transactional-outbox" key="direct-rollback" label="실제 결과 보기: 바로 보내기 + 롤백" source="TransactionalOutboxTest.directPublishLeaksOnRollback" />
+    </div>
+  </section>
+
+  <section id="after-commit" class="read">
+    <p class="eyebrow">3 · 커밋 뒤에 보내기</p>
+    <h2>@TransactionalEventListener는 유령 메시지를 막아요</h2>
+    <p>스프링에는 트랜잭션이 끝난 뒤에 실행되는 리스너가 있어요. 서비스는 스프링 안에서만 이벤트를 알리고(<code>publishEvent</code>), 브로커로 보내는 일은 <code>@TransactionalEventListener</code>가 <strong>커밋이 성공한 뒤에</strong> 해요.</p>
+    <pre set:text={codeListener} />
+    <ul>
+      <li>롤백되면 리스너가 실행되지 않아요. 유령 메시지가 사라져요.</li>
+      <li>그런데 커밋은 이미 끝났어요. 이 순간 브로커가 죽어 있거나 서버가 꺼지면, <strong>주문은 남고 메시지는 사라져요.</strong> 다시 보낼 기록이 어디에도 없어요. 게다가 커밋 뒤 리스너에서 난 예외는 스프링이 로그로만 남겨서, <code>place()</code>를 부른 쪽은 예외도 받지 못해요.</li>
+    </ul>
+    <CiOutput lesson="transactional-outbox" key="after-commit-lost" label="실제 결과 보기: 커밋 뒤 보내기 + 브로커 장애" source="TransactionalOutboxTest.afterCommitLosesMessageWhenBrokerDown" />
+    <p>정리하면 "바로 보내기"는 유령 메시지를, "커밋 뒤에 보내기"는 메시지 유실을 만들 수 있어요. 둘 다 <strong>두 시스템에 따로 쓴다</strong>는 점은 그대로예요.</p>
+  </section>
+
+  <section id="outbox" class="read">
+    <p class="eyebrow">4 · 아웃박스</p>
+    <h2>보낼 메시지를 같은 DB에 먼저 적어 두기</h2>
+    <p>해결의 열쇠는 "두 곳에 쓰기"를 "한 곳에 쓰기"로 바꾸는 거예요. 메시지를 브로커로 바로 보내지 않고, <strong>주문과 같은 DB의 테이블</strong>에 "보내야 할 메시지"로 적어요. 이 테이블을 <strong>아웃박스</strong>(outbox, 보낼 편지함)라고 해요.</p>
+    <pre set:text={codeOutboxTable} />
+    <pre set:text={codeOutboxService} />
+    <p>주문과 아웃박스 행은 한 트랜잭션이라 <strong>둘 다 커밋되거나 둘 다 롤백돼요.</strong> 이제 "주문은 있는데 보낼 기록이 없다"는 상태가 생길 수 없어요.</p>
+    <p>실제로 보내는 일은 <strong>릴레이</strong>(relay, 전달자)가 해요. 아웃박스에서 아직 안 보낸 행을 읽어 브로커로 보내고, 보낸 행에 표시해요. 이렇게 주기적으로 테이블을 읽는 방식을 <strong>폴링</strong>(polling)이라고 해요.</p>
+    <pre set:text={codeRelay} />
+    <p>브로커가 한 시간 죽어 있어도 주문은 계속 받을 수 있어요. 아웃박스에 쌓여 있다가 브로커가 살아나면 릴레이가 순서대로 보내요.</p>
+    <CiOutput lesson="transactional-outbox" key="outbox-outage" label="실제 결과 보기: 아웃박스 + 브로커 장애" source="TransactionalOutboxTest.outboxSurvivesBrokerOutage" />
+    <p class="muted">전체 코드: <a href={impl}>outbox 패키지</a></p>
+  </section>
+
+  <section id="duplicate" class="read">
+    <p class="eyebrow">5 · 중복은 남는다</p>
+    <h2>"정확히 한 번"이 아니라 "최소 한 번"</h2>
+    <p>릴레이가 메시지를 보낸 직후, published_at을 적기 전에 서버가 꺼지면 어떻게 될까요? 재시작한 릴레이는 그 행을 아직 안 보낸 것으로 보고 <strong>한 번 더 보내요.</strong></p>
+    <div class="flow" aria-label="릴레이가 보낸 뒤 표시하기 전에 죽으면 같은 메시지를 두 번 보낸다">
+      <div class="node on">① 릴레이: 브로커로 보냄 (event_id = a1b2…)</div>
+      <div class="arrow">↓</div>
+      <div class="node hot">② 표시하기 전에 서버 종료 → published_at은 여전히 비어 있음</div>
+      <div class="arrow">↓</div>
+      <div class="node on">③ 재시작한 릴레이: 같은 행을 다시 보냄 (event_id = a1b2…)</div>
+    </div>
+    <p>그래서 아웃박스는 메시지를 잃지 않는 대신 <strong>같은 메시지가 두 번 갈 수 있어요.</strong> 이런 전달 보장을 <strong>최소 한 번</strong>(at-least-once)이라고 해요. 받는 쪽은 <a href="/dev-lessons/lessons/idempotency/">멱등성 레슨</a>의 멱등 키처럼 <code>event_id</code>로 중복을 걸러야 해요. 이런 소비자를 <strong>멱등 컨슈머</strong>라고 해요.</p>
+    <pre set:text={codeConsumer} />
+    <CiOutput lesson="transactional-outbox" key="relay-duplicate" label="실제 결과 보기: 릴레이 중간 종료" source="TransactionalOutboxTest.relayCrashSendsDuplicate" />
+  </section>
+
+  <section id="choose" class="read">
+    <p class="eyebrow">6 · 함정과 선택 기준</p>
+    <h2>자주 헷갈리는 지점</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>함정</th><th>무슨 일이</th></tr></thead>
+        <tbody>
+          <tr><td>트랜잭션 밖에서 <code>publishEvent</code></td><td>@TransactionalEventListener는 기본 설정에서 <strong>아무 일도 하지 않아요</strong>(예외도 없음). 트랜잭션이 없으면 실행할 "커밋 뒤"가 없어서예요. <code>fallbackExecution = true</code>로 바꿀 수 있어요</td></tr>
+          <tr><td>AFTER_COMMIT 리스너 안에서 DB 쓰기</td><td>원래 트랜잭션은 이미 커밋됐어요. 스프링 문서는 이 단계의 데이터 접근이 커밋되지 않을 수 있다고 경고해요. 리스너에서 DB에 쓰려면 <code>@Transactional(propagation = REQUIRES_NEW)</code>로 새 트랜잭션을 열어요(<a href="/dev-lessons/lessons/tx-propagation/">트랜잭션 전파</a>)</td></tr>
+          <tr><td>"아웃박스면 중복이 없다"</td><td>릴레이가 보낸 뒤 표시하기 전에 죽으면 다시 보내요. 받는 쪽 멱등 처리는 필수예요</td></tr>
+          <tr><td>아웃박스 테이블이 계속 커짐</td><td>보낸 행은 며칠 뒤 지우는 정리 작업을 둬요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>상황별 선택</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>방법</th><th>유령 메시지</th><th>메시지 유실</th><th>어울리는 경우</th></tr></thead>
+        <tbody>
+          <tr><td>트랜잭션 안에서 바로 보내기</td><td>생김</td><td>생길 수 있음</td><td>쓰지 않아요</td></tr>
+          <tr><td>커밋 뒤에 보내기 (AFTER_COMMIT)</td><td>없음</td><td>생김 (커밋 후 실패 시)</td><td>놓쳐도 되는 알림(캐시 갱신, 통계)</td></tr>
+          <tr><td>아웃박스 + 폴링 릴레이</td><td>없음</td><td>없음 (대신 중복 가능)</td><td>주문, 결제, 포인트처럼 놓치면 안 되는 이벤트</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <details class="more"><summary>더 알아보기: 릴레이를 여러 대 띄울 때, 그리고 CDC</summary>
+      <p>릴레이 서버가 여러 대면 같은 행을 동시에 보낼 수 있어요. PostgreSQL과 MySQL 8은 다른 트랜잭션이 잠근 행을 건너뛰고 읽는 <code>FOR UPDATE SKIP LOCKED</code>를 지원해서, 릴레이마다 다른 행을 가져가게 할 수 있어요.</p>
+      <pre set:text={codeSkipLocked} />
+      <p>폴링 대신 DB의 변경 기록(WAL, binlog)을 읽어 아웃박스에 새 행이 생기면 바로 보내는 방식도 있어요. 이를 <strong>CDC</strong>(Change Data Capture)라고 하고, Debezium이 아웃박스용 기능을 제공해요. 폴링보다 빠르고 DB에 주기적인 조회 부담이 없지만, 운영할 구성 요소가 늘어요.</p>
+    </details>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">7 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "주문을 저장하고 이벤트를 발행할 때 둘이 어긋나지 않게 하려면?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: DB 저장과 메시지 발행은 서로 다른 시스템이라 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>DB 저장과 메시지 브로커 발행은 서로 다른 시스템이라 한 트랜잭션으로 묶이지 않습니다. 하나만 성공하면 유령 메시지나 메시지 유실이 생기는데, 이를 이중 쓰기 문제라고 합니다. 트랜잭셔널 아웃박스로 해결합니다.</dd>
+        <dt>원리</dt><dd>메시지를 바로 보내지 않고, 업무 데이터와 같은 트랜잭션으로 아웃박스 테이블에 기록합니다. 그러면 둘은 함께 커밋되거나 함께 롤백됩니다. 별도 릴레이가 아직 안 보낸 행을 순서대로 읽어 브로커로 보내고 보낸 표시를 합니다.</dd>
+        <dt>트레이드오프</dt><dd>@TransactionalEventListener(AFTER_COMMIT)는 롤백 시 발행을 막지만, 커밋 후 발행이 실패하면 메시지를 잃습니다. 아웃박스는 잃지 않는 대신 릴레이가 보낸 뒤 표시 전에 죽으면 중복 발행이 생기므로, 받는 쪽은 event_id로 멱등하게 처리해야 합니다. 릴레이 지연, 테이블 정리, 여러 릴레이의 동시 처리(SKIP LOCKED)도 고려합니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 테스트로 트랜잭션 안 발행이 롤백 후에도 메시지를 남기는 것과, 아웃박스가 브로커 장애 중에도 주문을 받고 복구 후 순서대로 보내는 것을 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 이중 쓰기 문제의 두 방향(유령, 유실)을 말했나요? 같은 트랜잭션으로 기록한다는 점, 최소 한 번과 멱등 컨슈머를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 실제 스프링 부트와 PostgreSQL에서, 브로커 대신 받은 메시지를 기록하는 가짜 브로커를 두고 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>트랜잭션 안에서 바로 보내면 롤백돼도 메시지는 이미 나가 있다 (주문 0행, 메시지 1개)</li>
+      <li>트랜잭션 안에서 바로 보내면 브로커 장애가 주문까지 실패시킨다</li>
+      <li>AFTER_COMMIT 리스너: 롤백되면 보내지 않고, 커밋되면 보낸다</li>
+      <li>AFTER_COMMIT 리스너: 커밋 뒤 보내기가 실패하면 주문은 남고 메시지는 없으며, 호출한 쪽은 예외를 받지 않는다</li>
+      <li>AFTER_COMMIT 리스너: 트랜잭션 밖에서 발행한 이벤트는 기본 설정에서 실행되지 않는다</li>
+      <li>아웃박스: 주문과 아웃박스 행은 함께 롤백되고 함께 커밋된다. 릴레이 전에는 메시지가 나가지 않는다</li>
+      <li>아웃박스: 브로커 장애 중에도 주문은 성공하고, 복구 후 릴레이가 모두 보낸다</li>
+      <li>릴레이는 저장된 순서대로 보낸다</li>
+      <li>릴레이가 보낸 뒤 표시 전에 죽으면 같은 event_id로 두 번 보내고, event_id로 거르면 한 번만 처리된다</li>
+    </ul>
+    <p><a href={test}>TransactionalOutboxTest</a></p>
+    <RunLocally tests={['lab.devlessons.outbox.TransactionalOutboxTest']} docker />
+  </section>
+
+  <footer>
+    근거: Spring Framework 문서의 Transaction-bound Events, TransactionalEventListener API 문서, Debezium Outbox Event Router 문서. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .ob-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  table.mini { min-width: 0; font-size: 14px; }
+  table.mini td, table.mini th { padding: 6px 8px; }
+  table.mini tr.bad td { color: var(--query); font-weight: 700; }
+  .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .path-steps li { color: var(--muted); }
+  .path-steps li.done { color: var(--ink); }
+  .path-steps li.now { color: var(--accent); font-weight: 700; }
+  .path-steps .who { font-family: var(--font-mono); font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--code-bg); margin-right: 4px; }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .ob-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('ob-p1'), p2: store('ob-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'sent' ? '메시지는 이미 나갔다' : '메시지도 취소된다') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "메시지는 이미 나갔다"예요. 2장에서 "바로 보내기" + "재고 부족으로 롤백"으로 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('ob-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 2. 시뮬레이터: 각 단계는 상태를 바꾸는 동작 목록을 가진다
+     o+: 주문 추가(커밋 전), x+: 아웃박스 추가(커밋 전), c: 커밋, r: 롤백, b+: 브로커가 받음, p: 아웃박스 표시 */
+  var S = {
+    direct: {
+      ok: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '브로커로 바로 보냄', ['b+']], ['서비스', '재고 차감 성공', []], ['DB', '커밋', ['c']]],
+      rollback: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '브로커로 바로 보냄 → 이미 밖으로 나감', ['b+']], ['서비스', '재고 부족 예외', []], ['DB', '롤백: 주문이 사라짐. 브로커의 메시지는 그대로', ['r']]],
+      down: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '브로커로 보내기 → 연결 실패 예외', []], ['DB', '롤백: 브로커 장애 때문에 주문도 실패', ['r']]]
+    },
+    after: {
+      ok: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', 'publishEvent: 스프링 안에서만 알림, 아직 안 보냄', []], ['서비스', '재고 차감 성공', []], ['DB', '커밋', ['c']], ['리스너', 'AFTER_COMMIT: 브로커로 보냄', ['b+']]],
+      rollback: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', 'publishEvent: 아직 안 보냄', []], ['서비스', '재고 부족 예외', []], ['DB', '롤백', ['r']], ['리스너', '커밋되지 않았으니 실행되지 않음', []]],
+      down: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', 'publishEvent: 아직 안 보냄', []], ['서비스', '재고 차감 성공', []], ['DB', '커밋: 주문 확정', ['c']], ['리스너', 'AFTER_COMMIT: 브로커로 보내기 → 연결 실패', []], ['리스너', '다시 보낼 기록이 없음. 메시지 유실', []]]
+    },
+    outbox: {
+      ok: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '아웃박스에 메시지 기록 (커밋 전)', ['x+']], ['서비스', '재고 차감 성공', []], ['DB', '커밋: 주문과 아웃박스 행이 함께 확정', ['c']], ['릴레이', '안 보낸 행을 읽어 브로커로 보냄', ['b+']], ['릴레이', 'published_at 표시', ['p']]],
+      rollback: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '아웃박스에 메시지 기록 (커밋 전)', ['x+']], ['서비스', '재고 부족 예외', []], ['DB', '롤백: 주문과 아웃박스 행이 함께 사라짐', ['r']], ['릴레이', '보낼 행 없음', []]],
+      down: [['서비스', '주문 저장 (커밋 전)', ['o+']], ['서비스', '아웃박스에 메시지 기록 (커밋 전)', ['x+']], ['DB', '커밋: 주문 확정 (브로커와 상관없음)', ['c']], ['릴레이', '브로커로 보내기 → 연결 실패. 표시하지 않음', []], ['릴레이', '(브로커 복구 후) 같은 행을 다시 읽어 보냄', ['b+']], ['릴레이', 'published_at 표시', ['p']]]
+    }
+  };
+  var method = 'direct', incident = 'ok', idx = -1;
+  function steps() { return S[method][incident]; }
+  function render() {
+    var st = steps();
+    var order = 0, outbox = 0, committed = false, rolled = false, broker = 0, published = false;
+    for (var i = 0; i <= idx; i++) st[i][2].forEach(function (a) {
+      if (a === 'o+') order = 1; else if (a === 'x+') outbox = 1; else if (a === 'c') committed = true;
+      else if (a === 'r') { rolled = true; order = 0; outbox = 0; } else if (a === 'b+') broker++; else if (a === 'p') published = true;
+    });
+    document.getElementById('steps').innerHTML = st.map(function (s, i) {
+      return '<li class="' + (i < idx ? 'done' : i === idx ? 'now' : '') + '">' + (i <= idx ? '<span class="who">' + esc(s[0]) + '</span>' + esc(s[1]) : '…') + '</li>';
+    }).join('');
+    var pending = committed ? '' : ' (커밋 전)';
+    var empty = '<tr><td colspan="3" class="muted">비어 있음</td></tr>';
+    document.getElementById('t-order').innerHTML = order ? '<tr><td>1</td><td>커피' + pending + '</td></tr>' : empty;
+    var showOutbox = method === 'outbox';
+    document.getElementById('l-outbox').hidden = !showOutbox;
+    document.getElementById('w-outbox').hidden = !showOutbox;
+    document.getElementById('t-outbox').innerHTML = outbox ? '<tr><td>1</td><td>OrderPlaced' + pending + '</td><td>' + (published ? '보냄' : '비어 있음') + '</td></tr>' : empty;
+    var ghost = broker > 0 && rolled;
+    document.getElementById('t-broker').innerHTML = broker ? '<tr class="' + (ghost ? 'bad' : '') + '"><td>1</td><td>OrderPlaced {orderId: 1}</td></tr>' : empty;
+    var v = '';
+    if (idx === st.length - 1) {
+      if (ghost) v = '유령 메시지: 주문은 없는데 배송팀은 메시지를 받았어요.';
+      else if (committed && order && !broker) v = '메시지 유실: 주문은 확정됐는데 아무도 몰라요.';
+      else if (!order && !broker) v = method === 'direct' && incident === 'down' ? '어긋나지는 않았지만, 브로커 장애 때문에 주문까지 받지 못했어요.' : '일치: 주문도 메시지도 없어요.';
+      else v = '일치: 주문 1건, 메시지 1개.' + (method === 'outbox' && incident === 'down' ? ' 브로커가 죽어 있는 동안에도 주문은 받았어요.' : '');
+    }
+    document.getElementById('sim-verdict').textContent = v;
+    document.getElementById('s-next').disabled = idx >= st.length - 1;
+  }
+  function reset() { idx = -1; render(); }
+  document.getElementById('s-next').addEventListener('click', function () { if (idx < steps().length - 1) { idx++; render(); } });
+  document.getElementById('s-all').addEventListener('click', function () { idx = steps().length - 1; render(); });
+  document.getElementById('s-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('method'), function (v) { method = v; reset(); });
+  pressGroup(document.getElementById('incident'), function (v) { incident = v; reset(); });
+  reset();
+
+  /* 7. 확인 문제 */
+  var quiz = [
+    { q: '@TransactionalEventListener(AFTER_COMMIT)로 메시지를 보낼 때 남는 문제는?', o: ['롤백돼도 메시지가 나간다', '커밋 후 보내기가 실패하면 메시지를 잃는다', '같은 메시지가 항상 두 번 나간다'], a: 1, e: '롤백되면 리스너가 실행되지 않아 유령 메시지는 막지만, 커밋이 끝난 뒤 실패하면 다시 보낼 기록이 없어요.' },
+    { q: '아웃박스 패턴이 메시지 유실을 막는 핵심 이유는?', o: ['브로커가 트랜잭션을 지원해서', '메시지를 업무 데이터와 같은 트랜잭션으로 DB에 기록해서', '릴레이가 메시지를 한 번만 보내서'], a: 1, e: '주문과 아웃박스 행이 함께 커밋되니, 주문이 있으면 보낼 기록도 반드시 있어요.' },
+    { q: '릴레이가 브로커로 보낸 직후, published_at을 적기 전에 죽었다. 재시작하면?', o: ['메시지를 잃는다', '같은 메시지를 다시 보낸다', '자동으로 중복이 걸러진다'], a: 1, e: '표시가 없으니 안 보낸 행으로 보고 다시 보내요. 그래서 받는 쪽이 event_id로 중복을 걸러야 해요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('ob-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('ob-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
