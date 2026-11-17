@@ -1,0 +1,117 @@
+# 재고 차감 동시성 (DB 락 vs Redis) 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: stock-concurrency
+  title: 재고 차감 동시성 (DB 락 vs Redis)
+  unit: 동시성·분산
+  order: 26
+concepts:
+  - key: core
+    name: 재고 차감 동시성 (DB 락 vs Redis)
+questions:
+  - key: q-a1873582
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: "\"읽고 확인하고 줄여 저장\"하는 재고 차감에서 초과 판매가 생기는 이유를 설명해 보세요"
+    explanation: |-
+      - 두 주문이 같은 값을 읽고 둘 다 확인을 통과해 같은 값을 쓴다(갱신 손실)
+      - 검증: InventoryConcurrencyTest (readModifyWriteOversells)
+    checklist:
+      - 읽기·확인·쓰기가 나뉘어 틈이 있다고 말했다
+      - 두 주문이 같은 값을 읽는다고 말했다
+      - 한 번의 차감이 사라진다(갱신 손실)고 말했다
+      - 재고 숫자는 멀쩡해 보여도 주문 수가 많다고 말했다
+      - 막는 방법(조건부 UPDATE 등)을 하나 이상 말했다
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: q-8db20882
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 재고 차감에서 조건부 UPDATE, 비관적 락, 낙관적 락, Redis Lua를 비교해 보세요
+    explanation: |-
+      - 조건부 UPDATE: 한 문장, 단순. 비관적 락: 잠금·대기. 낙관적 락: 충돌 시 실패, 재시도 필요. Redis Lua: 메모리에서 빠르게 거름, DB와 정합성 관리 필요
+      - 검증: InventoryConcurrencyTest
+    checklist:
+      - 조건부 UPDATE는 확인과 차감이 한 문장이라고 말했다
+      - 비관적 락은 인기 상품에서 대기가 길다고 말했다
+      - 낙관적 락은 경합이 심하면 재고가 있어도 실패한다고 말했다
+      - Redis Lua는 확인과 차감을 한 번에 실행한다고 말했다
+      - Redis와 DB의 정합성(복원, 대사)을 말했다
+    source: https://redis.io/docs/latest/develop/programmability/eval-intro/
+  - key: q-d0759c2c
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 선착순 이벤트에서 Redis로 재고를 먼저 차감하고 DB에 주문을 저장하는데, DB 저장이 실패했습니다. 어떻게 대비하나요?
+    explanation: "- Redis와 DB는 한 트랜잭션이 아니다. 실패 시 INCR로 되돌리고, 주기적으로 맞춰 본다"
+    checklist:
+      - Redis와 DB가 한 트랜잭션으로 묶이지 않는다고 말했다
+      - 저장 실패 시 INCR로 재고를 되돌린다고 말했다
+      - 되돌리기도 실패할 수 있어 주기적으로 DB 주문 수와 맞춰 본다(대사)고 말했다
+      - 재고 원본은 DB에 둔다고 말했다
+      - 같은 주문 재시도는 멱등 키로 막는다고 말했다
+    source: https://redis.io/docs/latest/commands/decr/
+  - key: q-91fa040e
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 재고 50개에 동시 주문 100건. "읽고 확인하고 줄여 저장"(락 없음)으로 처리하면 성공은 항상 정확히 50건이다
+    answer: X
+    explanation: |-
+      - 갱신 손실로 50건보다 많이 성공한다 (CI 실측: 100건 성공, 재고 39 남음)
+      - 검증: InventoryConcurrencyTest (readModifyWriteOversells)
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: q-6b1eaa3b
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: Redis에 stock=50을 넣고 DECR을 동시에 100번 하면 최종 값은?
+    choices:
+      - "0"
+      - "-50"
+      - 실행마다 다르다
+    answer: "2"
+    explanation: |-
+      - DECR은 원자적이라 잃어버리는 차감은 없지만 0에서 멈추지 않는다
+      - 검증: InventoryConcurrencyTest (redisDecrGoesNegative)
+    source: https://redis.io/docs/latest/commands/decr/
+  - key: q-6bd16c1c
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 낙관적 락(@Version, 재시도 없음)으로 재고 50개에 동시 주문 100건을 처리하면?
+    choices:
+      - 초과 판매
+      - 정확히 50건 성공
+      - 초과 판매는 없지만 재고가 남아도 충돌로 실패하는 주문이 생긴다
+    answer: "3"
+    explanation: |-
+      - 같은 버전을 읽은 주문 중 하나만 성공한다 (CI 실측: 성공 19, 충돌 81, 재고 31)
+      - 검증: InventoryConcurrencyTest (optimisticLockFailsUnderContention)
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: q-4d1b09d2
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 초과 판매를 막는 SQL은?
+    choices:
+      - UPDATE item SET quantity = ? WHERE id = ?
+      - UPDATE item SET quantity = quantity - 1 WHERE id = ?
+      - UPDATE item SET quantity = quantity - 1 WHERE id = ? AND quantity >= 1
+    answer: "3"
+    explanation: |-
+      - (1)은 읽은 값으로 덮어써 갱신 손실, (2)는 음수까지 내려간다. (3)은 확인과 차감이 한 문장이고, 바뀐 행이 0이면 품절
+      - 검증: InventoryConcurrencyTest (conditionalUpdateIsExact)
+    source: https://www.postgresql.org/docs/16/sql-update.html

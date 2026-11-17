@@ -1,0 +1,133 @@
+# JPA 첫걸음 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: jpa-basics
+  title: JPA 첫걸음
+  unit: JPA
+  order: 4
+concepts:
+  - key: core
+    name: JPA 첫걸음
+questions:
+  - key: q-4ac3dd19
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: JPA, Hibernate, Spring Data JPA의 관계를 1분 안에 설명해 보세요
+    explanation: |-
+      - ORM: 객체와 테이블을 대응시켜 SQL과 변환을 대신해 주는 기술
+      - JPA: 자바 ORM의 표준 명세(인터페이스, 어노테이션)
+      - Hibernate: JPA 구현체. 실제로 SQL을 만들고 실행
+      - Spring Data JPA: 리포지토리 인터페이스만으로 CRUD와 쿼리 메서드를 만들어 주는 스프링 모듈
+    checklist:
+      - ORM을 설명했다
+      - JPA는 표준이라고 말했다
+      - Hibernate는 구현이라고 말했다
+      - Spring Data JPA의 리포지토리를 말했다
+      - 실제 SQL을 확인해야 한다고 말했다
+    source: https://jakarta.ee/specifications/persistence/3.1/
+  - key: q-0d18237c
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: JPQL과 SQL의 차이를 대상, 이름, 결과로 비교해 보세요
+    explanation: |-
+      - 대상: JPQL은 엔티티, SQL은 테이블
+      - 이름: JPQL은 클래스·필드 이름, SQL은 테이블·컬럼 이름 (@Column(name)으로 다를 수 있음)
+      - 결과: JPQL은 엔티티 객체, SQL은 행
+      - DB 종류: JPQL은 DB가 바뀌어도 같고 Hibernate가 DB에 맞는 SQL로 번역
+    checklist:
+      - 엔티티 vs 테이블
+      - 필드 vs 컬럼
+      - 객체 vs 행
+      - DB 독립성
+      - Hibernate가 번역한다
+    source: https://jakarta.ee/specifications/persistence/3.1/
+  - key: q-3f7cd520
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: "@Query로 쓴 쿼리에서 'could not resolve attribute menu_name' 오류가 났다. 원인과 고치는 법을 말해 보세요"
+    explanation: |-
+      - JPQL에 컬럼 이름(menu_name)을 썼다. JPQL은 필드 이름(name)을 쓴다
+      - 고치기: m.name으로. 꼭 SQL로 쓰려면 nativeQuery = true
+      - 확인: 엔티티의 @Column(name) 매핑을 본다
+    checklist:
+      - JPQL은 필드 이름이라고 말했다
+      - 컬럼 이름을 썼다고 진단했다
+      - "@Column 매핑을 확인한다고 말했다"
+      - 네이티브 쿼리 대안을 말했다
+      - 엔티티 이름도 같은 규칙이라고 말했다
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  - key: q-38ca9d4d
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"JPA는 SQL을 만들어 실행하는 라이브러리다\""
+    answer: X
+    explanation: |-
+      - JPA는 표준 명세(인터페이스와 어노테이션)다. SQL을 만들고 실행하는 건 구현체인 Hibernate
+      - 검증: JpaBasicsTest (hibernateIsTheImplementation)
+    source: https://jakarta.ee/specifications/persistence/3.1/
+  - key: q-06f9ff5f
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "@Column(name = \"menu_name\") private String name; 일 때 findByName(\"latte\")가 만드는 SQL의 WHERE는?"
+    choices:
+      - where name = ?
+      - where menu_name = ?
+      - where findByName = ?
+      - 오류
+    answer: "2"
+    explanation: |-
+      - 메서드 이름은 필드 이름(Name) 기준이고, SQL은 매핑된 컬럼 이름(menu_name)으로 나간다
+      - 검증: JpaBasicsTest (derivedQueries)
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  - key: q-c07519cf
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Spring Data JPA 리포지토리에 대한 설명으로 맞는 것은?
+    choices:
+      - 구현 클래스를 직접 만들어야 한다
+      - 인터페이스만 선언하면 스프링이 구현 객체를 만들어 빈으로 등록한다
+      - 메서드 이름은 아무렇게나 지어도 된다
+      - SQL만 쓸 수 있다
+    answer: "2"
+    explanation: |-
+      - JpaRepository를 상속한 인터페이스에 스프링이 프록시 구현을 만든다. 메서드 이름 규칙(findBy...)으로 쿼리가 만들어진다
+      - 검증: JpaBasicsTest (repositoryIsGenerated, derivedQueries)
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  - key: q-35f13412
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 22-A] 앱 시작 때 쿼리 검증 오류가 난다. 원인이 되는 줄은?"
+    code: |-
+      @Entity @Table(name = "cafe_menu")
+      public class CafeMenu {
+          @Column(name = "menu_name") private String name;
+          private int price;
+      }
+
+      public interface CafeMenuRepository extends JpaRepository<CafeMenu, Long> {
+          @Query("select m from cafe_menu m where m.price >= :min")
+          List<CafeMenu> findExpensive(@Param("min") int min);
+      }
+    answer: "8"
+    explanation: |-
+      - JPQL에 테이블 이름(cafe_menu)을 썼다. JPQL은 엔티티 이름 CafeMenu를 쓴다
+      - 검증: JpaBasicsTest (jpqlIsTranslated)
+    source: https://jakarta.ee/specifications/persistence/3.1/

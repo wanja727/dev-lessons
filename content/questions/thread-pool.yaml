@@ -1,0 +1,127 @@
+# 스레드 풀과 ExecutorService 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: thread-pool
+  title: 스레드 풀과 ExecutorService
+  unit: 동시성·분산
+  order: 6
+concepts:
+  - key: core
+    name: 스레드 풀과 ExecutorService
+questions:
+  - key: q-c3c0be3a
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 스레드 풀을 쓰는 이유와 ThreadPoolExecutor가 작업을 받는 순서를 설명해 보세요
+    explanation: |-
+      - 이유: 스레드 재사용(생성 비용), 동시 스레드 수와 대기 작업에 상한
+      - 순서: core보다 적으면 새 스레드 → 큐 → 큐가 가득 차면 max까지 → 거절 정책
+    checklist:
+      - 재사용과 상한 두 가지 이유를 말했다
+      - core까지는 새 스레드를 만든다고 말했다
+      - core가 차면 스레드보다 큐가 먼저라고 말했다
+      - 큐가 가득 차야 max까지 늘어난다고 말했다
+      - 거절 정책(AbortPolicy, CallerRunsPolicy)을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
+  - key: q-3f21c752
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: newFixedThreadPool과 newCachedThreadPool의 내부 설정과 각각의 위험을 비교해 보세요
+    explanation: |-
+      - fixed: core = max, 무제한 큐 → 작업이 쌓여 메모리·지연 증가, 거절 없음
+      - cached: core 0, max 무제한, 크기 0 큐(SynchronousQueue) → 쉬는 스레드가 없으면 작업마다 새 스레드, 스레드 폭증
+      - 운영에서는 큐 크기와 거절 정책을 직접 정한다
+    checklist:
+      - fixed의 무제한 큐를 말했다
+      - 그 위험(메모리, 지연)을 말했다
+      - cached의 무제한 스레드와 크기 0 큐를 말했다
+      - 그 위험(스레드 폭증)을 말했다
+      - 대안(제한된 큐 + 거절 정책)을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  - key: q-bb4a75e9
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: "@Async로 리포트를 만드는데 트래픽이 몰리자 리포트가 몇 분씩 늦게 나오고 메모리 사용량이 계속 오른다. 예상 원인과 개선 방법을 말해 보세요"
+    explanation: |-
+      - Spring Boot 기본 실행기는 core 8, 큐 무제한이라 max가 무시되고 작업이 큐에 쌓인다 → 대기 시간과 메모리 증가
+      - 개선: 리포트 전용 ThreadPoolTaskExecutor를 만들고 core/max/큐 크기/거절 정책을 정한다. 큐 길이·활성 스레드를 모니터링한다. 무거운 작업은 배치나 메시지 큐로 분리도 검토
+    checklist:
+      - 기본 실행기의 큐가 무제한이라고 말했다
+      - 그래서 스레드가 늘지 않고 작업이 쌓인다고 말했다
+      - 전용 실행기와 큐 크기·거절 정책을 말했다
+      - 모니터링(큐 길이 등)을 말했다
+      - 작업 분리(배치, 메시지 큐) 같은 다른 대안을 말했다
+    source: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
+  - key: q-6838ebeb
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: core 2, max 4, 큐 크기 2인 풀에 오래 걸리는 작업 7개를 연달아 넣으면?
+    choices:
+      - 스레드 4개, 큐 3개
+      - 스레드 4개, 큐 2개, 7번째는 RejectedExecutionException
+      - 스레드 2개, 큐 5개
+      - 스레드 7개
+    answer: "2"
+    explanation: |-
+      - 1·2번째: core 스레드, 3·4번째: 큐, 5·6번째: 큐가 가득 차서 max까지 스레드 추가, 7번째: 거절(기본 AbortPolicy)
+      - 검증: ThreadPoolTest (coreQueueMaxReject)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
+  - key: q-48a982e3
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"newFixedThreadPool(4)는 작업이 몰리면 RejectedExecutionException을 던져 과부하를 막는다\""
+    answer: X
+    explanation: |-
+      - 큐가 무제한(LinkedBlockingQueue)이라 거절되지 않고 큐에 계속 쌓인다
+      - 검증: ThreadPoolTest (fixedPoolUnboundedQueue)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  - key: q-f2b87f2d
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: pool.shutdown()을 부른 뒤 일어나는 일은?
+    choices:
+      - 실행 중인 작업을 즉시 인터럽트한다
+      - 큐에 남은 작업을 버리고 목록을 돌려준다
+      - 새 작업은 거절하고, 이미 받은 작업은 끝까지 처리한다
+      - 모든 작업이 끝날 때까지 호출한 스레드가 기다린다
+    answer: "3"
+    explanation: |-
+      - 1·2번은 shutdownNow(), 4번은 awaitTermination()이 하는 일이다. shutdown()은 기다리지 않고 바로 돌아온다
+      - 검증: ThreadPoolTest (shutdownFinishesAcceptedTasks, shutdownNowReturnsQueued)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  - key: q-f37cb0b2
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 5-A] 리포트 생성이 가끔 실패하는데 로그에 아무것도 남지 않는다. 원인이 되는 줄은?"
+    code: |-
+      ExecutorService pool = Executors.newFixedThreadPool(4);
+
+      public void requestReport(Long id) {
+          pool.submit(() -> reportService.generate(id));
+          log.info("리포트 요청 접수: {}", id);
+      }
+    answer: "4"
+    explanation: |-
+      - submit은 작업의 예외를 Future 안에 보관하는데, 돌려받은 Future를 버려서 아무도 get()을 부르지 않는다. 예외가 조용히 사라진다
+      - 고치기: 작업 안에서 try-catch로 기록하거나, 결과가 필요 없으면 execute를 쓰고 UncaughtExceptionHandler로 기록
+      - 1번 줄(무제한 큐)은 다른 문제를 만들 수 있지만 "로그 없는 실패"의 원인은 아니다
+      - 검증: ThreadPoolTest (executeVsSubmitExceptions)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html

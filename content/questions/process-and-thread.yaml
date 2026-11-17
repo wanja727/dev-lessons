@@ -1,0 +1,137 @@
+# 프로세스와 스레드 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: process-and-thread
+  title: 프로세스와 스레드
+  unit: 운영체제
+  order: 5
+concepts:
+  - key: core
+    name: 프로세스와 스레드
+questions:
+  - key: q-91178545
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 프로세스와 스레드의 차이를 1분 안에 설명해 보세요
+    explanation: |-
+      - 프로세스: 운영체제로부터 독립된 메모리 공간을 받아 실행 중인 프로그램. 스레드: 프로세스 안의 실행 흐름
+      - 스레드끼리 코드·데이터·힙 공유, 스택·레지스터는 각자
+      - 스레드는 생성·전환 비용이 작고 공유가 쉽지만 경쟁 상태와 동기화가 필요. 프로세스는 무겁고 IPC가 필요하지만 격리됨
+    checklist:
+      - 두 개념을 각각 정의했다 (독립된 메모리 / 프로세스 안의 실행 흐름)
+      - 스레드가 공유하는 것(힙 등)과 따로 갖는 것(스택)을 말했다
+      - 생성·컨텍스트 스위칭 비용 차이를 말했다
+      - 공유의 대가(경쟁 상태, 동기화)를 말했다
+      - 장애 격리나 IPC 같은 프로세스의 장점을 말했다
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+  - key: q-dcce1b73
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 멀티 프로세스와 멀티 스레드 구조의 장단점을 비교하고, 각각 언제 쓰는지 말해 보세요
+    explanation: |-
+      - 멀티 프로세스: 격리가 강해 하나가 죽어도 다른 것은 안전. 대신 메모리·생성 비용이 크고 데이터를 나누려면 IPC(소켓, DB 등)
+      - 멀티 스레드: 가볍고 데이터 공유가 쉬움. 대신 동기화가 필요하고 한 스레드의 문제가 전체에 영향
+      - 예: 웹 서버 한 대 안에서는 요청마다 스레드(톰캣 스레드 풀), 서버 여러 대는 프로세스를 나눠 확장·장애 격리
+    checklist:
+      - 멀티 프로세스의 장점으로 격리를 말했다
+      - 멀티 프로세스의 단점으로 비용과 IPC를 말했다
+      - 멀티 스레드의 장점으로 가벼움과 공유를 말했다
+      - 멀티 스레드의 단점으로 동기화와 장애 전파를 말했다
+      - 웹 서버 같은 실제 예시로 연결했다
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+  - key: q-e3f01b30
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: |-
+      [코드 3-B] [코드 3-A]의 쿠폰 컨트롤러에 요청이 몰리면 100장보다 많이 발급된다. 원인과 해결 방법을 서버 한 대일 때와 여러 대일 때로 나눠 말해 보세요
+
+      코드는 [코드 3-A]와 같다. 답하기 전에 확신도를 먼저 고르고, 소리 내서 답한다.
+    explanation: |-
+      - 원인: 컨트롤러는 싱글톤 빈이라 요청 스레드들이 issuedCount 필드를 함께 쓴다. "확인(>= 100) 후 증가"가 한 번에 일어나지 않아 여러 스레드가 동시에 99를 보고 통과하고, ++ 자체도 갱신 손실이 생긴다
+      - 서버 한 대: synchronized로 확인과 증가를 한 덩어리로, 또는 AtomicInteger의 compareAndSet 루프
+      - 서버 여러 대: 프로세스끼리 메모리를 공유하지 않으니 수량을 DB나 Redis로 옮기고 DB 락, 조건부 UPDATE(where count < 100), Redis 원자적 명령 등으로 처리
+    checklist:
+      - 싱글톤 빈의 필드를 요청 스레드들이 공유한다고 말했다
+      - 확인 후 증가(check-then-act)가 원자적이지 않다고 말했다
+      - 서버 한 대의 해결(synchronized, 원자적 연산)을 말했다
+      - 여러 대에서는 메모리 동기화가 통하지 않는 이유를 말했다
+      - DB나 Redis 기반 해결을 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: q-267487f0
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 같은 프로세스 안에서 스레드마다 따로 갖는 것은?
+    choices:
+      - new로 만든 객체(힙)
+      - static 변수
+      - 호출 스택과 레지스터(프로그램 카운터 포함)
+      - 프로세스가 연 파일
+    answer: "3"
+    explanation: |-
+      - 스레드마다 실행 위치(프로그램 카운터)와 호출 스택이 달라야 독립적으로 실행된다. 힙, static, 연 파일 같은 자원은 프로세스 단위로 공유된다
+      - 검증: ProcessAndThreadTest (threadsShareHeap)
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+  - key: q-ee2e606b
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"같은 프로그램을 자식 프로세스(새 JVM)로 실행해 static 변수를 바꾸면, 부모 프로세스에서도 바뀐 값이 보인다\""
+    answer: X
+    explanation: |-
+      - 프로세스는 메모리를 따로 갖는다. static 변수도 프로세스마다 따로다. 값을 나누려면 IPC(소켓, 파이프, 파일, DB 등)가 필요하다
+      - 검증: ProcessAndThreadTest (processesDoNotShareMemory)
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+  - key: q-0e38ff4c
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 3-A] 여러 요청 스레드가 동시에 issue()를 실행할 때 경쟁 상태가 생기는 줄을 모두 고르세요"
+    code: |-
+      @RestController
+      public class CouponController {
+          private int issuedCount = 0;
+
+          @PostMapping("/coupons")
+          public String issue() {
+              if (issuedCount >= 100) return "마감";
+              issuedCount++;
+              return "발급";
+          }
+      }
+    answer: 7, 8
+    explanation: |-
+      - 7→8: 확인과 증가 사이에 다른 스레드가 끼어들 수 있다(check-then-act). 8: ++ 자체가 읽기·더하기·쓰기 세 단계라 갱신 손실이 생긴다
+      - 3번 줄은 원인(공유되는 필드)이지만 경쟁이 일어나는 지점은 아니다
+      - 검증: 같은 원리를 ProcessAndThreadTest (unsynchronizedIncrementLosesUpdates)가 확인한다
+      - 이어서 [코드 3-B]를 푼다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: q-6935ab4d
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 두 대가 같은 쿠폰 수량(100장)을 나눠 발급한다. 수량을 정확하게 지키는 방법은?
+    choices:
+      - 각 서버의 수량 필드를 AtomicInteger로 바꾼다
+      - issue() 메서드에 synchronized를 붙인다
+      - 수량을 DB나 Redis에 두고 락이나 원자적 명령으로 차감한다
+      - static 변수로 바꿔 두 서버가 공유하게 한다
+    answer: "3"
+    explanation: |-
+      - 서버 두 대는 프로세스 두 개라 메모리를 공유하지 않는다. 1·2·4번은 모두 서버 한 대 안에서만 효과가 있다
+      - 검증: ProcessAndThreadTest (processesDoNotShareMemory)
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html

@@ -1,0 +1,130 @@
+# 트랜잭션 기초 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: tx-basics
+  title: 트랜잭션 기초
+  unit: DB
+  order: 1
+concepts:
+  - key: core
+    name: 트랜잭션 기초
+questions:
+  - key: q-d579776f
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: 트랜잭션이 무엇이고 왜 필요한지 계좌 이체 예로 1분 안에 설명해 보세요
+    explanation: |-
+      - 여러 SQL을 하나의 작업 단위로 묶어 전부 반영(커밋)되거나 전부 취소(롤백)되게 한다
+      - 이체는 입금과 출금 두 문장. 자동 커밋이면 둘째가 실패할 때 첫째만 남아 돈이 생기거나 사라짐
+      - 커밋 전 변경은 다른 연결에 보이지 않음
+      - 트랜잭션은 짧게, 롤백되지 않는 외부 작업은 밖에서
+    checklist:
+      - 전부 아니면 전무를 말했다
+      - 커밋과 롤백을 말했다
+      - 자동 커밋의 위험을 이체로 설명했다
+      - 커밋 전 변경이 남에게 안 보인다고 말했다
+      - 트랜잭션을 짧게 두는 이유를 말했다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-42215bc5
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: ACID 네 가지를 각각 한 문장으로 설명하고 예를 들어 보세요
+    explanation: |-
+      - 원자성: 전부 반영되거나 하나도 반영되지 않음 (이체 실패 시 입금도 취소)
+      - 일관성: 전후로 제약 조건이 지켜짐 (잔액 ≥ 0, 합계 유지)
+      - 격리성: 동시 트랜잭션이 서로의 중간 상태를 보지 않음 (커밋 전 변경은 안 보임)
+      - 지속성: 커밋된 내용은 장애 후에도 남음
+    checklist:
+      - 원자성
+      - 일관성
+      - 격리성
+      - 지속성
+      - 각각 예를 들었다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-2b51ba33
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: DB 툴로 운영 데이터를 고치다 WHERE 실수로 수천 건이 바뀌었다. 무엇이 문제였고 앞으로 어떻게 작업할지 말해 보세요
+    explanation: |-
+      - 툴의 자동 커밋이 켜져 있어 UPDATE가 바로 확정됨
+      - 앞으로: 자동 커밋 끄기, BEGIN 후 실행, 바뀐 건수 확인 후 COMMIT, 이상하면 ROLLBACK
+      - 실행 전 대상 건수 SELECT, 백업 (대량 DML 레슨)
+    checklist:
+      - 자동 커밋을 원인으로 짚었다
+      - BEGIN으로 시작한다고 말했다
+      - 건수를 확인하고 커밋한다고 말했다
+      - ROLLBACK을 말했다
+      - 사전 SELECT나 백업을 말했다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-5d541492
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"BEGIN 없이 보낸 UPDATE 두 줄 중 둘째가 실패하면 첫째도 자동으로 취소된다\""
+    answer: X
+    explanation: |-
+      - 자동 커밋이라 첫째 줄은 끝나자마자 확정됨. 결과 kim 50, lee 100 (없던 돈 100)
+      - 검증: TransactionBasicsTest (autoCommitLeavesHalfDone)
+    source: https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
+  - key: q-da4e5ee5
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 연결 A가 BEGIN 후 잔액을 999로 바꾸고 커밋하지 않았다. 연결 B가 같은 행을 읽으면? (처음 잔액 50)
+    choices:
+      - "999"
+      - "50"
+      - A가 커밋할 때까지 기다린다
+      - 오류
+    answer: "2"
+    explanation: |-
+      - 커밋 전 변경은 바꾼 연결에만 보인다. 읽기는 기다리지 않고 확정된 값을 본다
+      - 검증: TransactionBasicsTest (uncommittedChangesAreInvisible)
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-d4bf1495
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 롤백해도 되돌릴 수 없는 것은?
+    choices:
+      - 같은 트랜잭션의 INSERT
+      - 같은 트랜잭션의 DELETE
+      - 트랜잭션 안에서 보낸 이메일
+      - 같은 트랜잭션의 UPDATE
+    answer: "3"
+    explanation: |-
+      - 롤백은 DB 변경만 되돌린다. 외부로 나간 일은 커밋 뒤에 한다
+      - 검증: TransactionBasicsTest (rollbackUndoesEverything)
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-3bbb5c20
+    concept: core
+    type: line_pick
+    status: draft
+    difficulty: 2
+    body: "[코드 19-A] 이체가 실패했는데 lee의 잔액만 늘어났다. 원인이 되는 줄은?"
+    code: |-
+      @Service
+      public class TransferService {
+          public void transfer(long from, long to, int amount) {
+              jdbc.update("UPDATE account SET balance = balance + ? WHERE id = ?", amount, to);
+              jdbc.update("UPDATE account SET balance = balance - ? WHERE id = ?", amount, from);
+          }
+      }
+    answer: "3"
+    explanation: |-
+      - @Transactional이 없어 두 UPDATE가 각각 자동 커밋된다. 5번에서 잔액 부족으로 실패해도 4번은 이미 확정. 3번 줄 메서드에 @Transactional을 붙인다
+      - 검증: TransactionBasicsTest (autoCommitLeavesHalfDone, transactionRollsBackAll)
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html

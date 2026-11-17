@@ -1,0 +1,161 @@
+# JPA N+1 문제 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: jpa-n-plus-1
+  title: JPA N+1 문제
+  unit: JPA
+  order: 12
+concepts:
+  - key: core
+    name: JPA N+1 문제
+questions:
+  - key: q-59546d76
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 1
+    body: JPA에서 N+1 문제가 무엇이고 왜 생기는지 1분 안에 설명해 보세요
+    explanation: |-
+      - 목록을 조회하는 쿼리 1번 뒤에 연관 엔티티를 가져오는 쿼리가 결과 수(N)만큼 더 나가는 문제
+      - JPQL은 SQL로 그대로 번역되고 연관 로딩은 나중에 따로 일어난다. LAZY는 처음 접근할 때마다, EAGER는 조회 직후 엔티티마다 추가 쿼리를 낸다
+      - 해결: fetch join / @EntityGraph / 배치 페치 / DTO 조회
+    checklist:
+      - 목록 조회 1번 + 결과 수(N)만큼 추가 쿼리라고 정의했다
+      - 원인으로 JPQL 번역과 연관 로딩이 따로 일어난다고 말했다
+      - EAGER로 바꿔도 해결되지 않는다고 말했다
+      - 해결책을 2개 이상 이름과 함께 말했다
+      - 1분 안에 막힘없이 말했다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-19b3c76f
+    concept: core
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: |-
+      Team과 Member가 1:N(LAZY)일 때, teamRepository.findAll()로 팀 10개를 조회하고 각 팀의 members.size()를 호출했다. 쿼리는 몇 번 나가는가? 연관관계를 EAGER로 바꾸면?
+
+      보기 (LAZY일 때 / EAGER일 때):
+    choices:
+      - 1번 / 11번
+      - 11번 / 1번
+      - 11번 / 11번
+      - 2번 / 2번
+    answer: "3"
+    explanation: |-
+      - LAZY: 팀 조회 1번 + members에 처음 접근할 때마다 1번씩 10번 = **11번**
+      - EAGER: 여전히 **11번**. findAll()은 JPQL로 팀만 조회하고, 그 뒤 즉시 로딩을 위해 팀마다 추가 쿼리가 나간다. 차이는 쿼리가 나가는 시점(조회 직후)뿐
+      - 검수 포인트: SQL 로그를 켜고 직접 세어 보면 가장 확실하다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-1935250f
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"연관관계를 EAGER로 바꾸면 N+1 문제가 해결된다\""
+    answer: X
+    explanation: |-
+      - **X.** JPQL 조회에서는 EAGER여도 추가 쿼리가 나간다. 시점만 앞당겨질 뿐이다
+      - 오히려 필요 없는 연관까지 항상 읽어오고, 예상하지 못한 쿼리가 생긴다. 그래서 실무에서는 모두 LAZY로 두고, 필요한 곳만 fetch join이나 배치 페치를 쓴다
+      - 참고: @ManyToOne·@OneToOne은 JPA 기본값이 EAGER라 명시적으로 LAZY를 적는다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-9d00afca
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: N+1 해결책인 fetch join, @EntityGraph, 배치 페치(default_batch_fetch_size)를 비교하고 각각 언제 쓰는지 말해 보세요
+    explanation: |-
+      | | 방식 | 장점 | 한계 |
+      | --- | --- | --- | --- |
+      | fetch join | JPQL에 join fetch | 쿼리 1번 | 컬렉션 + 페이징 불가(메모리 페이징), List 컬렉션 2개 동시 불가 |
+      | @EntityGraph | 리포지토리 메서드에 선언 | 쿼리를 직접 안 써도 됨 | fetch join(left outer join)과 같은 한계 |
+      | 배치 페치 | LAZY 유지, IN 절로 묶어 조회 | 페이징과 같이 씁, 설정 하나로 전체 적용 | 쿼리가 1번으로는 안 줌(1 + N/배치 크기) |
+
+      - 선택 기준: ToOne은 fetch join, 컬렉션 + 페이징은 배치 페치, 화면 전용 조회는 DTO
+    checklist:
+      - fetch join은 join으로 쿼리 1번에 가져온다고 말했다
+      - "@EntityGraph는 선언형 fetch join이라 한계도 같다고 말했다"
+      - 배치 페치는 IN 절로 묶어 1 + N/배치 크기가 된다고 말했다
+      - 컬렉션 fetch join은 페이징 불가, 배치 페치는 가능하다고 말했다
+      - 상황별 선택 기준(ToOne은 fetch join, 컬렉션 + 페이징은 배치 페치)을 말했다
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  - key: q-73be0dc3
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 팀 목록 화면에 페이징(20개씩)을 넣으면서 각 팀의 멤버도 함께 보여줘야 한다. "select t from Team t join fetch t.members"에 페이징을 걸면 어떻게 되고, 어떻게 고치겠는가?
+    explanation: |-
+      - **무슨 일이 생기나:** 컬렉션을 fetch join하면 팀 하나가 멤버 수만큼 여러 행으로 늘어나서, DB에서 행 단위로 자르면 팀 20개가 되지 않는다. 그래서 Hibernate는 경고를 내고 **전체 결과를 메모리로 가져와 페이징**한다. 데이터가 많으면 메모리 부족으로 장애가 난다
+      - **고치는 방법:** fetch join을 빼고 팀만 페이징해서 조회 → members는 배치 페치(default_batch_fetch_size 예: 100)로 IN 쿼리 1번에 가져온다. 총 쿼리 2번(팀 페이지 + 멤버)
+      - 대안: 팀 id만 페이징으로 먼저 조회하고, 그 id들로 멤버를 따로 조회해 조립
+    checklist:
+      - join 결과가 멤버 단위 행이라 DB에서 자르면 팀이 잘린다고 말했다
+      - Hibernate가 경고를 남기고 메모리에서 페이징한다고 말했다
+      - 데이터가 많으면 메모리 부족 위험이 있다고 말했다
+      - 팀만 페이징 조회 + 멤버는 배치 페치로 고친다고 말했다
+      - 고친 뒤 쿼리 수(2번)를 말했다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-a42bb6e5
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: LAZY, default_batch_fetch_size = 100일 때 팀 250개를 조회하고 모든 팀의 멤버에 접근했다. 쿼리는 모두 몇 번인가?
+    choices:
+      - 1번
+      - 3번
+      - 4번
+      - 251번
+    answer: "3"
+    explanation: |-
+      - 팀 목록 1번 + 멤버를 100팀씩 IN 절로 묶어 3번(100, 100, 50) = 4번
+      - 오답 해설: 251번은 배치 페치가 없을 때(1 + N), 3번은 처음 팀 목록 조회를 빠뜨린 경우
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-ece217e3
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 팀 목록을 20개씩 페이징하면서 각 팀의 멤버도 함께 보여줘야 한다. 가장 적절한 방법은?
+    choices:
+      - Team에서 members를 fetch join하고 페이징한다
+      - "@EntityGraph(attributePaths = \"members\")를 붙이고 페이징한다"
+      - 팀만 페이징으로 조회하고, 멤버는 배치 페치로 가져온다
+      - members를 EAGER로 바꾼다
+    answer: "3"
+    explanation: |-
+      - 팀 페이지 조회 1번 + 멤버 IN 조회 1번 = 2번으로 정확하게 끝난다
+      - 1·2번: 컬렉션 fetch join에 페이징을 걸면 Hibernate가 메모리에서 페이징한다(@EntityGraph도 내부는 fetch join)
+      - 4번: 쿼리 수가 줄지 않고(1 + 20) 항상 불필요하게 로딩한다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: q-c84ddabc
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"@EntityGraph를 쓰면 fetch join과 달리 컬렉션을 함께 조회해도 SQL 페이징이 안전하게 적용된다\""
+    answer: X
+    explanation: "- @EntityGraph는 선언형 fetch join(left outer join)이라 한계도 같다. 컬렉션을 함께 조회하며 페이징하면 메모리 페이징이 된다"
+    source: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  - key: q-0dd7b6b4
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 3
+    body: Member→Team이 @ManyToOne(LAZY)일 때, 멤버 목록을 20개씩 페이징하며 member.getTeam().getName()도 보여줘야 한다. 페이징을 안전하게 쓰면서 쿼리 1번으로 끝내는 방법은?
+    choices:
+      - Member에서 team을 fetch join하고 페이징한다
+      - Team에서 members를 fetch join하고 페이징한다
+      - team을 EAGER로 바꾼다
+      - 아무것도 하지 않아도 쿼리 1번이다
+    answer: "1"
+    explanation: |-
+      - ToOne 관계는 join해도 행이 늘어나지 않아서(멤버 1명 = 행 1개) fetch join과 SQL 페이징을 같이 써도 안전하다
+      - 2번: 컬렉션 fetch join + 페이징은 메모리 페이징. 3번: 쿼리 수가 줄지 않는다. 4번: 멤버마다(서로 다른 팀마다) 추가 쿼리가 나간다
+      - 핵심: "페이징 + fetch join"은 ToOne에서는 되고 컬렉션에서는 안 된다
+    source: https://docs.jboss.org/hibernate/orm/6.4/userguide/html_single/Hibernate_User_Guide.html#fetching

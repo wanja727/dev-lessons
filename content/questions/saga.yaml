@@ -1,0 +1,115 @@
+# 분산 트랜잭션과 사가 문제
+# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: saga
+  title: 분산 트랜잭션과 사가
+  unit: 동시성·분산
+  order: 25
+concepts:
+  - key: core
+    name: 분산 트랜잭션과 사가
+questions:
+  - key: q-0e7cb652
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 사가 패턴이 무엇이고, 보상 트랜잭션이 롤백과 어떻게 다른지 설명해 보세요
+    explanation: |-
+      - 사가: 로컬 트랜잭션을 차례로 실행하고, 실패하면 성공한 단계의 보상을 역순으로 실행
+      - 보상: 반대 동작을 새로 실행해 기록이 남는다(REFUNDED). 롤백은 흔적 없이 지운다
+    checklist:
+      - 로컬 트랜잭션 여러 개로 나눈다고 말했다
+      - 실패 시 성공한 단계만 보상한다고 말했다
+      - 보상은 역순이라고 말했다
+      - 보상은 새 동작이라 기록이 남는다고 말했다
+      - 예시(결제 → 환불, 주문 → 취소)를 들었다
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-f1c05adf
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 오케스트레이션 사가와 코레오그래피 사가를 비교하고, 각각 어떤 상황에 맞는지 말해 보세요
+    explanation: |-
+      - 오케스트레이션: 지휘자가 순서·보상 결정. 흐름이 한 곳, 단계 많을 때. 로직이 지휘자에 몰림
+      - 코레오그래피: 이벤트로 이어짐. 결합 느슨, 단계 적을 때. 흐름 파악·디버깅 어려움
+    checklist:
+      - 누가 순서를 정하는지로 구분했다
+      - 오케스트레이션의 장점(흐름 가시성)을 말했다
+      - 코레오그래피의 장점(느슨한 결합)을 말했다
+      - 코레오그래피의 단점(흐름이 흩어짐)을 말했다
+      - 단계 수·변경 빈도로 선택 기준을 말했다
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-e9c3c690
+    concept: core
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 사가로 주문을 처리하는데, 결제 승인 뒤 재고 차감 전에 고객이 결제 내역을 열었습니다. 어떤 문제가 있고 어떻게 다루나요?
+    explanation: |-
+      - 사가는 격리가 없어 곧 환불될 결제가 CHARGED로 보인다
+      - 검증: SagaTest (sagaHasNoIsolation)
+    checklist:
+      - 각 단계가 바로 커밋돼 중간 상태가 보인다고 말했다
+      - 사가에는 격리가 없다고 말했다
+      - PENDING 같은 상태로 "확정 아님"을 드러낸다고 말했다
+      - 다른 기능이 PENDING을 건드리지 않게 한다고 말했다
+      - 보상이 재시도될 수 있으니 멱등해야 한다고 말했다
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-8e83239b
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 사가에서 1. 주문 생성 2. 결제 승인 3. 재고 차감 중 3단계가 실패했다. 보상 순서는?
+    choices:
+      - 주문 취소 → 환불
+      - 환불 → 주문 취소
+      - 재고 복원만
+    answer: "2"
+    explanation: |-
+      - 성공한 단계를 역순으로 보상한다. 3단계는 커밋되지 않아 보상할 것이 없다
+      - 검증: SagaTest (orchestrationCompensatesInReverse)
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-0daf7f0e
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 사가의 환불 보상이 실행되면 결제 행은 삭제된다
+    answer: X
+    explanation: |-
+      - 보상은 반대 동작을 새로 실행한다. 결제 행은 REFUNDED 상태로 남는다
+      - 검증: SagaTest (orchestrationCompensatesInReverse)
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-30bb65a0
+    concept: core
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 환불 보상 SQL로 맞는 것은?
+    choices:
+      - UPDATE payment SET status='REFUNDED' WHERE order_id=?
+      - UPDATE payment SET status='REFUNDED' WHERE order_id=? AND status='CHARGED'
+      - DELETE FROM payment WHERE order_id=?
+    answer: "2"
+    explanation: |-
+      - 상태 조건이 있어야 두 번 불려도 두 번째는 0행이 바뀌어 멱등하다. (1)은 실제 환불 API와 함께 쓰면 두 번 환불할 수 있고, (3)은 기록을 지운다
+      - 검증: SagaTest (compensationIsIdempotent)
+    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
+  - key: q-a0597a60
+    concept: core
+    type: ox
+    status: draft
+    difficulty: 2
+    body: 2PC는 원자성을 보장하지 못해서 마이크로서비스에서 잘 쓰지 않는다
+    answer: X
+    explanation: |-
+      - 2PC는 원자성을 보장한다. 문제는 준비와 커밋 사이의 락 대기, 조정자 장애, 브로커·외부 API 미지원이다
+      - PostgreSQL은 기본 설정에서 max_prepared_transactions = 0 (SagaTest.twoPhaseCommitIsOffByDefault)
+    source: https://www.postgresql.org/docs/16/sql-prepare-transaction.html
