@@ -1,0 +1,343 @@
+---
+import Base from '../../layouts/Base.astro';
+import CiOutput from '../../components/CiOutput.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+
+const repo = 'https://github.com/wanja727/dev-lessons';
+const test = `${repo}/blob/main/verification/src/test/java/lab/devlessons/resilience/ResilienceTest.java`;
+
+const codePredict = `// 요청 스레드 10개인 서버. 결제 API(PG사)가 갑자기 3초씩 걸린다
+HttpRequest req = HttpRequest.newBuilder(URI.create(pgUrl))
+        .POST(body)
+        .build();                    // 타임아웃 설정 없음
+http.send(req, BodyHandlers.ofString());`;
+
+const codeTimeout = `HttpRequest req = HttpRequest.newBuilder(URI.create(pgUrl))
+        .timeout(Duration.ofMillis(300))   // 응답을 300ms까지만 기다린다
+        .header("Idempotency-Key", key)    // 재시도해도 같은 키
+        .POST(body)
+        .build();`;
+
+const codeRetry = `Retry retry = Retry.of("pg", RetryConfig.custom()
+        .maxAttempts(4)                                            // 처음 1번 + 재시도 3번
+        .intervalFunction(IntervalFunction.ofExponentialBackoff(
+                Duration.ofMillis(100), 2.0))                      // 100 → 200 → 400ms
+        .build());
+Retry.decorateRunnable(retry, () -> pay(key)).run();`;
+
+const codeCircuit = `CircuitBreaker cb = CircuitBreaker.of("pg", CircuitBreakerConfig.custom()
+        .slidingWindowSize(10)                       // 최근 10번 호출을 보고
+        .failureRateThreshold(50)                    // 실패율 50% 이상이면 연다
+        .waitDurationInOpenState(Duration.ofSeconds(30))   // 30초 동안 바로 거절
+        .permittedNumberOfCallsInHalfOpenState(2)    // 그 뒤 시험 호출 2번
+        .build());
+Runnable call = CircuitBreaker.decorateRunnable(cb, () -> pay(key));`;
+---
+<Base title="외부 API 타임아웃, 재시도, 서킷 브레이커 · Dev Lessons" description="외부 API가 느려질 때 우리 서버까지 멈추는 이유와 막는 법. 타임아웃, 멱등 키를 곁들인 재시도와 지수 백오프, 서킷 브레이커를 진짜 HTTP 서버로 재현하며 배워요.">
+<main>
+  <header class="top">
+    <a class="back" href="/dev-lessons/">← 레슨 목록</a>
+    <p class="eyebrow">Spring · 개념 학습 · 약 35분 · 선수 레슨: <a href="/dev-lessons/lessons/idempotency/">멱등성</a>, <a href="/dev-lessons/lessons/thread-pool/">스레드 풀과 ExecutorService</a></p>
+    <h1>외부 API 타임아웃, 재시도, 서킷 브레이커</h1>
+    <p class="lede">결제 대행사(PG사)가 느려졌을 뿐인데, 우리 쇼핑몰은 상품 목록까지 안 열려요. 남의 장애가 내 장애로 번지는 이유와, 그걸 막는 세 가지 장치를 진짜 HTTP 서버로 재현하며 배워요.</p>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 스레드 풀이 정해진 수의 스레드로 작업을 처리한다는 것(<a href="/dev-lessons/lessons/thread-pool/">스레드 풀</a>), 멱등 키(<a href="/dev-lessons/lessons/idempotency/">멱등성</a>), HTTP 요청과 응답, 상태 코드 200과 500.</p>
+    <nav class="toc" aria-label="목차">
+      <a href="#predict"><span>0</span>먼저 예측</a>
+      <a href="#timeout"><span>1</span>타임아웃</a>
+      <a href="#retry"><span>2</span>재시도</a>
+      <a href="#sim"><span>3</span>서킷 브레이커</a>
+      <a href="#together"><span>4</span>함께 쓰기</a>
+      <a href="#choose"><span>5</span>함정과 기준</a>
+      <a href="#check"><span>6</span>확인과 면접 답변</a>
+    </nav>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">0 · 먼저 예측</p>
+    <h2>PG가 느려지면 상품 조회는?</h2>
+    <p>요청을 처리하는 스레드가 10개인 서버예요(스프링 부트의 톰캣도 정해진 수의 스레드로 요청을 처리해요). 결제 요청 10건이 들어와 PG를 기다리는 동안, PG와 상관없는 상품 조회 요청이 들어왔어요.</p>
+    <pre set:text={codePredict} />
+    <div class="panel">
+      <div class="field">
+        <span class="label">내 예측: 상품 조회는</span>
+        <div class="choice-row" id="p1">
+          <button class="chip" type="button" data-v="fast" aria-pressed="false">PG와 상관없으니 바로 응답</button>
+          <button class="chip" type="button" data-v="slow" aria-pressed="false">3초 가까이 기다린다</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">확신도</span>
+        <div class="choice-row" id="p2">
+          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
+          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
+          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
+        </div>
+      </div>
+      <p class="muted" id="predict-msg">고르면 1장에서 실제 결과로 확인할 수 있어요.</p>
+    </div>
+  </section>
+
+  <section id="timeout" class="read">
+    <p class="eyebrow">1 · 타임아웃</p>
+    <h2>기다리는 스레드는 일을 못 해요</h2>
+    <p>외부 API를 부른 스레드는 응답이 올 때까지 그 자리에서 멈춰 있어요. 스레드 10개가 모두 PG를 기다리면, 11번째 요청은 PG와 상관없어도 빈 스레드가 생길 때까지 줄을 서요. 이렇게 한 곳의 장애가 다른 곳으로 번지는 것을 <strong>장애 전파</strong>(cascading failure)라고 해요.</p>
+    <CiOutput lesson="resilience" key="thread-exhaustion" label="실제 결과 보기: 상품 조회가 기다린 시간" source="ResilienceTest.noTimeoutExhaustsThreads" />
+    <p>첫 번째 장치는 <strong>타임아웃</strong>(timeout)이에요. "이 시간까지만 기다린다"를 정해 두면 스레드가 그 시간 뒤엔 풀려나요.</p>
+    <pre set:text={codeTimeout} />
+    <div class="callout warn"><strong>타임아웃은 "실패"가 아니라 "모름"이에요.</strong> 우리가 기다리기를 그만둔 것일 뿐, PG는 결제를 이미 처리했을 수 있어요. 테스트에서도 타임아웃 난 요청의 결제가 PG 쪽에서는 처리돼 있었어요. 그래서 타임아웃 뒤의 행동(재시도, 상태 조회)이 중요해요.</div>
+    <details class="more"><summary>더 알아보기: 연결 타임아웃과 응답 타임아웃</summary>
+      <p>타임아웃은 보통 둘로 나눠요. <strong>연결 타임아웃</strong>은 상대 서버와 연결을 맺기까지(서버가 꺼졌거나 네트워크가 막혔을 때), <strong>응답(읽기) 타임아웃</strong>은 연결 뒤 응답을 받기까지예요. 연결은 짧게(1초 안팎), 응답은 상대 API의 평소 응답 시간을 보고 정해요. 스프링의 RestClient, WebClient도 각각 설정할 수 있어요.</p>
+    </details>
+  </section>
+
+  <section id="retry" class="read">
+    <p class="eyebrow">2 · 재시도</p>
+    <h2>다시 보내기 전에 멱등 키부터</h2>
+    <p>순간적인 네트워크 오류는 다시 보내면 성공하기도 해요. 그래서 실패하면 몇 번 더 보내는 <strong>재시도</strong>(retry)를 붙여요. 하지만 결제처럼 돈이 오가는 요청을 멱등 키 없이 재시도하면 위험해요. 타임아웃은 "모름"이니까요.</p>
+    <CiOutput lesson="resilience" key="retry-duplicate" label="실제 결과 보기: 멱등 키 없이 재시도" source="ResilienceTest.retryNeedsIdempotencyKey" />
+    <p>재시도 간격도 중요해요. 장애 중인 서버에 모든 클라이언트가 즉시 다시 보내면 장애가 더 길어져요. 간격을 1배, 2배, 4배로 늘리는 <strong>지수 백오프</strong>(exponential backoff)를 써요. 여러 서버가 같은 순간에 몰리지 않게 간격에 무작위 값(<strong>지터</strong>, jitter)을 더하기도 해요.</p>
+    <pre set:text={codeRetry} />
+    <CiOutput lesson="resilience" key="backoff" label="실제 결과 보기: 재시도 간격" source="ResilienceTest.exponentialBackoff" />
+    <p class="muted">위 코드는 회복성 라이브러리 Resilience4j 2.2의 Retry예요. 스프링에서는 어노테이션(<code>@Retry</code>, <code>@CircuitBreaker</code>)으로도 쓸 수 있어요.</p>
+  </section>
+
+  <section id="sim">
+    <div class="read stack">
+      <p class="eyebrow">3 · 서킷 브레이커</p>
+      <h2>계속 실패하면 아예 부르지 않기</h2>
+      <p>PG가 완전히 죽었다면 타임아웃과 재시도를 매번 기다리는 것도 낭비예요. <strong>서킷 브레이커</strong>(circuit breaker, 누전 차단기)는 최근 호출의 실패율을 보다가 기준을 넘으면 회로를 <strong>열어(OPEN)</strong>, 한동안 PG를 부르지 않고 바로 실패를 돌려줘요. 시간이 지나면 <strong>반열림(HALF_OPEN)</strong>으로 바꿔 시험 호출을 몇 번 보내고, 성공하면 다시 <strong>닫혀요(CLOSED)</strong>.</p>
+      <p>PG 상태를 바꿔 가며 호출해 보세요. 창 10번, 실패율 기준 50%, 열린 뒤 3번 호출 시간이 지나면 반열림, 시험 호출 2번이에요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">PG 상태</span>
+        <div class="seg" id="pg">
+          <button type="button" data-v="up" aria-pressed="true">정상</button>
+          <button type="button" data-v="down" aria-pressed="false">장애</button>
+        </div>
+      </div>
+      <div class="cb-grid">
+        <div class="pane">
+          <span class="label">회로 상태</span>
+          <div class="cb-state" id="cb-state">CLOSED</div>
+          <span class="label">최근 호출 (최대 10번)</span>
+          <div class="lane" id="cb-window"></div>
+          <p class="muted" id="cb-rate">실패율: -</p>
+        </div>
+        <div class="pane">
+          <span class="label">호출 기록</span>
+          <ol class="path-steps" id="cb-log"></ol>
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn primary" type="button" id="cb-call">호출 1번</button>
+        <button class="btn" type="button" id="cb-call5">5번</button>
+        <button class="btn" type="button" id="cb-wait">시간 흐르기</button>
+        <button class="btn" type="button" id="cb-reset">처음으로</button>
+      </div>
+    </div>
+    <div class="read stack">
+      <pre set:text={codeCircuit} />
+      <p>실제 Resilience4j로 PG 오류 10번을 낸 뒤의 상태 변화예요. 열린 동안의 호출은 PG에 요청이 가지 않아 마이크로초 단위로 끝나요.</p>
+      <CiOutput lesson="resilience" key="circuit" label="실제 결과 보기: 서킷 브레이커 상태 변화" source="ResilienceTest.circuitBreakerOpensAndCloses" />
+    </div>
+  </section>
+
+  <section id="together" class="read">
+    <p class="eyebrow">4 · 함께 쓰기</p>
+    <h2>세 장치는 역할이 달라요</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>장치</th><th>막는 것</th><th>혼자 쓰면 남는 문제</th></tr></thead>
+        <tbody>
+          <tr><td>타임아웃</td><td>느린 응답이 스레드를 오래 붙잡는 것</td><td>장애가 길면 매 요청이 타임아웃만큼 기다려요</td></tr>
+          <tr><td>재시도 + 백오프</td><td>순간적인 오류</td><td>멱등 키가 없으면 중복 처리, 장애 중엔 부하를 더해요</td></tr>
+          <tr><td>서킷 브레이커</td><td>죽은 서버를 계속 부르는 것</td><td>열린 동안 사용자는 실패를 받아요. 대체 응답(fallback)을 준비해요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>실무에서는 보통 <strong>서킷 브레이커가 바깥, 재시도가 안쪽</strong>이에요. 재시도까지 다 실패한 호출을 서킷 브레이커가 하나의 실패로 세요. 열린 동안에는 "결제가 지연되고 있어요, 잠시 후 다시 시도해 주세요" 같은 대체 응답을 줘요.</p>
+    <details class="more"><summary>더 알아보기: 벌크헤드</summary>
+      <p>PG 호출 전용 스레드 풀(또는 동시 호출 수 제한)을 따로 두면, PG가 느려져도 그 풀만 차고 상품 조회용 스레드는 남아요. 배의 격벽처럼 침수를 한 칸에 가두는 방식이라 <strong>벌크헤드</strong>(bulkhead)라고 해요. Resilience4j에 Bulkhead 모듈이 있어요.</p>
+    </details>
+  </section>
+
+  <section id="choose" class="read">
+    <p class="eyebrow">5 · 함정과 기준</p>
+    <h2>무엇을 재시도할까</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>상황</th><th>재시도?</th><th>이유</th></tr></thead>
+        <tbody>
+          <tr><td>연결 실패, 503, 타임아웃 + 멱등 키 있음</td><td>예 (백오프)</td><td>일시적일 수 있고, 같은 키라 중복이 안 생겨요</td></tr>
+          <tr><td>400, 401, 404 같은 4xx</td><td>아니요</td><td>요청 자체가 틀렸어요. 다시 보내도 같아요</td></tr>
+          <tr><td>멱등 키를 지원하지 않는 결제 API의 타임아웃</td><td>재시도 대신 상태 조회</td><td>처리됐는지 먼저 물어보고(거래 조회 API), 안 됐을 때만 다시 보내요</td></tr>
+          <tr><td>사용자가 기다리는 요청</td><td>짧게 1~2번</td><td>재시도 시간도 사용자의 대기 시간이에요</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>재시도 곱하기:</strong> A → B → C로 이어진 호출에서 층마다 3번씩 재시도하면 C는 최대 9배(3 x 3) 요청을 받아요. 재시도는 한 층에서만 해요.</li>
+      <li><strong>타임아웃 합계:</strong> 타임아웃 2초에 재시도 3번이면 사용자는 최대 8초 이상 기다려요. 전체 시간 예산을 먼저 정하고 나눠요.</li>
+    </ul>
+  </section>
+
+  <section id="check" class="read">
+    <p class="eyebrow">6 · 확인과 면접 답변</p>
+    <h2>방금 배운 걸 꺼내 보기</h2>
+    <p>다시 보지 말고 바로 답해 보세요.</p>
+    <div class="panel" id="quiz"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "외부 결제 API가 느려지거나 장애가 나면 어떻게 대응하나요?"</h3>
+    <p>정의 → 원리 → 트레이드오프 → 내 경험 순서로, 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
+    <label class="label" for="my-answer">내 답</label>
+    <textarea id="my-answer" placeholder="예: 먼저 타임아웃을 걸어서 ..."></textarea>
+    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        <dt>정의</dt><dd>외부 API의 장애가 우리 서버로 번지지 않게 타임아웃, 재시도, 서킷 브레이커를 함께 씁니다. 타임아웃이 없으면 느린 응답이 요청 스레드를 모두 붙잡아 상관없는 기능까지 멈춥니다.</dd>
+        <dt>원리</dt><dd>연결과 응답 타임아웃으로 기다리는 시간을 제한하고, 일시적 오류는 지수 백오프와 지터로 간격을 늘려 재시도합니다. 결제는 타임아웃이 실패가 아니라 결과를 모르는 상태라 멱등 키를 함께 보내거나 거래 상태를 조회한 뒤 재시도합니다. 실패율이 기준을 넘으면 서킷 브레이커가 열려 호출하지 않고 바로 대체 응답을 주고, 일정 시간 뒤 시험 호출로 복구를 확인합니다.</dd>
+        <dt>트레이드오프</dt><dd>타임아웃이 짧으면 정상 요청도 끊기고 길면 스레드가 묶입니다. 재시도는 부하와 중복을 늘릴 수 있어 4xx는 재시도하지 않고 한 층에서만 합니다. 서킷이 열린 동안 사용자는 실패를 받으므로 대체 흐름이 필요하고, PG 전용 스레드 풀(벌크헤드)로 영향을 가둘 수 있습니다.</dd>
+        <dt>경험</dt><dd>(내 경험으로 채우기) 예: 응답 3초인 가짜 PG로 타임아웃 없이 스레드 10개가 묶여 상품 조회가 3초 기다리는 것을 재현하고, 타임아웃 300ms로 줄였습니다. 멱등 키 없이 재시도하면 결제가 두 번 처리되는 것도 확인했습니다.</dd>
+      </dl>
+      <p class="muted">비교 포인트: 장애 전파와 스레드, 타임아웃 = 모름, 멱등 키 있는 재시도와 백오프, 서킷 브레이커의 세 상태를 말했나요?</p>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <p class="eyebrow">검증</p>
+    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
+    <p>이 레슨에서 말한 동작은 응답 지연과 실패를 바꿀 수 있는 진짜 HTTP 서버(가짜 PG사)를 띄우고, 자바 HttpClient와 Resilience4j 2.2로 코드가 바뀔 때마다 다시 확인해요.</p>
+    <ul>
+      <li>타임아웃이 없으면 PG 응답 3초 동안 요청 스레드 10개가 모두 묶여, 다른 요청이 2.5초 넘게 기다린다. 타임아웃 300ms면 1.5초 안</li>
+      <li>타임아웃이 난 요청도 PG 쪽에서는 결제가 처리돼 있다</li>
+      <li>멱등 키 없이 재시도하면 결제 2번, 같은 키로 재시도하면 1번</li>
+      <li>지수 백오프: 재시도 간격이 약 100, 200, 400ms</li>
+      <li>서킷 브레이커: 실패 10번에 OPEN, 열린 동안은 PG에 요청이 가지 않음, 대기 후 시험 호출 2번 성공에 CLOSED</li>
+    </ul>
+    <p class="muted">시뮬레이터는 "대기 시간" 대신 호출 횟수로 시간을 흉내 내요. 실제 Resilience4j는 시간(waitDurationInOpenState)으로 반열림을 정해요.</p>
+    <p><a href={test}>ResilienceTest</a></p>
+    <RunLocally tests={['lab.devlessons.resilience.ResilienceTest']} />
+  </section>
+
+  <footer>
+    근거: Resilience4j 문서(CircuitBreaker, Retry), Java 21 HttpRequest.Builder API 문서, Spring Framework REST 클라이언트 문서. 오류는 <a href={`${repo}/issues`}>GitHub 이슈</a>로 알려 주세요.
+  </footer>
+</main>
+</Base>
+
+<style is:global>
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .cb-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .pane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .cb-state { font-family: var(--font-mono); font-size: 28px; font-weight: 700; color: var(--ok); }
+  .cb-state.open { color: var(--query); }
+  .cb-state.half { color: var(--warn); }
+  .tick.ok { background: var(--ok); }
+  .tick.fail { background: var(--query); }
+  .path-steps { margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+  .path-steps li { color: var(--ink); }
+  #cb-log { list-style: none; padding-left: 0; }
+  .step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 760px) { .cb-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<script is:inline>
+(function () {
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function pressGroup(el, onPick) {
+    el.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b) return;
+      el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+  function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 0. 예측 */
+  var pred = { p1: store('rs-p1'), p2: store('rs-p2') };
+  function showPred() {
+    if (!pred.p1) return;
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'slow' ? '3초 가까이 기다린다' : '바로 응답') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "3초 가까이 기다린다"예요. 1장의 실제 결과를 확인해 보세요.';
+  }
+  ['p1', 'p2'].forEach(function (k) {
+    var el = document.getElementById(k);
+    if (pred[k]) setPressed(el, pred[k]);
+    pressGroup(el, function (v) { pred[k] = v; store('rs-' + k, v); showPred(); });
+  });
+  showPred();
+
+  /* 3. 서킷 브레이커 시뮬레이터 */
+  var WINDOW = 10, THRESHOLD = 50, OPEN_TICKS = 3, HALF_CALLS = 2;
+  var pgUp = true, state, win, log, openTicks, halfResults, n;
+  function reset() { state = 'CLOSED'; win = []; log = []; openTicks = 0; halfResults = []; n = 0; render(); }
+  function add(msg) { n++; log.unshift(n + '. ' + msg); }
+  function rate() { var f = win.filter(function (x) { return !x; }).length; return win.length ? Math.round(f * 100 / win.length) : 0; }
+  function call() {
+    if (state === 'OPEN') {
+      openTicks++;
+      if (openTicks > OPEN_TICKS) { state = 'HALF_OPEN'; halfResults = []; add('대기 시간이 지나 HALF_OPEN으로'); }
+      else { add('OPEN: PG를 부르지 않고 바로 거절 (대체 응답)'); return; }
+    }
+    var ok = pgUp;
+    if (state === 'HALF_OPEN') {
+      halfResults.push(ok);
+      add('시험 호출: ' + (ok ? '성공' : '실패'));
+      if (!ok) { state = 'OPEN'; openTicks = 0; add('시험 호출 실패 → 다시 OPEN'); return; }
+      if (halfResults.length >= HALF_CALLS) { state = 'CLOSED'; win = []; add('시험 호출 ' + HALF_CALLS + '번 성공 → CLOSED'); }
+      return;
+    }
+    win.push(ok); if (win.length > WINDOW) win.shift();
+    add('PG 호출: ' + (ok ? '성공' : '실패 (500)'));
+    if (win.length >= WINDOW && rate() >= THRESHOLD) { state = 'OPEN'; openTicks = 0; add('실패율 ' + rate() + '% ≥ ' + THRESHOLD + '% → OPEN'); }
+  }
+  function render() {
+    var s = document.getElementById('cb-state');
+    s.textContent = state; s.className = 'cb-state' + (state === 'OPEN' ? ' open' : state === 'HALF_OPEN' ? ' half' : '');
+    document.getElementById('cb-window').innerHTML = win.map(function (x) { return '<span class="tick ' + (x ? 'ok' : 'fail') + '" title="' + (x ? '성공' : '실패') + '"></span>'; }).join('') || '<span class="muted">아직 없음</span>';
+    document.getElementById('cb-rate').textContent = '실패율: ' + (win.length ? rate() + '% (' + win.length + '번 중)' : '-');
+    document.getElementById('cb-log').innerHTML = log.slice(0, 30).map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('');
+  }
+  document.getElementById('cb-call').addEventListener('click', function () { call(); render(); });
+  document.getElementById('cb-call5').addEventListener('click', function () { for (var i = 0; i < 5; i++) call(); render(); });
+  document.getElementById('cb-wait').addEventListener('click', function () {
+    if (state === 'OPEN') { openTicks = OPEN_TICKS; add('시간이 흘렀어요 (다음 호출 때 HALF_OPEN)'); } else { add('시간이 흘렀어요 (CLOSED에서는 변화 없음)'); }
+    render();
+  });
+  document.getElementById('cb-reset').addEventListener('click', reset);
+  pressGroup(document.getElementById('pg'), function (v) { pgUp = v === 'up'; add('PG 상태: ' + (pgUp ? '정상' : '장애')); render(); });
+  reset();
+
+  /* 6. 확인 문제 */
+  var quiz = [
+    { q: '결제 API 호출이 타임아웃 났다. 맞는 해석은?', o: ['결제는 실패했다', '결제가 처리됐는지 모른다', '결제는 성공했다'], a: 1, e: '우리가 기다리기를 그만둔 것뿐이에요. 멱등 키로 재시도하거나 거래 상태를 조회해요.' },
+    { q: '서킷 브레이커가 OPEN일 때 호출하면?', o: ['PG를 부르고 결과를 기다린다', 'PG를 부르지 않고 바로 실패(또는 대체 응답)를 돌려준다', '재시도를 3번 한다'], a: 1, e: '죽은 서버를 계속 부르지 않아 스레드와 시간을 아껴요. 대기 시간이 지나면 HALF_OPEN에서 시험 호출을 해요.' },
+    { q: '재시도하면 안 되는 응답은?', o: ['503 Service Unavailable', '연결 타임아웃 (멱등 키 있음)', '400 Bad Request'], a: 2, e: '4xx는 요청이 틀린 거라 다시 보내도 같아요.' }
+  ];
+  var qEl = document.getElementById('quiz');
+  quiz.forEach(function (item, qi) {
+    var box = document.createElement('div'); box.className = 'quiz';
+    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + esc(item.q) + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+    var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+    item.o.forEach(function (o, oi) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () {
+        opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var right = oi === item.a;
+        fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+      });
+      opts.appendChild(b);
+    });
+    qEl.appendChild(box);
+  });
+  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
+  var saved = store('rs-answer'); if (saved) ans.value = saved;
+  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
+  ans.addEventListener('input', function () { store('rs-answer', ans.value); syncBtn(); });
+  syncBtn();
+  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+})();
+</script>
