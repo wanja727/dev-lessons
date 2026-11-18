@@ -1,10 +1,10 @@
 # 문제 파일
 
-레슨마다 문제 파일 하나(`<레슨 slug>.yaml`). 학습 앱 [콕](https://github.com/wanja727/kok)이 시작할 때 이 파일들을 가져간다.
+레슨마다 문제 파일 하나(`<레슨 slug>.yaml`). 학습 앱 [Retrievo](https://github.com/wanja727/retrievo)가 시작할 때 이 파일들을 가져간다.
 
-- 형식: [콕의 문제 파일 형식](https://github.com/wanja727/kok/blob/main/docs/content-format.md)
-- 검사: PR마다 `Check questions` CI가 콕의 검사기로 형식을 확인한다. 직접 돌리려면 콕 저장소를 옆에 받고 `gradle -p ../kok/backend checkContent -PcontentDir=$PWD/content/questions`
-- 상태: 새 문제는 `draft`. 근거를 확인한 뒤 `reviewed`로 바꾸면 콕에 보인다
+- 형식: [Retrievo의 문제 파일 형식](https://github.com/wanja727/retrievo/blob/main/docs/content-format.md)
+- 검사: PR마다 `Check questions` CI가 Retrievo의 검사기로 형식을 확인한다. 직접 돌리려면 Retrievo 저장소를 옆에 받고 `gradle -p ../retrievo/backend checkContent -PcontentDir=$PWD/content/questions`
+- 상태: 새 문제는 `draft`. 근거를 확인한 뒤 `reviewed`로 바꾸면 Retrievo에 보인다
 - 키(`key`)는 한 번 정하면 바꾸지 않는다. 바꾸면 다른 문제로 보고 풀이 기록이 이어지지 않는다
 
 ## 노션에서 옮긴 문제 (2026-11-17)
