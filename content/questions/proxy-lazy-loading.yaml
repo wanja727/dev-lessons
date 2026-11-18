@@ -1,6 +1,6 @@
 # 프록시와 지연 로딩 문제
 # 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
-# 형식: https://github.com/wanja727/kok/blob/main/docs/content-format.md
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
 subject:
   key: dev
   name: 개발자 면접

@@ -35,13 +35,13 @@ PR마다 아래를 모두 확인한다.
 - 버전에 따라 달라지는 동작은 버전을 적는다 (예: Hibernate 6.6)
 - 확인하지 않은 내용은 단정하지 않는다 ("~하기도 해요")
 
-## 4. 문제 규칙 (`content/questions/<slug>.yaml`, 학습 앱 콕이 가져간다)
+## 4. 문제 규칙 (`content/questions/<slug>.yaml`, 학습 앱 Retrievo가 가져간다)
 
 - 레슨마다 **연습 3개 이상 + 판정 4개 이상**
 - 연습(설명형·비교형·상황형): 정답 토글 안에 체크리스트 4~5개. 4개 이상 정답 / 2~3개 부분 / 1개 이하 오답
 - 판정(객관식·OX·코드 예측·줄 고르기): 정답이 하나로 정해진다. D+3·D+7 지연 확인은 판정 문제 중 처음 풀지 않은 것으로 한다
-- 문제는 레슨마다 `content/questions/<slug>.yaml` 파일 하나에 둔다. 형식은 [콕의 문제 파일 형식](https://github.com/wanja727/kok/blob/main/docs/content-format.md)을 따르고, CI(`Check questions`)가 콕의 검사기로 확인한다
-- 새 문제는 `status: draft`로 넣고, 근거를 확인한 뒤 `reviewed`로 바꾼다. 콕은 `reviewed`만 보여준다. 문제 키(`key`)는 한 번 정하면 바꾸지 않는다
+- 문제는 레슨마다 `content/questions/<slug>.yaml` 파일 하나에 둔다. 형식은 [Retrievo의 문제 파일 형식](https://github.com/wanja727/retrievo/blob/main/docs/content-format.md)을 따르고, CI(`Check questions`)가 Retrievo의 검사기로 확인한다
+- 새 문제는 `status: draft`로 넣고, 근거를 확인한 뒤 `reviewed`로 바꾼다. Retrievo는 `reviewed`만 보여준다. 문제 키(`key`)는 한 번 정하면 바꾸지 않는다
 - 코드 문제(줄 고르기)는 `code`에 줄 번호 없이 코드를 넣고 정답을 줄 번호로 적는다(화면이 번호를 붙인다). 가능하면 "줄 고르기(판정) → 이유와 해결 말하기(연습)" 2단계로 묶는다
 - 문제의 정답이 동작에 관한 것이면 검증 테스트와 같은 시나리오를 쓴다
 
