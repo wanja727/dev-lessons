@@ -1,0 +1,66 @@
+/*
+ * 핵심 질문 구조 레슨의 공통 모양 (docs/lesson-standard.md 1장).
+ * 핵심 질문 목록, 장 첫머리의 결론, 코드 아래 설명, 진행 표시, 좁은 화면의 표, 보지 않고 답하기.
+ * 기준 레슨(jpa-n-plus-1)에서 뽑았다. 두 번째 레슨(tx-basics)부터 이 파일을 쓴다.
+ */
+/* 핵심 질문 목록, 장 첫머리의 결론, 보지 않고 답하기 */
+.goals { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: goal; }
+.goals li { counter-increment: goal; }
+.goals a {
+  display: grid; grid-template-columns: 2.2em 1fr; align-items: baseline; text-decoration: none; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-weight: 500;
+}
+.goals a::before { content: counter(goal); font-family: var(--font-mono); color: var(--accent); }
+.goals a:hover { border-color: var(--accent); }
+.answer { border-left: 4px solid var(--ink); background: var(--accent-soft); border-radius: 0 12px 12px 0; padding: 18px 22px 20px; }
+.answer .label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.answer .lead { font-size: 21px; font-weight: 700; line-height: 1.45; letter-spacing: -0.02em; text-wrap: balance; }
+.answer .sub { margin: 8px 0 0; font-size: 16px; line-height: 1.7; }
+.answer ul.sub { padding-left: 20px; }
+/* 코드 아래 설명: 표시한 부분이 무엇인지 */
+.code-note { list-style: none; margin: -6px 0 0; padding: 0 4px; display: flex; flex-direction: column; gap: 4px; font-size: 14.5px; color: var(--muted); }
+.code-note mark.hl { font-family: var(--font-mono); font-size: 0.9em; font-weight: 400; color: var(--ink); margin-right: 4px; }
+/* 진행 표시 */
+.progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: transparent; }
+.progress span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 0 3px 3px 0; }
+.where {
+  position: fixed; top: 12px; right: 12px; z-index: 20; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+  backdrop-filter: blur(6px);
+}
+/* 좁은 화면에서는 표를 카드로 쌓는다. 칸 이름은 data-label로 붙인다 */
+@media (max-width: 600px) {
+  .table-wrap table { min-width: 0; }
+  .table-wrap thead { display: none; }
+  .table-wrap tr { display: block; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+  .table-wrap td { display: block; border: 0; padding: 0; }
+  .table-wrap td:first-child { font-weight: 600; margin-bottom: 4px; }
+  .table-wrap td:not(:first-child) { color: var(--muted); font-size: 14.5px; }
+  .table-wrap td:not(:first-child)::before { content: attr(data-label) " "; font-weight: 600; margin-right: 4px; }
+  pre { font-size: 12px; padding: 14px 8px 14px 10px; }
+}
+/* 레슨 정보 */
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--muted); }
+.next { color: var(--muted); border-top: 1px dashed var(--line); padding-top: 14px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.phases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.phase { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.phase h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.phase h4 span { font-family: var(--font-mono); color: var(--ink); font-size: 15px; }
+.phase .log { max-height: 190px; }
+.recall { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.recall:first-child { border-top: 0; padding-top: 0; }
+.recall h3 { font-size: 17px; }
+.recall .model-a { background: var(--ok-soft); border-radius: 8px; padding: 12px 14px; }
+.recall .back-link { font-size: 14px; }
+@media (max-width: 760px) { .phases { grid-template-columns: minmax(0, 1fr); } }
+/* 두 칸 비교 상자: 내 작업과 확정된 DB처럼 나란히 놓고 볼 때 */
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.duo .cell { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.duo .cell.active { border-color: var(--accent); background: var(--accent-soft); }
+.duo .cell.dim { opacity: 0.5; }
+.kv { display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-mono); font-size: 15px; }
+.kv b.changed { color: var(--accent); }
+.kv b.bad { color: var(--query); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 520px) { .duo { grid-template-columns: minmax(0, 1fr); } }

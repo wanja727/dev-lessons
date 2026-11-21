@@ -1,6 +1,14 @@
 # 트랜잭션 기초 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 레슨은 핵심 질문 다섯 개를 뼈대로 한다. 모든 문제는 그중 하나에 연결되고, 답의 근거가 레슨 본문에 있다.
+#   질문 1. 트랜잭션은 무엇이고 왜 필요한가요?
+#   질문 2. 커밋과 롤백은 무엇을 하나요?
+#   질문 3. 커밋하기 전의 변경은 다른 연결에 보이나요?
+#   질문 4. 자바와 스프링 코드에서는 어떻게 쓰나요?
+#   질문 5. ACID는 무엇인가요?
+# 잔액은 verification의 TransactionBasicsTest로 확인한 동작에서 나온다 (PostgreSQL 16, Spring Boot 3.5).
+# 키 q-xxxxxxxx는 노션에서 옮긴 문제(2026-11-17), txb-xxx는 2026-11-22에 레슨을 새로 쓰며 더한 문제다.
 subject:
   key: dev
   name: 개발자 면접
@@ -13,118 +21,371 @@ concepts:
   - key: core
     name: 트랜잭션 기초
 questions:
-  - key: q-d579776f
+  # ── 질문 1. 트랜잭션은 무엇이고 왜 필요한가요? ──
+  - key: q-5d541492
+    concept: core
+    type: ox
+    status: reviewed
+    difficulty: 1
+    body: 트랜잭션을 시작하지 않고(자동 커밋) UPDATE 두 문장을 차례로 보냈어요. 둘째 문장이 실패하면 첫째 문장의 변경도 함께 취소된다.
+    answer: X
+    explanation: |-
+      **X. 첫째 문장의 변경은 그대로 남아요.**
+
+      - 자동 커밋에서는 문장 하나가 끝날 때마다 바로 확정돼요. 둘째 문장을 보내기 전에 첫째 문장은 이미 확정돼 있어요
+      - 함께 취소되게 하려면 두 문장을 한 트랜잭션으로 묶어야 해요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-autocommit-result
+    concept: core
+    type: code_predict
+    status: reviewed
+    difficulty: 1
+    body: park의 잔액은 30, choi의 잔액은 10이에요. 잔액은 0보다 작아질 수 없어요. 트랜잭션을 시작하지 않고(자동 커밋) 아래 두 문장을 차례로 보냈어요. 둘째 문장은 잔액이 모자라 실패했어요. 두 사람의 잔액은 얼마일까요?
+    code: |-
+      update account
+      set balance = balance + 50
+      where owner = 'choi';
+
+      update account
+      set balance = balance - 50
+      where owner = 'park';
+    choices:
+      - park 30, choi 10
+      - park 30, choi 60
+      - park -20, choi 60
+      - park 0, choi 60
+    answer: "2"
+    explanation: |-
+      **park 30, choi 60이에요.** 첫 문장만 반영되고 둘째 문장은 반영되지 않았어요.
+
+      - 자동 커밋이라 첫 문장의 +50은 끝나자마자 확정됐어요
+      - 둘째 문장은 실패해서 park의 잔액은 30 그대로예요. 실패한 문장은 아무것도 바꾸지 않아요
+      - 합계가 40에서 90이 됐어요. 없던 돈 50이 생긴 거예요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-why-needed
     concept: core
     type: descriptive
     status: reviewed
     difficulty: 1
-    body: 트랜잭션이 무엇이고 왜 필요한지 계좌 이체 예로 1분 안에 설명해 보세요
+    body: 계좌 이체를 트랜잭션으로 묶지 않으면 어떤 문제가 생기는지 설명해 보세요.
     explanation: |-
-      - 여러 SQL을 하나의 작업 단위로 묶어 전부 반영(커밋)되거나 전부 취소(롤백)되게 한다
-      - 이체는 입금과 출금 두 문장. 자동 커밋이면 둘째가 실패할 때 첫째만 남아 돈이 생기거나 사라짐
-      - 커밋 전 변경은 다른 연결에 보이지 않음
-      - 트랜잭션은 짧게, 롤백되지 않는 외부 작업은 밖에서
+      **이체 도중에 실패하면 한쪽 문장만 반영돼서 돈이 생기거나 사라져요.**
+
+      - 이체는 받는 쪽에 더하는 문장과 보내는 쪽에서 빼는 문장, 두 문장이에요
+      - 묶지 않으면 자동 커밋이라 문장마다 바로 확정돼요
+      - 둘째 문장이 실패해도 이미 확정된 첫째 문장은 되돌아가지 않아요
+      - 트랜잭션으로 묶으면 두 문장이 전부 반영되거나 전부 취소돼요
     checklist:
-      - 전부 아니면 전무를 말했다
-      - 커밋과 롤백을 말했다
-      - 자동 커밋의 위험을 이체로 설명했다
-      - 커밋 전 변경이 남에게 안 보인다고 말했다
-      - 트랜잭션을 짧게 두는 이유를 말했다
+      - 이체가 두 문장으로 이루어진다고 말했다
+      - 묶지 않으면 문장마다 바로 확정된다(자동 커밋)고 말했다
+      - 중간에 실패하면 앞 문장만 남는다고 말했다
+      - 그 결과 돈이 생기거나 사라진다고 말했다
+      - 트랜잭션으로 묶으면 전부 반영되거나 전부 취소된다고 말했다
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
-  - key: q-42215bc5
+
+  # ── 질문 2. 커밋과 롤백은 무엇을 하나요? ──
+  - key: txb-rollback-result
     concept: core
-    type: descriptive
+    type: code_predict
     status: reviewed
-    difficulty: 2
-    body: ACID 네 가지를 각각 한 문장으로 설명하고 예를 들어 보세요
+    difficulty: 1
+    body: kim의 잔액은 50, lee의 잔액은 0이에요. 잔액은 0보다 작아질 수 없어요. 아래 문장을 차례로 보냈는데 둘째 UPDATE가 잔액이 모자라 실패했고, 그래서 마지막에 ROLLBACK을 보냈어요. 두 사람의 잔액은 얼마일까요?
+    code: |-
+      begin;
+
+      update account
+      set balance = balance + 100
+      where owner = 'lee';
+
+      update account
+      set balance = balance - 100
+      where owner = 'kim';
+
+      rollback;
+    choices:
+      - kim 50, lee 0
+      - kim 50, lee 100
+      - kim -50, lee 100
+      - kim 0, lee 100
+    answer: "1"
     explanation: |-
-      - 원자성: 전부 반영되거나 하나도 반영되지 않음 (이체 실패 시 입금도 취소)
-      - 일관성: 전후로 제약 조건이 지켜짐 (잔액 ≥ 0, 합계 유지)
-      - 격리성: 동시 트랜잭션이 서로의 중간 상태를 보지 않음 (커밋 전 변경은 안 보임)
-      - 지속성: 커밋된 내용은 장애 후에도 남음
-    checklist:
-      - 원자성
-      - 일관성
-      - 격리성
-      - 지속성
-      - 각각 예를 들었다
+      **kim 50, lee 0이에요.** 처음 그대로예요.
+
+      - BEGIN 뒤의 변경은 커밋하기 전까지 확정이 아니에요
+      - ROLLBACK은 트랜잭션 안의 변경을 모두 취소해요. 이미 성공한 첫 UPDATE의 +100도 함께 취소돼요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-rollback-scope
+    concept: core
+    type: ox
+    status: reviewed
+    difficulty: 1
+    body: 한 트랜잭션 안에서 INSERT, UPDATE, DELETE를 한 번씩 실행한 뒤 ROLLBACK하면, UPDATE만 되돌아가고 INSERT와 DELETE는 남는다.
+    answer: X
+    explanation: |-
+      **X. 세 가지 모두 되돌아가요.**
+
+      - 롤백은 트랜잭션 안에서 한 변경을 종류와 상관없이 모두 취소해요
+      - 넣은 행은 사라지고, 지운 행은 돌아오고, 바꾼 값은 원래 값이 돼요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-commit-meaning
+    concept: core
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: BEGIN으로 시작한 트랜잭션에서 COMMIT이 하는 일은 무엇인가요?
+    choices:
+      - 트랜잭션을 시작한다
+      - 트랜잭션의 변경을 모두 확정하고 트랜잭션을 끝낸다
+      - 트랜잭션의 변경을 모두 취소하고 트랜잭션을 끝낸다
+      - 마지막에 실행한 문장 하나만 확정한다
+    answer: "2"
+    explanation: |-
+      **트랜잭션의 변경을 모두 확정하고 트랜잭션을 끝내요.**
+
+      - BEGIN이 트랜잭션을 시작하고, 그 뒤의 변경은 확정 전 상태예요
+      - COMMIT은 그 변경을 한꺼번에 확정해요. 문장 하나만 확정하는 것이 아니에요
+      - 모두 취소하는 것은 ROLLBACK이에요
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: q-2b51ba33
     concept: core
     type: descriptive
     status: reviewed
     difficulty: 2
-    body: DB 툴로 운영 데이터를 고치다 WHERE 실수로 수천 건이 바뀌었다. 무엇이 문제였고 앞으로 어떻게 작업할지 말해 보세요
+    body: DB 툴에서 운영 데이터를 고치다가 조건을 잘못 쓴 UPDATE가 바로 반영돼 버렸어요. 왜 바로 반영됐는지, 앞으로는 어떤 순서로 작업해야 하는지 설명해 보세요.
     explanation: |-
-      - 툴의 자동 커밋이 켜져 있어 UPDATE가 바로 확정됨
-      - 앞으로: 자동 커밋 끄기, BEGIN 후 실행, 바뀐 건수 확인 후 COMMIT, 이상하면 ROLLBACK
-      - 실행 전 대상 건수 SELECT, 백업 (대량 DML 레슨)
+      **자동 커밋 상태라서 실행한 UPDATE가 바로 확정됐어요. 앞으로는 트랜잭션을 시작하고, 결과를 확인한 뒤에 커밋해요.**
+
+      - 트랜잭션을 시작하지 않으면 문장 하나가 끝날 때마다 바로 확정돼요
+      - BEGIN으로 트랜잭션을 시작하고 UPDATE를 실행해요
+      - 바뀐 결과를 확인하고, 맞으면 COMMIT으로 확정해요
+      - 잘못됐으면 ROLLBACK으로 모두 취소해요
     checklist:
-      - 자동 커밋을 원인으로 짚었다
-      - BEGIN으로 시작한다고 말했다
-      - 건수를 확인하고 커밋한다고 말했다
-      - ROLLBACK을 말했다
-      - 사전 SELECT나 백업을 말했다
+      - 자동 커밋이라 바로 확정됐다고 말했다
+      - BEGIN으로 트랜잭션을 시작한다고 말했다
+      - 결과를 확인한 뒤에 COMMIT한다고 말했다
+      - 잘못됐으면 ROLLBACK으로 되돌린다고 말했다
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
-  - key: q-5d541492
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: "\"BEGIN 없이 보낸 UPDATE 두 줄 중 둘째가 실패하면 첫째도 자동으로 취소된다\""
-    answer: X
-    explanation: |-
-      - 자동 커밋이라 첫째 줄은 끝나자마자 확정됨. 결과 kim 50, lee 100 (없던 돈 100)
-      - 검증: TransactionBasicsTest (autoCommitLeavesHalfDone)
-    source: https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
+
+  # ── 질문 3. 커밋하기 전의 변경은 다른 연결에 보이나요? ──
   - key: q-da4e5ee5
     concept: core
     type: code_predict
     status: reviewed
     difficulty: 1
-    body: 연결 A가 BEGIN 후 잔액을 999로 바꾸고 커밋하지 않았다. 연결 B가 같은 행을 읽으면? (처음 잔액 50)
+    body: PostgreSQL 기본 설정이에요. kim의 잔액은 50이에요. 연결 A가 BEGIN 뒤에 kim의 잔액을 999로 바꾸고 아직 커밋하지 않았어요. 이때 연결 B가 kim의 잔액을 읽으면 어떻게 될까요?
     choices:
-      - "999"
-      - "50"
+      - 999를 읽는다
+      - 50을 읽는다
       - A가 커밋할 때까지 기다린다
-      - 오류
+      - 오류가 난다
     answer: "2"
     explanation: |-
-      - 커밋 전 변경은 바꾼 연결에만 보인다. 읽기는 기다리지 않고 확정된 값을 본다
-      - 검증: TransactionBasicsTest (uncommittedChangesAreInvisible)
+      **50을 읽어요.** 커밋 전의 변경은 바꾼 연결에만 보여요.
+
+      - 연결 B는 기다리지 않고 확정된 값 50을 바로 읽어요
+      - A가 커밋하면 그때부터 B도 999를 읽어요
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
-  - key: q-d4bf1495
+  - key: txb-visible-after-commit
     concept: core
     type: multiple_choice
     status: reviewed
     difficulty: 1
-    body: 롤백해도 되돌릴 수 없는 것은?
+    body: PostgreSQL 기본 설정이에요. kim의 잔액은 50이에요. 연결 A가 BEGIN 뒤에 kim의 잔액을 999로 바꿨어요. 연결 B가 kim의 잔액을 A가 커밋하기 전에 한 번, 커밋한 뒤에 한 번 읽었어요. B가 읽은 값은 차례로 무엇일까요?
     choices:
-      - 같은 트랜잭션의 INSERT
-      - 같은 트랜잭션의 DELETE
-      - 트랜잭션 안에서 보낸 이메일
-      - 같은 트랜잭션의 UPDATE
-    answer: "3"
+      - 50, 50
+      - 50, 999
+      - 999, 999
+      - 999, 50
+    answer: "2"
     explanation: |-
-      - 롤백은 DB 변경만 되돌린다. 외부로 나간 일은 커밋 뒤에 한다
-      - 검증: TransactionBasicsTest (rollbackUndoesEverything)
+      **50, 999예요.** 커밋한 순간부터 다른 연결에 보여요.
+
+      - 커밋 전에는 A의 변경이 B에게 보이지 않아서 확정된 값 50을 읽어요
+      - A가 커밋하면 999가 확정된 값이 되고, B도 999를 읽어요
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-rollback-invisible
+    concept: core
+    type: ox
+    status: reviewed
+    difficulty: 1
+    body: PostgreSQL 기본 설정이에요. 연결 A가 트랜잭션 안에서 kim의 잔액을 50에서 999로 바꿨다가 ROLLBACK했어요. 그동안 연결 B가 kim의 잔액을 여러 번 읽었다면, B는 999를 한 번도 읽지 못한다.
+    answer: O
+    explanation: |-
+      **O. B는 계속 50만 읽어요.**
+
+      - 커밋하지 않은 변경은 다른 연결에 보이지 않아요
+      - A가 롤백했으니 999는 확정된 적이 없어요. B는 그 변경이 있었는지도 알 수 없어요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-visibility-explain
+    concept: core
+    type: descriptive
+    status: reviewed
+    difficulty: 2
+    body: 한 연결이 트랜잭션 안에서 바꾼 값은 다른 연결에 언제부터 보이나요? 커밋 전, 커밋 후, 롤백한 경우로 나눠 설명해 보세요.
+    explanation: |-
+      **커밋한 순간부터 보여요. 커밋 전에는 바꾼 연결에만 보여요.**
+
+      - 커밋 전: 바꾼 연결은 바뀐 값을 읽고, 다른 연결은 확정된 예전 값을 읽어요
+      - 커밋 후: 바뀐 값이 확정돼서 다른 연결도 그 값을 읽어요
+      - 롤백한 경우: 그 변경은 다른 연결에 끝까지 보이지 않아요
+      - 그래서 다른 연결은 이체의 중간 상태(더하기만 되고 빼기는 안 된 상태)를 보지 않아요
+    checklist:
+      - 커밋 전의 변경은 바꾼 연결에만 보인다고 말했다
+      - 그때 다른 연결은 확정된 예전 값을 읽는다고 말했다
+      - 커밋한 순간부터 다른 연결에도 보인다고 말했다
+      - 롤백한 변경은 다른 연결에 끝까지 보이지 않는다고 말했다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+
+  # ── 질문 4. 자바와 스프링 코드에서는 어떻게 쓰나요? ──
+  - key: txb-jdbc-default
+    concept: core
+    type: ox
+    status: reviewed
+    difficulty: 1
+    body: JDBC 연결은 따로 설정하지 않으면 자동 커밋이 켜져 있어서, 실행한 SQL이 문장마다 바로 확정된다.
+    answer: O
+    explanation: |-
+      **O. JDBC 연결의 기본은 자동 커밋이에요.**
+
+      - 트랜잭션으로 묶으려면 `setAutoCommit(false)`로 자동 커밋을 끄고, `commit()`이나 `rollback()`을 직접 불러야 해요
+      - 스프링에서는 `@Transactional`이 이 일을 대신 해 줘요
+    source: https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
   - key: q-3bbb5c20
     concept: core
     type: line_pick
     status: reviewed
     difficulty: 2
-    body: "[코드 19-A] 이체가 실패했는데 lee의 잔액만 늘어났다. 원인이 되는 줄은?"
+    body: kim(잔액 50)이 lee에게 100을 보냈더니 예외가 났는데, lee의 잔액만 100 늘어나 있었어요. deposit과 withdraw는 각각 UPDATE 한 문장을 보내요. 두 문장을 한 트랜잭션으로 묶으려면 어느 줄 위에 @Transactional을 붙여야 할까요?
     code: |-
-      @Service
-      public class TransferService {
-          public void transfer(long from, long to, int amount) {
-              jdbc.update("UPDATE account SET balance = balance + ? WHERE id = ?", amount, to);
-              jdbc.update("UPDATE account SET balance = balance - ? WHERE id = ?", amount, from);
-          }
+      void transfer(long from, long to, int n) {
+          deposit(to, n);
+          withdraw(from, n);
       }
+    answer: "1"
+    explanation: |-
+      **1번 줄, transfer 메서드에 붙여요.**
+
+      - `@Transactional`은 붙인 메서드 전체를 한 트랜잭션으로 묶어요. 메서드가 시작할 때 트랜잭션을 열고, 예외가 나면 롤백해요
+      - 지금은 붙어 있지 않아서 두 UPDATE가 각각 자동 커밋돼요. 그래서 withdraw가 실패해도 deposit의 +100이 남았어요
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+  - key: q-d4bf1495
+    concept: core
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 트랜잭션을 롤백해도 되돌릴 수 없는 것은 무엇인가요?
+    choices:
+      - 그 트랜잭션에서 한 INSERT
+      - 그 트랜잭션에서 한 DELETE
+      - 그 트랜잭션 안에서 보낸 이메일
+      - 그 트랜잭션에서 한 UPDATE
     answer: "3"
     explanation: |-
-      - @Transactional이 없어 두 UPDATE가 각각 자동 커밋된다. 5번에서 잔액 부족으로 실패해도 4번은 이미 확정. 3번 줄 메서드에 @Transactional을 붙인다
-      - 검증: TransactionBasicsTest (autoCommitLeavesHalfDone, transactionRollsBackAll)
+      **트랜잭션 안에서 보낸 이메일이에요.**
+
+      - 롤백은 DB의 변경만 되돌려요. INSERT, UPDATE, DELETE는 모두 취소돼요
+      - 이메일이나 다른 서버로 보낸 요청은 이미 나갔고, 롤백해도 취소되지 않아요. 그래서 이런 일은 커밋한 뒤에 해요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-transactional-explain
+    concept: core
+    type: descriptive
+    status: reviewed
+    difficulty: 2
+    body: 스프링의 @Transactional이 메서드에 붙으면 무슨 일을 해 주는지, 그리고 트랜잭션 안에서 조심할 점을 설명해 보세요.
+    explanation: |-
+      **메서드 전체를 한 트랜잭션으로 묶어 줘요.**
+
+      - 메서드가 시작할 때 트랜잭션을 열어요
+      - 메서드가 정상으로 끝나면 커밋하고, 런타임 예외가 나면 롤백해요
+      - 붙이지 않으면 SQL이 문장마다 자동 커밋돼요
+      - 롤백은 DB 변경만 되돌리므로 이메일 발송 같은 일은 커밋한 뒤에 해요
+      - 트랜잭션이 끝날 때까지 연결과 바꾼 행을 붙잡고 있으므로, 함께 묶어야 하는 SQL만 넣어 짧게 둬요
+    checklist:
+      - 메서드가 시작할 때 트랜잭션을 연다고 말했다
+      - 정상으로 끝나면 커밋한다고 말했다
+      - 런타임 예외가 나면 롤백한다고 말했다
+      - 롤백은 DB 변경만 되돌린다고(이메일 같은 것은 못 되돌린다고) 말했다
+      - 트랜잭션은 짧게 둔다고 말했다
     source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+
+  # ── 질문 5. ACID는 무엇인가요? ──
+  - key: txb-acid-atomicity
+    concept: core
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 이체 트랜잭션에서 출금이 실패하자, 이미 한 입금까지 함께 취소됐어요. ACID 가운데 어느 성질인가요?
+    choices:
+      - 원자성
+      - 일관성
+      - 격리성
+      - 지속성
+    answer: "1"
+    explanation: |-
+      **원자성이에요.** 트랜잭션의 변경이 전부 반영되거나 하나도 반영되지 않는 성질이에요.
+
+      - 격리성은 동시에 도는 트랜잭션이 서로의 중간 상태를 보지 않는 성질이에요
+      - 지속성은 커밋된 변경이 장애 뒤에도 남는 성질이에요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-acid-isolation
+    concept: core
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 연결 A가 이체 트랜잭션을 진행하는 동안, 연결 B는 "입금만 되고 출금은 아직 안 된" 상태를 읽지 못했어요. ACID 가운데 어느 성질인가요?
+    choices:
+      - 원자성
+      - 일관성
+      - 격리성
+      - 지속성
+    answer: "3"
+    explanation: |-
+      **격리성이에요.** 동시에 실행되는 트랜잭션이 서로의 중간 상태를 보지 않는 성질이에요.
+
+      - 커밋 전의 변경이 다른 연결에 보이지 않는 것이 격리성의 예예요
+      - 원자성은 한 트랜잭션의 변경이 전부 반영되거나 하나도 반영되지 않는 성질이에요
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: q-42215bc5
+    concept: core
+    type: descriptive
+    status: reviewed
+    difficulty: 2
+    body: ACID 네 가지를 각각 한 문장으로 설명하고, 계좌 이체를 예로 들어 보세요.
+    explanation: |-
+      **트랜잭션이 지켜 주는 네 가지 성질이에요.**
+
+      | 성질 | 뜻 | 이체 예 |
+      | --- | --- | --- |
+      | 원자성 | 전부 반영되거나 하나도 반영되지 않는다 | 출금이 실패하면 입금도 취소된다 |
+      | 일관성 | 트랜잭션 전후로 데이터의 규칙이 지켜진다 | 잔액은 0 이상이고 합계가 그대로다 |
+      | 격리성 | 동시에 도는 트랜잭션이 서로의 중간 상태를 보지 않는다 | 커밋 전의 잔액 변경은 다른 연결에 보이지 않는다 |
+      | 지속성 | 커밋된 변경은 장애가 나도 남는다 | 커밋된 이체는 서버가 꺼졌다 켜져도 남아 있다 |
+    checklist:
+      - 원자성을 설명했다
+      - 일관성을 설명했다
+      - 격리성을 설명했다
+      - 지속성을 설명했다
+      - 이체를 예로 들었다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+
+  # ── 다섯 질문을 하나로 ──
+  - key: q-d579776f
+    concept: core
+    type: descriptive
+    status: reviewed
+    difficulty: 1
+    body: 트랜잭션이 무엇이고 왜 필요한지 계좌 이체를 예로 들어 1분 안에 설명해 보세요.
+    explanation: |-
+      **여러 SQL을 하나로 묶어, 전부 반영(커밋)하거나 전부 취소(롤백)하는 작업 단위예요.**
+
+      - 이체는 입금과 출금 두 문장이에요. 묶지 않으면 자동 커밋이라, 둘째 문장이 실패할 때 첫째 문장만 남아 돈이 생기거나 사라져요
+      - 트랜잭션의 변경은 커밋 전까지 확정이 아니고, 다른 연결에 보이지 않아요
+      - 실패하면 롤백으로 시작 전 상태로 돌아가요
+      - 롤백은 DB 변경만 되돌리고, 트랜잭션은 필요한 SQL만 넣어 짧게 둬요
+    checklist:
+      - 전부 반영되거나 전부 취소된다고 말했다
+      - 커밋과 롤백을 말했다
+      - 자동 커밋의 위험을 이체로 설명했다
+      - 커밋 전의 변경은 다른 연결에 보이지 않는다고 말했다
+      - 트랜잭션을 짧게 두는 이유나 롤백이 되돌리지 못하는 것을 말했다
+    source: https://www.postgresql.org/docs/16/tutorial-transactions.html
