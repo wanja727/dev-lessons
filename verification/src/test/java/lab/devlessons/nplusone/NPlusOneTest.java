@@ -133,6 +133,36 @@ class NPlusOneTest {
         assertThat(hasPagingClause(SqlCapture.sqls().get(0))).isTrue();
     }
 
+    @Test
+    @DisplayName("ToOne fetch join + 페이징: SQL에 페이징이 붙고 경고가 없다. 쿼리 1번")
+    void toOneFetchJoinPaging(CapturedOutput output) {
+        List<Member> page = em.getEntityManager()
+                .createQuery("select m from Member m join fetch m.team order by m.id", Member.class)
+                .setMaxResults(2)
+                .getResultList();
+        page.forEach(m -> m.getTeam().getName());
+
+        assertThat(page).hasSize(2);
+        assertThat(SqlCapture.count()).isEqualTo(1);
+        assertThat(hasPagingClause(SqlCapture.sqls().get(0))).isTrue();
+        assertThat(output).doesNotContain("HHH90003004");
+    }
+
+    @Test
+    @DisplayName("팀만 페이징 + 배치 페치: 쿼리 2번, 첫 SQL에 페이징이 붙는다")
+    void pagingWithBatchFetch() {
+        List<BatchTeam> page = em.getEntityManager()
+                .createQuery("select t from BatchTeam t order by t.id", BatchTeam.class)
+                .setMaxResults(2)
+                .getResultList();
+        page.forEach(t -> t.getMembers().size());
+
+        assertThat(page).hasSize(2);
+        assertThat(page).allSatisfy(t -> assertThat(t.getMembers()).hasSize(3));
+        assertThat(SqlCapture.count()).isEqualTo(2);
+        assertThat(hasPagingClause(SqlCapture.sqls().get(0))).isTrue();
+    }
+
     private static boolean hasPagingClause(String sql) {
         String s = sql.toLowerCase();
         return s.contains(" limit ") || s.contains("fetch first") || s.contains(" offset ");

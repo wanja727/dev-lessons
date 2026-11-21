@@ -1,0 +1,220 @@
+/*
+ * 레슨 테마. lesson.css 다음에 불러오고, Base의 theme으로 html에 클래스를 준다. 지금은 jpa-n-plus-1에서만 쓴다.
+ * 세 겹으로 쌓인다. 실제로 쓰는 것은 "soft pastel"이다.
+ *   1. 클래스 없음: Retrievo 앱과 같은 흑백 (앱의 디자인 토큰: 노션 ADR-018)
+ *   2. soft: 흰 바탕은 그대로 두고 순흑과 중립 회색을 따뜻하게. 선 아이콘, 슬라이더
+ *   3. pastel: 테마 색 라벤더와 파스텔 면
+ * 흑백은 차갑고 밋밋하다는 의견이 있어 soft와 pastel을 만들었다 (2026-11-21). 앱에는 아직 적용하지 않았다.
+ *
+ * 아래는 1번(흑백)의 규칙이다.
+ * 색을 쓰는 규칙
+ * - 기본은 흰 바탕에 검은 글자, 얇은 선. 강조는 굵기와 검은색으로 한다
+ * - 빨강: 늘어난 쿼리, 틀림처럼 "문제"를 뜻할 때만
+ * - 골드: 맞힘, 모범 답처럼 "꺼내기에 성공"을 뜻할 때만 (옅은 바탕색으로)
+ * - 팀 색 네 가지: 행이 어느 팀 것인지 구분해야 하는 표에서만
+ * 앱이 밝은 화면만 쓰므로 여기서도 다크 모드를 끈다.
+ */
+html:root:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --ink: #0a0a0a;
+  --muted: #737373;
+  --line: #e5e5e5;
+  --accent: #0a0a0a;
+  --accent-soft: #f7f7f7;
+  --query: #e5484d;
+  --query-soft: #fdecec;
+  --ok: #0a0a0a;
+  --ok-soft: #fdf4dd;
+  --warn: #737373;
+  --warn-soft: #f7f7f7;
+  --code-bg: #f4f4f4;
+  --team-a: #3a6fd1; --team-b: #2a8a63; --team-c: #b5552b; --team-d: #8a4fb5;
+  --font-body: "Inter Tight", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  /* JetBrains Mono에는 한글이 없다. 뒤에 한글 글꼴을 두지 않으면 윈도우에서 굴림체로 나온다 */
+  --font-mono: "JetBrains Mono", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", ui-monospace, monospace;
+  color-scheme: light;
+}
+
+h1 { letter-spacing: -0.03em; font-weight: 600; }
+h2 { letter-spacing: -0.025em; font-weight: 600; }
+h3 { letter-spacing: -0.015em; font-weight: 600; }
+.eyebrow { color: var(--muted); font-family: var(--font-body); letter-spacing: -0.01em; font-size: 15px; font-weight: 600; }
+a { text-underline-offset: 3px; }
+.panel { border-radius: 16px; }
+.btn, .seg button { border-radius: 10px; }
+.callout, .answer { border-radius: 12px; }
+
+/* 코드 블록: 앱의 CodeBlock과 같은 어두운 바탕과 색 */
+pre { background: #0b0b0c; color: #e7e7e7; border-radius: 16px; padding: 16px 18px; line-height: 1.85; font-size: 13px; }
+pre .c-key { color: #c4a7e7; }
+pre .c-com { color: #6e6e73; }
+pre .c-str { color: #a8d5a2; }
+/* 지금 봐야 할 곳: 반투명한 밝은 띠에 얇은 테두리. 글자 굵기는 그대로 둔다.
+   띠가 14%면 잘 안 보였고, 흰 바탕에 굵은 글자는 너무 튀었다 */
+pre mark.hl {
+  background: rgb(255 255 255 / 0.24); color: #ffffff; font-weight: inherit;
+  border-radius: 5px; padding: 2px 6px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.32);
+}
+
+/* 쿼리 번호는 회색으로. 빨강은 쿼리 수와 눈금에만 쓴다 */
+.log { border-radius: 12px; }
+.log .row .n { color: var(--muted); }
+.tick.first { background: var(--ink); }
+.box.filled { border-color: var(--line); }
+.rows .r { background: var(--accent-soft); }
+
+/*
+ * 부드러운 버전 (시험 중, 2026-11-21). 흑백만 쓰니 차갑다는 의견이 있었고, 아이보리 바탕은 너무 누렇다는 의견이 있었다.
+ * 노션처럼 바탕은 흰색 그대로 두고, 차가움을 만드는 순흑과 중립 회색만 바꾼다.
+ * - 글자는 순흑 대신 따뜻한 짙은 회색, 회색과 선은 따뜻한 회색
+ * - 상자는 옅은 따뜻한 회색 면. 맞음은 옅은 초록, 문제는 옅은 빨강
+ * - 코드 블록은 밝은 면에 차분한 색. 봐야 할 곳은 옅은 파란 띠
+ * html에 soft 클래스를 주면 켜진다 (비교용)
+ */
+html.soft:root:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --ink: #37352f;
+  --muted: #787774;
+  --line: #e9e9e7;
+  /* 포인트 색 하나(인디고): 누를 수 있는 것, 지금 고른 것, 결론에만 쓴다. 넓은 면은 옅게 칠한다 */
+  --accent: #5b5ef0;
+  --accent-ink: #4a4dd6;
+  --accent-soft: #f3f4ff;
+  /* 색은 회색 기운을 빼고 밝고 맑게: 산호색(문제), 민트(맞음), 레몬(형광펜) */
+  --query: #ee7a6c;
+  --query-soft: #ffefec;
+  --ok: #37352f;
+  --ok-soft: #e4f8ec;
+  --team-a: #4f8ef7; --team-b: #2fbf83; --team-c: #f59e42; --team-d: #a97be8;
+  --warn: #787774;
+  --warn-soft: #f7f6f3;
+  --code-bg: #f1f1ef;
+}
+html.soft pre { background: #f7f6f3; color: #37352f; }
+/* 문법 색은 테마의 색과 같은 계열로 맑게: 인디고(키워드), 앰버(어노테이션), 민트(문자열). 봐야 할 곳은 형광펜 */
+html.soft :is(pre, .code-note) .c-key { color: #4a5cf0; }
+html.soft :is(pre, .code-note) .c-anno { color: #c27d0a; }
+html.soft :is(pre, .code-note) .c-com { color: #a3a19c; }
+html.soft :is(pre, .code-note) .c-str { color: #0f9468; }
+html.soft mark.hl {
+  background: #fff2a6; color: inherit; box-shadow: none; border-radius: 2px; padding: 2px 3px; font-weight: inherit;
+}
+html.soft .log { background: #f7f6f3; }
+html.soft .rows .r { background: #f7f6f3; }
+html.soft .box.filled { border-color: #bfe9cf; }
+html.soft .page-out .bad { color: #e0594a; }
+
+/*
+ * 선 아이콘 (노션처럼 가는 회색 선). 구역의 종류를 글자 옆 작은 아이콘으로 알려 준다.
+ * 글자색을 따라가도록 mask로 그린다. 아이콘은 --icon에 넣는다.
+ */
+html.soft .meta span,
+html.soft section > .eyebrow, html.soft section .stack > .eyebrow,
+html.soft .answer .label, html.soft .quiz > .label, html.soft .next,
+html.soft #verified summary { --icon: none; }
+html.soft .meta span::before,
+html.soft section > .eyebrow::before, html.soft section .stack > .eyebrow::before,
+html.soft .answer .label::before, html.soft .quiz > .label::before, html.soft .next::before,
+html.soft #verified summary::before {
+  content: ""; display: inline-block; width: 1.15em; height: 1.15em; margin-right: 0.4em; vertical-align: -0.2em;
+  background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat;
+}
+html.soft .meta .m-unit { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z'/%3E%3Cpath d='M5 17a3 3 0 0 1 3-3h11'/%3E%3C/svg%3E"); }
+html.soft .meta .m-time { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E"); }
+html.soft .meta .m-pre { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1'/%3E%3Cpath d='M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'/%3E%3C/svg%3E"); }
+html.soft #predict > .eyebrow { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z'/%3E%3Cpath d='M18.5 15.5v4M16.5 17.5h4'/%3E%3C/svg%3E"); }
+html.soft section[id^="q"] .eyebrow { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.8'/%3E%3Cpath d='M12 17.2h.01'/%3E%3C/svg%3E"); }
+html.soft #recall > .eyebrow { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h16v11H9.5L4 20z'/%3E%3C/svg%3E"); }
+html.soft .answer .label { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 18h5M10.5 21h3'/%3E%3Cpath d='M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2.2h5c.1-1 .5-1.7 1.1-2.2A6 6 0 0 0 12 3z'/%3E%3C/svg%3E"); }
+html.soft .quiz > .label { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19z'/%3E%3Cpath d='M14.5 6.5l3 3'/%3E%3C/svg%3E"); }
+html.soft .next { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E"); }
+html.soft #verified summary { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8.5 12.2l2.4 2.4 4.6-5'/%3E%3C/svg%3E"); }
+
+/* 생기: 맨 위에 옅은 색 번짐, 포인트 색을 쓰는 자리 */
+html.soft body {
+  background-image: radial-gradient(640px 260px at 8% -40px, rgb(91 94 240 / 0.13), transparent 70%),
+                    radial-gradient(520px 220px at 62% -60px, rgb(47 191 131 / 0.10), transparent 70%);
+  background-repeat: no-repeat;
+}
+html.soft a { color: var(--accent-ink); }
+html.soft .back, html.soft .goals a { color: var(--ink); }
+html.soft .goals a:hover { background: var(--accent-soft); border-color: #c5c8fb; }
+html.soft section > .eyebrow, html.soft section .stack > .eyebrow { color: var(--accent-ink); }
+html.soft .answer { border-left-color: var(--accent); }
+html.soft .answer .label { color: var(--accent-ink); }
+html.soft .callout { background: #f7f6f3; }
+html.soft .assume { border-left-color: var(--line); }
+/* 고른 보기는 진하게 칠하지 않고 옅은 면과 색 글자로 */
+html.soft .chip[aria-pressed="true"], html.soft .seg button[aria-pressed="true"] {
+  background: #eceeff; color: var(--accent-ink); border-color: #b9bdfa; font-weight: 600;
+}
+html.soft .btn.primary { color: #ffffff; }
+html.soft .btn:hover { border-color: #b9bdfa; }
+/* 로그나 경고처럼 한 줄이 긴 글은 가로로 밀지 않게 줄을 바꾼다 */
+pre.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/*
+ * 파스텔 버전 (시험 중, 2026-11-21). soft 위에 덧씌운다: html에 soft와 pastel을 함께 준다.
+ * - 면과 띠는 파스텔(라벤더, 민트, 복숭아, 레몬)
+ * - 글자는 파스텔로 하면 흰 바탕에서 흐려 읽기 어렵다. 같은 색상에서 한 단계 짙은 색을 쓴다
+ */
+html.soft.pastel:root:root {
+  --ink: #3b3944;
+  --muted: #807e8c;
+  --line: #ebeaf1;
+  --accent: #8477e6;
+  --accent-ink: #6c5fd3;
+  --accent-soft: #f5f2ff;
+  /* 큰 숫자가 흰 바탕에서 흐리지 않게 산호색을 한 단계 짙게 */
+  --query: #e86f5e;
+  --query-soft: #fff1ee;
+  --ok-soft: #e3f7ec;
+  --code-bg: #f3f2f8;
+  --team-a: #8fb4ff; --team-b: #7fd8b0; --team-c: #ffc48a; --team-d: #c9a9f5;
+}
+/* 번짐은 테마 색(라벤더) 하나만. 맨 위와 맨 아래에 같은 모양으로 둔다 */
+html.soft.pastel body {
+  background-image: radial-gradient(760px 280px at 10% -50px, rgb(170 150 255 / 0.24), transparent 70%),
+                    radial-gradient(760px 280px at 10% calc(100% + 50px), rgb(170 150 255 / 0.24), transparent 70%);
+  background-repeat: no-repeat;
+}
+html.soft .code-note mark.hl { color: var(--ink); }
+html.soft.pastel pre, html.soft.pastel .log, html.soft.pastel .rows .r, html.soft.pastel .callout { background: #f7f6fb; }
+html.soft.pastel :is(pre, .code-note) .c-key { color: #8a63e0; }
+html.soft.pastel :is(pre, .code-note) .c-anno { color: #d98a3d; }
+html.soft.pastel :is(pre, .code-note) .c-str { color: #3a9f7c; }
+html.soft.pastel :is(pre, .code-note) .c-com { color: #a9a7b6; }
+html.soft.pastel mark.hl { background: #fff1b5; }
+html.soft.pastel .answer { border-left-color: #b3a8f5; }
+html.soft.pastel .chip[aria-pressed="true"], html.soft.pastel .seg button[aria-pressed="true"] {
+  background: #efeaff; color: var(--accent-ink); border-color: #cfc6fb;
+}
+html.soft.pastel .goals a:hover, html.soft.pastel .btn:hover { border-color: #cfc6fb; }
+/* 민트는 "맞았어요"에만 쓴다. 가져온 데이터와 모범 답은 판정이 아니라서 테마 색(라벤더)으로 칠한다 */
+html.soft.pastel .box.filled { background: var(--accent-soft); border-color: #d9d2fb; }
+html.soft.pastel .recall .model-a { background: var(--accent-soft); }
+html.soft.pastel .page-out .bad { color: #e0705f; }
+html.soft.pastel .tick.first { background: var(--accent); }
+
+/* 슬라이더: 가는 트랙에 테마 색으로 채우고, 흰 손잡이 */
+html.soft input[type="range"] { -webkit-appearance: none; appearance: none; height: 24px; background: transparent; cursor: pointer; margin: 0; }
+html.soft input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--p, 50%), #e9e7f3 var(--p, 50%));
+}
+html.soft input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%;
+  background: #ffffff; border: 2px solid var(--accent); box-shadow: 0 1px 4px rgb(60 50 120 / 0.18);
+}
+html.soft input[type="range"]::-moz-range-track { height: 6px; border-radius: 999px; background: #e9e7f3; }
+html.soft input[type="range"]::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--accent); }
+html.soft input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%; background: #ffffff; border: 2px solid var(--accent); box-shadow: 0 1px 4px rgb(60 50 120 / 0.18);
+}
+html.soft.pastel .tick { opacity: 0.75; }
+html.soft.pastel .tick.first { opacity: 1; }
+/* 접힌 검증 구역의 실행 명령은 길어서 줄을 바꾼다 */
+.run-local pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+

@@ -60,6 +60,9 @@ pre {
   font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6; overflow-x: auto;
 }
 .c-key { color: var(--accent); } .c-com { color: var(--muted); } .c-q { color: var(--query); font-weight: 500; }
+.c-str { color: var(--ok); }
+/* 코드에서 지금 봐야 할 곳 (site/src/lib/highlight.ts의 [[강조]]) */
+mark.hl { background: var(--accent-soft); color: var(--ink); font-weight: 700; border-radius: 4px; padding: 2px 4px; }
 a { color: var(--accent); }
 button, select, input, textarea { font: inherit; color: inherit; }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
