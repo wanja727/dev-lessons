@@ -1,363 +1,303 @@
 ---
 import Base from '../../layouts/Base.astro';
+import RunLocally from '../../components/RunLocally.astro';
+import '../../styles/lesson.css';
+import '../../styles/retrievo-theme.css';
+import { highlight } from '../../lib/highlight';
+
+// 이 레슨은 "핵심 질문" 네 개를 뼈대로 쓴다. 장 하나가 질문 하나에 답하고, 장의 첫머리에 결론을 둔다.
+// 문제 파일(content/questions/jpa-n-plus-1.yaml)의 모든 문제는 이 네 질문 중 하나에 연결된다.
+const test = 'https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java';
+
+// 코드는 한 줄이 44자를 넘지 않게 쓴다. 모바일(375px)에서 가로로 밀지 않아도 강조한 곳이 보여야 한다
+const codePredict = `// 팀 10개
+List<Team> teams = teamRepository.findAll();
+for (Team team : teams) {
+    int count = team.getMembers().size();
+    System.out.println(count);
+}`;
+
+// 처음 코드에서 지금 설명하는 줄을 강조해 다시 보여 준다
+const codeFindAll = `// 팀 10개
+List<Team> teams = [[teamRepository.findAll()]];
+for (Team team : teams) {
+    int count = team.getMembers().size();
+    System.out.println(count);
+}`;
+
+const codeLoop = `// 팀 10개
+List<Team> teams = teamRepository.findAll();
+for (Team team : teams) {
+    int count = [[team.getMembers()]].size();
+    System.out.println(count);
+}`;
+
+const codeEntity = `@Entity
+class Team {
+    @Id Long id;
+    String name;
+
+    // 지연 로딩(LAZY)이 기본값
+    @OneToMany(mappedBy = "team")
+    [[List<Member> members]];
+}`;
+
+const codeEager = `@OneToMany(
+    mappedBy = "team",
+    [[fetch = FetchType.EAGER]]
+)
+List<Member> members;`;
+
+const codeFetchJoin = `@Query("""
+    select t from Team t
+    left [[join fetch]] t.members
+    """)
+List<Team> findAllWithMembers();
+
+-- 나가는 SQL (1번)
+select t.*, m.*
+from team t
+[[left join member m]] on m.team_id = t.id`;
+
+const codeBatch = `# application.yml
+spring:
+  jpa:
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+
+-- 나가는 SQL (팀 10개일 때 2번)
+select * from team
+select * from member
+where team_id [[in (1, 2, 3, ..., 10)]]`;
+
+const codePagingFix = `-- 1번째: 팀만 페이징해서 조회
+select * from team
+order by id [[limit 2]]
+
+-- 2번째: 그 팀들의 멤버를 한 번에
+select * from member
+where team_id [[in (1, 2)]]`;
+
+// 검증 테스트 하나를 그대로 보여 준다 (NPlusOneTest.eagerDoesNotFix)
+const codeTest = `@Test
+void eagerDoesNotFix() {
+    // EAGER인 팀 10개를 조회. 멤버는 안 씀
+    eagerTeamRepository.findAll();
+
+    // 나간 SQL이 1 + 10번인지 확인
+    assertThat([[SqlCapture.count()]])
+        .isEqualTo(1 + TEAMS);
+}`;
+
+const codeToOne = `@Query("""
+    select m from Member m
+    [[join fetch]] m.team
+    """)
+List<Member> findPage(Pageable pageable);
+
+-- 나가는 SQL (1번)
+select m.*, t.*
+from member m
+join team t on t.id = m.team_id
+[[limit 20]]`;
 ---
-<Base title="JPA N+1 문제 · Dev Lessons" description="JPA를 처음 보는 사람도 따라올 수 있는 N+1 문제 대화형 레슨. 쿼리 수 시뮬레이터, EAGER의 함정, fetch join과 배치 페치, 페이징 함정.">
+<Base theme="soft pastel" title="JPA N+1 문제 · Dev Lessons" description="N+1 문제가 왜 생기는지, EAGER로는 왜 안 되는지, 어떻게 해결하는지, 페이징할 때는 무엇을 고르는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.">
+<link slot="head" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" />
 <style is:global>
-/* Layout: 한 줄 읽기 칼럼(720px) + 실습 위젯만 넓게(960px). 쿼리 = 주황 눈금으로 일관되게 표시 */
-:root {
-  --bg: #f4f6f8;
-  --surface: #ffffff;
-  --ink: #17212c;
-  --muted: #5a6775;
-  --line: #d9dfe6;
-  --accent: #1f5bb8;
-  --accent-soft: #e4ecf8;
-  --query: #c94a12;
-  --query-soft: #fbe9df;
-  --ok: #2a7d3c;
-  --ok-soft: #e2f2e5;
-  --warn: #9a6a00;
-  --warn-soft: #fbf1d9;
-  --code-bg: #eef1f5;
-  --team-a: #3a6fd1; --team-b: #2a8a63; --team-c: #b5552b; --team-d: #8a4fb5;
-  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+/* 핵심 질문 목록, 장 첫머리의 결론, 보지 않고 답하기 */
+.goals { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: goal; }
+.goals li { counter-increment: goal; }
+.goals a {
+  display: grid; grid-template-columns: 2.2em 1fr; align-items: baseline; text-decoration: none; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-weight: 500;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f141a; --surface: #161d26; --ink: #e5ecf3; --muted: #94a2b1; --line: #2a3441;
-    --accent: #7ea6ff; --accent-soft: #1c2b45; --query: #ff8d52; --query-soft: #3a2116;
-    --ok: #63c47f; --ok-soft: #173123; --warn: #e3b341; --warn-soft: #34290f; --code-bg: #1b2430;
-    --team-a: #7ea6ff; --team-b: #5fcf9e; --team-c: #ff9d6e; --team-d: #c79bf0;
-    color-scheme: dark;
-  }
+.goals a::before { content: counter(goal); font-family: var(--font-mono); color: var(--accent); }
+.goals a:hover { border-color: var(--accent); }
+.answer { border-left: 4px solid var(--ink); background: var(--accent-soft); border-radius: 0 12px 12px 0; padding: 18px 22px 20px; }
+.answer .label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 14px; font-weight: 600; }
+.answer .lead { font-size: 21px; font-weight: 700; line-height: 1.45; letter-spacing: -0.02em; text-wrap: balance; }
+.answer .sub { margin: 8px 0 0; font-size: 16px; line-height: 1.7; }
+.answer ul.sub { padding-left: 20px; }
+/* 코드 아래 설명: 표시한 부분이 무엇인지 */
+.code-note { list-style: none; margin: -6px 0 0; padding: 0 4px; display: flex; flex-direction: column; gap: 4px; font-size: 14.5px; color: var(--muted); }
+.code-note mark.hl { font-family: var(--font-mono); font-size: 0.9em; font-weight: 400; color: var(--ink); margin-right: 4px; }
+/* 진행 표시 */
+.progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 20; background: transparent; }
+.progress span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 0 3px 3px 0; }
+.where {
+  position: fixed; top: 12px; right: 12px; z-index: 20; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+  backdrop-filter: blur(6px);
 }
-:root[data-theme="dark"] {
-  --bg: #0f141a; --surface: #161d26; --ink: #e5ecf3; --muted: #94a2b1; --line: #2a3441;
-  --accent: #7ea6ff; --accent-soft: #1c2b45; --query: #ff8d52; --query-soft: #3a2116;
-  --ok: #63c47f; --ok-soft: #173123; --warn: #e3b341; --warn-soft: #34290f; --code-bg: #1b2430;
-  --team-a: #7ea6ff; --team-b: #5fcf9e; --team-c: #ff9d6e; --team-d: #c79bf0;
-  color-scheme: dark;
+/* 좁은 화면에서는 표를 카드로 쌓는다. 칸 이름은 data-label로 붙인다 */
+@media (max-width: 600px) {
+  .table-wrap table { min-width: 0; }
+  .table-wrap thead { display: none; }
+  .table-wrap tr { display: block; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+  .table-wrap td { display: block; border: 0; padding: 0; }
+  .table-wrap td:first-child { font-weight: 600; margin-bottom: 4px; }
+  .table-wrap td:not(:first-child) { color: var(--muted); font-size: 14.5px; }
+  .table-wrap td:not(:first-child)::before { content: attr(data-label) " "; font-weight: 600; margin-right: 4px; }
+  pre { font-size: 12px; padding: 14px 8px 14px 10px; }
 }
-* { box-sizing: border-box; }
-body {
-  background: var(--bg); color: var(--ink); font-family: var(--font-body);
-  font-size: 16px; line-height: 1.75; word-break: keep-all; overflow-wrap: anywhere;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 32px 80px;
-}
-main { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
-.read { max-width: 720px; }
-h1, h2, h3 { text-wrap: balance; line-height: 1.3; margin: 0; }
-h1 { font-size: clamp(30px, 5vw, 42px); font-weight: 700; letter-spacing: -0.02em; }
-h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
-h3 { font-size: 18px; font-weight: 700; }
-p { margin: 0; }
-section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 16px; }
-.eyebrow { font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.04em; }
-.muted { color: var(--muted); }
-.assume { font-size: 15px; border-left: 3px solid var(--accent); padding-left: 10px; }
-code, .mono { font-family: var(--font-mono); font-size: 0.9em; }
-:not(pre) > code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
-pre {
-  margin: 0; background: var(--code-bg); border-radius: 8px; padding: 14px 16px;
-  font-family: var(--font-mono); font-size: 13.5px; line-height: 1.6; overflow-x: auto;
-}
-.c-key { color: var(--accent); } .c-com { color: var(--muted); } .c-q { color: var(--query); font-weight: 500; }
-a { color: var(--accent); }
-button, select, input, textarea { font: inherit; color: inherit; }
-button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
-}
-.btn {
-  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
-  padding: 8px 14px; cursor: pointer; font-size: 15px;
-}
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-.btn[disabled] { opacity: 0.45; cursor: default; }
-
-/* 머리말 */
-header.top { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
-.lede { font-size: 18px; color: var(--muted); }
-.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.toc a {
-  text-decoration: none; font-size: 14px; color: var(--ink); background: var(--surface);
-  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
-}
-.toc a span { font-family: var(--font-mono); color: var(--muted); margin-right: 6px; }
-
-/* 상자 */
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.callout { border-radius: 8px; padding: 14px 16px; background: var(--accent-soft); }
-.callout.warn { background: var(--warn-soft); }
-.callout.ok { background: var(--ok-soft); }
-.callout strong { font-weight: 700; }
-.choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px;
-  cursor: pointer; font-size: 15px;
-}
-.chip[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-.label { font-size: 13px; color: var(--muted); letter-spacing: 0.03em; }
-
-/* 다이어그램 */
-.diagram { overflow-x: auto; }
-.diagram svg { display: block; min-width: 620px; width: 100%; height: auto; }
-.svg-box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
-.svg-head { fill: var(--accent-soft); }
-.svg-t { fill: var(--ink); font-family: var(--font-mono); font-size: 13px; }
-.svg-tb { fill: var(--ink); font-family: var(--font-body); font-size: 14px; font-weight: 700; }
-.svg-m { fill: var(--muted); font-family: var(--font-body); font-size: 12.5px; }
-.svg-line { stroke: var(--muted); stroke-width: 1.5; fill: none; }
-.svg-acc { stroke: var(--accent); stroke-width: 2; fill: none; }
-
-/* 지연 로딩 미니 실습 */
-.lazy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.team-card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
-.team-card h4 { margin: 0; font-size: 16px; }
-.box {
-  border: 1.5px dashed var(--muted); border-radius: 8px; padding: 10px; font-size: 14px; color: var(--muted);
-  min-height: 64px; display: flex; align-items: center; justify-content: center; text-align: center;
-}
-.box.filled { border-style: solid; border-color: var(--ok); color: var(--ink); background: var(--ok-soft); justify-content: flex-start; text-align: left; }
-
-/* 쿼리 로그 */
-.log {
-  background: var(--code-bg); border-radius: 8px; padding: 10px 12px; font-family: var(--font-mono);
-  font-size: 12.5px; line-height: 1.6; max-height: 300px; overflow: auto; display: flex; flex-direction: column; gap: 2px;
-}
-.log .row { display: grid; grid-template-columns: 2.4em 1fr; gap: 8px; white-space: pre-wrap; animation: in 0.25s ease-out; }
-.log .row .n { color: var(--query); text-align: right; }
-.log .row.note { color: var(--muted); grid-template-columns: 1fr; }
-.log .row.warn { color: var(--warn); grid-template-columns: 1fr; }
-.log .empty { color: var(--muted); }
-@keyframes in { from { opacity: 0.2; transform: translateY(2px); } to { opacity: 1; transform: none; } }
-
-/* 시뮬레이터 */
-.sim { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; }
-.controls { display: flex; flex-direction: column; gap: 18px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field .row-line { display: flex; justify-content: space-between; align-items: baseline; }
-.seg { display: flex; flex-wrap: wrap; gap: 6px; }
-.seg button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 14px; }
-.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
-.check { display: flex; gap: 8px; align-items: center; font-size: 15px; }
-.check input { width: 18px; height: 18px; accent-color: var(--accent); }
-.result { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.count-line { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.big { font-family: var(--font-mono); font-size: 52px; font-weight: 500; line-height: 1; color: var(--query); font-variant-numeric: tabular-nums; }
-.big.good { color: var(--ok); }
-.formula { font-family: var(--font-mono); font-size: 15px; color: var(--muted); }
-.lane { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 18px; }
-.tick { width: 10px; height: 18px; border-radius: 2px; background: var(--query); }
-.tick.first { background: var(--accent); }
-.verdict { font-size: 15px; }
-
-/* 단계 넘기기 */
-.stepper { display: flex; flex-direction: column; gap: 14px; }
-.step-dots { display: flex; gap: 6px; flex-wrap: wrap; }
-.step-dots button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 12px; font-family: var(--font-mono); font-size: 13px; cursor: pointer; }
-.step-dots button[aria-current="step"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-.step-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.flow { display: flex; flex-direction: column; gap: 8px; }
-.flow .node { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; background: var(--surface); opacity: 0.38; transition: opacity 0.2s; }
-.flow .node.on { opacity: 1; border-color: var(--accent); }
-.flow .node.hot { border-color: var(--query); background: var(--query-soft); }
-.flow .arrow { text-align: center; color: var(--muted); font-size: 13px; line-height: 1; }
-.step-nav { display: flex; gap: 8px; }
-
-/* 탭 */
-.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
-.tabs button { border: 0; background: none; padding: 10px 12px; cursor: pointer; font-size: 15px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
-.tab-panel { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
-.pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.pc div { border-radius: 8px; padding: 12px 14px; font-size: 15px; }
-.pc .pro { background: var(--ok-soft); } .pc .con { background: var(--warn-soft); }
-.pc h4 { margin: 0 0 4px; font-size: 14px; }
-.pc ul, .read ul { margin: 0; padding-left: 20px; }
-
-/* 표 */
-.table-wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 560px; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 13px; color: var(--muted); font-weight: 500; letter-spacing: 0.03em; }
-
-/* 페이징 */
-.rows { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-mono); font-size: 13px; }
-.rows .r { display: grid; grid-template-columns: 3em 6em 1fr; gap: 10px; padding: 4px 10px; border-radius: 4px; border-left: 4px solid var(--c); background: var(--surface); }
-.rows .r.cut { opacity: 0.3; }
-.rows .limit { border-top: 2px dashed var(--query); margin: 4px 0; position: relative; }
-.rows .limit span { position: absolute; right: 0; top: -11px; background: var(--bg); color: var(--query); font-size: 12px; padding: 0 6px; }
-.page-out { display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
-.page-out .bad { color: var(--query); font-weight: 700; }
-
-/* 체크 */
-.quiz { display: flex; flex-direction: column; gap: 10px; }
-.quiz .opts { display: flex; flex-wrap: wrap; gap: 8px; }
-.quiz .feedback { font-size: 15px; border-radius: 8px; padding: 10px 14px; }
-.quiz .feedback.right { background: var(--ok-soft); }
-.quiz .feedback.wrong { background: var(--query-soft); }
-textarea { width: 100%; min-height: 120px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface); resize: vertical; line-height: 1.7; }
-.model { display: flex; flex-direction: column; gap: 10px; }
-.model dl { margin: 0; display: grid; grid-template-columns: 7em 1fr; gap: 8px 14px; }
-.model dt { font-weight: 700; } .model dd { margin: 0; }
-
-footer { color: var(--muted); font-size: 14px; max-width: 720px; }
-
-@media (max-width: 760px) {
-  .sim, .step-body, .pc { grid-template-columns: minmax(0, 1fr); }
-  .lazy-grid { grid-template-columns: minmax(0, 1fr); }
-  .model dl { grid-template-columns: 1fr; }
-  .big { font-size: 42px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
-}
-
-[hidden] { display: none !important; }
-.back { font-size: 14px; color: var(--muted); text-decoration: none; }
-.back:hover { color: var(--accent); }
+/* 레슨 정보 */
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--muted); }
+.next { color: var(--muted); border-top: 1px dashed var(--line); padding-top: 14px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.phases { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.phase { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.phase h4 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.phase h4 span { font-family: var(--font-mono); color: var(--ink); font-size: 15px; }
+.phase .log { max-height: 190px; }
+.recall { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.recall:first-child { border-top: 0; padding-top: 0; }
+.recall h3 { font-size: 17px; }
+.recall .model-a { background: var(--ok-soft); border-radius: 8px; padding: 12px 14px; }
+.recall .back-link { font-size: 14px; }
+@media (max-width: 760px) { .phases { grid-template-columns: minmax(0, 1fr); } }
 </style>
+<!-- 진행 표시: 맨 위의 가는 막대와 지금 읽는 질문 -->
+<div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+<div class="where" id="where" hidden></div>
 <main>
   <header class="top">
     <a class="back" href="/dev-lessons/">← 레슨 목록</a>
-    <p class="eyebrow">JPA 단원 · 개념 학습 · 약 30분 · 선수 레슨: <a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a></p>
+    <p class="meta"><span class="m-unit">JPA</span><span class="m-time">약 15분</span><span class="m-pre">먼저 배울 레슨 <a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a></span></p>
     <h1>JPA N+1 문제</h1>
-    <p class="lede">JPA를 처음 보는 사람도 끝까지 따라올 수 있게 만든 학습 페이지예요. 읽기만 하지 말고, 중간중간 예측하고 직접 눌러 보세요. 예측이 틀려도 괜찮아요. 틀린 예측이 오히려 더 오래 남아요.</p>
-    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 엔티티, 리포지토리, JPQL(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 프록시와 지연 로딩(<a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a>), SQL의 JOIN과 LIMIT.</p>
-    <nav class="toc" aria-label="목차">
-      <a href="#predict"><span>0</span>먼저 예측</a>
-      <a href="#background"><span>1</span>JPA와 연관관계</a>
-      <a href="#lazy"><span>2</span>지연 로딩</a>
-      <a href="#sim"><span>3</span>쿼리 세어 보기</a>
-      <a href="#eager"><span>4</span>EAGER의 함정</a>
-      <a href="#fix"><span>5</span>해결 방법</a>
-      <a href="#paging"><span>6</span>페이징 함정</a>
-      <a href="#check"><span>7</span>확인과 면접 답변</a>
-    </nav>
+    <p class="lede">이 레슨을 마치면 아래 네 질문에 자료를 보지 않고 답할 수 있어요. 장 하나가 질문 하나에 답해요.</p>
+    <ol class="goals">
+      <li><a href="#q1">N+1 문제는 무엇이고 왜 생기나요?</a></li>
+      <li><a href="#q2">EAGER로 바꾸면 왜 해결되지 않나요?</a></li>
+      <li><a href="#q3">어떻게 해결하나요?</a></li>
+      <li><a href="#q4">페이징이 필요하면 어떤 방법을 써야 하나요?</a></li>
+    </ol>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong> 엔티티, 리포지토리, JPQL(<a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>), 지연 로딩(<a href="/dev-lessons/lessons/proxy-lazy-loading/">프록시와 지연 로딩</a>), SQL의 JOIN과 LIMIT.</p>
   </header>
 
-  <!-- 0 -->
+  <!-- 예측 -->
   <section id="predict" class="read">
-    <p class="eyebrow">0 · 먼저 예측</p>
-    <h2>DB에 몇 번 물어볼까요?</h2>
-    <p>팀이 10개 있고, 팀마다 멤버가 여러 명 있어요. 아래 코드는 팀 목록을 가져온 뒤 팀마다 멤버 수를 출력해요. 이 코드가 실행되는 동안 DB에 SQL을 몇 번 보낼까요? 모르는 게 정상이니 감으로 골라 보세요.</p>
-<pre><span class="c-key">List</span>&lt;Team&gt; teams = teamRepository.findAll();
-<span class="c-key">for</span> (Team team : teams) &#123;
-    System.out.println(team.getMembers().size());
-&#125;</pre>
+    <p class="eyebrow">먼저 예측해 보기</p>
+    <h2>이 코드는 DB에 SQL을 몇 번 보낼까요?</h2>
+    <p>팀이 10개 있고, 팀마다 멤버가 여러 명 있어요. 팀 목록을 가져온 뒤 팀마다 멤버 수를 세서 출력해요. 모르는 게 정상이니 감으로 골라 보세요. 답은 바로 다음 장에 나와요.</p>
+    <pre set:html={highlight(codePredict)} />
     <div class="panel">
-      <div class="field">
-        <span class="label">내 예측</span>
-        <div class="choice-row" id="predict-opts">
-          <button class="chip" type="button" data-v="1" aria-pressed="false">1번</button>
-          <button class="chip" type="button" data-v="2" aria-pressed="false">2번</button>
-          <button class="chip" type="button" data-v="11" aria-pressed="false">11번</button>
-          <button class="chip" type="button" data-v="20" aria-pressed="false">20번</button>
-        </div>
+      <span class="label">내 예측</span>
+      <div class="choice-row" id="predict-opts">
+        <button class="chip" type="button" data-v="1" aria-pressed="false">1번</button>
+        <button class="chip" type="button" data-v="2" aria-pressed="false">2번</button>
+        <button class="chip" type="button" data-v="11" aria-pressed="false">11번</button>
+        <button class="chip" type="button" data-v="20" aria-pressed="false">20번</button>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="predict-conf">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
-      <p class="muted" id="predict-msg">예측을 고르면 3장에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
 
-  <!-- 1 -->
-  <section id="background" class="read">
-    <p class="eyebrow">1 · 배경 지식</p>
-    <h2>JPA는 객체와 테이블 사이의 통역사예요</h2>
-    <p>자바 코드에서는 <code>team.getMembers()</code>처럼 객체를 따라가요. 하지만 실제 데이터는 DB의 테이블에 있어요. <strong>JPA</strong>는 이 둘을 연결하는 도구(ORM)라서, 코드가 데이터를 필요로 하는 순간 SQL을 대신 만들어 DB에 보내요.</p>
-    <div class="panel diagram" aria-label="Team과 Member 객체가 team, member 테이블에 대응하는 그림">
-      <svg viewBox="0 0 680 250" role="img" aria-labelledby="dg1">
-        <title id="dg1">Team 객체의 members 목록은 member 테이블의 team_id 외래 키로 연결된다</title>
-        <text class="svg-m" x="20" y="22">자바 객체 (코드)</text>
-        <text class="svg-m" x="420" y="22">DB 테이블 (데이터)</text>
-        <rect class="svg-box" x="20" y="34" width="230" height="96" rx="8"/>
-        <rect class="svg-head" x="21" y="35" width="228" height="28" rx="7"/>
-        <text class="svg-tb" x="34" y="54">Team</text>
-        <text class="svg-t" x="34" y="84">Long id</text>
-        <text class="svg-t" x="34" y="104">String name</text>
-        <text class="svg-t" x="34" y="124" style="fill:var(--accent)">List&lt;Member&gt; members</text>
-        <rect class="svg-box" x="20" y="150" width="230" height="80" rx="8"/>
-        <rect class="svg-head" x="21" y="151" width="228" height="28" rx="7"/>
-        <text class="svg-tb" x="34" y="170">Member</text>
-        <text class="svg-t" x="34" y="200">String name</text>
-        <text class="svg-t" x="34" y="220" style="fill:var(--accent)">Team team</text>
-        <rect class="svg-box" x="420" y="34" width="240" height="76" rx="8"/>
-        <rect class="svg-head" x="421" y="35" width="238" height="28" rx="7"/>
-        <text class="svg-tb" x="434" y="54">team</text>
-        <text class="svg-t" x="434" y="84">id (PK)</text>
-        <text class="svg-t" x="434" y="102">name</text>
-        <rect class="svg-box" x="420" y="150" width="240" height="80" rx="8"/>
-        <rect class="svg-head" x="421" y="151" width="238" height="28" rx="7"/>
-        <text class="svg-tb" x="434" y="170">member</text>
-        <text class="svg-t" x="434" y="200">name</text>
-        <text class="svg-t" x="434" y="220" style="fill:var(--accent)">team_id (FK → team.id)</text>
-        <path class="svg-line" d="M250 82 H420" stroke-dasharray="4 4"/>
-        <path class="svg-line" d="M250 190 H420" stroke-dasharray="4 4"/>
-        <text class="svg-m" x="300" y="76">매핑</text>
-        <text class="svg-m" x="300" y="184">매핑</text>
-        <path class="svg-acc" d="M640 214 C 700 190, 700 100, 640 92"/>
-        <text class="svg-m" x="560" y="140" style="fill:var(--accent)">1 : N</text>
-      </svg>
-    </div>
-    <p>팀 하나에 멤버가 여럿이니 <strong>1:N 관계</strong>예요. 테이블에는 멤버 쪽에 <code>team_id</code>가 있고, 객체에는 양쪽에 서로를 가리키는 필드가 있어요.</p>
-<pre><span class="c-key">@Entity</span>
-<span class="c-key">class</span> Team &#123;
-    <span class="c-key">@Id</span> Long id;
-    String name;
-    <span class="c-key">@OneToMany</span>(mappedBy = "team")          <span class="c-com">// 컬렉션은 기본값이 LAZY</span>
-    List&lt;Member&gt; members;
-&#125;
-
-<span class="c-key">@Entity</span>
-<span class="c-key">class</span> Member &#123;
-    <span class="c-key">@Id</span> Long id;
-    String name;
-    <span class="c-key">@ManyToOne</span>(fetch = FetchType.LAZY)     <span class="c-com">// 기본값이 EAGER라 직접 LAZY로 적는다</span>
-    Team team;
-&#125;</pre>
-    <div class="callout">
-      <strong>기억할 한 가지:</strong> SQL을 한 번 보낼 때마다 애플리케이션과 DB 사이에 네트워크 왕복이 한 번 생겨요. 같은 데이터를 가져오더라도 <strong>쿼리 수가 많을수록 느려져요.</strong> N+1은 이 쿼리 수가 데이터 개수에 비례해 늘어나는 문제예요.
-    </div>
-  </section>
-
-  <!-- 2 -->
-  <section id="lazy">
-    <div class="read" style="display:flex;flex-direction:column;gap:16px">
-      <p class="eyebrow">2 · 지연 로딩과 즉시 로딩</p>
-      <h2>필요할 때 채우는 빈 상자</h2>
-      <p>연관된 데이터를 <strong>언제</strong> 가져올지 정하는 설정이 로딩 전략이에요.</p>
-      <ul>
-        <li><strong>지연 로딩(LAZY):</strong> 팀을 가져올 때 멤버는 가져오지 않고 "나중에 채울 빈 상자"(프록시, 지연 컬렉션)만 넣어 둬요. 상자를 처음 열 때(<code>size()</code>, 반복문 등) 그제서야 SQL을 보내요.</li>
-        <li><strong>즉시 로딩(EAGER):</strong> 팀을 가져오자마자 멤버도 바로 채워요. 편해 보이지만 4장에서 볼 함정이 있어요.</li>
-      </ul>
-      <p>아래에서 팀 목록은 이미 가져온 상태예요(쿼리 1번). 각 팀의 상자를 열어 보세요.</p>
+  <!-- 질문 1 -->
+  <section id="q1">
+    <div class="read stack">
+      <p class="eyebrow">질문 1</p>
+      <h2>N+1 문제는 무엇이고 왜 생기나요?</h2>
+      <div class="answer">
+        <span class="label">결론</span>
+        <p class="lead">연관된 데이터를 하나씩 따로 가져와서 생겨요.</p>
+        <p class="sub">팀 목록을 쿼리 1번으로 가져온 뒤, 팀마다 멤버를 가져오는 쿼리가 1번씩 더 나가요. 팀이 N개면 모두 1 + N번이에요.</p>
+      </div>
+      <p>예측한 코드의 답은 <strong>11번</strong>이에요. <span id="predict-result" class="muted"></span> 왜 11번인지 직접 확인해 봐요.</p>
+      <p>팀은 멤버 목록을 가지고 있어요. 이렇게 엔티티가 다른 엔티티를 가리키는 것을 <strong>연관관계</strong>라고 해요. N+1은 연관관계를 따라가며 데이터를 쓸 때 생겨요.</p>
+      <pre set:html={highlight(codeEntity)} />
+      <ul class="code-note"><li><mark class="hl">List&lt;Member&gt; members</mark> 팀이 가진 멤버 목록이에요. 이 필드가 팀과 멤버의 연관관계예요.</li></ul>
+      <p><code>members</code>는 <strong>지연 로딩</strong>이에요. 팀을 가져올 때 멤버는 가져오지 않고, 코드가 멤버를 처음 쓰는 순간에 그 팀의 멤버만 조회해요. 처음 코드에서는 반복문 안의 <code>team.getMembers()</code>가 그 순간이에요.</p>
+      <pre set:html={highlight(codeLoop)} />
+      <ul class="code-note"><li><mark class="hl">team.getMembers()</mark> 멤버를 처음 쓰는 곳이에요. 여기서 그 팀의 멤버를 가져오는 쿼리가 나가요.</li></ul>
+      <p>아래는 첫 줄이 끝나서 팀 목록을 이미 가져온 상태예요(쿼리 1번). 반복문이 하는 것처럼 팀마다 멤버를 꺼내 보세요.</p>
     </div>
     <div class="panel">
       <div class="lazy-grid" id="lazy-grid"></div>
-      <div class="count-line"><span class="label">지금까지 보낸 쿼리</span><span class="mono" id="lazy-count" style="color:var(--query);font-weight:500">1번</span></div>
+      <div class="count-line"><span class="label">지금까지 보낸 쿼리</span><span class="mono" id="lazy-count" style="font-weight:500">1번</span></div>
       <div class="log" id="lazy-log" aria-live="polite"></div>
+      <p id="lazy-msg" class="verdict" hidden></p>
       <div><button class="btn" type="button" id="lazy-reset">처음으로</button></div>
+    </div>
+    <div class="read stack">
+      <p>팀 하나의 멤버를 꺼낼 때마다 쿼리가 하나씩 나가요. 그래서 쿼리 수는 <strong>목록 1번 + 팀 수 N번</strong>이에요. 팀이 10개면 11번, 1,000개면 1,001번이에요.</p>
+      <p>이게 문제인 이유는 쿼리 한 번마다 애플리케이션과 DB 사이를 한 번씩 오가기 때문이에요. 쿼리 수가 데이터 개수를 따라 늘어나니, 데이터가 쌓일수록 화면이 느려져요.</p>
+      <p>멤버를 쓰지 않으면 추가 쿼리는 없어요. 팀만 조회하고 끝내면 1번이에요.</p>
+      <div class="panel quiz" data-quiz="q1"></div>
+      <p class="next"><strong>다음 질문:</strong> 멤버를 나중에 따로 가져와서 생긴 문제예요. 그러면 처음부터 같이 가져오도록 즉시 로딩(EAGER)으로 바꾸면 해결될까요?</p>
     </div>
   </section>
 
-  <!-- 3 -->
-  <section id="sim">
-    <div class="read" style="display:flex;flex-direction:column;gap:16px">
-      <p class="eyebrow">3 · 쿼리 세어 보기</p>
-      <h2>1번 조회했는데 N번이 더 나가요</h2>
-      <p>0장의 코드를 그대로 실행한다고 생각해 보세요. 팀 수와 로딩 전략을 바꾸면서 SQL 로그를 보세요. 파란 눈금은 처음 목록 조회 1번, 주황 눈금은 그 뒤에 따라 나간 쿼리예요.</p>
+  <!-- 질문 2 -->
+  <section id="q2">
+    <div class="read stack">
+      <p class="eyebrow">질문 2</p>
+      <h2>EAGER로 바꾸면 왜 해결되지 않나요?</h2>
+      <div class="answer">
+        <span class="label">결론</span>
+        <p class="lead">EAGER는 가져오는 시점만 바꾸기 때문이에요.</p>
+        <p class="sub">멤버를 팀마다 따로 조회하는 방식은 그대로예요. 그래서 쿼리 수도 그대로 11번이에요.</p>
+      </div>
+      <p><strong>즉시 로딩(EAGER)</strong>은 팀을 가져오면 멤버도 바로 채우라는 설정이에요.</p>
+      <pre set:html={highlight(codeEager)} />
+      <ul class="code-note"><li><mark class="hl">fetch = FetchType.EAGER</mark> 로딩 방식을 즉시 로딩으로 바꾸는 설정이에요.</li></ul>
+      <p>처음 코드를 그대로 실행한다고 해 볼게요. 아래에서 LAZY와 EAGER를 바꿔 보세요. 쿼리가 언제 나가는지, 모두 몇 번인지 비교해요.</p>
+    </div>
+    <div class="panel">
+      <div class="field">
+        <span class="label">members의 로딩 방식</span>
+        <div class="seg" id="tm-fetch">
+          <button type="button" data-v="LAZY" aria-pressed="true">LAZY</button>
+          <button type="button" data-v="EAGER" aria-pressed="false">EAGER</button>
+        </div>
+      </div>
+      <div class="phases">
+        <div class="phase"><h4>findAll()을 실행하는 동안 <span id="tm-c1"></span></h4><div class="log" id="tm-log1"></div></div>
+        <div class="phase"><h4>반복문에서 멤버를 쓰는 동안 <span id="tm-c2"></span></h4><div class="log" id="tm-log2"></div></div>
+      </div>
+      <p class="verdict" id="tm-verdict" aria-live="polite"></p>
+    </div>
+    <div class="read stack">
+      <p>이유는 처음 코드의 첫 줄, <code>teamRepository.findAll()</code>이 실행되는 순서에 있어요. <code>findAll()</code>은 Spring Data JPA가 만들어 주는 "전부 조회" 메서드예요.</p>
+      <pre set:html={highlight(codeFindAll)} />
+      <ul class="code-note"><li><mark class="hl">teamRepository.findAll()</mark> 아래 세 단계가 모두 이 한 줄 안에서 일어나요.</li></ul>
+      <ol style="margin:0;padding-left:22px">
+        <li><code>findAll()</code>은 안에서 JPQL <code>select t from Team t</code>를 실행해요. "팀을 전부 가져와라"라는 뜻이에요.</li>
+        <li>JPA는 JPQL을 적힌 그대로 SQL로 바꿔요. 팀만 적혀 있으니 SQL도 팀만 조회해요. (쿼리 1번)</li>
+        <li>팀 10개를 받은 뒤에야 EAGER 설정을 보고, 팀마다 멤버를 조회해요. (쿼리 10번)</li>
+      </ol>
+      <p>LAZY와 다른 점은 세 번째 단계가 일어나는 때뿐이에요. LAZY는 반복문에서 멤버를 쓸 때, EAGER는 <code>findAll()</code>이 끝나기 전에 일어나요.</p>
+      <p>EAGER는 오히려 손해예요. 멤버가 필요 없는 화면에서도 11번이 나가요. LAZY였다면 1번으로 끝났을 조회예요.</p>
+      <div class="callout"><strong>실무 규칙:</strong> 연관관계는 모두 LAZY로 두고, 멤버가 필요한 조회에서만 함께 가져와요. <code>@ManyToOne</code>과 <code>@OneToOne</code>은 기본값이 EAGER라서 <code>fetch = FetchType.LAZY</code>를 직접 적어요.</div>
+      <details class="more">
+        <summary>더 알아보기: 하나만 찾을 때는 달라요</summary>
+        <p><code>em.find(Team.class, id)</code>처럼 id로 하나만 찾을 때는 Hibernate가 EAGER 연관을 join으로 한 번에 가져오기도 해요. N+1이 생기는 건 JPQL로 목록을 조회할 때예요.</p>
+      </details>
+      <div class="panel quiz" data-quiz="q2"></div>
+      <p class="next"><strong>다음 질문:</strong> 가져오는 시점을 바꿔서는 소용이 없어요. "팀마다 따로"를 없애야 해요. 어떻게 하면 될까요?</p>
+    </div>
+  </section>
+
+  <!-- 질문 3 -->
+  <section id="q3">
+    <div class="read stack">
+      <p class="eyebrow">질문 3</p>
+      <h2>어떻게 해결하나요?</h2>
+      <div class="answer">
+        <span class="label">결론</span>
+        <p class="lead">멤버를 팀마다 따로 가져오지 말고, 묶어서 가져와요.</p>
+        <ul class="sub"><li><strong>fetch join:</strong> 팀과 멤버를 join해서 쿼리 1번에 가져와요.</li><li><strong>배치 페치:</strong> 여러 팀의 멤버를 IN 절로 묶어 한 번에 가져와요.</li></ul>
+      </div>
+      <h3>방법 1. fetch join: join해서 한 번에</h3>
+      <p><code>findAll()</code> 대신, JPQL에 <code>join fetch</code>를 적은 조회 메서드를 만들어 써요. 팀과 멤버를 join한 SQL 하나로 함께 가져와서 쿼리는 <strong>1번</strong>이에요.</p>
+      <pre set:html={highlight(codeFetchJoin)} />
+      <ul class="code-note"><li><mark class="hl"><span class="c-str">join fetch</span></mark> 팀을 조회할 때 멤버도 함께 가져오라는 뜻이에요.</li><li><mark class="hl" set:html={highlight('left join member m')} /> 그래서 SQL에 멤버 테이블 join이 생겨요.</li></ul>
+      <p class="muted">Spring Data JPA의 <code>@EntityGraph(attributePaths = "members")</code>도 같은 join을 만들어요. 쿼리를 직접 쓰지 않고 메서드에 붙여서 써요.</p>
+      <h3>방법 2. 배치 페치: IN으로 묶어서</h3>
+      <p>LAZY는 그대로 둬요. 대신 멤버를 처음 쓸 때 그 팀 하나가 아니라 <strong>여러 팀의 멤버를 IN 절로 묶어</strong> 한 번에 가져와요. IN 절은 <code>where team_id in (1, 2, 3)</code>처럼 여러 값을 한 번에 조건으로 거는 SQL 문법이에요. 설정 하나로 모든 연관관계에 적용돼요.</p>
+      <pre set:html={highlight(codeBatch)} />
+      <ul class="code-note"><li><mark class="hl" set:html={highlight('in (1, 2, 3, ..., 10)')} /> 팀 10개의 멤버를 조건 하나로 묶었어요. 배치 크기가 100이라 10개가 쿼리 하나에 다 들어가요.</li></ul>
+      <p>한 번에 묶는 팀 수가 배치 크기예요. 쿼리 수는 <strong>1 + (팀 수 ÷ 배치 크기, 올림)</strong>이에요. 팀 10개에 배치 크기 5면 1 + 2 = 3번이에요.</p>
+      <p>처음 코드에 두 방법을 각각 적용했을 때의 쿼리 수예요. 팀 수와 방법을 바꿔 가며 비교해 보세요.</p>
     </div>
     <div class="panel">
       <div class="sim">
@@ -367,226 +307,158 @@ footer { color: var(--muted); font-size: 14px; max-width: 720px; }
             <input type="range" id="sim-n" min="1" max="20" value="10">
           </div>
           <div class="field">
-            <span class="label">로딩 전략</span>
-            <div class="seg" id="sim-fetch">
-              <button type="button" data-v="LAZY" aria-pressed="true">LAZY</button>
-              <button type="button" data-v="EAGER" aria-pressed="false">EAGER</button>
-            </div>
-          </div>
-          <label class="check"><input type="checkbox" id="sim-access" checked> 반복문에서 멤버에 접근</label>
-          <div class="field">
-            <span class="label">해결 방법 (5장에서 설명)</span>
+            <span class="label">방법</span>
             <div class="seg" id="sim-fix">
-              <button type="button" data-v="none" aria-pressed="true">없음</button>
+              <button type="button" data-v="none" aria-pressed="true">아무것도 안 함</button>
               <button type="button" data-v="fetch" aria-pressed="false">fetch join</button>
-              <button type="button" data-v="graph" aria-pressed="false">@EntityGraph</button>
               <button type="button" data-v="batch" aria-pressed="false">배치 페치</button>
             </div>
           </div>
           <div class="field" id="batch-field" hidden>
-            <label class="label" for="sim-batch">배치 크기</label>
-            <select id="sim-batch">
-              <option value="3">3</option>
-              <option value="5" selected>5</option>
-              <option value="10">10</option>
-              <option value="100">100</option>
-            </select>
+            <span class="label">배치 크기</span>
+            <div class="seg" id="sim-batch">
+              <button type="button" data-v="3" aria-pressed="false">3</button>
+              <button type="button" data-v="5" aria-pressed="true">5</button>
+              <button type="button" data-v="10" aria-pressed="false">10</button>
+              <button type="button" data-v="100" aria-pressed="false">100</button>
+            </div>
           </div>
         </div>
         <div class="result">
           <div class="count-line">
             <span class="big" id="sim-count">11</span>
-            <span class="formula" id="sim-formula">= 1 + N(10)</span>
+            <span class="formula" id="sim-formula"></span>
           </div>
           <div class="lane" id="sim-lane" aria-hidden="true"></div>
-          <p class="verdict" id="sim-verdict"></p>
-          <div class="log" id="sim-log" aria-live="polite"></div>
-          <p class="muted" id="sim-predict"></p>
+          <p class="verdict" id="sim-verdict" aria-live="polite"></p>
+          <div class="log" id="sim-log"></div>
         </div>
       </div>
+    </div>
+    <div class="read stack">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>방법</th><th>하는 일</th><th>쿼리 수</th></tr></thead>
+          <tbody>
+            <tr><td>아무것도 안 함</td><td>팀마다 멤버를 따로 조회</td><td>1 + N</td></tr>
+            <tr><td>fetch join</td><td>팀과 멤버를 join해서 한 번에</td><td>1</td></tr>
+            <tr><td>배치 페치</td><td>여러 팀의 멤버를 IN으로 묶어서</td><td>1 + (N ÷ 배치 크기, 올림)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="more">
+        <summary>더 알아보기: 세부 동작과 그 밖의 방법</summary>
+        <ul>
+          <li>join하면 팀 하나가 멤버 수만큼 여러 행이 돼요. Hibernate 6은 결과에서 중복된 팀을 자동으로 하나로 합쳐 줘요.</li>
+          <li>Hibernate 6과 PostgreSQL 조합에서는 IN 대신 <code>where team_id = any (?)</code>로 나가기도 해요. 묶어서 가져오는 원리와 쿼리 수는 같아요.</li>
+          <li>화면에 값 몇 개와 집계만 필요하면 엔티티 대신 필요한 값만 담은 객체(DTO)로 바로 조회하기도 해요.</li>
+        </ul>
+      </details>
+      <div class="panel quiz" data-quiz="q3"></div>
+      <p class="next"><strong>다음 질문:</strong> 쿼리 수만 보면 fetch join이 늘 더 좋아 보여요. 그런데 목록을 페이지로 나눠 보여 줄 때는 fetch join을 쓰면 안 되는 경우가 있어요.</p>
     </div>
   </section>
 
-  <!-- 4 -->
-  <section id="eager">
-    <div class="read" style="display:flex;flex-direction:column;gap:16px">
-      <p class="eyebrow">4 · EAGER의 함정</p>
-      <h2>EAGER로 바꿔도 해결되지 않는 이유</h2>
-      <p>3장에서 EAGER로 바꿔도 쿼리 수가 그대로였죠. 이유는 JPA가 일하는 순서에 있어요. <code>findAll()</code>은 안에서 JPQL(엔티티를 대상으로 쓰는 조회 언어, <a href="/dev-lessons/lessons/jpa-basics/">JPA 첫걸음</a>)을 만들어 실행해요. 단계를 하나씩 넘겨 보세요.</p>
-    </div>
-    <div class="panel stepper">
-      <div class="step-dots" id="step-dots" role="group" aria-label="단계"></div>
-      <div class="step-body">
-        <div class="flow" id="flow">
-          <div class="node" data-s="1">① <code>teamRepository.findAll()</code></div>
-          <div class="arrow">↓</div>
-          <div class="node" data-s="2">② JPQL <code>select t from Team t</code> → SQL 번역</div>
-          <div class="arrow">↓</div>
-          <div class="node" data-s="3">③ 팀 10개가 영속성 컨텍스트에 올라옴</div>
-          <div class="arrow">↓</div>
-          <div class="node" data-s="4">④ EAGER 설정 확인 → 팀마다 멤버 조회</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
-          <h3 id="step-title"></h3>
-          <p id="step-text"></p>
-          <pre id="step-sql"></pre>
-        </div>
+  <!-- 질문 4 -->
+  <section id="q4">
+    <div class="read stack">
+      <p class="eyebrow">질문 4</p>
+      <h2>페이징이 필요하면 어떤 방법을 써야 하나요?</h2>
+      <div class="answer">
+        <span class="label">결론</span>
+        <p class="lead">팀 목록에 멤버를 붙여 페이징할 때는 배치 페치를 써요.</p>
+        <p class="sub">fetch join을 쓰면 DB가 페이지를 자르지 못해요. Hibernate가 전체 데이터를 메모리로 가져온 뒤에 잘라요.</p>
       </div>
-      <div class="step-nav">
-        <button class="btn" type="button" id="step-prev">이전</button>
-        <button class="btn primary" type="button" id="step-next">다음</button>
-      </div>
-    </div>
-    <div class="read callout warn">
-      <strong>정리:</strong> EAGER는 쿼리가 나가는 <strong>시점</strong>을 앞당길 뿐 <strong>수</strong>를 줄이지 않아요. 게다가 멤버가 필요 없는 화면에서도 항상 함께 읽어 와요. 그래서 실무에서는 모든 연관관계를 LAZY로 두고, 필요한 곳에서만 5장의 방법으로 한꺼번에 가져와요.
-      <br><span class="muted">참고: <code>em.find(Team.class, id)</code>처럼 하나만 찾을 때는 Hibernate가 join으로 한 번에 가져오기도 해요. 문제가 되는 건 JPQL로 목록을 조회할 때예요.</span>
-    </div>
-  </section>
-
-  <!-- 5 -->
-  <section id="fix">
-    <div class="read" style="display:flex;flex-direction:column;gap:16px">
-      <p class="eyebrow">5 · 해결 방법</p>
-      <h2>필요한 데이터를 한꺼번에 가져오기</h2>
-      <p>해결의 핵심은 같아요. <strong>"이 화면에서는 멤버도 필요하다"</strong>는 것을 조회하는 시점에 JPA에 알려 주는 거예요. 방법마다 장단점이 있어서, 면접에서는 차이와 선택 기준을 묻는 경우가 많아요.</p>
-    </div>
-    <div class="panel">
-      <div class="tabs" role="tablist" id="fix-tabs">
-        <button role="tab" type="button" aria-selected="true" aria-controls="tab-fetch" id="t-fetch">fetch join</button>
-        <button role="tab" type="button" aria-selected="false" aria-controls="tab-graph" id="t-graph">@EntityGraph</button>
-        <button role="tab" type="button" aria-selected="false" aria-controls="tab-batch" id="t-batch">배치 페치</button>
-        <button role="tab" type="button" aria-selected="false" aria-controls="tab-dto" id="t-dto">DTO 조회</button>
-      </div>
-      <div class="tab-panel" role="tabpanel" id="tab-fetch" aria-labelledby="t-fetch">
-        <p>JPQL에 <code>join fetch</code>를 적으면 팀과 멤버를 <strong>SQL 한 번</strong>에 join해서 가져와요.</p>
-<pre><span class="c-key">@Query</span>("select t from Team t left join fetch t.members")
-List&lt;Team&gt; findAllWithMembers();
-
-<span class="c-com">-- 실제 SQL</span>
-<span class="c-q">select t.*, m.* from team t left join member m on m.team_id = t.id</span></pre>
-        <div class="pc">
-          <div class="pro"><h4>장점</h4><ul><li>쿼리 1번</li><li>어떤 연관을 가져오는지 쿼리에 드러남</li></ul></div>
-          <div class="con"><h4>한계</h4><ul><li>컬렉션 fetch join에는 페이징을 쓰면 안 됨 (6장)</li><li>List 컬렉션 둘을 동시에 fetch join하면 <code>MultipleBagFetchException</code></li><li><code>join fetch</code>(inner join)는 멤버 없는 팀이 빠지니 필요하면 <code>left join fetch</code></li></ul></div>
-        </div>
-        <p class="muted">join하면 팀 하나가 멤버 수만큼 여러 행이 돼요. Hibernate 6부터는 중복 팀을 자동으로 하나로 합쳐 줘서 예전처럼 <code>distinct</code>를 꼭 붙이지 않아도 돼요.</p>
-      </div>
-      <div class="tab-panel" role="tabpanel" id="tab-graph" aria-labelledby="t-graph" hidden>
-        <p>Spring Data JPA에서 메서드에 붙이는 <strong>선언형 fetch join</strong>이에요. 쿼리를 직접 쓰지 않아도 돼요.</p>
-<pre><span class="c-key">@EntityGraph</span>(attributePaths = "members")
-List&lt;Team&gt; findAll();
-
-<span class="c-com">-- 실제 SQL (left outer join)</span>
-<span class="c-q">select t.*, m.* from team t left join member m on m.team_id = t.id</span></pre>
-        <div class="pc">
-          <div class="pro"><h4>장점</h4><ul><li>쿼리 1번</li><li>기본 메서드(findAll 등)에도 바로 적용</li></ul></div>
-          <div class="con"><h4>한계</h4><ul><li>내부 동작이 fetch join이라 한계도 같음</li><li>어떤 SQL이 나가는지 코드만 봐서는 덜 드러남</li></ul></div>
-        </div>
-      </div>
-      <div class="tab-panel" role="tabpanel" id="tab-batch" aria-labelledby="t-batch" hidden>
-        <p>LAZY는 그대로 두고, 상자를 열 때 <strong>여러 팀의 멤버를 IN 절로 묶어서</strong> 가져와요. 설정 하나로 전체에 적용할 수 있어요.</p>
-<pre><span class="c-com"># application.yml</span>
-spring.jpa.properties.hibernate.default_batch_fetch_size: 100
-
-<span class="c-com">// 또는 필드에 직접</span>
-<span class="c-key">@BatchSize</span>(size = 100)
-<span class="c-key">@OneToMany</span>(mappedBy = "team")
-List&lt;Member&gt; members;
-
-<span class="c-com">-- 실제 SQL</span>
-<span class="c-q">select * from team</span>
-<span class="c-q">select * from member where team_id in (?, ?, ?, ... )</span></pre>
-        <div class="pc">
-          <div class="pro"><h4>장점</h4><ul><li>페이징과 함께 쓸 수 있음</li><li>컬렉션이 여러 개여도 됨</li><li>쿼리 수가 1 + N에서 1 + ⌈N/배치 크기⌉로 줄어듦</li></ul></div>
-          <div class="con"><h4>한계</h4><ul><li>쿼리가 1번으로 줄지는 않음</li><li>IN 절이 길어지니 배치 크기는 보통 100~1000 사이</li></ul></div>
-        </div>
-        <p class="muted">Hibernate 6과 PostgreSQL 조합에서는 IN 대신 <code>where team_id = any (?)</code>처럼 배열 파라미터 하나로 나가기도 해요. 여러 팀을 묶어서 가져온다는 원리와 쿼리 수는 같아요.</p>
-      </div>
-      <div class="tab-panel" role="tabpanel" id="tab-dto" aria-labelledby="t-dto" hidden>
-        <p>엔티티 대신 화면에 필요한 값만 담는 객체(DTO)로 바로 조회해요. 연관관계 로딩 자체가 일어나지 않아요.</p>
-<pre><span class="c-key">@Query</span>("select new com.example.TeamSummary(t.name, count(m)) " +
-       "from Team t left join t.members m group by t.name")
-List&lt;TeamSummary&gt; findTeamSummaries();</pre>
-        <div class="pc">
-          <div class="pro"><h4>장점</h4><ul><li>필요한 컬럼만 가져와 가장 가벼움</li><li>집계, 통계 화면에 잘 맞음</li></ul></div>
-          <div class="con"><h4>한계</h4><ul><li>화면마다 쿼리와 DTO가 늘어남</li><li>조회한 결과를 엔티티처럼 수정할 수 없음</li></ul></div>
-        </div>
-      </div>
-    </div>
-    <div class="read table-wrap">
-      <table>
-        <thead><tr><th>상황</th><th>추천</th><th>이유</th></tr></thead>
-        <tbody>
-          <tr><td>ToOne 관계(멤버 → 팀)를 함께 조회</td><td>fetch join</td><td>행이 늘어나지 않아 페이징도 안전</td></tr>
-          <tr><td>컬렉션(팀 → 멤버) + 페이징</td><td>배치 페치</td><td>페이징은 팀 기준 SQL로, 멤버는 IN으로</td></tr>
-          <tr><td>컬렉션, 페이징 없음, 데이터 적음</td><td>fetch join 또는 @EntityGraph</td><td>쿼리 1번</td></tr>
-          <tr><td>목록 화면에 일부 값과 집계만 필요</td><td>DTO 조회</td><td>가장 가볍고 의도가 분명</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- 6 -->
-  <section id="paging">
-    <div class="read" style="display:flex;flex-direction:column;gap:16px">
-      <p class="eyebrow">6 · 페이징 함정</p>
-      <h2>컬렉션을 fetch join하고 페이징하면</h2>
-      <p>"팀을 2개씩 보여주는 목록에 멤버도 같이" 보여주려고 컬렉션 fetch join에 페이징을 걸었다고 해 볼게요. join 결과는 <strong>팀 단위가 아니라 멤버 단위 행</strong>이에요. DB가 행을 기준으로 자르면 어떻게 되는지 아래에서 잘라 보세요.</p>
+      <p>"팀을 2개씩 보여 주는 목록에 멤버도 같이" 보여 주려고 fetch join에 페이징을 걸었다고 해 볼게요. 팀과 멤버를 join한 결과는 <strong>팀 단위가 아니라 멤버 단위 행</strong>이에요. DB의 LIMIT은 행을 기준으로 잘라요. 아래에서 직접 잘라 보세요.</p>
     </div>
     <div class="panel">
       <div class="field">
-        <div class="row-line"><label class="label" for="pg-limit">SQL에서 행 기준으로 자르기 (LIMIT)</label><span class="mono" id="pg-limit-val">4행</span></div>
-        <input type="range" id="pg-limit" min="1" max="10" value="4">
+        <div class="row-line"><label class="label" for="pg-limit">DB에서 행 기준으로 자르기 (LIMIT)</label><span class="mono" id="pg-limit-val">2행</span></div>
+        <input type="range" id="pg-limit" min="1" max="10" value="2">
       </div>
       <div class="sim">
         <div class="rows" id="pg-rows" aria-label="team join member 결과 행"></div>
-        <div class="page-out" id="pg-out"></div>
+        <div class="page-out" id="pg-out" aria-live="polite"></div>
       </div>
-      <div class="callout warn">
-        <strong>그래서 Hibernate는 DB에서 자르지 않아요.</strong> 경고를 남기고 <strong>전체 행을 메모리로 가져와서</strong> 팀 기준으로 잘라요. 데이터가 10행이면 괜찮지만 100만 행이면 메모리가 부족해 장애가 날 수 있어요.
-<pre style="margin-top:8px">WARN HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory</pre>
+    </div>
+    <div class="read stack">
+      <p>LIMIT 5일 때만 원하는 결과가 나와요. 그런데 5라는 숫자는 팀 A가 3명, 팀 B가 2명이라는 걸 알아야 정할 수 있어요. 팀마다 멤버 수가 다르니, 행을 기준으로는 "팀 2개와 그 멤버 전부"를 자를 수 없어요.</p>
+      <p>그래서 Hibernate는 SQL에 LIMIT을 붙이지 않아요. <strong>전체 행을 메모리로 가져온 뒤</strong> 팀 2개를 골라내고, 아래 경고를 남겨요. 결과는 맞지만, 팀이 수십만 개면 그걸 전부 메모리에 올리다가 장애가 날 수 있어요.</p>
+      <pre class="wrap">WARN HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory</pre>
+      <h3>고치는 법: 팀만 페이징하고, 멤버는 배치 페치로</h3>
+      <p>fetch join을 빼면 SQL에 LIMIT이 정상으로 붙어요. 멤버는 배치 페치가 그 페이지에 있는 팀 것만 묶어서 가져와요. 쿼리는 <strong>2번</strong>이에요.</p>
+      <pre set:html={highlight(codePagingFix)} />
+      <ul class="code-note"><li><mark class="hl" set:html={highlight('limit 2')} /> 팀을 기준으로 2개만 잘라요.</li><li><mark class="hl" set:html={highlight('in (1, 2)')} /> 그 두 팀의 멤버만 한 번에 가져와요.</li></ul>
+      <p class="muted">Hibernate 6은 LIMIT을 같은 뜻의 <code>fetch first 2 rows only</code>로 쓰기도 해요.</p>
+      <h3>반대 방향은 fetch join을 써도 안전해요</h3>
+      <p>멤버 목록을 페이징하면서 각 멤버의 팀을 보여 줄 때는 얘기가 달라요. 멤버 한 명에 팀은 하나라서 join해도 행이 늘어나지 않아요. 그래서 fetch join과 페이징을 같이 써도 LIMIT이 그대로 붙고, 쿼리 <strong>1번</strong>으로 끝나요.</p>
+      <pre set:html={highlight(codeToOne)} />
+      <ul class="code-note"><li><mark class="hl"><span class="c-str">join fetch</span></mark> 멤버를 조회할 때 팀도 함께 가져와요.</li><li><mark class="hl" set:html={highlight('limit 20')} /> 행이 늘지 않아서 LIMIT이 SQL에 그대로 붙어요.</li></ul>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>상황</th><th>방법</th><th>쿼리 수</th></tr></thead>
+          <tbody>
+            <tr><td>팀 목록 + 멤버들, 페이징 있음</td><td>팀만 페이징 + 배치 페치</td><td>2 (페이지 크기가 배치 크기 이하일 때)</td></tr>
+            <tr><td>팀 목록 + 멤버들, 페이징 없음</td><td>fetch join</td><td>1</td></tr>
+            <tr><td>멤버 목록 + 팀, 페이징이 있든 없든</td><td>fetch join</td><td>1</td></tr>
+          </tbody>
+        </table>
       </div>
-      <div class="callout ok">
-        <strong>고치는 법:</strong> fetch join을 빼고 팀만 페이징해서 조회한 뒤(<code>select * from team limit 2</code>), 멤버는 배치 페치로 한 번에 가져와요(<code>where team_id in (1, 2)</code>). 쿼리 2번으로 정확하게 끝나요.
-      </div>
+      <p class="muted">용어: 팀 → 멤버들처럼 여럿을 가리키는 연관을 <strong>컬렉션</strong>, 멤버 → 팀처럼 하나를 가리키는 연관을 <strong>ToOne</strong>이라고 불러요. 한 줄로 줄이면 "컬렉션 fetch join에는 페이징을 걸지 않는다"예요.</p>
+      <div class="panel quiz" data-quiz="q4"></div>
     </div>
   </section>
 
-  <!-- 7 -->
-  <section id="check" class="read">
-    <p class="eyebrow">7 · 확인과 면접 답변</p>
-    <h2>방금 배운 걸 꺼내 보기</h2>
-    <p>다시 보지 말고 바로 답해 보세요. 고른 뒤에 정답이 열려요.</p>
-    <div class="panel" id="quiz"></div>
+  <!-- 보지 않고 답하기 -->
+  <section id="recall" class="read">
+    <p class="eyebrow">보지 않고 답하기</p>
+    <h2>네 질문에 직접 답해 보세요</h2>
+    <p>위로 올라가지 말고, 질문마다 소리 내어 말하거나 머릿속으로 먼저 답해 보세요. 그다음에 모범 답을 열어 비교해요. 읽을 때 안다고 느낀 것과 꺼낼 수 있는 것은 달라요.</p>
+    <div class="panel" id="recall-list"></div>
 
-    <h3 style="margin-top:12px">면접 질문: "JPA N+1 문제에 대해 설명해 주세요"</h3>
-    <p>정의 → 원리 → 해결과 트레이드오프 → 내 경험 순서로, 소리 내서 1분 안에 말한다고 생각하고 먼저 써 보세요.</p>
-    <label class="label" for="my-answer">내 답</label>
-    <textarea id="my-answer" placeholder="예: N+1 문제는 ..."></textarea>
-    <div><button class="btn primary" type="button" id="model-btn" disabled>모범 답안과 비교하기</button></div>
+    <h3 style="margin-top:12px">면접 질문: "JPA N+1 문제를 설명해 주세요"</h3>
+    <p>네 답을 하나로 이어서, 1분 안에 말해 보세요. 정의 → 원인 → 해결 → 내 경험 순서예요. 말해 본 뒤에 모범 답을 열어요.</p>
+    <div><button class="btn primary" type="button" id="model-btn">모범 답 보기</button></div>
     <div class="panel model" id="model" hidden>
       <dl>
-        <dt>정의</dt><dd>목록을 조회하는 쿼리 1번 뒤에, 결과 수 N만큼 연관 엔티티를 조회하는 쿼리가 추가로 나가는 문제입니다.</dd>
-        <dt>원리</dt><dd>JPQL은 적힌 대로 SQL로 번역되고, 연관관계 로딩은 그 뒤에 따로 일어납니다. LAZY면 연관 객체에 처음 접근할 때마다, EAGER면 조회 직후 엔티티마다 쿼리가 나가서 EAGER로 바꿔도 해결되지 않습니다.</dd>
-        <dt>해결</dt><dd>기본은 모두 LAZY로 두고, 필요한 곳에서 fetch join이나 @EntityGraph로 한 번에 가져옵니다. 컬렉션에 페이징이 필요하면 fetch join은 메모리 페이징이 되니, default_batch_fetch_size로 IN 절 조회를 씁니다.</dd>
-        <dt>경험</dt><dd>(내 프로젝트로 채우기) 예: 학습 앱의 레슨 목록에서 문제 목록을 함께 보여줄 때 SQL 로그로 쿼리 수를 확인하고 배치 페치로 줄였습니다.</dd>
+        <dt>정의</dt><dd>연관관계가 있는 엔티티 목록을 조회할 때, 목록 쿼리 1번 뒤에 조회한 개수 N만큼 연관 데이터를 가져오는 쿼리가 더 나가는 문제입니다.</dd>
+        <dt>원인</dt><dd>JPA는 JPQL에 적힌 대상만 조회하고, 연관 데이터는 엔티티마다 따로 가져옵니다. EAGER로 바꿔도 가져오는 시점만 앞당겨지고 쿼리 수는 같습니다.</dd>
+        <dt>해결</dt><dd>연관관계는 모두 LAZY로 두고, 필요한 조회에서 fetch join으로 한 번에 가져옵니다. 컬렉션을 페이징해야 하면 fetch join은 메모리에서 페이징하므로, 배치 페치로 IN 쿼리에 묶습니다.</dd>
+        <dt>경험</dt><dd>(내 프로젝트로 채우기) 예: 목록 화면에서 SQL 로그로 쿼리 수를 세어 보고 배치 페치를 적용해 줄였습니다.</dd>
       </dl>
-      <p class="muted">비교 포인트: EAGER가 해결책이 아니라는 점, 페이징 한계, 측정(SQL 로그)으로 확인했다는 점을 말했나요?</p>
     </div>
   </section>
 
   <section class="read" id="verified">
-    <p class="eyebrow">검증</p>
-    <h2>이 레슨의 주장은 테스트로 확인해요</h2>
-    <p>아래 동작은 저장소의 <a href="https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java">NPlusOneTest</a>가 실제 PostgreSQL에서 나간 SQL을 세어, 코드가 바뀔 때마다 다시 확인해요.</p>
-    <ul>
-      <li>LAZY, 팀 10개, 멤버에 접근: 쿼리 11번</li>
-      <li>LAZY, 멤버에 접근하지 않음: 1번</li>
-      <li>EAGER로 바꿔도 11번</li>
-      <li>fetch join, @EntityGraph: 1번, 중복 없이 팀 10개</li>
-      <li>배치 크기 5: 3번</li>
-      <li>컬렉션 fetch join + 페이징: SQL에는 페이징이 없고 HHH90003004 경고와 함께 메모리에서 잘림</li>
-    </ul>
-    <p>한 번 이해한 것과 오래 기억하는 것은 달라요. 7장의 확인 문제를 3일 뒤, 7일 뒤에 다시 풀어 보세요.</p>
+    <details class="more">
+      <summary>이 레슨의 숫자는 어떻게 확인했나요? (검증 테스트)</summary>
+      <div class="stack" style="padding-top:6px">
+        <p>이 레슨에 나온 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 테스트(<a href={test}>NPlusOneTest</a>)는 팀 10개와 팀마다 멤버 3명을 넣어 두고, 아래 상황마다 결과를 확인해요.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>상황</th><th>확인한 결과</th></tr></thead>
+            <tbody>
+              <tr><td>지연 로딩에서 팀을 조회하고 멤버를 쓴다</td><td>쿼리 11번</td></tr>
+              <tr><td>지연 로딩에서 팀만 조회한다</td><td>쿼리 1번</td></tr>
+              <tr><td>EAGER로 바꾸고 팀만 조회한다</td><td>쿼리 11번</td></tr>
+              <tr><td>fetch join으로 조회한다</td><td>쿼리 1번, 팀은 중복 없이 10개</td></tr>
+              <tr><td>@EntityGraph로 조회한다</td><td>쿼리 1번</td></tr>
+              <tr><td>배치 크기 5로 조회하고 멤버를 쓴다</td><td>쿼리 3번</td></tr>
+              <tr><td>팀과 멤버를 fetch join하고 페이징한다</td><td>SQL에 LIMIT이 없고, 경고(HHH90003004)가 남는다</td></tr>
+              <tr><td>팀만 페이징하고 멤버는 배치 페치로 가져온다</td><td>쿼리 2번, 첫 SQL에 LIMIT이 붙는다</td></tr>
+              <tr><td>멤버에 팀을 fetch join하고 페이징한다</td><td>쿼리 1번, SQL에 LIMIT이 붙는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.</p>
+        <h3>테스트는 이렇게 생겼어요</h3>
+        <p>"EAGER로 바꾸고 팀만 조회한다"를 확인하는 테스트예요. 조회한 뒤에 나간 SQL 수가 11번인지 확인해요. <code>TEAMS</code>는 팀 수 10이에요.</p>
+        <pre set:html={highlight(codeTest)} />
+        <ul class="code-note"><li><mark class="hl" set:html={highlight('SqlCapture.count()')} /> Hibernate가 DB로 보낸 SQL을 모두 모아 두었다가 개수를 알려 줘요.</li></ul>
+        <p>내 프로젝트에서도 같은 방법으로 확인할 수 있어요. 설정에 <code>logging.level.org.hibernate.SQL=debug</code>를 넣으면 나가는 SQL이 로그에 찍혀요. 목록 화면을 한 번 열고 SQL이 몇 번 찍히는지 세어 보세요.</p>
+        <RunLocally tests={['lab.devlessons.nplusone.NPlusOneTest']} docker />
+      </div>
+    </details>
   </section>
 
   <footer>
@@ -596,6 +468,7 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
 <script is:inline>
 (function () {
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function $(id) { return document.getElementById(id); }
   function pressGroup(container, onPick) {
     container.addEventListener('click', function (e) {
       var b = e.target.closest('button[data-v]'); if (!b) return;
@@ -603,54 +476,6 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
       onPick(b.dataset.v);
     });
   }
-  function setPressed(container, v) {
-    container.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); });
-  }
-
-  /* 0. 예측 */
-  var prediction = store('n1-predict'), predConf = store('n1-conf');
-  var predMsg = document.getElementById('predict-msg');
-  function updatePredict() {
-    if (prediction) predMsg.textContent = '내 예측: ' + prediction + '번' + (predConf ? ' (' + predConf + ')' : '') + '. 3장에서 기본 설정(LAZY, 팀 10개)의 결과와 비교해 보세요.';
-    renderSim();
-  }
-  var po = document.getElementById('predict-opts'), pc = document.getElementById('predict-conf');
-  if (prediction) setPressed(po, prediction);
-  if (predConf) setPressed(pc, predConf);
-  pressGroup(po, function (v) { prediction = v; store('n1-predict', v); updatePredict(); });
-  pressGroup(pc, function (v) { predConf = v; store('n1-conf', v); updatePredict(); });
-
-  /* 2. 지연 로딩 미니 실습 */
-  var lazyTeams = [
-    { id: 1, name: '팀 A', members: ['김', '이', '박'] },
-    { id: 2, name: '팀 B', members: ['최', '정'] },
-    { id: 3, name: '팀 C', members: ['강', '조', '윤', '장'] }
-  ];
-  var lazyGrid = document.getElementById('lazy-grid'), lazyLog = document.getElementById('lazy-log'), lazyCount = document.getElementById('lazy-count');
-  var lazyQ;
-  function lazyReset() {
-    lazyQ = 1;
-    lazyLog.innerHTML = '';
-    addLog(lazyLog, 1, 'select * from team');
-    lazyGrid.innerHTML = '';
-    lazyTeams.forEach(function (t) {
-      var card = document.createElement('div'); card.className = 'team-card';
-      card.innerHTML = '<h4>' + t.name + '</h4><div class="box">members: 빈 상자 (프록시)<br>아직 DB에 묻지 않음</div><button class="btn" type="button">team.getMembers().size()</button>';
-      var btn = card.querySelector('button'), box = card.querySelector('.box');
-      btn.addEventListener('click', function () {
-        lazyQ++;
-        addLog(lazyLog, lazyQ, 'select * from member where team_id = ' + t.id);
-        box.className = 'box filled';
-        box.innerHTML = 'members: ' + t.members.map(function (m) { return m + '○○'; }).join(', ') + '<br>→ ' + t.members.length + '명';
-        btn.disabled = true; btn.textContent = '상자를 열었어요';
-        lazyCount.textContent = lazyQ + '번';
-      });
-      lazyGrid.appendChild(card);
-    });
-    lazyCount.textContent = '1번';
-  }
-  document.getElementById('lazy-reset').addEventListener('click', lazyReset);
-
   function addLog(el, n, sql, cls) {
     var row = document.createElement('div');
     row.className = 'row' + (cls ? ' ' + cls : '');
@@ -658,132 +483,122 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
     else { row.innerHTML = '<span class="n">' + n + '</span><span></span>'; row.lastChild.textContent = sql; }
     el.appendChild(row);
   }
+
+  /* 예측 */
+  var prediction = store('n1-predict');
+  function showPrediction() {
+    if (!prediction) { $('predict-result').textContent = ''; return; }
+    $('predict-result').textContent = prediction === '11' ? '예측이 맞았어요.' : '예측은 ' + prediction + '번이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.';
+  }
+  var po = $('predict-opts');
+  if (prediction) po.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === prediction ? 'true' : 'false'); });
+  pressGroup(po, function (v) { prediction = v; store('n1-predict', v); showPrediction(); });
+  showPrediction();
+
+  /* 질문 1: 팀마다 멤버를 꺼내 보기 */
+  var lazyTeams = [
+    { id: 1, name: '팀 A', members: ['김', '이', '박'] },
+    { id: 2, name: '팀 B', members: ['최', '정'] },
+    { id: 3, name: '팀 C', members: ['강', '조', '윤', '장'] }
+  ];
+  var lazyQ;
+  function lazyReset() {
+    lazyQ = 1;
+    $('lazy-log').innerHTML = '';
+    addLog($('lazy-log'), 1, 'select * from team');
+    $('lazy-grid').innerHTML = '';
+    $('lazy-msg').hidden = true;
+    lazyTeams.forEach(function (t) {
+      var card = document.createElement('div'); card.className = 'team-card';
+      card.innerHTML = '<h4>' + t.name + '</h4><div class="box">members: 아직 가져오지 않음</div><button class="btn" type="button">team.getMembers().size()</button>';
+      var btn = card.querySelector('button'), box = card.querySelector('.box');
+      btn.addEventListener('click', function () {
+        lazyQ++;
+        addLog($('lazy-log'), lazyQ, 'select * from member where team_id = ' + t.id);
+        box.className = 'box filled';
+        box.textContent = 'members: ' + t.members.map(function (m) { return m + '○○'; }).join(', ') + ' (' + t.members.length + '명)';
+        btn.disabled = true; btn.textContent = '가져왔어요';
+        $('lazy-count').textContent = lazyQ + '번';
+        if (lazyQ === lazyTeams.length + 1) {
+          $('lazy-msg').hidden = false;
+          $('lazy-msg').textContent = '팀 3개의 멤버를 모두 꺼냈더니 1 + 3 = 4번이에요. 팀이 10개였다면 1 + 10 = 11번이에요.';
+        }
+      });
+      $('lazy-grid').appendChild(card);
+    });
+    $('lazy-count').textContent = '1번';
+  }
+  $('lazy-reset').addEventListener('click', lazyReset);
   lazyReset();
 
-  /* 3. 시뮬레이터 */
-  var simN = document.getElementById('sim-n'), simNVal = document.getElementById('sim-n-val');
-  var simFetch = document.getElementById('sim-fetch'), simFix = document.getElementById('sim-fix');
-  var simAccess = document.getElementById('sim-access'), simBatch = document.getElementById('sim-batch');
-  var batchField = document.getElementById('batch-field');
-  var state = { fetch: 'LAZY', fix: 'none' };
-  pressGroup(simFetch, function (v) { state.fetch = v; renderSim(); });
-  pressGroup(simFix, function (v) { state.fix = v; renderSim(); });
-  simN.addEventListener('input', renderSim);
-  simAccess.addEventListener('change', renderSim);
-  simBatch.addEventListener('change', renderSim);
+  /* 질문 2: LAZY와 EAGER, 쿼리가 나가는 시점 */
+  function renderTiming(mode) {
+    var l1 = $('tm-log1'), l2 = $('tm-log2'); l1.innerHTML = ''; l2.innerHTML = '';
+    addLog(l1, 1, 'select * from team');
+    var target = mode === 'EAGER' ? l1 : l2;
+    for (var t = 1; t <= 10; t++) addLog(target, t + 1, 'select * from member where team_id = ' + t);
+    if (mode === 'EAGER') addLog(l2, 0, '-- 이미 채워져 있어서 쿼리 없음', 'note');
+    $('tm-c1').textContent = (mode === 'EAGER' ? 11 : 1) + '번';
+    $('tm-c2').textContent = (mode === 'EAGER' ? 0 : 10) + '번';
+    $('tm-verdict').textContent = mode === 'EAGER'
+      ? 'EAGER: 11 + 0 = 11번. 멤버 쿼리 10번이 findAll() 쪽으로 옮겨 갔을 뿐, 합계는 같아요.'
+      : 'LAZY: 1 + 10 = 11번. 멤버 쿼리 10번은 반복문에서 멤버를 쓸 때 나가요.';
+  }
+  pressGroup($('tm-fetch'), renderTiming);
+  renderTiming('LAZY');
 
+  /* 질문 3: 방법별 쿼리 수 */
+  var fix = 'none';
+  pressGroup($('sim-fix'), function (v) { fix = v; renderSim(); });
+  $('sim-n').addEventListener('input', renderSim);
+  var batchSize = 5;
+  pressGroup($('sim-batch'), function (v) { batchSize = +v; renderSim(); });
   function renderSim() {
-    var n = +simN.value, access = simAccess.checked, size = +simBatch.value;
-    simNVal.textContent = n;
-    batchField.hidden = state.fix !== 'batch';
-    var log = document.getElementById('sim-log'); log.innerHTML = '';
-    var q = 0, formula, verdict, good = false;
+    var n = +$('sim-n').value, size = batchSize;
+    $('sim-n-val').textContent = n;
+    $('batch-field').hidden = fix !== 'batch';
+    var log = $('sim-log'); log.innerHTML = '';
+    var q = 0, formula, verdict;
     function sql(s) { q++; addLog(log, q, s); }
-    function note(s, cls) { addLog(log, 0, s, cls || 'note'); }
-
-    if (state.fix === 'fetch' || state.fix === 'graph') {
-      note(state.fix === 'fetch' ? '-- findAllWithMembers() : join fetch' : '-- findAll() + @EntityGraph("members")');
+    if (fix === 'fetch') {
       sql('select t.*, m.* from team t left join member m on m.team_id = t.id');
-      note('-- 팀 ' + n + '개와 멤버를 한 번에 받음. 반복문에서는 쿼리 없음');
-      formula = '= 1'; good = true;
-      verdict = '연관 데이터를 처음부터 함께 가져와서 쿼리가 1번으로 끝나요.';
+      formula = '= 1';
+      verdict = '팀과 멤버를 한 번에 가져와요. 팀이 몇 개든 1번이에요.';
+    } else if (fix === 'batch') {
+      sql('select * from team');
+      var chunks = Math.ceil(n / size);
+      for (var c = 0; c < chunks; c++) {
+        var ids = [];
+        for (var i = c * size + 1; i <= Math.min(n, (c + 1) * size); i++) ids.push(i);
+        sql('select * from member where team_id in (' + ids.join(', ') + ')');
+      }
+      formula = '= 1 + (' + n + ' ÷ ' + size + ', 올림)';
+      verdict = '멤버를 ' + size + '팀씩 IN으로 묶어 ' + chunks + '번에 가져와요.';
     } else {
       sql('select * from team');
-      var needLoad = state.fetch === 'EAGER' || access;
-      if (!needLoad) {
-        note('-- 멤버에 접근하지 않아서 상자를 열지 않음');
-        formula = '= 1'; good = true;
-        verdict = 'LAZY에서 멤버에 접근하지 않으면 추가 쿼리가 없어요. N+1은 연관 데이터에 접근할 때 드러나요.';
-      } else if (state.fix === 'batch') {
-        note(state.fetch === 'EAGER' ? '-- 조회 직후 (EAGER)' : '-- 반복문에서 첫 접근 시 (LAZY)');
-        var chunks = Math.ceil(n / size);
-        for (var c = 0; c < chunks; c++) {
-          var ids = [];
-          for (var i = c * size + 1; i <= Math.min(n, (c + 1) * size); i++) ids.push(i);
-          sql('select * from member where team_id in (' + ids.join(', ') + ')');
-        }
-        formula = '= 1 + ⌈' + n + ' / ' + size + '⌉'; good = chunks <= 2;
-        verdict = '멤버를 IN 절로 ' + size + '팀씩 묶어서 가져와요. 1 + N이 1 + ' + chunks + '로 줄었어요.';
-      } else {
-        note(state.fetch === 'EAGER' ? '-- 조회 직후, 팀마다 즉시 로딩 (EAGER)' : '-- 반복문에서 팀마다 상자를 열 때 (LAZY)');
-        for (var t = 1; t <= n; t++) sql('select * from member where team_id = ' + t);
-        formula = '= 1 + N(' + n + ')';
-        verdict = state.fetch === 'EAGER'
-          ? 'EAGER로 바꿔도 ' + (1 + n) + '번이에요. 쿼리가 나가는 시점만 앞당겨졌어요. 멤버에 접근하지 않아도 나가요. (4장)'
-          : '팀 목록 1번 + 팀마다 1번씩 ' + n + '번. 이것이 N+1 문제예요.';
-      }
+      for (var t = 1; t <= n; t++) sql('select * from member where team_id = ' + t);
+      formula = '= 1 + N(' + n + ')';
+      verdict = '팀마다 멤버를 따로 조회해요. 팀 수만큼 쿼리가 늘어요.';
     }
-    var count = document.getElementById('sim-count');
-    count.textContent = q; count.className = 'big' + (good ? ' good' : '');
-    document.getElementById('sim-formula').textContent = formula;
-    document.getElementById('sim-verdict').textContent = verdict;
-    var lane = document.getElementById('sim-lane'); lane.innerHTML = '';
+    var count = $('sim-count');
+    count.textContent = q; count.className = 'big' + (fix === 'none' ? '' : ' good');
+    $('sim-formula').textContent = formula;
+    $('sim-verdict').textContent = verdict;
+    var lane = $('sim-lane'); lane.innerHTML = '';
     for (var k = 0; k < q; k++) { var d = document.createElement('span'); d.className = 'tick' + (k === 0 ? ' first' : ''); lane.appendChild(d); }
-    var pm = document.getElementById('sim-predict');
-    if (prediction) {
-      pm.textContent = '0장 예측: ' + prediction + '번. 0장 코드의 실제 결과(LAZY, 팀 10개, 해결 방법 없음)는 11번이에요.' + (prediction === '11' ? ' 맞혔어요.' : ' 왜 11번인지 위 로그로 확인해 보세요.');
-    } else pm.textContent = '';
   }
   renderSim();
 
-  /* 4. 단계 */
-  var steps = [
-    { t: '코드가 조회를 요청해요', x: 'Spring Data JPA의 findAll()은 내부적으로 JPQL "select t from Team t"를 만들어요. JPQL은 테이블이 아니라 엔티티(Team)를 대상으로 하는 쿼리 언어예요.', s: '// 코드\nteamRepository.findAll();\n\n// JPQL\nselect t from Team t' },
-    { t: 'JPQL을 적힌 그대로 SQL로 번역해요', x: '이때 JPA는 쿼리에 적힌 것만 봐요. "팀을 가져와라"만 적혀 있으니 팀 테이블만 조회해요. 멤버를 어떻게 로딩할지(EAGER)는 이 단계에서 반영되지 않아요.', s: 'select * from team                 -- 쿼리 1번' },
-    { t: '팀 10개가 영속성 컨텍스트에 올라와요', x: '영속성 컨텍스트는 JPA가 조회한 엔티티를 담아 두는 1차 캐시예요. 팀 10개가 여기에 객체로 만들어져요. 아직 멤버는 비어 있어요.', s: 'Team(1), Team(2), ... Team(10)\nmembers = 비어 있음' },
-    { t: '그제서야 EAGER 설정을 보고 멤버를 채워요', x: '팀 객체를 만든 뒤 "members는 즉시 로딩"이라는 설정을 확인하고, 팀마다 멤버 조회 SQL을 따로 보내요. 그래서 1 + 10 = 11번이 돼요.', s: 'select * from member where team_id = 1\nselect * from member where team_id = 2\n...\nselect * from member where team_id = 10   -- 10번 더' }
-  ];
-  var cur = 0, dots = document.getElementById('step-dots');
-  steps.forEach(function (s, i) {
-    var b = document.createElement('button'); b.type = 'button'; b.textContent = (i + 1) + '단계';
-    b.addEventListener('click', function () { cur = i; renderStep(); });
-    dots.appendChild(b);
-  });
-  function renderStep() {
-    var s = steps[cur];
-    document.getElementById('step-title').textContent = s.t;
-    document.getElementById('step-text').textContent = s.x;
-    document.getElementById('step-sql').textContent = s.s;
-    dots.querySelectorAll('button').forEach(function (b, i) { if (i === cur) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-    document.querySelectorAll('#flow .node').forEach(function (nd) {
-      var k = +nd.dataset.s; nd.classList.toggle('on', k <= cur + 1); nd.classList.toggle('hot', k === 4 && cur === 3);
-    });
-    document.getElementById('step-prev').disabled = cur === 0;
-    document.getElementById('step-next').disabled = cur === steps.length - 1;
-  }
-  document.getElementById('step-prev').addEventListener('click', function () { if (cur > 0) { cur--; renderStep(); } });
-  document.getElementById('step-next').addEventListener('click', function () { if (cur < steps.length - 1) { cur++; renderStep(); } });
-  renderStep();
-
-  /* 5. 탭 */
-  var tabs = document.querySelectorAll('#fix-tabs [role="tab"]');
-  tabs.forEach(function (tab, idx) {
-    tab.addEventListener('click', function () { selectTab(tab); });
-    tab.addEventListener('keydown', function (e) {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-        var next = tabs[(idx + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-        selectTab(next); next.focus();
-      }
-    });
-  });
-  function selectTab(tab) {
-    tabs.forEach(function (t) {
-      var on = t === tab; t.setAttribute('aria-selected', on ? 'true' : 'false'); t.tabIndex = on ? 0 : -1;
-      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
-    });
-  }
-
-  /* 6. 페이징 */
+  /* 질문 4: join 결과를 행 기준으로 자르기 */
   var pgData = [
     { team: '팀 A', c: 'var(--team-a)', members: ['김○○', '이○○', '박○○'] },
     { team: '팀 B', c: 'var(--team-b)', members: ['최○○', '정○○'] },
     { team: '팀 C', c: 'var(--team-c)', members: ['강○○', '조○○', '윤○○', '장○○'] },
     { team: '팀 D', c: 'var(--team-d)', members: ['임○○'] }
   ];
-  var pgLimit = document.getElementById('pg-limit');
   function renderPaging() {
-    var lim = +pgLimit.value, rowsEl = document.getElementById('pg-rows'), out = document.getElementById('pg-out');
-    document.getElementById('pg-limit-val').textContent = lim + '행';
+    var lim = +$('pg-limit').value, rowsEl = $('pg-rows'), out = $('pg-out');
+    $('pg-limit-val').textContent = lim + '행';
     rowsEl.innerHTML = '';
     var idx = 0, got = {};
     var head = document.createElement('div'); head.className = 'r'; head.style.setProperty('--c', 'transparent');
@@ -798,29 +613,62 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
         if (idx <= lim) got[t.team] = (got[t.team] || 0) + 1;
       });
     });
-    var html = '<span class="label">애플리케이션이 받은 결과</span>';
+    var html = '<span class="label">원한 것: 팀 2개와 그 멤버 전부</span><span class="label">받은 것</span>';
+    var teams = 0, cutAny = false;
     pgData.forEach(function (t) {
       if (!got[t.team]) return;
+      teams++;
       var full = got[t.team] === t.members.length;
+      if (!full) cutAny = true;
       html += '<div>' + t.team + ': 멤버 ' + got[t.team] + '명' + (full ? '' : ' <span class="bad">(실제 ' + t.members.length + '명인데 잘림)</span>') + '</div>';
     });
-    var teams = Object.keys(got).length;
-    html += '<p class="muted" style="margin-top:6px">팀 2개를 원했는데 팀 ' + teams + '개를 받았어요. 행 기준으로 자르면 팀 수도, 멤버 목록도 정확하지 않아요.</p>';
+    var ok = teams === 2 && !cutAny;
+    html += '<p class="muted" style="margin-top:6px">' + (ok
+      ? '원하는 결과가 나왔어요. 하지만 팀 A가 3명, 팀 B가 2명이라는 걸 미리 알아야만 고를 수 있는 숫자예요.'
+      : '팀 ' + teams + '개를 받았' + (cutAny ? '고 멤버 목록이 잘렸어요.' : '어요.') + ' 원한 결과가 아니에요.') + '</p>';
     out.innerHTML = html;
   }
-  pgLimit.addEventListener('input', renderPaging);
+  $('pg-limit').addEventListener('input', renderPaging);
   renderPaging();
 
-  /* 7. 확인 문제 */
-  var quiz = [
-    { q: 'LAZY에서 팀 5개를 조회하고 멤버에는 접근하지 않았어요. 쿼리는 몇 번?', o: ['1번', '5번', '6번'], a: 0, e: '상자를 열지 않으면 멤버 조회는 일어나지 않아요. 팀 목록 1번이 전부예요.' },
-    { q: '배치 크기 10, 팀 25개, LAZY로 모든 팀의 멤버에 접근하면 쿼리는?', o: ['1번', '4번', '26번'], a: 1, e: '팀 목록 1번 + 멤버를 10팀씩 IN으로 3번(10, 10, 5) = 4번이에요.' },
-    { q: '컬렉션 fetch join에 페이징을 걸면 Hibernate는 어떻게 하나요?', o: ['SQL에 LIMIT을 붙인다', '예외를 던지고 실행하지 않는다', '경고를 남기고 메모리에서 페이징한다'], a: 2, e: '행 기준 LIMIT은 결과를 망가뜨리니, 전체를 가져와 메모리에서 잘라요. 데이터가 많으면 위험해요.' }
-  ];
-  var qEl = document.getElementById('quiz');
-  quiz.forEach(function (item, qi) {
-    var box = document.createElement('div'); box.className = 'quiz';
-    box.innerHTML = '<p><strong>Q' + (qi + 1) + '.</strong> ' + item.q + '</p><div class="opts"></div><div class="feedback" hidden></div>';
+  /* 좁은 화면에서 표를 카드로 쌓을 때 쓸 칸 이름 */
+  document.querySelectorAll('.table-wrap table').forEach(function (table) {
+    var heads = [].map.call(table.querySelectorAll('th'), function (th) { return th.textContent; });
+    table.querySelectorAll('tbody tr').forEach(function (tr) {
+      [].forEach.call(tr.children, function (td, i) { td.setAttribute('data-label', heads[i] || ''); });
+    });
+  });
+
+  /* 진행 표시: 얼마나 읽었는지와 지금 읽는 질문 */
+  var marks = [['predict', '예측'], ['q1', '질문 1 / 4'], ['q2', '질문 2 / 4'], ['q3', '질문 3 / 4'], ['q4', '질문 4 / 4'], ['recall', '마무리']];
+  function progress() {
+    var doc = document.documentElement, max = doc.scrollHeight - innerHeight;
+    $('progress-bar').style.width = (max > 0 ? Math.min(100, scrollY / max * 100) : 0) + '%';
+    var label = '';
+    marks.forEach(function (m) { if ($(m[0]).getBoundingClientRect().top < innerHeight * 0.4) label = m[1]; });
+    $('where').hidden = !label; $('where').textContent = label;
+  }
+  addEventListener('scroll', progress, { passive: true });
+  addEventListener('resize', progress);
+  progress();
+
+  /* 슬라이더의 채워진 부분을 그리려고 현재 위치를 --p로 넘긴다 */
+  document.querySelectorAll('input[type="range"]').forEach(function (el) {
+    function fill() { el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%'); }
+    el.addEventListener('input', fill); fill();
+  });
+
+  /* 장마다 확인 문제 하나. 기록하지 않는 연습이다 */
+  var quizzes = {
+    q1: { q: '지연 로딩인 팀 5개를 조회하고, 멤버는 한 번도 쓰지 않았어요. 쿼리는 몇 번일까요?', o: ['1번', '5번', '6번'], a: 0, e: '멤버를 쓰지 않으면 멤버 조회는 나가지 않아요. 팀 목록 1번이 전부예요.' },
+    q2: { q: 'members를 EAGER로 바꾸고 findAll()로 팀 10개를 조회했어요. 멤버는 쓰지 않았어요. 쿼리는 몇 번일까요?', o: ['1번', '10번', '11번'], a: 2, e: '팀 조회 1번 뒤에, 쓰든 안 쓰든 팀마다 멤버 쿼리가 10번 나가요.' },
+    q3: { q: '배치 크기 5, 팀 10개. 모든 팀의 멤버를 썼어요. 쿼리는 몇 번일까요?', o: ['2번', '3번', '11번'], a: 1, e: '팀 목록 1번 + 멤버를 5팀씩 묶어 2번 = 3번이에요.' },
+    q4: { q: '위 표에서 팀 A는 3명, 팀 B는 2명이에요. join 결과에 LIMIT 4를 걸면 팀 B의 멤버는 몇 명을 받을까요?', o: ['0명', '1명', '2명'], a: 1, e: '1~3행이 팀 A, 4행이 팀 B의 첫 멤버예요. 팀 B는 2명 중 1명만 받아요.' }
+  };
+  document.querySelectorAll('[data-quiz]').forEach(function (box) {
+    var item = quizzes[box.dataset.quiz];
+    box.innerHTML = '<span class="label">확인</span><p></p><div class="opts"></div><div class="feedback" hidden></div>';
+    box.querySelector('p').textContent = item.q;
     var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
     item.o.forEach(function (o, oi) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
@@ -828,19 +676,30 @@ List&lt;TeamSummary&gt; findTeamSummaries();</pre>
         opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
         var right = oi === item.a;
         fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
-        fb.textContent = (right ? '정답이에요. ' : '정답은 "' + item.o[item.a] + '"예요. ') + item.e;
+        fb.textContent = (right ? '맞아요. ' : '정답은 "' + item.o[item.a] + '"이에요. ') + item.e;
       });
       opts.appendChild(b);
     });
-    qEl.appendChild(box);
   });
 
-  var ans = document.getElementById('my-answer'), mbtn = document.getElementById('model-btn');
-  var saved = store('n1-answer'); if (saved) ans.value = saved;
-  function syncBtn() { mbtn.disabled = ans.value.trim().length < 20; }
-  ans.addEventListener('input', function () { store('n1-answer', ans.value); syncBtn(); });
-  syncBtn();
-  mbtn.addEventListener('click', function () { document.getElementById('model').hidden = false; mbtn.textContent = '모범 답안을 열었어요'; mbtn.disabled = true; });
+  /* 보지 않고 답하기: 모범 답은 각 장의 결론과 같은 내용이다 */
+  var recalls = [
+    { id: 'q1', q: 'N+1 문제는 무엇이고 왜 생기나요?', a: '연관된 데이터를 하나씩 따로 가져와서 생겨요. 팀 목록을 쿼리 1번으로 가져온 뒤, 팀마다 멤버를 가져오는 쿼리가 1번씩 더 나가요. 팀이 N개면 모두 1 + N번이에요.' },
+    { id: 'q2', q: 'EAGER로 바꾸면 왜 해결되지 않나요?', a: 'JPQL은 적힌 대로 팀만 조회하고, 그 뒤에 팀마다 멤버를 조회해요. EAGER는 그 시점을 앞당길 뿐이라 쿼리 수는 그대로예요. 멤버가 필요 없을 때도 나가서 오히려 손해예요.' },
+    { id: 'q3', q: '어떻게 해결하나요?', a: '멤버를 묶어서 가져와요. fetch join은 팀과 멤버를 join해서 1번에, 배치 페치는 여러 팀의 멤버를 IN으로 묶어 1 + (N ÷ 배치 크기, 올림)번에 가져와요.' },
+    { id: 'q4', q: '페이징이 필요하면 어떤 방법을 써야 하나요?', a: '팀 목록에 멤버를 붙일 때는 팀만 페이징하고 멤버는 배치 페치로 가져와요(2번). 컬렉션을 fetch join하면 행이 멤버 수만큼 늘어 DB에서 자를 수 없고, Hibernate가 전체를 메모리로 가져와 잘라요. 멤버 목록에 팀을 붙일 때는 행이 늘지 않아 fetch join을 써도 돼요.' }
+  ];
+  recalls.forEach(function (r, i) {
+    var el = document.createElement('div'); el.className = 'recall';
+    el.innerHTML = '<h3></h3><div><button class="btn" type="button">모범 답 보기</button></div><div class="model-a" hidden><p></p><a class="back-link"></a></div>';
+    el.querySelector('h3').textContent = (i + 1) + '. ' + r.q;
+    el.querySelector('.model-a p').textContent = r.a;
+    var link = el.querySelector('a'); link.href = '#' + r.id; link.textContent = '막혔다면 질문 ' + (i + 1) + '의 결론 다시 보기';
+    var btn = el.querySelector('button');
+    btn.addEventListener('click', function () { el.querySelector('.model-a').hidden = false; btn.disabled = true; btn.textContent = '모범 답을 열었어요'; });
+    $('recall-list').appendChild(el);
+  });
+  $('model-btn').addEventListener('click', function () { $('model').hidden = false; this.disabled = true; this.textContent = '모범 답을 열었어요'; });
 })();
 </script>
 </Base>
