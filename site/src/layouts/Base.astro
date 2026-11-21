@@ -20,8 +20,24 @@ const { title, description, theme } = Astro.props;
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" />
     <slot name="head" />
+    <!-- 앱 안 화면: Retrievo 앱이 주소 끝에 ?embed=1을 붙여 iframe으로 연다. 앱이 닫기와 제목을 보여 주므로 사이트 이동 링크를 숨긴다 -->
+    <script is:inline>
+      if (/[?&]embed=1(&|$)/.test(location.search)) document.documentElement.classList.add('embed');
+    </script>
+    <style is:global>
+      html.embed .back { display: none; }
+      html.embed body { padding-top: 20px; }
+    </style>
   </head>
   <body>
     <slot />
+    <script is:inline>
+      /* 앱 안 화면에서 다른 페이지로 가는 링크는 새 탭으로 연다. 안 그러면 앱의 레슨 화면 안에서 다른 페이지가 열린다 */
+      if (document.documentElement.classList.contains('embed')) {
+        document.querySelectorAll('a[href]').forEach(function (a) {
+          if (a.getAttribute('href').charAt(0) !== '#') { a.target = '_blank'; a.rel = 'noopener'; }
+        });
+      }
+    </script>
   </body>
 </html>
