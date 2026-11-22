@@ -15,23 +15,23 @@ const test = 'https://github.com/wanja727/dev-lessons/blob/main/verification/src
 
 // 코드는 한 줄이 44자를 넘지 않게 쓴다
 const codePredict = `// 풀이 가진 연결은 2개
-try (Connection conn =
+try (Connection conn =⤶
          dataSource.getConnection()) {
     // 오래 걸리는 SQL 실행
 }`;
 
-const codeRaw = `try (Connection conn =
+const codeRaw = `try (Connection conn =⤶
          [[DriverManager.getConnection(url)]]) {
     // SQL 실행
 }`;
 
-const codePool = `try (Connection conn =
+const codePool = `try (Connection conn =⤶
          [[dataSource.getConnection()]]) {
     // SQL 실행
 [[}]]`;
 
 const codeWait = `// 풀이 가진 연결은 2개
-try (Connection conn =
+try (Connection conn =⤶
          [[dataSource.getConnection()]]) {
     // 오래 걸리는 SQL 실행
 }`;
