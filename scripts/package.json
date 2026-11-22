@@ -1,0 +1,13 @@
+{
+  "name": "dev-lessons-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check:questions": "node check-questions.mjs ../content/questions",
+    "check:sources": "node check-sources.mjs",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "yaml": "2.9.1"
+  }
+}
