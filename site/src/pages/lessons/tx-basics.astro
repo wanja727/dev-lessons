@@ -17,35 +17,35 @@ const test = 'https://github.com/wanja727/dev-lessons/blob/main/verification/src
 const codePredict = `-- kim의 잔액 50, lee의 잔액 0
 -- 잔액은 0보다 작아질 수 없어요
 
-update account
-set balance = balance + 100
+update account⤶
+set balance = balance + 100⤶
 where owner = 'lee';
 
-update account
-set balance = balance - 100
+update account⤶
+set balance = balance - 100⤶
 where owner = 'kim';`;
 
-const codeFirst = `[[update account]]
-[[set balance = balance + 100]]
+const codeFirst = `[[update account]]⤶
+[[set balance = balance + 100]]⤶
 [[where owner = 'lee';]]
 
-update account
-set balance = balance - 100
+update account⤶
+set balance = balance - 100⤶
 where owner = 'kim';`;
 
 const codeTx = `[[begin;]]
 
-update account
-set balance = balance + 100
+update account⤶
+set balance = balance + 100⤶
 where owner = 'lee';
 
-update account
-set balance = balance - 100
+update account⤶
+set balance = balance - 100⤶
 where owner = 'kim';
 
 [[commit;]]`;
 
-const codeJdbc = `Connection conn =
+const codeJdbc = `Connection conn =⤶
     dataSource.getConnection();
 [[conn.setAutoCommit(false);]]
 try {
@@ -67,11 +67,11 @@ void transfer(long from, long to, int n) {
 const codeTest = `@Test
 void transactionRollsBackAll() {
     // 잔액 50인데 100을 보낸다
-    assertThatThrownBy(() ->
+    assertThatThrownBy(() ->⤶
         service.transfer(1, 2, 100));
 
     // 처음 그대로인지 확인
-    assertThat([[balance(1)]])
+    assertThat([[balance(1)]])⤷
         .isEqualTo(50);
     assertThat([[balance(2)]]).isZero();
 }`;
