@@ -57,14 +57,6 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
           <button class="chip" type="button" data-v="seq" aria-pressed="false">인덱스를 무시하고 전체를 읽는다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장 실험실에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -242,12 +234,12 @@ WHERE created_at > '2026-03-01'                           -- 선두 컬럼 조�
   function setPressed(el, v) { el.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === v ? 'true' : 'false'); }); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
-  var pred = { p1: store('ix-p1'), p2: store('ix-p2') };
+  var pred = { p1: store('ix-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'index' ? 'idx_status를 쓴다' : '전체를 읽는다') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "전체를 읽는다"예요. 99%가 PAID라서요. 3장에서 status 쿼리 두 개를 비교해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'index' ? 'idx_status를 쓴다' : '전체를 읽는다') + '. 정답은 "전체를 읽는다"예요. 99%가 PAID라서요. 3장에서 status 쿼리 두 개를 비교해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('ix-' + k, v); showPred(); });

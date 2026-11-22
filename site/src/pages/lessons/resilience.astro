@@ -66,14 +66,6 @@ Runnable call = CircuitBreaker.decorateRunnable(cb, () -> pay(key));`;
           <button class="chip" type="button" data-v="slow" aria-pressed="false">3초 가까이 기다린다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 1장에서 실제 결과로 확인할 수 있어요.</p>
     </div>
   </section>
@@ -257,12 +249,12 @@ Runnable call = CircuitBreaker.decorateRunnable(cb, () -> pay(key));`;
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('rs-p1'), p2: store('rs-p2') };
+  var pred = { p1: store('rs-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'slow' ? '3초 가까이 기다린다' : '바로 응답') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "3초 가까이 기다린다"예요. 1장의 실제 결과를 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'slow' ? '3초 가까이 기다린다' : '바로 응답') + '. 정답은 "3초 가까이 기다린다"예요. 1장의 실제 결과를 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('rs-' + k, v); showPred(); });

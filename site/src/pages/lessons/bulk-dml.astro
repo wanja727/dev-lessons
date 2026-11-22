@@ -69,14 +69,6 @@ UPDATE orders o SET status = b.status
           <button class="chip" type="button" data-v="restore" aria-pressed="false">먼저 원복해야만 다시 돌릴 수 있다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
@@ -247,12 +239,12 @@ UPDATE orders o SET status = b.status
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   var pl = { dup: '앞 묶음이 두 번 처리되어 꼬인다', safe: '이미 바뀐 행은 건너뛰고 나머지만 처리된다', restore: '먼저 원복해야만 다시 돌릴 수 있다' };
-  var pred = { p1: store('dml-p1'), p2: store('dml-p2') };
+  var pred = { p1: store('dml-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "이미 바뀐 행은 건너뛰고 나머지만 처리된다"예요. 대상 조건이 WHERE에 있어서예요. 2장에서 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + '. 정답은 "이미 바뀐 행은 건너뛰고 나머지만 처리된다"예요. 대상 조건이 WHERE에 있어서예요. 2장에서 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('dml-' + k, v); showPred(); });

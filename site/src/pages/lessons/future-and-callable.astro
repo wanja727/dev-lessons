@@ -107,14 +107,6 @@ const codeBug = ` 1  ExecutorService pool = Executors.newFixedThreadPool(3);
           <button class="chip" type="button" data-v="none" aria-pressed="false">알 수 없다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p3">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장 타임라인에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
@@ -328,13 +320,13 @@ const codeBug = ` 1  ExecutorService pool = Executors.newFixedThreadPool(3);
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('fu-p1'), p2: store('fu-p2'), p3: store('fu-p3') };
+  var pred = { p1: store('fu-p1'), p2: store('fu-p2') };
   var p2label = { submit: 'submit 하는 줄', get: 'price.get() 하는 줄', none: '알 수 없다' };
   function showPred() {
     if (!pred.p1 && !pred.p2) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 ? '약 ' + pred.p1 + '초' : '?') + ', 예외는 ' + (pred.p2 ? p2label[pred.p2] : '?') + (pred.p3 ? ' (' + pred.p3 + ')' : '') + '. 정답은 약 1초, price.get() 하는 줄이에요. 3장에서 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 ? '약 ' + pred.p1 + '초' : '?') + ', 예외는 ' + (pred.p2 ? p2label[pred.p2] : '?') + '. 정답은 약 1초, price.get() 하는 줄이에요. 3장에서 확인해 보세요.';
   }
-  ['p1', 'p2', 'p3'].forEach(function (k) {
+  ['p1', 'p2'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('fu-' + k, v); showPred(); });

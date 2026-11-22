@@ -92,14 +92,6 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
           <button class="chip" type="button" data-v="two" aria-pressed="false">②에서만 예외</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 직접 호출해 확인할 수 있어요.</p>
     </div>
   </section>
@@ -277,12 +269,12 @@ return id != null && id.equals(other.getId());  // 필드 대신 getter`;
 
   /* 0. 예측 */
   var labels = { none: '둘 다 괜찮다', one: '①부터 예외', two: '②에서만 예외' };
-  var pred = { p1: store('lazy-p1'), p2: store('lazy-p2') };
+  var pred = { p1: store('lazy-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "②에서만 예외"예요. getId()는 프록시가 이미 아는 값이에요. 2장에서 같은 순서로 눌러 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + '. 정답은 "②에서만 예외"예요. getId()는 프록시가 이미 아는 값이에요. 2장에서 같은 순서로 눌러 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('lazy-' + k, v); showPred(); });

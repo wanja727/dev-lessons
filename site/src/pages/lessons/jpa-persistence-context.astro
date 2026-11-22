@@ -96,14 +96,6 @@ public void rename(Long id) {
           <button class="chip" type="button" data-v="no" aria-pressed="false">그대로다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p3">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
@@ -367,13 +359,13 @@ public void rename(Long id) {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('pc-p1'), p2: store('pc-p2'), p3: store('pc-p3') };
+  var pred = { p1: store('pc-p1'), p2: store('pc-p2') };
   var msg = document.getElementById('predict-msg');
   function showPred() {
     if (!pred.p1 && !pred.p2) return;
-    msg.textContent = '내 예측: SELECT ' + (pred.p1 ? pred.p1 + '번' : '?') + ', 제목 ' + (pred.p2 === 'yes' ? '바뀐다' : pred.p2 === 'no' ? '그대로다' : '?') + (pred.p3 ? ' (' + pred.p3 + ')' : '') + '. 정답은 SELECT 1번, 제목은 바뀐다예요. 3장에서 이유를 확인해 보세요.';
+    msg.textContent = '내 예측: SELECT ' + (pred.p1 ? pred.p1 + '번' : '?') + ', 제목 ' + (pred.p2 === 'yes' ? '바뀐다' : pred.p2 === 'no' ? '그대로다' : '?') + '. 정답은 SELECT 1번, 제목은 바뀐다예요. 3장에서 이유를 확인해 보세요.';
   }
-  ['p1', 'p2', 'p3'].forEach(function (k) {
+  ['p1', 'p2'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('pc-' + k, v); showPred(); });

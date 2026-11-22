@@ -74,14 +74,6 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
           <button class="chip" type="button" data-v="2" aria-pressed="false">2건이 될 수 있다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
@@ -264,12 +256,12 @@ const codeService = `public Payment pay(String key, Long orderId, long amount) {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('id-p1'), p2: store('id-p2') };
+  var pred = { p1: store('id-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '1' ? '항상 1건' : '2건이 될 수 있다') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "2건이 될 수 있다"예요. 3장에서 "더블 클릭 (동시)" + "먼저 조회 후 저장"으로 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '1' ? '항상 1건' : '2건이 될 수 있다') + '. 정답은 "2건이 될 수 있다"예요. 3장에서 "더블 클릭 (동시)" + "먼저 조회 후 저장"으로 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('id-' + k, v); showPred(); });

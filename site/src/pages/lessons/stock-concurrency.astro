@@ -71,14 +71,6 @@ return redis.call('DECRBY', KEYS[1], ARGV[1])`;
           <button class="chip" type="button" data-v="more" aria-pressed="false">50건보다 많이 팔릴 수 있다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장과 3장에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -277,12 +269,12 @@ return redis.call('DECRBY', KEYS[1], ARGV[1])`;
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('stk-p1'), p2: store('stk-p2') };
+  var pred = { p1: store('stk-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'more' ? '50건보다 많이 팔릴 수 있다' : '정확히 50건') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "50건보다 많이 팔릴 수 있다"예요. 2장 시뮬레이터와 3장 실제 결과로 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === 'more' ? '50건보다 많이 팔릴 수 있다' : '정확히 50건') + '. 정답은 "50건보다 많이 팔릴 수 있다"예요. 2장 시뮬레이터와 3장 실제 결과로 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('stk-' + k, v); showPred(); });

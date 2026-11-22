@@ -95,14 +95,6 @@ const codeFix3 = `public void placeOrder(Order order) {
           <button class="chip" type="button" data-v="error" aria-pressed="false">예외가 난다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 호출 경로를 따라가며 확인할 수 있어요.</p>
     </div>
   </section>
@@ -274,12 +266,12 @@ const codeFix3 = `public void placeOrder(Order order) {
 
   /* 0. 예측 */
   var labels = { both: '주문 저장, 포인트 반영', order: '주문 저장, 포인트 그대로', error: '예외가 난다' };
-  var pred = { p1: store('tx-p1'), p2: store('tx-p2') };
+  var pred = { p1: store('tx-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "주문 저장, 포인트 그대로"예요. 예외도 나지 않아요. 2장에서 이유를 따라가 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + '. 정답은 "주문 저장, 포인트 그대로"예요. 예외도 나지 않아요. 2장에서 이유를 따라가 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('tx-' + k, v); showPred(); });

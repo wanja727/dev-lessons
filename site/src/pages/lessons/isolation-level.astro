@@ -59,14 +59,6 @@ public void transfer(...) { ... }
           <button class="chip" type="button" data-v="error" aria-pressed="false">T2가 오류로 실패</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 "갱신 손실" + READ COMMITTED로 확인할 수 있어요.</p>
     </div>
   </section>
@@ -239,12 +231,12 @@ public void transfer(...) { ... }
 
   /* 0. 예측 */
   var pl = { '180': '180', '150': '150', '130': '130', error: 'T2가 오류로 실패' };
-  var pred = { p1: store('iso-p1'), p2: store('iso-p2') };
+  var pred = { p1: store('iso-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 130이에요. T1이 넣은 50이 사라져요. 2장에서 "갱신 손실" + READ COMMITTED로 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + '. 정답은 130이에요. T1이 넣은 50이 사라져요. 2장에서 "갱신 손실" + READ COMMITTED로 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('iso-' + k, v); showPred(); });

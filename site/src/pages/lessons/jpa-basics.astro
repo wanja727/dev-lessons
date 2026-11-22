@@ -91,14 +91,6 @@ const codeRepo = `public interface CafeMenuRepository extends JpaRepository<Cafe
           <button class="chip" type="button" data-v="error" aria-pressed="false">오류 (그런 테이블 없음)</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 4장에서 번역 과정을 직접 볼 수 있어요.</p>
     </div>
   </section>
@@ -281,12 +273,12 @@ const codeRepo = `public interface CafeMenuRepository extends JpaRepository<Cafe
 
   /* 0. 예측 */
   var labels = { name: "where name = 'latte'", menu_name: "where menu_name = 'latte'", error: '오류' };
-  var pred = { p1: store('jb-p1'), p2: store('jb-p2') };
+  var pred = { p1: store('jb-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + ". 정답은 \"where menu_name = 'latte'\"예요. JPQL은 엔티티(CafeMenu)와 필드(name)로 쓰고, Hibernate가 테이블(cafe_menu)과 컬럼(menu_name)으로 바꿔요.";
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + ". 정답은 \"where menu_name = 'latte'\"예요. JPQL은 엔티티(CafeMenu)와 필드(name)로 쓰고, Hibernate가 테이블(cafe_menu)과 컬럼(menu_name)으로 바꿔요.";
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('jb-' + k, v); showPred(); });

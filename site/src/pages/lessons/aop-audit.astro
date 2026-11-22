@@ -97,14 +97,6 @@ public class AuditTxConfig { }`;
           <button class="chip" type="button" data-v="success" aria-pressed="false">SUCCESS가 남는다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -311,12 +303,12 @@ public class AuditTxConfig { }`;
 
   /* 0. 예측 */
   var labels = { kept: 'FAILED 기록이 남는다', lost: '아무것도 없다', success: 'SUCCESS가 남는다' };
-  var pred = { p1: store('aop-p1'), p2: store('aop-p2') };
+  var pred = { p1: store('aop-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "아무것도 없다"예요. FAILED 행도 같은 트랜잭션이라 롤백과 함께 사라져요. 3장에서 "REQUIRED"를 골라 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + '. 정답은 "아무것도 없다"예요. FAILED 행도 같은 트랜잭션이라 롤백과 함께 사라져요. 3장에서 "REQUIRED"를 골라 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('aop-' + k, v); showPred(); });
