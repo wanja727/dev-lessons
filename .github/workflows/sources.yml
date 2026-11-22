@@ -1,0 +1,24 @@
+name: Check sources
+
+# 레슨과 문제에 적은 출처 주소가 열리는지 본다.
+# 바깥 사이트의 사정으로 실패할 수 있어서 PR에서는 돌리지 않는다. 매주 한 번 돌고, 없는 페이지가 있으면 실패로 알린다.
+on:
+  schedule:
+    - cron: '0 0 * * 1' # 월요일 09:00 KST
+  workflow_dispatch:
+
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - run: npm ci
+      - run: npm run check:sources

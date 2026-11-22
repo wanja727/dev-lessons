@@ -65,6 +65,26 @@ questions:
       - 지연 로딩은 멤버를 처음 쓰는 순간에 조회해요. 쓰지 않으면 멤버 쿼리는 나가지 않아요
       - N+1은 조회한 목록의 연관 데이터를 하나씩 쓸 때 드러나요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: n1-what-and-why
+    concept: core
+    coreQuestion: q1
+    type: descriptive
+    status: reviewed
+    difficulty: 1
+    body: Team의 members가 지연 로딩(LAZY)이에요. 팀 목록을 조회한 뒤 반복문에서 팀마다 members를 쓰면 왜 N+1 문제가 생기는지, 그리고 이것이 왜 문제인지 설명해 보세요.
+    explanation: |-
+      **지연 로딩은 멤버를 처음 쓰는 순간에 그 팀의 멤버만 따로 조회하기 때문이에요.**
+
+      - 팀 목록은 쿼리 1번으로 가져와요. 이때 멤버는 가져오지 않아요
+      - 반복문이 팀마다 members를 처음 쓸 때 그 팀의 멤버를 가져오는 쿼리가 1번씩 나가요. 팀이 N개면 모두 1 + N번이에요
+      - 쿼리 한 번마다 애플리케이션과 DB 사이를 한 번씩 오가요. 쿼리 수가 데이터 개수를 따라 늘어나니 데이터가 쌓일수록 느려져요
+      - 멤버를 쓰지 않으면 추가 쿼리는 없어요
+    checklist:
+      - 팀 목록 조회는 쿼리 1번이고 이때 멤버는 가져오지 않는다고 말했다
+      - 멤버를 처음 쓰는 순간에 그 팀의 멤버만 조회한다고 말했다
+      - 팀이 N개면 쿼리가 모두 1 + N번이라고 말했다
+      - 쿼리 수가 데이터 개수를 따라 늘어나서 문제라고 말했다
+    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
 
   # ── 질문 2. EAGER로 바꾸면 왜 해결되지 않나요? ──
   - key: q-1935250f

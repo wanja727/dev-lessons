@@ -42,7 +42,7 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 5. 문제 초안
 
-표준 4장 규칙으로 핵심 질문마다 판정 2개 이상과 설명형 1개를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식을 검사한다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
+표준 4장 규칙으로 핵심 질문마다 판정 2개 이상과 설명형 1개를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
 
 ## 6. 마무리
 

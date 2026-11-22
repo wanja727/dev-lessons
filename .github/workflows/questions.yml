@@ -1,13 +1,14 @@
 name: Check questions
 
-# 문제 파일(content/questions)의 형식을 학습 앱 Retrievo의 검사기로 확인한다.
-# 검사 규칙은 Retrievo 저장소(wanja727/retrievo)에 하나만 두고 여기서는 내려받아 실행한다.
+# 문제 파일(content/questions)을 두 가지로 확인한다.
+# check: 형식. 학습 앱 Retrievo의 검사기로 본다. 규칙은 Retrievo 저장소(wanja727/retrievo)에 하나만 두고 여기서는 내려받아 실행한다.
+# standard: 레슨 표준(docs/lesson-standard.md 4장). 이 저장소의 scripts/check-questions.mjs로 본다.
 on:
   push:
     branches: [main]
-    paths: ['content/**', '.github/workflows/questions.yml']
+    paths: ['content/**', 'scripts/**', '.github/workflows/questions.yml']
   pull_request:
-    paths: ['content/**', '.github/workflows/questions.yml']
+    paths: ['content/**', 'scripts/**', '.github/workflows/questions.yml']
   workflow_dispatch:
     inputs:
       retrievo_ref:
@@ -34,11 +35,29 @@ jobs:
       - name: 문제 파일 검사
         run: gradle -p retrievo/backend checkContent --no-daemon -PcontentDir=$GITHUB_WORKSPACE/content/questions
 
+  standard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - run: npm ci
+      - name: 검사 스크립트 테스트
+        run: npm test
+      - name: 레슨 표준 검사
+        run: npm run check:questions
+
   # main에 들어간 문제 파일을 운영 앱(Retrievo)에 반영한다.
   # Retrievo의 Backend 워크플로가 content-updated 신호를 받아 다시 배포한다 (문제를 이미지에 넣어 시작할 때 가져온다)
   # 토큰 만드는 법: wanja727/retrievo의 docs/deploy.md "문제 파일 자동 배포"
   notify-retrievo:
-    needs: check
+    needs: [check, standard]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
