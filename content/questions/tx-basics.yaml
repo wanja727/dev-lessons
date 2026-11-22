@@ -1,12 +1,7 @@
 # 트랜잭션 기초 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
 #
-# 레슨은 핵심 질문 다섯 개를 뼈대로 한다. 모든 문제는 그중 하나에 연결되고, 답의 근거가 레슨 본문에 있다.
-#   질문 1. 트랜잭션은 무엇이고 왜 필요한가요?
-#   질문 2. 커밋과 롤백은 무엇을 하나요?
-#   질문 3. 커밋하기 전의 변경은 다른 연결에 보이나요?
-#   질문 4. 자바와 스프링 코드에서는 어떻게 쓰나요?
-#   질문 5. ACID는 무엇인가요?
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다.
 # 잔액은 verification의 TransactionBasicsTest로 확인한 동작에서 나온다 (PostgreSQL 16, Spring Boot 3.5).
 # 키 q-xxxxxxxx는 노션에서 옮긴 문제(2026-11-17), txb-xxx는 2026-11-22에 레슨을 새로 쓰며 더한 문제다.
 subject:
@@ -20,10 +15,22 @@ lesson:
 concepts:
   - key: core
     name: 트랜잭션 기초
+coreQuestions:
+  - key: q1
+    text: "트랜잭션은 무엇이고 왜 필요한가요?"
+  - key: q2
+    text: "커밋과 롤백은 무엇을 하나요?"
+  - key: q3
+    text: "커밋하기 전의 변경은 다른 연결에 보이나요?"
+  - key: q4
+    text: "자바와 스프링 코드에서는 어떻게 쓰나요?"
+  - key: q5
+    text: "ACID는 무엇인가요?"
 questions:
   # ── 질문 1. 트랜잭션은 무엇이고 왜 필요한가요? ──
   - key: q-5d541492
     concept: core
+    coreQuestion: q1
     type: ox
     status: reviewed
     difficulty: 1
@@ -37,6 +44,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-autocommit-result
     concept: core
+    coreQuestion: q1
     type: code_predict
     status: reviewed
     difficulty: 1
@@ -64,6 +72,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-why-needed
     concept: core
+    coreQuestion: q1
     type: descriptive
     status: reviewed
     difficulty: 1
@@ -86,6 +95,7 @@ questions:
   # ── 질문 2. 커밋과 롤백은 무엇을 하나요? ──
   - key: txb-rollback-result
     concept: core
+    coreQuestion: q2
     type: code_predict
     status: reviewed
     difficulty: 1
@@ -116,6 +126,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-rollback-scope
     concept: core
+    coreQuestion: q2
     type: ox
     status: reviewed
     difficulty: 1
@@ -129,6 +140,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-commit-meaning
     concept: core
+    coreQuestion: q2
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -148,6 +160,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: q-2b51ba33
     concept: core
+    coreQuestion: q2
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -169,6 +182,7 @@ questions:
   # ── 질문 3. 커밋하기 전의 변경은 다른 연결에 보이나요? ──
   - key: q-da4e5ee5
     concept: core
+    coreQuestion: q3
     type: code_predict
     status: reviewed
     difficulty: 1
@@ -187,6 +201,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-visible-after-commit
     concept: core
+    coreQuestion: q3
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -205,6 +220,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-rollback-invisible
     concept: core
+    coreQuestion: q3
     type: ox
     status: reviewed
     difficulty: 1
@@ -218,6 +234,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-visibility-explain
     concept: core
+    coreQuestion: q3
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -239,6 +256,7 @@ questions:
   # ── 질문 4. 자바와 스프링 코드에서는 어떻게 쓰나요? ──
   - key: txb-jdbc-default
     concept: core
+    coreQuestion: q4
     type: ox
     status: reviewed
     difficulty: 1
@@ -252,6 +270,7 @@ questions:
     source: https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
   - key: q-3bbb5c20
     concept: core
+    coreQuestion: q4
     type: line_pick
     status: reviewed
     difficulty: 2
@@ -270,6 +289,7 @@ questions:
     source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
   - key: q-d4bf1495
     concept: core
+    coreQuestion: q4
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -288,6 +308,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-transactional-explain
     concept: core
+    coreQuestion: q4
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -311,6 +332,7 @@ questions:
   # ── 질문 5. ACID는 무엇인가요? ──
   - key: txb-acid-atomicity
     concept: core
+    coreQuestion: q5
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -329,6 +351,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: txb-acid-isolation
     concept: core
+    coreQuestion: q5
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -347,6 +370,7 @@ questions:
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
   - key: q-42215bc5
     concept: core
+    coreQuestion: q5
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -371,6 +395,7 @@ questions:
   # ── 다섯 질문을 하나로 ──
   - key: q-d579776f
     concept: core
+    coreQuestion: all
     type: descriptive
     status: reviewed
     difficulty: 1

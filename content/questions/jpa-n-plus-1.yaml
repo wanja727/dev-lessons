@@ -1,11 +1,7 @@
 # JPA N+1 문제 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
 #
-# 레슨은 핵심 질문 네 개를 뼈대로 한다. 모든 문제는 그중 하나에 연결되고, 답의 근거가 레슨 본문에 있다.
-#   질문 1. N+1 문제는 무엇이고 왜 생기나요?
-#   질문 2. EAGER로 바꾸면 왜 해결되지 않나요?
-#   질문 3. 어떻게 해결하나요?
-#   질문 4. 페이징이 필요하면 어떤 방법을 써야 하나요?
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다.
 # 숫자는 verification의 NPlusOneTest로 확인한 동작에서 나온다.
 # 키 q-xxxxxxxx는 노션에서 옮긴 문제(2026-11-17), n1-xxx는 2026-11-21에 레슨을 새로 쓰며 더한 문제다.
 subject:
@@ -19,10 +15,20 @@ lesson:
 concepts:
   - key: core
     name: JPA N+1 문제
+coreQuestions:
+  - key: q1
+    text: "N+1 문제는 무엇이고 왜 생기나요?"
+  - key: q2
+    text: "EAGER로 바꾸면 왜 해결되지 않나요?"
+  - key: q3
+    text: "어떻게 해결하나요?"
+  - key: q4
+    text: "페이징이 필요하면 어떤 방법을 써야 하나요?"
 questions:
   # ── 질문 1. N+1 문제는 무엇이고 왜 생기나요? ──
   - key: n1-lazy-count
     concept: core
+    coreQuestion: q1
     type: code_predict
     status: reviewed
     difficulty: 1
@@ -47,6 +53,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: n1-lazy-no-access
     concept: core
+    coreQuestion: q1
     type: ox
     status: reviewed
     difficulty: 1
@@ -62,6 +69,7 @@ questions:
   # ── 질문 2. EAGER로 바꾸면 왜 해결되지 않나요? ──
   - key: q-1935250f
     concept: core
+    coreQuestion: q2
     type: ox
     status: reviewed
     difficulty: 1
@@ -75,6 +83,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-19b3c76f
     concept: core
+    coreQuestion: q2
     type: code_predict
     status: reviewed
     difficulty: 2
@@ -100,6 +109,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: n1-eager-timing
     concept: core
+    coreQuestion: q2
     type: multiple_choice
     status: reviewed
     difficulty: 2
@@ -119,6 +129,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: n1-why-eager-fails
     concept: core
+    coreQuestion: q2
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -141,6 +152,7 @@ questions:
   # ── 질문 3. 어떻게 해결하나요? ──
   - key: n1-fetch-join-how
     concept: core
+    coreQuestion: q3
     type: multiple_choice
     status: reviewed
     difficulty: 1
@@ -159,6 +171,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-a42bb6e5
     concept: core
+    coreQuestion: q3
     type: multiple_choice
     status: reviewed
     difficulty: 2
@@ -177,6 +190,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-9d00afca
     concept: core
+    coreQuestion: q3
     type: descriptive
     status: reviewed
     difficulty: 2
@@ -201,6 +215,7 @@ questions:
   # ── 질문 4. 페이징이 필요하면 어떤 방법을 써야 하나요? ──
   - key: n1-collection-paging
     concept: core
+    coreQuestion: q4
     type: multiple_choice
     status: reviewed
     difficulty: 2
@@ -220,6 +235,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-ece217e3
     concept: core
+    coreQuestion: q4
     type: multiple_choice
     status: reviewed
     difficulty: 2
@@ -240,6 +256,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-0dd7b6b4
     concept: core
+    coreQuestion: q4
     type: multiple_choice
     status: reviewed
     difficulty: 3
@@ -261,6 +278,7 @@ questions:
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-73be0dc3
     concept: core
+    coreQuestion: q4
     type: descriptive
     status: reviewed
     difficulty: 3
@@ -282,6 +300,7 @@ questions:
   # ── 네 질문을 하나로 ──
   - key: q-59546d76
     concept: core
+    coreQuestion: all
     type: descriptive
     status: reviewed
     difficulty: 2
