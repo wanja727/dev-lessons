@@ -1,0 +1,686 @@
+# 단일 책임과 개방 폐쇄 원칙 문제 (시험 삼아 쓴 것)
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 품질 계획 3단계에서 설계 유형이 되는지 보려고 썼다. 설계서는 srp-ocp.md다.
+# content/questions에 두지 않아서 학습 앱이 가져가지 않는다. 레슨을 쓸 때 옮긴다.
+# 모든 문제는 설계서의 "질문마다 본문이 말할 것"에 근거가 있다.
+# 숫자와 컴파일 오류는 자바 21로 직접 돌려 확인했다 (2026-11-23).
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: srp-ocp
+  title: 단일 책임과 개방 폐쇄 원칙
+  unit: 객체지향 설계와 패턴
+  order: 303
+concepts:
+  - key: core
+    name: 단일 책임과 개방 폐쇄 원칙
+coreQuestions:
+  - key: q1
+    text: "단일 책임 원칙은 무엇인가요?"
+  - key: q2
+    text: "책임이 섞여 있으면 어떤 문제가 생기고, 어떻게 나누나요?"
+  - key: q3
+    text: "개방 폐쇄 원칙은 무엇인가요?"
+  - key: q4
+    text: "있던 코드를 고치지 않고 어떻게 기능을 더하나요?"
+  - key: q5
+    text: "개방 폐쇄 원칙을 지키면 어떤 변경이든 있던 코드를 고치지 않고 할 수 있나요?"
+questions:
+  # ── 질문 1. 단일 책임 원칙은 무엇인가요? ──
+  - key: so-srp-meaning
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 단일 책임 원칙에서 클래스의 책임이 하나라는 것은 무엇이 하나라는 뜻일까요?
+    choices:
+      - public 메서드
+      - 클래스가 바뀌는 이유
+      - 필드
+      - 이 클래스를 쓰는 다른 클래스
+    answer: "2"
+    explanation: |-
+      **클래스가 바뀌는 이유가 하나라는 뜻이에요.**
+
+      - 바뀌는 이유는 그 변경을 요구하는 쪽으로 세요. 할인 규칙은 마케팅팀이, 영수증 문구는 고객지원팀이 바꾸라고 해요
+      - 메서드나 필드가 몇 개인지와는 상관없어요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-srp-which-change
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: |-
+      [코드 A] 메일 서버에 접속해서 보내는 코드는 MailSender 안에 있어요. 다음 요구 가운데 OrderService를 고쳐야 하는 것을 모두 고르면?
+
+      ㄱ. VIP 할인율을 10%에서 15%로 바꾼다
+      ㄴ. 영수증 문구를 "결제 금액"에서 "결제하신 금액"으로 바꾼다
+      ㄷ. 메일 서버 주소를 바꾼다
+    code: |-
+      class OrderService {
+          MailSender mail;
+          int pay(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              if (grade == Grade.VIP) {
+                  price = price * 90 / 100;
+              } else if (grade == Grade.GOLD) {
+                  price = price * 95 / 100;
+              }
+              String text =
+                  "결제 금액: " + price + "원";
+              mail.send(order.email(), text);
+              return price;
+          }
+      }
+    choices:
+      - ㄱ
+      - ㄱ, ㄴ
+      - ㄴ, ㄷ
+      - ㄱ, ㄴ, ㄷ
+    answer: "2"
+    explanation: |-
+      **ㄱ과 ㄴ이에요.** 할인율과 영수증 문구는 OrderService.pay() 안에 있어요.
+
+      - ㄱ: `price * 90 / 100`이 pay() 안에 있어요
+      - ㄴ: "결제 금액: "이라는 문구가 pay() 안에 있어요
+      - ㄷ: 메일 서버에 접속하는 코드는 MailSender 안에 있어서 OrderService는 고치지 않아요
+      - 서로 다른 이유 둘이 같은 클래스를 고치게 하니, 이 클래스는 바뀌는 이유가 하나가 아니에요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-srp-line
+    concept: core
+    coreQuestion: q1
+    type: line_pick
+    status: draft
+    difficulty: 1
+    body: "[코드 A] 고객지원팀이 영수증 문구를 \"결제 금액\"에서 \"결제하신 금액\"으로 바꿔 달라고 했어요. 고쳐야 하는 줄을 고르세요."
+    code: |-
+      class OrderService {
+          MailSender mail;
+          int pay(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              if (grade == Grade.VIP) {
+                  price = price * 90 / 100;
+              } else if (grade == Grade.GOLD) {
+                  price = price * 95 / 100;
+              }
+              String text =
+                  "결제 금액: " + price + "원";
+              mail.send(order.email(), text);
+              return price;
+          }
+      }
+    answer: "12"
+    explanation: |-
+      **12번째 줄이에요.** 문구 "결제 금액: "이 그 줄에 있어요.
+
+      - 이 줄은 할인을 계산하는 6~10번째 줄과 같은 메서드 안에 있어요
+      - 고객지원팀의 요구로 고치는데, 마케팅팀이 정한 할인 계산이 든 메서드를 열게 돼요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-srp-not-one-method
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 단일 책임 원칙을 지키려면 클래스에 public 메서드가 하나만 있어야 한다.
+    answer: X
+    explanation: |-
+      **X. 메서드의 수가 아니라 바뀌는 이유의 수를 봐요.**
+
+      - 메서드가 여럿이어도 같은 이유로 바뀌는 것끼리 모여 있으면 책임은 하나예요
+      - 메서드가 하나여도 [코드 A]의 pay()처럼 다른 이유로 바뀌는 코드가 섞여 있으면 원칙을 어긴 거예요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-srp-explain
+    concept: core
+    coreQuestion: q1
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: "[코드 A]의 OrderService는 한 메서드에서 할인을 계산하고, 영수증 문구를 만들고, 메일을 보내요. 이 클래스가 단일 책임 원칙을 어긴 이유를 설명해 보세요."
+    explanation: |-
+      **바뀌는 이유가 둘 이상이기 때문이에요.**
+
+      - 단일 책임 원칙은 클래스가 바뀌는 이유가 하나여야 한다는 원칙이에요
+      - 바뀌는 이유는 그 변경을 요구하는 쪽으로 세요
+      - 마케팅팀이 할인 규칙을 바꾸라고 해도 OrderService를 고쳐야 해요
+      - 고객지원팀이 영수증 문구를 바꾸라고 해도 OrderService를 고쳐야 해요
+    checklist:
+      - 단일 책임 원칙은 클래스가 바뀌는 이유가 하나여야 한다는 원칙이라고 말했다
+      - 바뀌는 이유를 그 변경을 요구하는 쪽으로 센다고 말했다
+      - 할인 규칙이 바뀔 때 OrderService를 고쳐야 한다고 말했다
+      - 영수증 문구가 바뀔 때도 OrderService를 고쳐야 한다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+
+  # ── 질문 2. 책임이 섞여 있으면 어떤 문제가 생기고, 어떻게 나누나요? ──
+  - key: so-split-discount
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "[코드 B] VIP 할인율을 10%에서 15%로 바꾸려고 해요. 고쳐야 하는 클래스는?"
+    code: |-
+      class DiscountCalculator {
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              if (grade == Grade.VIP) {
+                  return price * 90 / 100;
+              } else if (grade == Grade.GOLD) {
+                  return price * 95 / 100;
+              }
+              return price;
+          }
+      }
+
+      class ReceiptWriter {
+          String write(int price) {
+              return "결제 금액: " + price + "원";
+          }
+      }
+
+      class OrderService {
+          DiscountCalculator calculator;
+          ReceiptWriter writer;
+          MailSender mail;
+          int pay(Order order) {
+              int price =
+                  calculator.calculate(order);
+              String text = writer.write(price);
+              mail.send(order.email(), text);
+              return price;
+          }
+      }
+    choices:
+      - OrderService
+      - DiscountCalculator
+      - ReceiptWriter
+      - OrderService와 DiscountCalculator
+    answer: "2"
+    explanation: |-
+      **DiscountCalculator만 고쳐요.** `price * 90 / 100`이 그 안에 있어요.
+
+      - OrderService는 calculate()를 부르기만 해서 할인율이 바뀌어도 그대로예요
+      - 나눈 뒤에는 요구 하나에 클래스 하나만 고쳐요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-split-receipt
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "[코드 B] 영수증 문구가 바뀌면 OrderService도 고쳐야 한다."
+    code: |-
+      class ReceiptWriter {
+          String write(int price) {
+              return "결제 금액: " + price + "원";
+          }
+      }
+
+      class OrderService {
+          DiscountCalculator calculator;
+          ReceiptWriter writer;
+          MailSender mail;
+          int pay(Order order) {
+              int price =
+                  calculator.calculate(order);
+              String text = writer.write(price);
+              mail.send(order.email(), text);
+              return price;
+          }
+      }
+    answer: X
+    explanation: |-
+      **X. ReceiptWriter만 고쳐요.**
+
+      - 문구는 ReceiptWriter.write() 안에 있어요
+      - OrderService는 write()를 부르기만 해요. 세 객체를 순서대로 부르는 일만 남았어요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-split-test
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 영수증 문구가 맞게 만들어지는지 테스트하려고 해요. [코드 A]에서는 문구를 만드는 줄이 OrderService.pay() 안에 있었고, [코드 B]는 아래와 같아요. 각각 무엇을 불러야 하나요?
+    code: |-
+      class ReceiptWriter {
+          String write(int price) {
+              return "결제 금액: " + price + "원";
+          }
+      }
+    choices:
+      - A는 OrderService.pay(), B는 ReceiptWriter.write()
+      - A와 B 모두 OrderService.pay()
+      - A와 B 모두 ReceiptWriter.write()
+      - A는 ReceiptWriter.write(), B는 OrderService.pay()
+    answer: "1"
+    explanation: |-
+      **A는 pay()를, B는 write()만 부르면 돼요.**
+
+      - A에서는 문구가 pay() 안에서 만들어져요. pay()를 부르면 할인 계산과 메일 보내기도 함께 실행돼요
+      - B에서는 `write(9000)`만 불러 "결제 금액: 9000원"이 나오는지 보면 돼요
+      - A에는 ReceiptWriter라는 클래스가 없어요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+  - key: so-split-explain
+    concept: core
+    coreQuestion: q2
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 책임이 여럿인 클래스는 무엇이 문제인지, 그리고 [코드 A]를 [코드 B]로 나눈 기준이 무엇인지 설명해 보세요.
+    explanation: |-
+      **한 가지 이유로 고칠 때 상관없는 기능의 코드까지 건드리게 돼요. 그래서 바뀌는 이유마다 클래스를 나눠요.**
+
+      - [코드 A]에서는 영수증 문구를 고치려고 해도 할인 계산이 든 pay()를 열어야 해요
+      - 같은 이유로 바뀌는 코드끼리 모으고, 다른 이유로 바뀌는 코드는 나눠요
+      - 할인 계산은 DiscountCalculator로, 영수증 문구는 ReceiptWriter로 나눴어요
+      - 나눈 뒤에는 요구 하나에 클래스 하나만 고쳐요
+    checklist:
+      - 한 가지 이유로 고칠 때 상관없는 기능의 코드도 함께 건드리게 된다고 말했다
+      - 같은 이유로 바뀌는 코드끼리 모으고 다른 이유로 바뀌는 코드는 나눈다고 말했다
+      - 할인 계산은 DiscountCalculator로, 영수증 문구는 ReceiptWriter로 나눴다고 말했다
+      - 나눈 뒤에는 요구 하나에 클래스 하나만 고친다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
+
+  # ── 질문 3. 개방 폐쇄 원칙은 무엇인가요? ──
+  - key: so-ocp-meaning
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 개방 폐쇄 원칙에서 "수정에 닫혀 있다"는 무슨 뜻일까요?
+    choices:
+      - 클래스를 상속하지 못하게 final로 막는다
+      - 기능을 더할 때 있던 코드를 고치지 않는다
+      - 필드를 private으로 숨긴다
+      - 한 번 배포한 코드는 버그가 있어도 고치지 않는다
+    answer: "2"
+    explanation: |-
+      **기능을 더할 때 있던 코드를 고치지 않는다는 뜻이에요.**
+
+      - 개방 폐쇄 원칙은 있던 코드를 고치지 않고 새 코드를 더해서 기능을 더할 수 있어야 한다는 원칙이에요
+      - 상속을 막거나 필드를 숨기는 것과는 다른 이야기예요
+      - 버그를 고치는 것은 기능을 더하는 것이 아니에요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-open
+    concept: core
+    coreQuestion: q3
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 개방 폐쇄 원칙에서 "확장에 열려 있다"는 것은 새 기능을 더할 수 있다는 뜻이다.
+    answer: O
+    explanation: |-
+      **O. 확장은 새 기능을 더하는 것이에요.**
+
+      - 확장에 열려 있다: 새 기능을 더할 수 있다
+      - 수정에 닫혀 있다: 그때 있던 코드를 고치지 않는다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-add-grade
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "[코드 B]의 DiscountCalculator에 SILVER 등급 3% 할인을 더하려고 해요. 어떻게 해야 하나요?"
+    code: |-
+      class DiscountCalculator {
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              if (grade == Grade.VIP) {
+                  return price * 90 / 100;
+              } else if (grade == Grade.GOLD) {
+                  return price * 95 / 100;
+              }
+              return price;
+          }
+      }
+    choices:
+      - calculate() 안에 else if를 더한다
+      - 새 클래스를 만들기만 하면 된다
+      - ReceiptWriter를 고친다
+      - 고칠 곳이 없다
+    answer: "1"
+    explanation: |-
+      **calculate() 안에 else if를 더해야 해요.** 있던 메서드를 고치는 거예요.
+
+      - 등급에 따른 계산이 모두 calculate() 안의 if와 else if에 있어요
+      - 등급이 늘 때마다 같은 메서드를 다시 고쳐요
+      - 기능을 더하려고 있던 코드를 고치니 개방 폐쇄 원칙을 어긴 코드예요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-silver-result
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "[코드 B] Grade에 SILVER를 더했지만 calculate()는 고치지 않았어요. SILVER 등급의 10,000원 주문으로 calculate()를 부르면 무엇이 나올까요?"
+    code: |-
+      class DiscountCalculator {
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              if (grade == Grade.VIP) {
+                  return price * 90 / 100;
+              } else if (grade == Grade.GOLD) {
+                  return price * 95 / 100;
+              }
+              return price;
+          }
+      }
+    choices:
+      - "9700"
+      - "10000"
+      - "0"
+      - 예외가 난다
+    answer: "2"
+    explanation: |-
+      **10000이에요.** 할인 없이 원래 금액이 나와요.
+
+      - SILVER는 if에도 else if에도 맞지 않아서 마지막 `return price`로 가요
+      - 오류가 나지 않아요. 그래서 고치는 것을 빠뜨려도 알아채기 어려워요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-explain
+    concept: core
+    coreQuestion: q3
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 등급을 if와 else if로 나눈 [코드 B]의 DiscountCalculator가 개방 폐쇄 원칙을 어긴 이유를 설명해 보세요.
+    explanation: |-
+      **새 등급을 더하려면 있던 calculate() 메서드를 고쳐야 하기 때문이에요.**
+
+      - 개방 폐쇄 원칙은 있던 코드를 고치지 않고 새 코드를 더해서 기능을 더할 수 있어야 한다는 원칙이에요
+      - 등급에 따른 계산이 calculate() 안에 모여 있어서, 등급이 늘 때마다 같은 메서드를 다시 고쳐요
+      - 고치는 것을 빠뜨리면 오류 없이 할인이 빠진 금액이 나와요
+    checklist:
+      - 개방 폐쇄 원칙은 있던 코드를 고치지 않고 기능을 더할 수 있어야 한다는 원칙이라고 말했다
+      - 새 등급을 더하려면 calculate() 메서드를 고쳐야 한다고 말했다
+      - 등급이 늘 때마다 같은 메서드를 다시 고치게 된다고 말했다
+      - 고치는 것을 빠뜨려도 오류 없이 할인이 빠진 금액이 나온다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+
+  # ── 질문 4. 있던 코드를 고치지 않고 어떻게 기능을 더하나요? ──
+  - key: so-ocp-not-touched
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "[코드 C] SILVER 등급 3% 할인을 더하려고 해요. 정책 목록은 조립 코드에서 List.of(new VipDiscount(), new GoldDiscount())로 만들어요. 고치지 않아도 되는 것은?"
+    code: |-
+      interface DiscountPolicy {
+          boolean supports(Grade grade);
+          int apply(int price);
+      }
+
+      class DiscountCalculator {
+          List<DiscountPolicy> policies;
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              for (DiscountPolicy p : policies) {
+                  if (p.supports(grade)) {
+                      return p.apply(price);
+                  }
+              }
+              return price;
+          }
+      }
+    choices:
+      - Grade
+      - 정책 목록을 만드는 조립 코드
+      - DiscountCalculator
+      - 셋 다 고쳐야 한다
+    answer: "3"
+    explanation: |-
+      **DiscountCalculator는 고치지 않아요.** DiscountPolicy만 알고, 어떤 구현이 있는지는 몰라요.
+
+      - Grade에는 SILVER를 더해요
+      - SilverDiscount 클래스를 새로 만들어요
+      - 조립 코드의 목록에 `new SilverDiscount()`를 넣어요
+      - 고치는 곳이 없어지는 것이 아니라, 계산 코드 밖의 한 곳으로 모여요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-not-registered
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "[코드 C] SILVER 주문에 3%를 할인하는 SilverDiscount 클래스를 만들었지만, 정책 목록에는 넣지 않았어요. 목록에는 VipDiscount와 GoldDiscount만 있어요. SILVER 등급의 10,000원 주문으로 calculate()를 부르면 무엇이 나올까요?"
+    code: |-
+      class DiscountCalculator {
+          List<DiscountPolicy> policies;
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              for (DiscountPolicy p : policies) {
+                  if (p.supports(grade)) {
+                      return p.apply(price);
+                  }
+              }
+              return price;
+          }
+      }
+    choices:
+      - "9700"
+      - "10000"
+      - "0"
+      - 예외가 난다
+    answer: "2"
+    explanation: |-
+      **10000이에요.** 목록에 없는 정책은 쓰이지 않아요.
+
+      - calculate()는 목록에 든 정책만 차례로 물어봐요. SILVER를 맡는 정책이 없어서 마지막 `return price`로 가요
+      - 조립 코드의 목록에 `new SilverDiscount()`를 넣으면 9700이 나와요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-knows-interface
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "[코드 C]의 DiscountCalculator 코드에는 VipDiscount라는 클래스 이름이 나오지 않는다."
+    code: |-
+      class DiscountCalculator {
+          List<DiscountPolicy> policies;
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              for (DiscountPolicy p : policies) {
+                  if (p.supports(grade)) {
+                      return p.apply(price);
+                  }
+              }
+              return price;
+          }
+      }
+    answer: O
+    explanation: |-
+      **O. DiscountCalculator는 DiscountPolicy 인터페이스만 알아요.**
+
+      - 구현 클래스의 이름이 코드에 없어서, 구현이 늘어도 DiscountCalculator는 고칠 것이 없어요
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+  - key: so-ocp-how-explain
+    concept: core
+    coreQuestion: q4
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: "[코드 B]의 if와 else if를 [코드 C]처럼 바꾸는 방법과, 바꾼 뒤에 새 등급을 더할 때 무엇이 달라지는지 설명해 보세요."
+    explanation: |-
+      **등급마다 다른 계산을 인터페이스로 빼고, 새 등급은 새 구현 클래스로 더해요.**
+
+      - 등급마다 다른 계산을 DiscountPolicy 인터페이스로 빼요. 등급 하나의 할인이 구현 클래스 하나예요
+      - DiscountCalculator는 인터페이스만 알고 구현 클래스는 몰라요
+      - 새 등급은 구현 클래스를 새로 만들어 정책 목록에 넣어요
+      - DiscountCalculator와 있던 구현 클래스는 고치지 않아요
+    checklist:
+      - 등급마다 다른 계산을 DiscountPolicy 인터페이스로 뺐다고 말했다
+      - 등급 하나의 할인을 구현 클래스 하나로 만든다고 말했다
+      - DiscountCalculator는 인터페이스만 알고 구현 클래스는 모른다고 말했다
+      - 새 등급은 새 구현 클래스를 만들어 목록에 넣는다고 말했다
+      - DiscountCalculator와 있던 구현 클래스는 고치지 않는다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+
+  # ── 질문 5. 개방 폐쇄 원칙을 지키면 어떤 변경이든 있던 코드를 고치지 않고 할 수 있나요? ──
+  - key: so-ocp-add-method
+    concept: core
+    coreQuestion: q5
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "[코드 C] 영수증에 할인 이름을 찍으려고 DiscountPolicy에 String name() 메서드를 더해요. 구현 클래스는 VipDiscount와 GoldDiscount 둘이고, default 메서드는 쓰지 않아요. 인터페이스와 클래스는 파일 하나씩이에요. 컴파일되려면 파일을 모두 몇 개 고쳐야 하나요?"
+    code: |-
+      interface DiscountPolicy {
+          boolean supports(Grade grade);
+          int apply(int price);
+      }
+    choices:
+      - 1개
+      - 2개
+      - 3개
+      - 고칠 파일이 없다
+    answer: "3"
+    explanation: |-
+      **3개예요.** 인터페이스 1개와 구현 클래스 2개를 고쳐요.
+
+      - 인터페이스에 메서드를 더하면 구현 클래스가 모두 그 메서드를 구현해야 해요
+      - [코드 C]는 새 등급을 더하는 변경에만 닫혀 있어요. 인터페이스를 바꾸는 변경에는 열려 있어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
+  - key: so-ocp-compile
+    concept: core
+    coreQuestion: q5
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: DiscountPolicy에 name()을 더하고 VipDiscount만 고쳤어요. 이 코드를 컴파일하면 어떻게 될까요?
+    code: |-
+      interface DiscountPolicy {
+          boolean supports(Grade grade);
+          int apply(int price);
+          String name();
+      }
+
+      class VipDiscount implements DiscountPolicy {
+          public boolean supports(Grade grade) {
+              return grade == Grade.VIP;
+          }
+          public int apply(int price) {
+              return price * 90 / 100;
+          }
+          public String name() {
+              return "VIP 할인";
+          }
+      }
+
+      class GoldDiscount
+              implements DiscountPolicy {
+          public boolean supports(Grade grade) {
+              return grade == Grade.GOLD;
+          }
+          public int apply(int price) {
+              return price * 95 / 100;
+          }
+      }
+    choices:
+      - 오류 없이 컴파일된다
+      - VipDiscount에서 컴파일 오류가 난다
+      - GoldDiscount에서 컴파일 오류가 난다
+      - DiscountPolicy에서 컴파일 오류가 난다
+    answer: "3"
+    explanation: |-
+      **GoldDiscount에서 컴파일 오류가 나요.** name()을 구현하지 않았기 때문이에요.
+
+      - 추상 클래스가 아닌 클래스는 인터페이스의 메서드를 모두 구현해야 해요
+      - 구현 클래스가 많을수록 고칠 곳이 많아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
+  - key: so-ocp-closed-against
+    concept: core
+    coreQuestion: q5
+    type: multiple_choice
+    status: draft
+    difficulty: 3
+    body: "[코드 C] 다음 가운데 DiscountCalculator와 있던 구현 클래스(VipDiscount, GoldDiscount)를 고치지 않고 할 수 있는 변경은?"
+    code: |-
+      interface DiscountPolicy {
+          boolean supports(Grade grade);
+          int apply(int price);
+      }
+
+      class DiscountCalculator {
+          List<DiscountPolicy> policies;
+          int calculate(Order order) {
+              Grade grade = order.grade();
+              int price = order.price();
+              for (DiscountPolicy p : policies) {
+                  if (p.supports(grade)) {
+                      return p.apply(price);
+                  }
+              }
+              return price;
+          }
+      }
+    choices:
+      - SILVER 등급의 할인을 더한다
+      - 할인 이름을 돌려주는 메서드를 DiscountPolicy에 더한다
+      - apply()가 돌려주는 타입을 int에서 long으로 바꾼다
+      - supports()가 등급 대신 주문 금액을 받게 바꾼다
+    answer: "1"
+    explanation: |-
+      **SILVER 등급의 할인을 더하는 것뿐이에요.** 새 구현 클래스를 만들면 돼요.
+
+      - 나머지 셋은 DiscountPolicy의 메서드를 더하거나 모양을 바꿔요. 그러면 구현 클래스를 모두 고쳐야 해요
+      - apply()나 supports()의 모양이 바뀌면 그것을 부르는 DiscountCalculator도 고쳐야 해요
+      - 어느 방향의 변경에 닫을지는 인터페이스를 만들 때 정해져요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
+  - key: so-ocp-limit-explain
+    concept: core
+    coreQuestion: q5
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 개방 폐쇄 원칙을 지킨 [코드 C]에도 있던 코드를 고쳐야 하는 변경이 있어요. 예를 하나 들고 그 이유를 설명해 보세요.
+    explanation: |-
+      **인터페이스에 메서드를 더하는 변경이에요. 구현 클래스를 모두 고쳐야 해요.**
+
+      - [코드 C]는 새 등급을 더하는 변경에만 닫혀 있어요
+      - DiscountPolicy에 name() 같은 메서드를 더하거나 메서드의 모양을 바꾸면 구현 클래스를 모두 고쳐야 해요
+      - 어느 방향의 변경에 닫을지는 인터페이스를 만들 때 정해져요. 그래서 실제로 자주 바뀌는 곳에 적용해요
+    checklist:
+      - "[코드 C]는 새 등급을 더하는 변경에만 닫혀 있다고 말했다"
+      - 인터페이스에 메서드를 더하거나 메서드의 모양을 바꾸는 변경을 예로 들었다
+      - 그런 변경은 구현 클래스를 모두 고쳐야 한다고 말했다
+      - 어느 방향의 변경에 닫을지는 인터페이스를 만들 때 정해진다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
+
+  # ── 다섯 질문을 하나로 ──
+  - key: so-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "단일 책임 원칙과 개방 폐쇄 원칙을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **정의 → 어긴 코드 → 고치는 법 순서로 말해요.**
+
+      - **단일 책임 원칙:** 클래스가 바뀌는 이유는 하나여야 한다. 할인 계산과 영수증 문구가 한 클래스에 있으면 서로 다른 요구가 같은 클래스를 고치게 한다. 바뀌는 이유마다 클래스를 나눈다
+      - **개방 폐쇄 원칙:** 있던 코드를 고치지 않고 기능을 더할 수 있어야 한다. 등급을 if와 else if로 나누면 등급이 늘 때마다 그 메서드를 고친다. 바뀌는 부분을 인터페이스로 빼고 새 기능은 새 구현 클래스로 더한다
+      - **한계:** 인터페이스로 빼 둔 방향의 변경에만 닫힌다. 인터페이스 자체를 바꾸면 구현을 모두 고쳐야 한다
+    checklist:
+      - 단일 책임 원칙을 클래스가 바뀌는 이유가 하나여야 한다는 것으로 정의했다
+      - 책임이 섞이면 서로 다른 요구가 같은 클래스를 고치게 한다고 말했다
+      - 개방 폐쇄 원칙을 있던 코드를 고치지 않고 기능을 더할 수 있어야 한다는 것으로 정의했다
+      - 바뀌는 부분을 인터페이스로 빼고 새 구현 클래스로 기능을 더한다고 말했다
+      - 인터페이스를 바꾸는 변경에는 닫혀 있지 않다고 말했다
+    source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html

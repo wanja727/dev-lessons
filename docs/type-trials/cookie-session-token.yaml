@@ -1,0 +1,455 @@
+# 쿠키, 세션, 토큰 문제 (시험 삼아 쓴 것)
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 품질 계획 3단계에서 개념 설명 유형이 되는지 보려고 썼다. 설계서는 cookie-session-token.md다.
+# content/questions에 두지 않아서 학습 앱이 가져가지 않는다. 레슨을 쓸 때 옮긴다.
+# 모든 문제는 설계서의 "질문마다 본문이 말할 것"에 근거가 있다.
+# JWT는 서명만 한 형태를 다룬다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: cookie-session-token
+  title: 쿠키, 세션, 토큰
+  unit: 네트워크와 웹
+  order: 507
+concepts:
+  - key: core
+    name: 쿠키, 세션, 토큰
+coreQuestions:
+  - key: q1
+    text: "쿠키는 무엇이고 왜 필요한가요?"
+  - key: q2
+    text: "세션 방식은 어떻게 로그인 상태를 유지하나요?"
+  - key: q3
+    text: "토큰(JWT) 방식은 어떻게 다른가요?"
+  - key: q4
+    text: "두 방식은 각각 무엇을 얻고 무엇을 잃나요?"
+questions:
+  # ── 질문 1. 쿠키는 무엇이고 왜 필요한가요? ──
+  - key: cst-stateless
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: HTTP가 무상태(stateless)라는 것은 무슨 뜻일까요?
+    choices:
+      - 서버가 응답을 저장하지 않는다
+      - 요청 하나하나를 앞의 요청과 상관없이 따로 이해할 수 있다
+      - 연결을 한 번 쓰면 반드시 끊는다
+      - 요청에 본문을 담을 수 없다
+    answer: "2"
+    explanation: |-
+      **요청 하나하나를 앞의 요청과 상관없이 따로 이해할 수 있다는 뜻이에요.**
+
+      - 그래서 서버는 이 요청이 아까 그 사람의 요청인지 HTTP만으로는 알 수 없어요
+      - 누구인지 알려 주는 값을 요청마다 함께 보내야 해요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-3.3
+  - key: cst-set-cookie
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서버가 브라우저에 쿠키를 저장하게 하려면 응답에 어떤 헤더를 넣어야 하나요?
+    choices:
+      - Cookie
+      - Set-Cookie
+      - Authorization
+      - Content-Type
+    answer: "2"
+    explanation: |-
+      **Set-Cookie예요.** 서버가 응답에 넣어 값을 줘요.
+
+      - Cookie는 브라우저가 요청에 넣는 헤더예요
+    source: https://www.rfc-editor.org/rfc/rfc6265.html
+  - key: cst-cookie-roundtrip
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 브라우저가 아래 응답을 받았어요. 같은 사이트로 보내는 다음 요청에 브라우저가 넣는 헤더는 무엇일까요?
+    code: |-
+      HTTP/1.1 200 OK
+      Set-Cookie: theme=dark
+    choices:
+      - "Set-Cookie: theme=dark"
+      - "Cookie: theme=dark"
+      - "Authorization: theme=dark"
+      - 아무 헤더도 넣지 않는다
+    answer: "2"
+    explanation: |-
+      **`Cookie: theme=dark`예요.** 받은 값을 Cookie 헤더에 넣어 돌려보내요.
+
+      - 서버가 Set-Cookie로 준 값을 브라우저가 저장해요
+      - 그 사이트로 가는 요청마다 Cookie 헤더에 넣어요
+    source: https://www.rfc-editor.org/rfc/rfc6265.html
+  - key: cst-cookie-auto
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 브라우저는 저장한 쿠키를 그 사이트로 가는 요청에 자동으로 실어 보낸다. 페이지의 자바스크립트가 요청마다 직접 넣지 않아도 된다.
+    answer: O
+    explanation: |-
+      **O. 브라우저가 자동으로 넣어요.**
+
+      - 쿠키는 브라우저가 저장했다가 그 사이트로 가는 요청의 Cookie 헤더에 넣어요
+    source: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies
+  - key: cst-cookie-editable
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 2
+    body: 쿠키는 브라우저에 저장되므로, 사용자가 개발자 도구로 값을 보거나 바꿀 수 있다.
+    answer: O
+    explanation: |-
+      **O. 사용자가 보고 바꿀 수 있어요.**
+
+      - 그래서 `role=ADMIN` 같은 값을 쿠키에 그대로 담으면 안 돼요. 사용자가 고쳐서 보낼 수 있어요
+    source: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies
+  - key: cst-cookie-explain
+    concept: core
+    coreQuestion: q1
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: HTTP가 무상태인데도 사이트가 로그인한 사용자를 알아보려면 무엇이 필요한지, 쿠키가 오가는 과정과 함께 설명해 보세요.
+    explanation: |-
+      **요청마다 누구인지 알려 주는 값을 함께 보내야 하고, 쿠키가 그 값을 자동으로 실어 보내요.**
+
+      - HTTP는 요청을 따로따로 이해해요. 서버는 이 요청이 아까 그 사람의 요청인지 알 수 없어요
+      - 서버가 응답의 Set-Cookie 헤더로 값을 줘요
+      - 브라우저가 저장했다가 다음 요청의 Cookie 헤더에 자동으로 넣어요
+    checklist:
+      - HTTP는 요청을 따로따로 이해해서 앞 요청과 같은 사람인지 알 수 없다고 말했다
+      - 요청마다 누구인지 알려 주는 값을 함께 보내야 한다고 말했다
+      - 서버가 Set-Cookie 헤더로 값을 준다고 말했다
+      - 브라우저가 저장했다가 다음 요청의 Cookie 헤더에 자동으로 넣는다고 말했다
+    source: https://www.rfc-editor.org/rfc/rfc6265.html
+
+  # ── 질문 2. 세션 방식은 어떻게 로그인 상태를 유지하나요? ──
+  - key: cst-session-cookie-content
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 세션 방식에서 브라우저의 쿠키에 담기는 것은 무엇일까요?
+    choices:
+      - 사용자 이름과 권한
+      - 비밀번호
+      - 서버에 저장된 로그인 정보를 찾는 세션 ID
+      - 서버의 서명 키
+    answer: "3"
+    explanation: |-
+      **세션 ID예요.** 서버에 저장된 로그인 정보를 찾는 번호예요.
+
+      - 사용자 이름과 권한 같은 로그인 정보는 서버가 저장해요
+      - 브라우저에는 번호만 줘요
+    source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  - key: cst-session-lookup
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "서버의 세션 저장소에 abc123 → kim, xyz789 → lee가 들어 있어요. 아래 요청이 오면 서버는 누구의 요청으로 처리할까요?"
+    code: |-
+      GET /me HTTP/1.1
+      Cookie: JSESSIONID=abc123
+    choices:
+      - kim
+      - lee
+      - 알 수 없다. 쿠키에 사용자 이름이 없다
+      - 로그인하지 않은 요청으로 처리한다
+    answer: "1"
+    explanation: |-
+      **kim이에요.** 서버가 세션 ID abc123으로 저장소에서 로그인 정보를 찾아요.
+
+      - 쿠키에는 번호만 있고, 누구인지는 서버의 저장소에 있어요
+    source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  - key: cst-session-two-servers
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 A와 B가 세션을 각자 자기 메모리에만 저장해요. 요청은 두 서버에 번갈아 가요. A에서 로그인한 사용자의 다음 요청이 B로 가면 어떻게 될까요?
+    choices:
+      - B가 A에게 물어봐서 로그인된 요청으로 처리한다
+      - B에는 그 세션 ID의 정보가 없어서 로그인하지 않은 요청으로 처리한다
+      - 쿠키에 로그인 정보가 들어 있어서 로그인된 요청으로 처리한다
+      - 브라우저가 B에는 쿠키를 보내지 않는다
+    answer: "2"
+    explanation: |-
+      **B에는 그 세션이 없어서 로그인하지 않은 요청이 돼요.**
+
+      - 로그인 정보는 A의 메모리에만 있어요. 쿠키에는 세션 ID만 있어요
+      - 그래서 서버가 여러 대면 세션 저장소를 함께 써야 해요
+    source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  - key: cst-session-logout
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 서버가 세션을 지우면, 브라우저에 세션 ID 쿠키가 남아 있어도 그 쿠키로 온 요청은 로그인하지 않은 요청으로 처리된다.
+    answer: O
+    explanation: |-
+      **O. 서버에 찾을 정보가 없기 때문이에요.**
+
+      - 서버는 세션 ID로 저장소에서 로그인 정보를 찾아요. 세션을 지웠으니 찾을 것이 없어요
+    source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  - key: cst-session-explain
+    concept: core
+    coreQuestion: q2
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 세션 방식에서 로그인한 뒤 다음 요청이 로그인된 요청으로 처리되기까지의 과정을 설명해 보세요.
+    explanation: |-
+      **로그인 정보는 서버가 저장하고, 브라우저는 그 정보를 찾는 세션 ID만 쿠키로 주고받아요.**
+
+      - 로그인하면 서버가 로그인 정보를 서버 쪽 저장소에 저장해요
+      - 그 정보를 찾는 세션 ID를 만들어 Set-Cookie로 줘요
+      - 브라우저가 다음 요청에 세션 ID 쿠키를 보내요
+      - 서버가 세션 ID로 저장소에서 로그인 정보를 찾아요
+    checklist:
+      - 로그인하면 서버가 로그인 정보를 서버 쪽 저장소에 저장한다고 말했다
+      - 그 정보를 찾는 세션 ID를 만들어 Set-Cookie로 준다고 말했다
+      - 브라우저가 다음 요청에 세션 ID 쿠키를 보낸다고 말했다
+      - 서버가 세션 ID로 저장소에서 로그인 정보를 찾는다고 말했다
+    source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+
+  # ── 질문 3. 토큰(JWT) 방식은 어떻게 다른가요? ──
+  - key: cst-jwt-parts
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: JWT는 점(.)으로 나뉜 세 부분으로 이루어져요. 순서대로 무엇일까요?
+    choices:
+      - 헤더, 페이로드, 서명
+      - 페이로드, 헤더, 서명
+      - 서명, 헤더, 페이로드
+      - 헤더, 서명, 페이로드
+    answer: "1"
+    explanation: |-
+      **헤더, 페이로드, 서명 순서예요.**
+
+      - 페이로드에 사용자 정보와 만료 시간이 들어가요
+      - 서명은 서버만 아는 키로 헤더와 페이로드를 계산해 만들어요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-jwt-readable
+    concept: core
+    coreQuestion: q3
+    type: ox
+    status: draft
+    difficulty: 1
+    body: 서명만 한 JWT의 페이로드는 암호화되어 있어서, 서명 키가 없으면 내용을 읽을 수 없다.
+    answer: X
+    explanation: |-
+      **X. 토큰을 가진 사람은 누구나 읽을 수 있어요.**
+
+      - 페이로드는 암호화된 것이 아니라 인코딩만 되어 있어요
+      - 그래서 비밀번호 같은 것을 넣지 않아요
+      - 서명은 내용을 숨기는 것이 아니라 내용이 바뀌지 않았는지 확인하는 데 써요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-jwt-tamper
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 사용자가 받은 JWT의 페이로드에서 role을 USER에서 ADMIN으로 바꾸고, 서명 부분은 그대로 둔 채 서버에 보냈어요. 서버는 받은 토큰의 서명을 확인해요. 어떻게 처리할까요?
+    choices:
+      - ADMIN 권한으로 처리한다
+      - 서명이 내용과 맞지 않아 거부한다
+      - 저장소에서 원래 role을 찾아 USER로 처리한다
+      - 페이로드를 읽을 수 없어 거부한다
+    answer: "2"
+    explanation: |-
+      **서명이 맞지 않아 거부해요.**
+
+      - 서명은 서버만 아는 키로 헤더와 페이로드를 계산해 만든 값이에요
+      - 페이로드가 바뀌면 다시 계산한 값이 토큰의 서명과 달라요
+      - 사용자는 키를 몰라서 맞는 서명을 새로 만들 수 없어요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-jwt-no-lookup
+    concept: core
+    coreQuestion: q3
+    type: ox
+    status: draft
+    difficulty: 2
+    body: JWT 방식에서 서버는 토큰이 맞는지 확인하려고 요청마다 저장소에서 그 토큰을 찾아본다. (막을 토큰을 따로 저장해 두지 않는 경우)
+    answer: X
+    explanation: |-
+      **X. 저장소를 찾아보지 않아요.**
+
+      - 서버는 토큰을 저장하지 않아요
+      - 요청마다 서명이 맞는지와 만료 시간이 지났는지만 확인해요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-jwt-header
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: JWT를 요청의 헤더에 담아 보낼 때 보통 쓰는 모양은 무엇일까요?
+    choices:
+      - "Cookie: Bearer 토큰"
+      - "Authorization: Bearer 토큰"
+      - "Set-Cookie: 토큰"
+      - "Token: 토큰"
+    answer: "2"
+    explanation: |-
+      **`Authorization: Bearer 토큰`이에요.**
+
+      - Set-Cookie는 서버가 응답에 넣는 헤더예요
+    source: https://www.rfc-editor.org/rfc/rfc6750.html
+  - key: cst-jwt-explain
+    concept: core
+    coreQuestion: q3
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: JWT 방식에서 서버가 로그인 정보를 저장하지 않고도 요청을 보낸 사용자를 알아보는 방법을 설명해 보세요.
+    explanation: |-
+      **로그인 정보를 서명한 토큰에 담아 주고, 요청마다 서명과 만료 시간만 확인해요.**
+
+      - 로그인하면 서버가 사용자 정보를 담은 토큰을 만들어 줘요
+      - 토큰은 헤더, 페이로드, 서명으로 이루어져요. 서명은 서버만 아는 키로 만들어요
+      - 서버는 요청마다 서명이 맞는지와 만료 시간이 지났는지 확인해요
+      - 내용을 바꾸면 서명이 맞지 않아 거부돼요
+    checklist:
+      - 로그인하면 서버가 사용자 정보를 담은 토큰을 만들어 준다고 말했다
+      - 토큰이 헤더, 페이로드, 서명으로 이루어진다고 말했다
+      - 서명은 서버만 아는 키로 만든다고 말했다
+      - 서버는 요청마다 서명과 만료 시간을 확인한다고 말했다
+      - 내용을 바꾸면 서명이 맞지 않아 거부된다고 말했다
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+
+  # ── 질문 4. 두 방식은 각각 무엇을 얻고 무엇을 잃나요? ──
+  - key: cst-cmp-suspended
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: JWT의 만료 시간은 발급하고 30분 뒤예요. 서버는 서명과 만료 시간만 확인하고, 막을 토큰을 따로 저장해 두지 않아요. 발급하고 5분 뒤에 관리자가 DB에서 이 계정을 정지했어요. 발급하고 10분 뒤에 이 토큰으로 온 요청은 어떻게 될까요?
+    choices:
+      - 서명 확인에서 거부된다
+      - 통과한다. 만료까지 20분이 남았다
+      - 계정이 정지되어 거부된다
+      - 토큰이 자동으로 지워져 거부된다
+    answer: "2"
+    explanation: |-
+      **통과해요.** 서명이 맞고 만료 시간이 지나지 않았기 때문이에요.
+
+      - 서버는 서명과 만료 시간만 봐요. DB의 계정 상태는 보지 않아요
+      - 계정을 정지해도 이미 준 토큰은 만료될 때까지 쓸 수 있어요
+      - 그래서 JWT는 만료 시간을 짧게 잡아요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-cmp-two-servers
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 A와 B가 같은 서명 키를 가지고 있고, 함께 쓰는 저장소는 없어요. A에서 로그인해 받은 JWT로 B에 요청하면 어떻게 될까요?
+    choices:
+      - B는 그 토큰을 발급한 적이 없어서 거부한다
+      - B가 서명을 확인해서 로그인된 요청으로 처리한다
+      - B가 A에게 토큰이 맞는지 물어본다
+      - 브라우저가 B에서 토큰을 다시 받아야 한다
+    answer: "2"
+    explanation: |-
+      **B가 서명을 확인해서 통과시켜요.**
+
+      - 토큰이 맞는지는 서명 키만 있으면 확인할 수 있어요
+      - 세션 방식과 달리 서버들이 저장소를 함께 쓰지 않아도 돼요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-cmp-blocklist
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 2
+    body: JWT 방식에서 만료 전의 토큰을 서버가 막으려면, 막을 토큰을 서버 쪽에 저장해 두고 요청마다 확인해야 한다.
+    answer: O
+    explanation: |-
+      **O. 저장소가 다시 필요해져요.**
+
+      - 서명과 만료 시간만 봐서는 만료 전의 토큰을 구별할 수 없어요
+      - 막을 토큰을 저장해 두고 요청마다 확인하면, 저장소가 필요 없다는 JWT의 장점이 줄어들어요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-cmp-stale-role
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 3
+    body: "서버는 JWT 페이로드의 role 값만 보고 권한을 판단해요. 관리자가 DB에서 kim의 권한을 ADMIN에서 USER로 낮췄어요. kim이 그 전에 받은 토큰(role: ADMIN, 만료 전)으로 관리자 기능을 요청하면 어떻게 될까요?"
+    choices:
+      - 거부된다. DB의 권한이 USER다
+      - 통과한다. 토큰에는 여전히 ADMIN이 적혀 있다
+      - 거부된다. 권한이 바뀌면 서명이 달라진다
+      - 토큰의 role이 USER로 자동으로 바뀐다
+    answer: "2"
+    explanation: |-
+      **통과해요.** 토큰에는 발급할 때의 권한이 그대로 적혀 있어요.
+
+      - 토큰은 클라이언트가 가지고 있어서 서버가 내용을 바꿀 수 없어요
+      - DB를 바꿔도 이미 준 토큰의 서명은 그대로 맞아요
+      - 새 권한은 토큰을 다시 받을 때부터 적용돼요
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+  - key: cst-cmp-explain
+    concept: core
+    coreQuestion: q4
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 세션 방식과 JWT 방식이 각각 얻는 것과 잃는 것을 비교해 설명해 보세요.
+    explanation: |-
+      **세션은 바로 끊을 수 있지만 저장소가 필요하고, JWT는 저장소가 필요 없지만 만료 전에는 막기 어려워요.**
+
+      - 세션 방식은 서버가 세션을 지우면 바로 로그인이 끊겨요
+      - 세션 방식은 서버가 여러 대면 세션 저장소를 함께 써야 해요
+      - JWT 방식은 서버가 로그인 정보를 저장하지 않아요. 같은 서명 키를 가진 서버는 어느 서버든 확인할 수 있어요
+      - JWT 방식은 만료 전의 토큰을 막기 어려워요. 그래서 만료 시간을 짧게 잡아요
+    checklist:
+      - 세션 방식은 서버가 세션을 지워 바로 로그인을 끊을 수 있다고 말했다
+      - 세션 방식은 서버가 여러 대면 세션 저장소를 함께 써야 한다고 말했다
+      - JWT 방식은 서버가 로그인 정보를 저장하지 않아도 된다고 말했다
+      - JWT 방식은 만료 전의 토큰을 막기 어렵다고 말했다
+      - 그래서 JWT의 만료 시간을 짧게 잡는다고 말했다
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
+
+  # ── 네 질문을 하나로 ──
+  - key: cst-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "쿠키, 세션, 토큰(JWT)의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **쿠키는 값을 실어 보내는 수단이고, 세션과 JWT는 그 값으로 로그인 상태를 유지하는 두 가지 방식이에요.**
+
+      - **쿠키:** 서버가 Set-Cookie로 준 값을 브라우저가 저장했다가 요청마다 자동으로 보낸다
+      - **세션:** 로그인 정보는 서버가 저장하고, 브라우저에는 그 정보를 찾는 세션 ID만 준다
+      - **JWT:** 로그인 정보를 서명한 토큰에 담아 클라이언트에 주고, 서버는 서명과 만료 시간만 확인한다
+      - **차이:** 세션은 서버가 바로 끊을 수 있지만 서버들이 저장소를 함께 써야 한다. JWT는 저장소가 필요 없지만 만료 전에는 막기 어렵다
+    checklist:
+      - 쿠키는 서버가 준 값을 브라우저가 요청마다 자동으로 보내는 것이라고 말했다
+      - 세션 방식은 로그인 정보를 서버가 저장하고 브라우저에는 세션 ID만 준다고 말했다
+      - JWT 방식은 로그인 정보를 서명한 토큰에 담아 클라이언트에 준다고 말했다
+      - 세션은 바로 끊을 수 있지만 서버들이 저장소를 함께 써야 한다고 말했다
+      - JWT는 저장소가 필요 없지만 만료 전에는 막기 어렵다고 말했다
+    source: https://www.rfc-editor.org/rfc/rfc7519.html
