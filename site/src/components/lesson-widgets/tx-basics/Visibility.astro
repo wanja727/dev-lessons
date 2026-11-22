@@ -1,0 +1,60 @@
+---
+/** 질문 3: 연결 A의 커밋 전 변경이 연결 B에 보이는지 본다 */
+---
+<div class="duo">
+  <div class="cell" id="vi-box-a"><span class="label">연결 A가 읽는 kim의 잔액</span><div class="kv"><span id="vi-a-state">트랜잭션 없음</span><b id="vi-a">50</b></div></div>
+  <div class="cell"><span class="label">연결 B가 읽는 kim의 잔액</span><div class="kv"><span>확정된 값</span><b id="vi-b">50</b></div></div>
+</div>
+<div class="btn-row">
+  <button class="btn primary" type="button" id="vi-update">A: BEGIN 후 잔액을 999로</button>
+  <button class="btn" type="button" id="vi-commit" disabled>A: COMMIT</button>
+  <button class="btn" type="button" id="vi-rollback" disabled>A: ROLLBACK</button>
+  <button class="btn" type="button" id="vi-reset">처음으로</button>
+</div>
+<div class="log conn-log" id="vi-log" aria-live="polite"></div>
+<style is:global>
+.conn-log { min-height: 96px; }
+</style>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  /* 로그 한 줄: 몇 번째인지와 내용 */
+  function addLog(el, text) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<span class="n">' + (el.children.length + 1) + '</span><span></span>';
+    row.lastChild.textContent = text;
+    el.appendChild(row);
+  }
+  /* 질문 3: 커밋 전 변경이 다른 연결에 보이는지 */
+  var committed, pending;
+  function viRender() {
+    $('vi-a').textContent = pending === null ? committed : pending;
+    $('vi-a').className = pending === null ? '' : 'changed';
+    $('vi-a-state').textContent = pending === null ? '트랜잭션 없음' : '트랜잭션 진행 중 (커밋 전)';
+    $('vi-b').textContent = committed;
+    $('vi-box-a').className = 'cell' + (pending === null ? '' : ' active');
+    $('vi-update').disabled = pending !== null || committed === 999;
+    $('vi-commit').disabled = pending === null;
+    $('vi-rollback').disabled = pending === null;
+  }
+  function viReset() { committed = 50; pending = null; $('vi-log').innerHTML = ''; viRender(); }
+  $('vi-update').addEventListener('click', function () {
+    pending = 999; viRender();
+    addLog($('vi-log'), '연결 A: begin; update ... balance = 999  (커밋 전)');
+    addLog($('vi-log'), '연결 B: select balance  → ' + committed + '  (A의 변경이 보이지 않아요)');
+  });
+  $('vi-commit').addEventListener('click', function () {
+    committed = pending; pending = null; viRender();
+    addLog($('vi-log'), '연결 A: commit');
+    addLog($('vi-log'), '연결 B: select balance  → ' + committed + '  (커밋한 순간부터 보여요)');
+  });
+  $('vi-rollback').addEventListener('click', function () {
+    pending = null; viRender();
+    addLog($('vi-log'), '연결 A: rollback');
+    addLog($('vi-log'), '연결 B: select balance  → ' + committed + '  (999는 끝까지 보이지 않았어요)');
+  });
+  $('vi-reset').addEventListener('click', viReset);
+  viReset();
+})();
+</script>

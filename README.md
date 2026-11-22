@@ -23,8 +23,10 @@
 
 ```
 site/           Astro 정적 사이트 (GitHub Pages)
-  src/content/lessons/   레슨 메타데이터. verifiedBy(검증 테스트)가 없으면 빌드 실패
-  src/pages/lessons/     대화형 레슨 페이지
+  src/content/lessons/        레슨 메타데이터. verifiedBy(검증 테스트)가 없으면 빌드 실패
+  src/content/lesson-pages/   레슨 본문 자료. 칸을 채우면 틀이 페이지를 만든다 (docs/lesson-data-format.md)
+  src/components/lesson/      페이지 틀, 본문 블록, 공통 위젯
+  src/pages/lessons/          예전 구조로 쓴 레슨 페이지. 새로 쓸 때 자료 파일로 옮긴다
 verification/   Spring Boot 3.5 + JPA 예제와 검증 테스트
 content/questions/   레슨별 문제 파일. 학습 앱 Retrievo가 가져간다
 scripts/        문제 파일이 레슨 표준을 지키는지, 출처 주소가 열리는지 보는 검사

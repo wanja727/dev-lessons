@@ -8,8 +8,9 @@
 
 - 질문은 쓰기 전에 정한다. 질문에 답하는 데 필요 없는 내용은 빼거나 "더 알아보기"로 접는다
 - 질문은 앞 질문의 답에서 다음 질문이 나오게 잇는다 (왜 생기나 → 흔한 해결이 왜 안 되나 → 어떻게 고치나 → 언제 무엇을 쓰나)
-- 기준 레슨: `site/src/pages/lessons/jpa-n-plus-1.astro`. 2026-11-21에 이 구조로 처음 쓴 레슨이다. 그 전에 만든 레슨은 예전 구조(7단계)이고, 다시 쓸 때 이 구조로 바꾼다
-- 공통 도구: 모양은 `site/src/styles/core-question.css`, 진행 표시와 스크립트(예측, 확인 문제, 보지 않고 답하기)는 `site/src/components/CoreQuestionKit.astro`의 `window.Lesson`을 쓴다. 두 번째 레슨 `tx-basics.astro`가 이 도구를 쓰는 예다
+- 레슨은 페이지를 직접 쓰지 않고 자료 파일(`site/src/content/lesson-pages/<슬러그>.yaml`)의 칸을 채워 만든다. 아래 표의 구역과 순서는 틀(`site/src/components/lesson/LessonPage.astro`)이 정한다. 칸은 `docs/lesson-data-format.md`에 있다
+- 기준 레슨: `site/src/content/lesson-pages/jpa-n-plus-1.yaml`. 2026-11-21에 이 구조로 처음 쓴 레슨이다. 그 전에 만든 레슨은 예전 구조(7단계)이고 `site/src/pages/lessons/`에 `.astro`로 남아 있다. 다시 쓸 때 이 구조로 바꾼다
+- 공통 도구: 모양은 `site/src/styles/core-question.css`, 진행 표시와 스크립트(예측, 확인 문제, 보지 않고 답하기)는 `site/src/components/CoreQuestionKit.astro`, 자료만으로 만드는 위젯은 `site/src/components/lesson/WidgetKit.astro`다
 
 | 구역 | 목적 | 필수 요소 |
 | --- | --- | --- |
@@ -99,8 +100,12 @@ PR 설명에 적는다. 나중에 콘텐츠 비용과 품질을 숫자로 말하
 
 ## 6. 재사용 위젯
 
-같은 형태의 위젯이 **세 번째 레슨에 나오면** 공통 컴포넌트로 뽑는다. 그 전에는 복사해서 쓴다.
-현재 후보: SQL 로그와 쿼리 수 표시, 단계 넘기기 도식, 탭 비교, 확인 문제, 면접 답변 비교.
+공통 위젯에서 먼저 고른다. 자료만 적으면 되고, 모든 레슨에서 같은 모양으로 나온다 (`docs/lesson-data-format.md`의 "위젯").
+
+- 지금 있는 것: 상황 분류하기(`classify`), 켜고 끄며 비교하기(`toggle`), 한 단계씩 실행하기(`steps`)
+- 만들 것: 두 칸 비교, 타임라인. 설계 유형과 개념 설명 유형의 기준 레슨을 쓸 때 만든다
+- 공통 위젯으로 안 되는 것만 레슨 전용으로 만든다. 슬라이더로 값을 바꿔 계산 결과를 보는 것, 누르는 순서가 정해지지 않은 것이 그렇다
+- 레슨 전용 위젯과 같은 형태가 **세 번째 레슨에 나오면** 공통 위젯으로 뽑는다
 
 ## 7. 실제 결과 보여주기
 

@@ -64,3 +64,20 @@
 .kv b.bad { color: var(--query); }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 520px) { .duo { grid-template-columns: minmax(0, 1fr); } }
+/* 상황 분류하기: 상황 하나와 고를 것들 */
+.classify-row { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.classify-row:first-child { border-top: 0; padding-top: 0; }
+.classify-row p { margin: 0; }
+/* 시간 막대: 요청이나 연결이 언제부터 언제까지 무엇을 했는지 */
+.legend { display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.sw.wait, .g-wait { background: repeating-linear-gradient(45deg, var(--muted), var(--muted) 2px, transparent 2px, transparent 5px); }
+.sw.hold, .g-hold { background: var(--accent); }
+.sw.fail, .g-fail { background: var(--query); }
+.sw.api, .g-api { background: var(--query); opacity: 0.55; }
+.gantt { display: flex; flex-direction: column; gap: 4px; }
+.g-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 6px; align-items: center; font-size: 12px; font-family: var(--font-mono); }
+.g-track { position: relative; height: 16px; background: var(--code-bg); border-radius: 4px; overflow: hidden; }
+.g-track span { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.g-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-left: 58px; }

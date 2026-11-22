@@ -19,4 +19,47 @@ const lessons = defineCollection({
   }),
 });
 
-export const collections = { lessons };
+// 레슨 본문 자료 (docs/lesson-data-format.md). 이 파일의 칸을 채우면 페이지가 나온다.
+// 틀이 아직 초안이라 본문 블록과 위젯의 칸은 느슨하게 받는다. 틀을 굳힐 때 조인다 (docs/quality-plan.md 진행 순서 5번)
+const text = z.string().min(1);
+const block = z.record(z.any());
+const lessonPages = defineCollection({
+  loader: glob({ pattern: "**/*.yaml", base: "./src/content/lesson-pages" }),
+  schema: z.object({
+    title: text,
+    description: text,
+    unit: text,
+    minutes: z.number().int().positive(),
+    prerequisites: z.array(z.object({ slug: text, title: text })).default([]),
+    assume: text,
+    codes: z.record(z.string()).default({}),
+    links: z.record(z.string().url()).default({}),
+    predict: z.object({
+      title: text,
+      text: text,
+      code: text.optional(),
+      label: text,
+      options: z.array(z.object({ value: text, label: text })).min(2),
+      answer: text,
+      storageKey: text,
+      wrong: text,
+    }),
+    questions: z.array(z.object({
+      id: z.string().regex(/^q[1-9]$/),
+      title: text,
+      conclusion: z.object({ lead: text, sub: text.optional(), subList: z.array(text).optional() }),
+      says: z.array(text).optional(),
+      body: z.array(block).min(1),
+      recall: text,
+    })).min(3).max(5),
+    interview: z.object({
+      question: text,
+      model: z.array(z.object({ label: text, text: text })).min(3),
+    }),
+    verified: z.object({ summary: text, body: z.array(block).min(1) }),
+    footer: text,
+  }),
+});
+
+export const collections = { lessons, lessonPages };
+

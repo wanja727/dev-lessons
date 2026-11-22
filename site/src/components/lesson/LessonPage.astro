@@ -1,0 +1,172 @@
+---
+/**
+ * 핵심 질문 구조 레슨의 페이지 틀 (docs/lesson-standard.md 1장).
+ * 자료 파일(src/content/lesson-pages/<슬러그>.yaml)의 칸을 채우면 이 틀이 페이지를 만든다.
+ * 구역의 순서와 모양은 여기서 정한다: 머리, 먼저 예측해 보기, 질문 1~N, 보지 않고 답하기, 검증, 근거.
+ */
+import Base from '../../layouts/Base.astro';
+import CoreQuestionKit from '../CoreQuestionKit.astro';
+import Blocks from './Blocks.astro';
+import Widget from './Widget.astro';
+import WidgetKit from './WidgetKit.astro';
+import '../../styles/lesson.css';
+import '../../styles/retrievo-theme.css';
+import '../../styles/core-question.css';
+import { highlight } from '../../lib/highlight';
+import { countWord, inline } from '../../lib/inline';
+
+interface Props {
+  slug: string;
+  data: Record<string, any>;
+}
+const { slug, data } = Astro.props;
+const { codes, links, predict, questions, interview, verified } = data;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const md = (text: string) => inline(text, { links });
+const count = countWord(questions.length);
+
+/** 본문을 읽는 구역과 위젯으로 나눈다. 위젯은 읽는 폭보다 넓게 쓰므로 읽는 구역 밖에 둔다 */
+type Group = { widget: Record<string, any> } | { blocks: Record<string, any>[] };
+function groups(body: Record<string, any>[]): Group[] {
+  const out: Group[] = [{ blocks: [] }];
+  for (const b of body) {
+    if ('widget' in b) out.push({ widget: b.widget }, { blocks: [] });
+    else (out[out.length - 1] as { blocks: Record<string, any>[] }).blocks.push(b);
+  }
+  return out.filter((g, i) => i === 0 || 'widget' in g || g.blocks.length > 0);
+}
+
+// 페이지 스크립트가 쓸 자료: 예측, 장마다의 확인 문제, 보지 않고 답하기, 진행 표시
+const quizzes: Record<string, unknown> = {};
+for (const q of questions) {
+  const quiz = q.body.find((b: Record<string, any>) => 'quiz' in b)?.quiz;
+  if (!quiz) throw new Error(`레슨 '${slug}' ${q.id}: 확인 문제(quiz)가 없다`);
+  if (quiz.answer < 1 || quiz.answer > quiz.options.length) throw new Error(`레슨 '${slug}' ${q.id}: quiz.answer는 보기 번호(1부터)다`);
+  quizzes[q.id] = { q: quiz.q, o: quiz.options, a: quiz.answer - 1, e: quiz.explain };
+}
+if (!predict.options.some((o: { value: string }) => o.value === predict.answer)) {
+  throw new Error(`레슨 '${slug}': predict.answer '${predict.answer}'가 options에 없다`);
+}
+const page = {
+  predict: {
+    key: predict.storageKey,
+    answer: predict.answer,
+    wrong: predict.wrong,
+    labels: Object.fromEntries(predict.options.map((o: { value: string; label: string }) => [o.value, o.label])),
+  },
+  quizzes,
+  recalls: questions.map((q: Record<string, any>) => ({ id: q.id, q: q.title, a: q.recall })),
+  marks: [
+    ['predict', '예측'],
+    ...questions.map((q: Record<string, any>, i: number) => [q.id, `질문 ${i + 1} / ${questions.length}`]),
+    ['recall', '마무리'],
+  ],
+};
+const pageJson = JSON.stringify(page).replace(/</g, '\\u003c');
+// 면접 답의 순서: 모범 답의 칸 이름을 잇는다. 마지막 "경험"은 "내 경험"으로 읽는다
+const order = interview.model.map((m: { label: string }) => (m.label === '경험' ? '내 경험' : m.label)).join(' → ');
+---
+<Base theme="soft pastel" title={`${data.title} · Dev Lessons`} description={data.description}>
+<link slot="head" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" />
+<CoreQuestionKit />
+<main>
+  <header class="top">
+    <a class="back" href={`${base}/`}>← 레슨 목록</a>
+    <p class="meta">
+      <span class="m-unit">{data.unit}</span><span class="m-time">약 {data.minutes}분</span><span class="m-pre">먼저 배울 레슨{' '}
+        {data.prerequisites.length === 0
+          ? '없음'
+          : data.prerequisites.map((p, i) => <>{i > 0 && ', '}<a href={`${base}/lessons/${p.slug}/`}>{p.title}</a></>)}</span>
+    </p>
+    <h1>{data.title}</h1>
+    <p class="lede">이 레슨을 마치면 아래 {count} 질문에 자료를 보지 않고 답할 수 있어요. 장 하나가 질문 하나에 답해요.</p>
+    <ol class="goals">
+      {questions.map((q) => <li><a href={`#${q.id}`}>{q.title}</a></li>)}
+    </ol>
+    <p class="muted assume"><strong>알고 있다고 보는 것:</strong>{' '}<Fragment set:html={md(data.assume)} /></p>
+  </header>
+
+  <section id="predict" class="read">
+    <p class="eyebrow">먼저 예측해 보기</p>
+    <h2>{predict.title}</h2>
+    <p set:html={md(predict.text)} />
+    {predict.code && <pre set:html={highlight(codes[predict.code].replace(/\n$/, ''))} />}
+    <div class="panel">
+      <span class="label">{predict.label}</span>
+      <div class="choice-row" id="predict-opts">
+        {predict.options.map((o) => (
+          <button class="chip" type="button" data-v={o.value} aria-pressed="false">{o.label}</button>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  {questions.map((q, i) => (
+    <section id={q.id}>
+      {groups(q.body).map((g, gi) => 'widget' in g
+        ? <Widget widget={g.widget} />
+        : (
+          <div class="read stack">
+            {gi === 0 && (
+              <>
+                <p class="eyebrow">질문 {i + 1}</p>
+                <h2>{q.title}</h2>
+                <div class="answer">
+                  <span class="label">결론</span>
+                  <p class="lead" set:html={md(q.conclusion.lead)} />
+                  {q.conclusion.sub && <p class="sub" set:html={md(q.conclusion.sub)} />}
+                  {q.conclusion.subList && <ul class="sub">{q.conclusion.subList.map((s) => <li set:html={md(s)} />)}</ul>}
+                </div>
+              </>
+            )}
+            <Blocks blocks={g.blocks} lesson={slug} codes={codes} links={links} questionId={q.id} />
+          </div>
+        ))}
+    </section>
+  ))}
+
+  <section id="recall" class="read">
+    <p class="eyebrow">보지 않고 답하기</p>
+    <h2>{count} 질문에 직접 답해 보세요</h2>
+    <p>위로 올라가지 말고, 질문마다 소리 내어 말하거나 머릿속으로 먼저 답해 보세요. 그다음에 모범 답을 열어 비교해요. 읽을 때 안다고 느낀 것과 꺼낼 수 있는 것은 달라요.</p>
+    <div class="panel" id="recall-list"></div>
+
+    <h3 style="margin-top:12px">면접 질문: "{interview.question}"</h3>
+    <p>{count} 답을 하나로 이어서, 1분 안에 말해 보세요. {order} 순서예요. 말해 본 뒤에 모범 답을 열어요.</p>
+    <div><button class="btn primary" type="button" id="model-btn">모범 답 보기</button></div>
+    <div class="panel model" id="model" hidden>
+      <dl>
+        {interview.model.map((m) => <><dt>{m.label}</dt><dd>{m.text}</dd></>)}
+      </dl>
+    </div>
+  </section>
+
+  <section class="read" id="verified">
+    <details class="more">
+      <summary>{verified.summary}</summary>
+      <div class="stack" style="padding-top:6px">
+        <Blocks blocks={verified.body} lesson={slug} codes={codes} links={links} />
+      </div>
+    </details>
+  </section>
+
+  <footer set:html={md(data.footer)} />
+</main>
+<script type="application/json" id="lesson-page" set:html={pageJson} />
+<script is:inline>
+(function () {
+  var L = window.Lesson, page = JSON.parse(document.getElementById('lesson-page').textContent);
+  var p = page.predict;
+  L.predict({
+    key: p.key, opts: 'predict-opts', result: 'predict-result', answer: p.answer,
+    right: '예측이 맞았어요.',
+    wrong: function (v) { return p.wrong.replace('{value}', v).replace('{label}', p.labels[v]); }
+  });
+  L.quizzes(page.quizzes);
+  L.recalls('recall-list', page.recalls);
+  L.reveal('model-btn', 'model');
+  L.progress(page.marks);
+})();
+</script>
+<WidgetKit />
+</Base>

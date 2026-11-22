@@ -1,0 +1,312 @@
+# DB 커넥션과 커넥션 풀
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/connection-pool.yaml에 있다.
+title: DB 커넥션과 커넥션 풀
+description: 커넥션을 매번 새로 만들면 왜 안 되는지, 커넥션 풀이 어떻게 동작하는지, 연결이 모두 쓰이고 있으면 어떻게 되는지, 트랜잭션이 연결을 얼마나 오래 쥐는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
+unit: DB
+minutes: 20
+prerequisites:
+  - slug: tx-basics
+    title: 트랜잭션 기초
+assume: SQL 기초, 트랜잭션의 커밋과 롤백([트랜잭션 기초](lesson:tx-basics)), 자바의 try-with-resources. 풀은 스프링 부트가 기본으로 쓰는 HikariCP, DB는 PostgreSQL 16이에요.
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/connpool/ConnectionPoolTest.java
+codes:
+  predict: |-
+    // 풀이 가진 연결은 2개
+    try (Connection conn =⤶
+             dataSource.getConnection()) {
+        // 오래 걸리는 SQL 실행
+    }
+  raw: |-
+    try (Connection conn =⤶
+             [[DriverManager.getConnection(url)]]) {
+        // SQL 실행
+    }
+  pool: |-
+    try (Connection conn =⤶
+             [[dataSource.getConnection()]]) {
+        // SQL 실행
+    [[}]]
+  wait: |-
+    // 풀이 가진 연결은 2개
+    try (Connection conn =⤶
+             [[dataSource.getConnection()]]) {
+        // 오래 걸리는 SQL 실행
+    }
+  config: |-
+    # application.yml
+    spring:
+      datasource:
+        hikari:
+          [[maximum-pool-size: 10]]
+          [[connection-timeout: 30000]]
+  tx: |-
+    @Transactional
+    void checkout(Long id) {
+        Order o = orders.findById(id);
+        Receipt r = [[paymentApi.pay(o)]];
+        o.markPaid(r);
+    }
+  txFix: |-
+    void checkout(Long id) {
+        Order o = orderService.find(id);
+        Receipt r = paymentApi.pay(o);
+        [[orderService.markPaid(id, r)]];
+    }
+  test: |-
+    @Test
+    void closeReturnsToPool() {
+        // 연결이 1개뿐인 풀
+        int first, second;
+        try (var c = pool.getConnection()) {
+            first = [[backendPid(c)]];
+        }
+        try (var c = pool.getConnection()) {
+            second = [[backendPid(c)]];
+        }
+        // 같은 연결을 다시 받았는지 확인
+        assertThat(second).isEqualTo(first);
+    }
+predict:
+  title: 연결이 남아 있지 않으면 세 번째 요청은 어떻게 될까요?
+  text: 아래 코드는 풀에서 DB 연결을 하나 빌려 SQL을 실행해요. 풀이 가진 연결은 2개뿐이에요. 요청 두 개가 연결을 하나씩 빌려 오래 걸리는 SQL을 실행하는 중에, 세 번째 요청이 같은 코드를 실행했어요. 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에서 확인해요.
+  code: predict
+  label: 세 번째 요청은
+  options:
+    - value: more
+      label: 연결을 하나 더 만들어 받는다
+    - value: fail
+      label: 바로 실패한다
+    - value: wait
+      label: 기다리다가, 정해진 시간이 지나면 실패한다
+  answer: wait
+  storageKey: cp-predict
+  wrong: 예측은 "{label}"였어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 커넥션은 무엇이고, 왜 매번 새로 만들면 안 되나요?
+    conclusion:
+      lead: 커넥션은 프로그램과 DB 서버 사이에 열린 통신 통로예요. 만드는 데 드는 비용이 커서 매번 새로 만들면 느려요.
+      sub: 연결 하나를 만들려면 네트워크 접속, 인증, DB 서버의 준비가 필요해요. DB 서버가 동시에 받을 수 있는 연결 수에도 한계가 있어요.
+    body:
+      - p: 프로그램이 DB에 SQL을 보내고 결과를 받는 일은 모두 **커넥션**(연결)을 통해서 해요. 풀을 쓰지 않으면 요청마다 연결을 새로 만들어야 해요.
+      - code: raw
+        notes:
+          - mark: DriverManager.getConnection(url)
+            as: code
+            text: DB 서버에 새로 접속해서 연결을 만들어요. try 블록이 끝나면 그 연결을 끊어요.
+      - p: 연결 하나를 새로 만들 때는 세 가지 일이 일어나요.
+      - ol:
+          - 네트워크로 DB 서버에 접속해요.
+          - 아이디와 비밀번호로 인증해요.
+          - DB 서버가 이 연결을 맡을 준비를 해요. PostgreSQL은 연결마다 서버 프로세스를 하나씩 띄워요.
+      - p: 아래에서 방식을 고르고 요청을 여러 번 처리해 보세요. 요청마다 무슨 일을 하는지, 연결을 몇 번 새로 만드는지 세어 봐요.
+      - widget: {kind: custom, name: connection-pool/NewOrPooled}
+      - p: 요청마다 새로 연결하면 SQL 한 번을 보내려고 접속, 인증, 준비를 매번 다시 해요. 얼마나 차이 나는지 실제로 재 봤어요. 연결을 새로 만들어 SELECT 한 번 하는 시간과, 풀에서 빌려 SELECT 한 번 하는 시간을 20번씩 재서 평균을 낸 값이에요.
+      - ci:
+          key: timing
+          label: 실제로 잰 시간 보기
+          source: ConnectionPoolTest.newConnectionIsSlowerThanPooled
+      - p: 연결을 무한정 만들 수도 없어요. DB 서버가 동시에 받을 수 있는 연결 수에는 한계가 있고, PostgreSQL의 기본값은 100개예요.
+      - quiz:
+          q: 풀을 쓰지 않고 요청마다 연결을 새로 만들어요. 요청 100개를 차례로 처리하면 DB 서버에 접속하고 인증하는 일은 몇 번 일어날까요?
+          options:
+            - 1번
+            - 10번
+            - 100번
+          answer: 3
+          explain: 요청마다 연결을 새로 만들고 끊으니, 접속과 인증도 요청 수만큼 일어나요.
+      - next: 연결을 만드는 일이 비싸다면, 한 번 만든 연결을 끊지 않고 계속 쓰면 되지 않을까요?
+    recall: 커넥션은 프로그램과 DB 서버 사이에 열린 통신 통로예요. 하나를 만들려면 네트워크 접속, 인증, DB 서버의 준비(PostgreSQL은 서버 프로세스를 띄움)가 필요해서 SQL 한 번보다 훨씬 오래 걸려요. DB 서버가 동시에 받을 수 있는 연결 수에도 한계가 있어요.
+  - id: q2
+    title: 커넥션 풀은 어떻게 동작하나요?
+    conclusion:
+      lead: 연결을 미리 만들어 두고, 요청마다 빌려주고 돌려받아요.
+      sub: 풀에서 빌린 연결의 close()는 연결을 끊지 않고 풀에 반납해요. 반납된 연결은 다음 요청이 다시 써요.
+    body:
+      - p: '**커넥션 풀**은 연결을 정해진 개수만큼 가지고 있다가 필요한 요청에 빌려줘요. 스프링 부트는 **HikariCP**라는 풀을 기본으로 쓰고, `dataSource`로 꺼내 쓸 수 있게 해 줘요.'
+      - code: pool
+        notes:
+          - mark: dataSource.getConnection()
+            as: code
+            text: 연결을 새로 만들지 않고 풀에서 하나 빌려요.
+          - mark: '}'
+            text: try 블록이 끝나면 `close()`가 자동으로 불려요. 풀에서 빌린 연결은 이때 끊기지 않고 풀로 돌아가요.
+      - p: 코드는 풀이 없을 때와 거의 같아요. 달라진 것은 `close()`의 뜻이에요. 아래는 연결 2개를 가진 풀이에요. 빌리고 반납하기를 반복해 보세요. 연결 옆의 번호는 그 연결을 맡은 DB 서버 프로세스의 번호예요.
+      - widget: {kind: custom, name: connection-pool/BorrowReturn}
+      - p: 반납한 뒤에 다시 빌리면 같은 번호의 연결이 나와요. 새로 만든 것이 아니라 풀에 돌아와 있던 연결을 다시 쓰는 거예요. 실제 PostgreSQL에서도 서버 프로세스 번호가 같은지 확인했어요.
+      - ci:
+          key: reuse
+          label: 반납한 뒤 다시 빌린 실제 결과 보기
+          source: ConnectionPoolTest.closeReturnsToPool
+      - p: 그래서 빌린 연결은 꼭 `close()`해야 해요. 반납하지 않은 연결은 다른 요청이 쓸 수 없어요. try-with-resources를 쓰거나, 스프링의 `JdbcTemplate`이나 JPA처럼 빌리고 반납하는 일을 대신 해 주는 도구를 써요.
+      - quiz:
+          q: 연결이 1개뿐인 풀에서 연결을 빌려 쓰고 close()한 다음, 다시 빌렸어요. 두 번째로 빌린 연결은?
+          options:
+            - 처음과 같은 연결
+            - 새로 만든 다른 연결
+          answer: 1
+          explain: 풀에서 빌린 연결의 close()는 끊지 않고 반납이에요. 풀에 돌아온 그 연결을 다시 빌려요.
+      - next: 위에서 연결 2개를 모두 빌리면 빌리기 버튼이 눌리지 않았어요. 실제 풀에서는 그때 온 요청이 어떻게 될까요?
+    recall: 연결을 미리 만들어 두고 요청마다 빌려주고 돌려받아요. 풀에서 빌린 연결의 close()는 끊지 않고 반납이라, 다음 요청이 같은 연결을 다시 써요. 그래서 빌린 연결은 꼭 close()해야 해요.
+  - id: q3
+    title: 풀의 연결이 모두 쓰이고 있으면 다음 요청은 어떻게 되나요?
+    conclusion:
+      lead: 연결이 반납될 때까지 기다려요. 정해진 시간 안에 받지 못하면 예외로 실패해요.
+      sub: 풀은 최대 크기를 넘겨 연결을 더 만들지 않아요. 기다리는 동안 누군가 반납하면 그 연결을 바로 받아요.
+    body:
+      - p: 처음 예측의 답은 **기다리다가, 정해진 시간이 지나면 실패한다**예요. {{predict-result}}
+      - code: wait
+        notes:
+          - mark: dataSource.getConnection()
+            as: code
+            text: 빌려줄 연결이 없으면 이 줄에서 멈춰서 기다려요.
+      - p: 풀의 크기와 기다리는 최대 시간은 설정으로 정해요. 아래는 HikariCP의 기본값이에요.
+      - code: config
+        notes:
+          - mark: 'maximum-pool-size: 10'
+            text: 풀이 가질 수 있는 연결의 최대 개수예요.
+          - mark: 'connection-timeout: 30000'
+            text: 연결을 기다리는 최대 시간이에요. 단위는 밀리초라 30초예요.
+      - p: 아래는 요청이 0.1초 간격으로 들어와서 각자 연결을 하나씩 쓰고 반납하는 모습이에요. 처음 값은 예측한 상황과 같아요. 값을 바꿔 가며 누가 기다리고 누가 실패하는지 보세요.
+      - widget: {kind: custom, name: connection-pool/PoolSim}
+      - p: 같은 상황을 실제 HikariCP로 돌린 결과예요. 풀 크기 2, 기다리는 최대 시간 500ms에서 세 번째 요청이 받은 예외 메시지를 볼 수 있어요.
+      - ci:
+          key: timeout
+          label: 세 번째 요청의 실제 결과 보기
+          source: ConnectionPoolTest.exhaustedPoolTimesOut
+      - p: 실패한 요청이 받는 예외는 `SQLTransientConnectionException`이에요. 메시지는 "Connection is not available, request timed out"으로 시작해요. 이 메시지를 봤다면 DB가 느린 것이 아니라 **풀에 빌려줄 연결이 없었다**는 뜻이에요.
+      - more:
+          summary: '더 알아보기: 풀을 크게 잡으면 되지 않나요?'
+          body:
+            - p: 풀을 키우면 기다림은 줄지만, DB 서버가 받을 수 있는 연결 수와 자원에는 한계가 있어요. 풀 크기를 어떻게 정하는지는 [커넥션 풀과 톰캣 스레드 풀 크기](lesson:pool-sizing) 레슨에서 다뤄요.
+      - quiz:
+          q: 풀 크기는 2, 기다리는 최대 시간은 500ms예요. 요청 두 개가 연결을 쥔 채 2초짜리 SQL을 실행하는 중에 세 번째 요청이 연결을 달라고 했어요. 세 번째 요청은?
+          options:
+            - 세 번째 연결을 만들어 받는다
+            - 약 500ms 기다린 뒤 예외로 실패한다
+            - 2초 기다린 뒤 연결을 받는다
+          answer: 2
+          explain: 풀은 최대 크기를 넘겨 만들지 않아요. 500ms 안에 반납되는 연결이 없으니 예외로 실패해요.
+      - next: 연결을 오래 쥐고 있을수록 다른 요청이 기다리게 돼요. 그러면 요청 하나는 연결을 얼마나 오래 쥐고 있을까요?
+    recall: 최대 크기를 넘겨 연결을 만들지 않고, 반납될 때까지 기다려요. 기다리는 동안 누군가 반납하면 그 연결을 받고, 정해진 시간(HikariCP 기본 30초) 안에 받지 못하면 SQLTransientConnectionException으로 실패해요.
+  - id: q4
+    title: 트랜잭션은 연결을 얼마나 오래 쥐고 있나요?
+    conclusion:
+      lead: 트랜잭션이 끝날 때까지 연결 하나를 쥐고 있어요.
+      sub: 커밋이나 롤백을 해야 연결이 풀로 돌아가요. 그래서 트랜잭션 안에 느린 작업이 있으면 그동안 연결을 붙잡아요.
+    body:
+      - p: 트랜잭션은 연결 하나 위에서 진행돼요. [트랜잭션 기초](lesson:tx-basics)에서 "연결 A의 커밋 전 변경은 연결 B에 보이지 않는다"고 했던 그 연결이에요. 트랜잭션이 진행되는 동안에는 그 연결을 다른 요청에 빌려줄 수 없어요.
+      - p: 아래는 주문을 조회하고, 외부 결제 서버를 부르고, 결제 결과를 저장하는 코드예요.
+      - code: tx
+        notes:
+          - mark: paymentApi.pay(o)
+            as: code
+            text: 다른 회사의 결제 서버를 부르는 줄이에요. 응답에 몇 초가 걸릴 수 있어요. 그동안 DB에 보내는 SQL은 없지만 연결은 쥔 채예요.
+      - p: 결제 서버의 응답에 3초가 걸리고, SQL은 한 번에 0.05초가 걸린다고 해 볼게요. 결제 호출이 트랜잭션 안에 있을 때와 밖에 있을 때, 요청 하나가 연결을 쥐는 시간을 비교해 보세요.
+      - widget:
+          kind: toggle
+          layout:
+            - selector
+            - legend
+            - gantt
+            - duo
+            - verdict
+          selector:
+            label: 결제 서버 호출의 위치
+            options:
+              - value: in
+                label: 트랜잭션 안
+              - value: out
+                label: 트랜잭션 밖
+          legend:
+            - kind: hold
+              label: 연결을 쥐고 SQL 실행
+            - kind: api
+              label: 결제 서버 응답을 기다림
+          scenes:
+            in:
+              gantt:
+                total: 3.1
+                axis: [0초, 1.55초, 3.10초]
+                rows: [{label: 연결, bars: [{kind: hold, from: 0, to: 3.1}]}, {label: 하는 일, bars: [{kind: hold, from: 0, to: 0.05}, {kind: api, from: 0.05, to: 3.05}, {kind: hold, from: 3.05, to: 3.1}]}]
+              duo:
+                - {label: 요청 하나가 연결을 쥐는 시간, rows: [{k: 초, v: '3.10', mark: bad}]}
+                - {label: 연결 10개로 1초에 처리할 수 있는 주문, rows: [{k: 건, v: '3.2', mark: bad}]}
+              verdict: 연결을 3.10초 동안 쥐어요. 그 가운데 3초는 SQL을 보내지 않고 결제 서버만 기다리는 시간이에요. 연결 10개로는 1초에 약 3.2건밖에 처리하지 못해요.
+            out:
+              gantt:
+                total: 3.1
+                axis: [0초, 1.55초, 3.10초]
+                rows: [{label: 연결, bars: [{kind: hold, from: 3, to: 3.05}]}, {label: 하는 일, bars: [{kind: api, from: 0, to: 3}, {kind: hold, from: 3, to: 3.05}]}]
+              duo:
+                - {label: 요청 하나가 연결을 쥐는 시간, rows: [{k: 초, v: '0.05', mark: changed}]}
+                - {label: 연결 10개로 1초에 처리할 수 있는 주문, rows: [{k: 건, v: '200', mark: changed}]}
+              verdict: 연결을 0.05초만 쥐어요. 결제 서버를 기다리는 3초 동안에는 연결을 쓰지 않아요. 같은 연결 10개로 1초에 200건을 처리할 수 있어요.
+      - p: 결제 호출이 트랜잭션 안에 있으면 DB는 한가한데도 풀의 연결이 모자라요. 요청이 조금만 몰려도 질문 3의 기다림과 실패가 생겨요. 고치는 방법은 느린 호출을 트랜잭션 밖으로 빼고, DB에 저장하는 부분만 짧은 트랜잭션으로 묶는 거예요.
+      - code: txFix
+        notes:
+          - mark: orderService.markPaid(id, r)
+            as: code
+            text: 결제 결과를 저장하는 메서드예요. `checkout`에서는 `@Transactional`을 떼고 이 메서드에만 붙여요. 결제 서버를 기다리는 동안에는 연결을 쥐지 않아요.
+      - p: 트랜잭션이 연결을 쥐고 있다가 끝나면 돌려준다는 것은 테스트로 확인했어요. 스프링 트랜잭션 안에서 SQL을 보낸 직후에 풀에서 쓰이고 있는 연결은 1개였고, 트랜잭션이 끝난 뒤에는 0개였어요.
+      - more:
+          summary: '더 알아보기: 연결을 요청 끝까지 쥐게 하는 설정'
+          body:
+            - p: 스프링 부트의 기본 설정에는 트랜잭션이 끝난 뒤에도 요청이 끝날 때까지 연결을 쥐게 할 수 있는 것이 있어요. [OSIV](lesson:osiv) 레슨에서 다뤄요.
+      - quiz:
+          q: '@Transactional 메서드가 주문을 조회하고(0.05초), 결제 서버를 부르고(3초), 결과를 저장해요(0.05초). 이 요청이 연결을 쥐는 시간은?'
+          options:
+            - 0.1초
+            - 3초
+            - 3.1초
+          answer: 3
+          explain: 트랜잭션이 끝날 때까지 연결을 쥐어요. 결제 서버를 기다리는 3초도 포함돼요.
+    recall: 트랜잭션이 끝날 때까지 연결 하나를 쥐고, 커밋이나 롤백을 해야 풀로 돌려줘요. 트랜잭션 안에서 외부 서버 호출처럼 느린 작업을 하면 그동안 연결을 붙잡아서 풀이 모자라요. 느린 작업은 트랜잭션 밖으로 빼고 트랜잭션을 짧게 둬요.
+interview:
+  question: 커넥션 풀을 왜 쓰나요?
+  model:
+    - label: 정의
+      text: 커넥션 풀은 DB 연결을 미리 만들어 두고 요청마다 빌려주고 돌려받는 구조입니다. 스프링 부트는 HikariCP를 기본으로 쓰고, 기본 최대 크기는 10입니다.
+    - label: 원리
+      text: 연결을 새로 만들려면 네트워크 접속, 인증, DB 서버의 준비가 필요해서 비용이 큽니다. 풀에서 빌린 연결의 close()는 끊지 않고 반납이라 다음 요청이 같은 연결을 다시 씁니다. 연결이 모두 쓰이고 있으면 다음 요청은 기다리고, 정해진 시간 안에 받지 못하면 예외로 실패합니다.
+    - label: 주의할 점
+      text: 트랜잭션은 끝날 때까지 연결 하나를 쥐고 있습니다. 트랜잭션 안에서 외부 API처럼 느린 작업을 하면 DB는 한가해도 풀이 모자라므로, 느린 작업은 트랜잭션 밖으로 빼고 트랜잭션을 짧게 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 연결 대기 타임아웃의 원인이 트랜잭션 안의 외부 API 호출인 것을 찾아, 호출을 트랜잭션 밖으로 옮겼습니다.'
+verified:
+  summary: 이 레슨의 내용은 어떻게 확인했나요? (검증 테스트)
+  body:
+    - p: 이 레슨에 나온 동작은 짐작이 아니라, 실제 PostgreSQL 16과 HikariCP에서 코드를 돌려 확인했어요. 테스트([ConnectionPoolTest](link:test))는 아래 상황마다 결과를 확인해요.
+    - table:
+        head:
+          - 상황
+          - 확인한 결과
+        rows:
+          - - 연결을 새로 만들어 SELECT 한 번, 풀에서 빌려 SELECT 한 번을 20번씩 잰다
+            - 새로 만드는 쪽이 더 오래 걸린다
+          - - 연결이 1개인 풀에서 빌리고, 반납하고, 다시 빌린다
+            - 두 번 모두 같은 서버 프로세스 번호
+          - - 연결 2개를 동시에 쥔다
+            - 서버 프로세스 번호가 서로 다르다
+          - - 풀 크기 2, 기다리는 최대 시간 500ms에서 세 번째로 빌린다
+            - 450ms 넘게 기다린 뒤 SQLTransientConnectionException
+          - - 연결이 1개인 풀에서 기다리는 중에 앞 요청이 반납한다
+            - 기다리던 요청이 그 연결을 받는다
+          - - 스프링 트랜잭션 안에서 SQL을 보낸 직후와 끝난 뒤
+            - 쓰이고 있는 연결은 1개, 끝난 뒤 0개
+          - - 스프링 부트가 만든 풀의 최대 크기
+            - '10'
+    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요. 질문 4의 3초와 0.05초는 설명하려고 정한 숫자이고, 잰 값이 아니에요.
+    - h3: 테스트는 이렇게 생겼어요
+    - p: '"반납한 연결을 다시 쓴다"를 확인하는 테스트예요. PostgreSQL은 연결마다 서버 프로세스가 따로 있어서, 프로세스 번호가 같으면 같은 연결이에요.'
+    - code: test
+      notes:
+        - mark: backendPid(c)
+          as: code
+          text: 이 연결을 맡은 DB 서버 프로세스의 번호를 DB에 물어봐요.
+    - run:
+        tests:
+          - lab.devlessons.connpool.ConnectionPoolTest
+        docker: true
+footer: '근거: HikariCP 문서의 maximumPoolSize와 connectionTimeout, Spring Boot 참조 문서의 SQL Databases, PostgreSQL 16 문서의 How Connections Are Established와 max_connections. 동작은 PostgreSQL 16과 Spring Boot 3.5(HikariCP)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

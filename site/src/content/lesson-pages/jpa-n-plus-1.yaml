@@ -1,0 +1,385 @@
+# JPA N+1 문제
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/jpa-n-plus-1.yaml에 있다.
+title: JPA N+1 문제
+description: N+1 문제가 왜 생기는지, EAGER로는 왜 안 되는지, 어떻게 해결하는지, 페이징할 때는 무엇을 고르는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
+unit: JPA
+minutes: 15
+prerequisites:
+  - slug: proxy-lazy-loading
+    title: 프록시와 지연 로딩
+assume: 엔티티, 리포지토리, JPQL([JPA 첫걸음](lesson:jpa-basics)), 지연 로딩([프록시와 지연 로딩](lesson:proxy-lazy-loading)), SQL의 JOIN과 LIMIT.
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java
+codes:
+  predict: |-
+    // 팀 10개
+    List<Team> teams = teamRepository.findAll();
+    for (Team team : teams) {
+        int count = team.getMembers().size();
+        System.out.println(count);
+    }
+  findAll: |-
+    // 팀 10개
+    List<Team> teams = [[teamRepository.findAll()]];
+    for (Team team : teams) {
+        int count = team.getMembers().size();
+        System.out.println(count);
+    }
+  loop: |-
+    // 팀 10개
+    List<Team> teams = teamRepository.findAll();
+    for (Team team : teams) {
+        int count = [[team.getMembers()]].size();
+        System.out.println(count);
+    }
+  entity: |-
+    @Entity
+    class Team {
+        @Id Long id;
+        String name;
+
+        // 지연 로딩(LAZY)이 기본값
+        @OneToMany(mappedBy = "team")
+        [[List<Member> members]];
+    }
+  eager: |-
+    @OneToMany(⤷
+        mappedBy = "team",⤶
+        [[fetch = FetchType.EAGER]]⤷
+    )
+    List<Member> members;
+  fetchJoin: |-
+    @Query("""
+        select t from Team t
+        left [[join fetch]] t.members
+        """)
+    List<Team> findAllWithMembers();
+
+    -- 나가는 SQL (1번)
+    select t.*, m.*
+    from team t
+    [[left join member m]] on m.team_id = t.id
+  batch: |-
+    # application.yml
+    spring:
+      jpa:
+        properties:
+          hibernate:
+            default_batch_fetch_size: 100
+
+    -- 나가는 SQL (팀 10개일 때 2번)
+    select * from team
+    select * from member⤶
+    where team_id [[in (1, 2, 3, ..., 10)]]
+  pagingFix: |-
+    -- 1번째: 팀만 페이징해서 조회
+    select * from team⤶
+    order by id [[limit 2]]
+
+    -- 2번째: 그 팀들의 멤버를 한 번에
+    select * from member⤶
+    where team_id [[in (1, 2)]]
+  test: |-
+    @Test
+    void eagerDoesNotFix() {
+        // EAGER인 팀 10개를 조회. 멤버는 안 씀
+        eagerTeamRepository.findAll();
+
+        // 나간 SQL이 1 + 10번인지 확인
+        assertThat([[SqlCapture.count()]])⤷
+            .isEqualTo(1 + TEAMS);
+    }
+  toOne: |-
+    @Query("""
+        select m from Member m
+        [[join fetch]] m.team
+        """)
+    List<Member> findPage(Pageable pageable);
+
+    -- 나가는 SQL (1번)
+    select m.*, t.*
+    from member m
+    join team t on t.id = m.team_id
+    [[limit 20]]
+predict:
+  title: 이 코드는 DB에 SQL을 몇 번 보낼까요?
+  text: 팀이 10개 있고, 팀마다 멤버가 여러 명 있어요. 팀 목록을 가져온 뒤 팀마다 멤버 수를 세서 출력해요. 모르는 게 정상이니 감으로 골라 보세요. 답은 바로 다음 장에 나와요.
+  code: predict
+  label: 내 예측
+  options:
+    - value: '1'
+      label: 1번
+    - value: '2'
+      label: 2번
+    - value: '11'
+      label: 11번
+    - value: '20'
+      label: 20번
+  answer: '11'
+  storageKey: n1-predict
+  wrong: 예측은 {value}번이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: N+1 문제는 무엇이고 왜 생기나요?
+    conclusion:
+      lead: 연관된 데이터를 하나씩 따로 가져와서 생겨요.
+      sub: 팀 목록을 쿼리 1번으로 가져온 뒤, 팀마다 멤버를 가져오는 쿼리가 1번씩 더 나가요. 팀이 N개면 모두 1 + N번이에요.
+    body:
+      - p: 예측한 코드의 답은 **11번**이에요. {{predict-result}} 왜 11번인지 직접 확인해 봐요.
+      - p: 팀은 멤버 목록을 가지고 있어요. 이렇게 엔티티가 다른 엔티티를 가리키는 것을 **연관관계**라고 해요. N+1은 연관관계를 따라가며 데이터를 쓸 때 생겨요.
+      - code: entity
+        notes:
+          - mark: List<Member> members
+            text: 팀이 가진 멤버 목록이에요. 이 필드가 팀과 멤버의 연관관계예요.
+      - p: '`members`는 **지연 로딩**이에요. 팀을 가져올 때 멤버는 가져오지 않고, 코드가 멤버를 처음 쓰는 순간에 그 팀의 멤버만 조회해요. 처음 코드에서는 반복문 안의 `team.getMembers()`가 그 순간이에요.'
+      - code: loop
+        notes:
+          - mark: team.getMembers()
+            text: 멤버를 처음 쓰는 곳이에요. 여기서 그 팀의 멤버를 가져오는 쿼리가 나가요.
+      - p: 아래는 첫 줄이 끝나서 팀 목록을 이미 가져온 상태예요(쿼리 1번). 반복문이 하는 것처럼 팀마다 멤버를 꺼내 보세요.
+      - widget: {kind: custom, name: jpa-n-plus-1/LazyGrid}
+      - p: 팀 하나의 멤버를 꺼낼 때마다 쿼리가 하나씩 나가요. 그래서 쿼리 수는 **목록 1번 + 팀 수 N번**이에요. 팀이 10개면 11번, 1,000개면 1,001번이에요.
+      - p: 이게 문제인 이유는 쿼리 한 번마다 애플리케이션과 DB 사이를 한 번씩 오가기 때문이에요. 쿼리 수가 데이터 개수를 따라 늘어나니, 데이터가 쌓일수록 화면이 느려져요.
+      - p: 멤버를 쓰지 않으면 추가 쿼리는 없어요. 팀만 조회하고 끝내면 1번이에요.
+      - quiz:
+          q: 지연 로딩인 팀 5개를 조회하고, 멤버는 한 번도 쓰지 않았어요. 쿼리는 몇 번일까요?
+          options:
+            - 1번
+            - 5번
+            - 6번
+          answer: 1
+          explain: 멤버를 쓰지 않으면 멤버 조회는 나가지 않아요. 팀 목록 1번이 전부예요.
+      - next: 멤버를 나중에 따로 가져와서 생긴 문제예요. 그러면 처음부터 같이 가져오도록 즉시 로딩(EAGER)으로 바꾸면 해결될까요?
+    recall: 연관된 데이터를 하나씩 따로 가져와서 생겨요. 팀 목록을 쿼리 1번으로 가져온 뒤, 팀마다 멤버를 가져오는 쿼리가 1번씩 더 나가요. 팀이 N개면 모두 1 + N번이에요.
+  - id: q2
+    title: EAGER로 바꾸면 왜 해결되지 않나요?
+    conclusion:
+      lead: EAGER는 가져오는 시점만 바꾸기 때문이에요.
+      sub: 멤버를 팀마다 따로 조회하는 방식은 그대로예요. 그래서 쿼리 수도 그대로 11번이에요.
+    body:
+      - p: '**즉시 로딩(EAGER)**은 팀을 가져오면 멤버도 바로 채우라는 설정이에요.'
+      - code: eager
+        notes:
+          - mark: fetch = FetchType.EAGER
+            text: 로딩 방식을 즉시 로딩으로 바꾸는 설정이에요.
+      - p: 처음 코드를 그대로 실행한다고 해 볼게요. 아래에서 LAZY와 EAGER를 바꿔 보세요. 쿼리가 언제 나가는지, 모두 몇 번인지 비교해요.
+      - widget:
+          kind: toggle
+          layout:
+            - selector
+            - phases
+            - verdict
+          selector:
+            label: members의 로딩 방식
+            options:
+              - value: LAZY
+                label: LAZY
+              - value: EAGER
+                label: EAGER
+          scenes:
+            LAZY:
+              phases:
+                - {title: findAll()을 실행하는 동안, count: 1번, log: [select * from team]}
+                - {title: 반복문에서 멤버를 쓰는 동안, count: 10번, log: [select * from member where team_id = 1, select * from member where team_id = 2, select * from member where team_id = 3, select * from member where team_id = 4, select * from member where team_id = 5, select * from member where team_id = 6, select * from member where team_id = 7, select * from member where team_id = 8, select * from member where team_id = 9, select * from member where team_id = 10]}
+              verdict: 'LAZY: 1 + 10 = 11번. 멤버 쿼리 10번은 반복문에서 멤버를 쓸 때 나가요.'
+            EAGER:
+              phases:
+                - {title: findAll()을 실행하는 동안, count: 11번, log: [select * from team, select * from member where team_id = 1, select * from member where team_id = 2, select * from member where team_id = 3, select * from member where team_id = 4, select * from member where team_id = 5, select * from member where team_id = 6, select * from member where team_id = 7, select * from member where team_id = 8, select * from member where team_id = 9, select * from member where team_id = 10]}
+                - {title: 반복문에서 멤버를 쓰는 동안, count: 0번, log: [{note: '-- 이미 채워져 있어서 쿼리 없음'}]}
+              verdict: 'EAGER: 11 + 0 = 11번. 멤버 쿼리 10번이 findAll() 쪽으로 옮겨 갔을 뿐, 합계는 같아요.'
+      - p: 이유는 처음 코드의 첫 줄, `teamRepository.findAll()`이 실행되는 순서에 있어요. `findAll()`은 Spring Data JPA가 만들어 주는 "전부 조회" 메서드예요.
+      - code: findAll
+        notes:
+          - mark: teamRepository.findAll()
+            text: 아래 세 단계가 모두 이 한 줄 안에서 일어나요.
+      - ol:
+          - '`findAll()`은 안에서 JPQL `select t from Team t`를 실행해요. "팀을 전부 가져와라"라는 뜻이에요.'
+          - JPA는 JPQL을 적힌 그대로 SQL로 바꿔요. 팀만 적혀 있으니 SQL도 팀만 조회해요. (쿼리 1번)
+          - 팀 10개를 받은 뒤에야 EAGER 설정을 보고, 팀마다 멤버를 조회해요. (쿼리 10번)
+      - p: LAZY와 다른 점은 세 번째 단계가 일어나는 때뿐이에요. LAZY는 반복문에서 멤버를 쓸 때, EAGER는 `findAll()`이 끝나기 전에 일어나요.
+      - p: EAGER는 오히려 손해예요. 멤버가 필요 없는 화면에서도 11번이 나가요. LAZY였다면 1번으로 끝났을 조회예요.
+      - callout: '**실무 규칙:** 연관관계는 모두 LAZY로 두고, 멤버가 필요한 조회에서만 함께 가져와요. `@ManyToOne`과 `@OneToOne`은 기본값이 EAGER라서 `fetch = FetchType.LAZY`를 직접 적어요.'
+      - more:
+          summary: '더 알아보기: 하나만 찾을 때는 달라요'
+          body:
+            - p: '`em.find(Team.class, id)`처럼 id로 하나만 찾을 때는 Hibernate가 EAGER 연관을 join으로 한 번에 가져오기도 해요. N+1이 생기는 건 JPQL로 목록을 조회할 때예요.'
+      - quiz:
+          q: members를 EAGER로 바꾸고 findAll()로 팀 10개를 조회했어요. 멤버는 쓰지 않았어요. 쿼리는 몇 번일까요?
+          options:
+            - 1번
+            - 10번
+            - 11번
+          answer: 3
+          explain: 팀 조회 1번 뒤에, 쓰든 안 쓰든 팀마다 멤버 쿼리가 10번 나가요.
+      - next: 가져오는 시점을 바꿔서는 소용이 없어요. "팀마다 따로"를 없애야 해요. 어떻게 하면 될까요?
+    recall: JPQL은 적힌 대로 팀만 조회하고, 그 뒤에 팀마다 멤버를 조회해요. EAGER는 그 시점을 앞당길 뿐이라 쿼리 수는 그대로예요. 멤버가 필요 없을 때도 나가서 오히려 손해예요.
+  - id: q3
+    title: 어떻게 해결하나요?
+    conclusion:
+      lead: 멤버를 팀마다 따로 가져오지 말고, 묶어서 가져와요.
+      subList:
+        - '**fetch join:** 팀과 멤버를 join해서 쿼리 1번에 가져와요.'
+        - '**배치 페치:** 여러 팀의 멤버를 IN 절로 묶어 한 번에 가져와요.'
+    body:
+      - h3: '방법 1. fetch join: join해서 한 번에'
+      - p: '`findAll()` 대신, JPQL에 `join fetch`를 적은 조회 메서드를 만들어 써요. 팀과 멤버를 join한 SQL 하나로 함께 가져와서 쿼리는 **1번**이에요.'
+      - code: fetchJoin
+        notes:
+          - mark: join fetch
+            as: str
+            text: 팀을 조회할 때 멤버도 함께 가져오라는 뜻이에요.
+          - mark: left join member m
+            as: code
+            text: 그래서 SQL에 멤버 테이블 join이 생겨요.
+      - muted: Spring Data JPA의 `@EntityGraph(attributePaths = "members")`도 같은 join을 만들어요. 쿼리를 직접 쓰지 않고 메서드에 붙여서 써요.
+      - h3: '방법 2. 배치 페치: IN으로 묶어서'
+      - p: LAZY는 그대로 둬요. 대신 멤버를 처음 쓸 때 그 팀 하나가 아니라 **여러 팀의 멤버를 IN 절로 묶어** 한 번에 가져와요. IN 절은 `where team_id in (1, 2, 3)`처럼 여러 값을 한 번에 조건으로 거는 SQL 문법이에요. 설정 하나로 모든 연관관계에 적용돼요.
+      - code: batch
+        notes:
+          - mark: in (1, 2, 3, ..., 10)
+            as: code
+            text: 팀 10개의 멤버를 조건 하나로 묶었어요. 배치 크기가 100이라 10개가 쿼리 하나에 다 들어가요.
+      - p: 한 번에 묶는 팀 수가 배치 크기예요. 쿼리 수는 **1 + (팀 수 ÷ 배치 크기, 올림)**이에요. 팀 10개에 배치 크기 5면 1 + 2 = 3번이에요.
+      - p: 처음 코드에 두 방법을 각각 적용했을 때의 쿼리 수예요. 팀 수와 방법을 바꿔 가며 비교해 보세요.
+      - widget: {kind: custom, name: jpa-n-plus-1/QuerySim}
+      - table:
+          head:
+            - 방법
+            - 하는 일
+            - 쿼리 수
+          rows:
+            - - 아무것도 안 함
+              - 팀마다 멤버를 따로 조회
+              - 1 + N
+            - - fetch join
+              - 팀과 멤버를 join해서 한 번에
+              - '1'
+            - - 배치 페치
+              - 여러 팀의 멤버를 IN으로 묶어서
+              - 1 + (N ÷ 배치 크기, 올림)
+      - more:
+          summary: '더 알아보기: 세부 동작과 그 밖의 방법'
+          body:
+            - ul:
+                - join하면 팀 하나가 멤버 수만큼 여러 행이 돼요. Hibernate 6은 결과에서 중복된 팀을 자동으로 하나로 합쳐 줘요.
+                - Hibernate 6과 PostgreSQL 조합에서는 IN 대신 `where team_id = any (?)`로 나가기도 해요. 묶어서 가져오는 원리와 쿼리 수는 같아요.
+                - 화면에 값 몇 개와 집계만 필요하면 엔티티 대신 필요한 값만 담은 객체(DTO)로 바로 조회하기도 해요.
+      - quiz:
+          q: 배치 크기 5, 팀 10개. 모든 팀의 멤버를 썼어요. 쿼리는 몇 번일까요?
+          options:
+            - 2번
+            - 3번
+            - 11번
+          answer: 2
+          explain: 팀 목록 1번 + 멤버를 5팀씩 묶어 2번 = 3번이에요.
+      - next: 쿼리 수만 보면 fetch join이 늘 더 좋아 보여요. 그런데 목록을 페이지로 나눠 보여 줄 때는 fetch join을 쓰면 안 되는 경우가 있어요.
+    recall: 멤버를 묶어서 가져와요. fetch join은 팀과 멤버를 join해서 1번에, 배치 페치는 여러 팀의 멤버를 IN으로 묶어 1 + (N ÷ 배치 크기, 올림)번에 가져와요.
+  - id: q4
+    title: 페이징이 필요하면 어떤 방법을 써야 하나요?
+    conclusion:
+      lead: 팀 목록에 멤버를 붙여 페이징할 때는 배치 페치를 써요.
+      sub: fetch join을 쓰면 DB가 페이지를 자르지 못해요. Hibernate가 전체 데이터를 메모리로 가져온 뒤에 잘라요.
+    body:
+      - p: '"팀을 2개씩 보여 주는 목록에 멤버도 같이" 보여 주려고 fetch join에 페이징을 걸었다고 해 볼게요. 팀과 멤버를 join한 결과는 **팀 단위가 아니라 멤버 단위 행**이에요. DB의 LIMIT은 행을 기준으로 잘라요. 아래에서 직접 잘라 보세요.'
+      - widget: {kind: custom, name: jpa-n-plus-1/PagingCut}
+      - p: LIMIT 5일 때만 원하는 결과가 나와요. 그런데 5라는 숫자는 팀 A가 3명, 팀 B가 2명이라는 걸 알아야 정할 수 있어요. 팀마다 멤버 수가 다르니, 행을 기준으로는 "팀 2개와 그 멤버 전부"를 자를 수 없어요.
+      - p: 그래서 Hibernate는 SQL에 LIMIT을 붙이지 않아요. **전체 행을 메모리로 가져온 뒤** 팀 2개를 골라내고, 아래 경고를 남겨요. 결과는 맞지만, 팀이 수십만 개면 그걸 전부 메모리에 올리다가 장애가 날 수 있어요.
+      - prewrap: 'WARN HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory'
+      - h3: '고치는 법: 팀만 페이징하고, 멤버는 배치 페치로'
+      - p: fetch join을 빼면 SQL에 LIMIT이 정상으로 붙어요. 멤버는 배치 페치가 그 페이지에 있는 팀 것만 묶어서 가져와요. 쿼리는 **2번**이에요.
+      - code: pagingFix
+        notes:
+          - mark: limit 2
+            as: code
+            text: 팀을 기준으로 2개만 잘라요.
+          - mark: in (1, 2)
+            as: code
+            text: 그 두 팀의 멤버만 한 번에 가져와요.
+      - muted: Hibernate 6은 LIMIT을 같은 뜻의 `fetch first 2 rows only`로 쓰기도 해요.
+      - h3: 반대 방향은 fetch join을 써도 안전해요
+      - p: 멤버 목록을 페이징하면서 각 멤버의 팀을 보여 줄 때는 얘기가 달라요. 멤버 한 명에 팀은 하나라서 join해도 행이 늘어나지 않아요. 그래서 fetch join과 페이징을 같이 써도 LIMIT이 그대로 붙고, 쿼리 **1번**으로 끝나요.
+      - code: toOne
+        notes:
+          - mark: join fetch
+            as: str
+            text: 멤버를 조회할 때 팀도 함께 가져와요.
+          - mark: limit 20
+            as: code
+            text: 행이 늘지 않아서 LIMIT이 SQL에 그대로 붙어요.
+      - table:
+          head:
+            - 상황
+            - 방법
+            - 쿼리 수
+          rows:
+            - - 팀 목록 + 멤버들, 페이징 있음
+              - 팀만 페이징 + 배치 페치
+              - 2 (페이지 크기가 배치 크기 이하일 때)
+            - - 팀 목록 + 멤버들, 페이징 없음
+              - fetch join
+              - '1'
+            - - 멤버 목록 + 팀, 페이징이 있든 없든
+              - fetch join
+              - '1'
+      - muted: '용어: 팀 → 멤버들처럼 여럿을 가리키는 연관을 **컬렉션**, 멤버 → 팀처럼 하나를 가리키는 연관을 **ToOne**이라고 불러요. 한 줄로 줄이면 "컬렉션 fetch join에는 페이징을 걸지 않는다"예요.'
+      - quiz:
+          q: 위 표에서 팀 A는 3명, 팀 B는 2명이에요. join 결과에 LIMIT 4를 걸면 팀 B의 멤버는 몇 명을 받을까요?
+          options:
+            - 0명
+            - 1명
+            - 2명
+          answer: 2
+          explain: 1~3행이 팀 A, 4행이 팀 B의 첫 멤버예요. 팀 B는 2명 중 1명만 받아요.
+    recall: 팀 목록에 멤버를 붙일 때는 팀만 페이징하고 멤버는 배치 페치로 가져와요(2번). 컬렉션을 fetch join하면 행이 멤버 수만큼 늘어 DB에서 자를 수 없고, Hibernate가 전체를 메모리로 가져와 잘라요. 멤버 목록에 팀을 붙일 때는 행이 늘지 않아 fetch join을 써도 돼요.
+interview:
+  question: JPA N+1 문제를 설명해 주세요
+  model:
+    - label: 정의
+      text: 연관관계가 있는 엔티티 목록을 조회할 때, 목록 쿼리 1번 뒤에 조회한 개수 N만큼 연관 데이터를 가져오는 쿼리가 더 나가는 문제입니다.
+    - label: 원인
+      text: JPA는 JPQL에 적힌 대상만 조회하고, 연관 데이터는 엔티티마다 따로 가져옵니다. EAGER로 바꿔도 가져오는 시점만 앞당겨지고 쿼리 수는 같습니다.
+    - label: 해결
+      text: 연관관계는 모두 LAZY로 두고, 필요한 조회에서 fetch join으로 한 번에 가져옵니다. 컬렉션을 페이징해야 하면 fetch join은 메모리에서 페이징하므로, 배치 페치로 IN 쿼리에 묶습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 목록 화면에서 SQL 로그로 쿼리 수를 세어 보고 배치 페치를 적용해 줄였습니다.'
+verified:
+  summary: 이 레슨의 숫자는 어떻게 확인했나요? (검증 테스트)
+  body:
+    - p: 이 레슨에 나온 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 테스트([NPlusOneTest](link:test))는 팀 10개와 팀마다 멤버 3명을 넣어 두고, 아래 상황마다 결과를 확인해요.
+    - table:
+        head:
+          - 상황
+          - 확인한 결과
+        rows:
+          - - 지연 로딩에서 팀을 조회하고 멤버를 쓴다
+            - 쿼리 11번
+          - - 지연 로딩에서 팀만 조회한다
+            - 쿼리 1번
+          - - EAGER로 바꾸고 팀만 조회한다
+            - 쿼리 11번
+          - - fetch join으로 조회한다
+            - 쿼리 1번, 팀은 중복 없이 10개
+          - - '@EntityGraph로 조회한다'
+            - 쿼리 1번
+          - - 배치 크기 5로 조회하고 멤버를 쓴다
+            - 쿼리 3번
+          - - 팀과 멤버를 fetch join하고 페이징한다
+            - SQL에 LIMIT이 없고, 경고(HHH90003004)가 남는다
+          - - 팀만 페이징하고 멤버는 배치 페치로 가져온다
+            - 쿼리 2번, 첫 SQL에 LIMIT이 붙는다
+          - - 멤버에 팀을 fetch join하고 페이징한다
+            - 쿼리 1번, SQL에 LIMIT이 붙는다
+    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.
+    - h3: 테스트는 이렇게 생겼어요
+    - p: '"EAGER로 바꾸고 팀만 조회한다"를 확인하는 테스트예요. 조회한 뒤에 나간 SQL 수가 11번인지 확인해요. `TEAMS`는 팀 수 10이에요.'
+    - code: test
+      notes:
+        - mark: SqlCapture.count()
+          as: code
+          text: Hibernate가 DB로 보낸 SQL을 모두 모아 두었다가 개수를 알려 줘요.
+    - p: 내 프로젝트에서도 같은 방법으로 확인할 수 있어요. 설정에 `logging.level.org.hibernate.SQL=debug`를 넣으면 나가는 SQL이 로그에 찍혀요. 목록 화면을 한 번 열고 SQL이 몇 번 찍히는지 세어 보세요.
+    - run:
+        tests:
+          - lab.devlessons.nplusone.NPlusOneTest
+        docker: true
+footer: '근거: Hibernate ORM 사용자 가이드의 Fetching 장, Spring Data JPA 참조 문서의 Entity Graph 절. 쿼리 수는 Spring Boot 3.5(Hibernate 6.6) 기본 설정에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

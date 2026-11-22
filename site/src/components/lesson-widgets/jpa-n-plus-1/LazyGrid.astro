@@ -1,0 +1,55 @@
+---
+/** 질문 1: 팀마다 멤버를 꺼내며 쿼리가 하나씩 늘어나는 것을 센다 */
+---
+<div class="lazy-grid" id="lazy-grid"></div>
+<div class="count-line"><span class="label">지금까지 보낸 쿼리</span><span class="mono" id="lazy-count" style="font-weight:500">1번</span></div>
+<div class="log" id="lazy-log" aria-live="polite"></div>
+<p id="lazy-msg" class="verdict" hidden></p>
+<div><button class="btn" type="button" id="lazy-reset">처음으로</button></div>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  function addLog(el, n, sql, cls) {
+    var row = document.createElement('div');
+    row.className = 'row' + (cls ? ' ' + cls : '');
+    if (cls) row.textContent = sql;
+    else { row.innerHTML = '<span class="n">' + n + '</span><span></span>'; row.lastChild.textContent = sql; }
+    el.appendChild(row);
+  }
+  /* 질문 1: 팀마다 멤버를 꺼내 보기 */
+  var lazyTeams = [
+    { id: 1, name: '팀 A', members: ['김', '이', '박'] },
+    { id: 2, name: '팀 B', members: ['최', '정'] },
+    { id: 3, name: '팀 C', members: ['강', '조', '윤', '장'] }
+  ];
+  var lazyQ;
+  function lazyReset() {
+    lazyQ = 1;
+    $('lazy-log').innerHTML = '';
+    addLog($('lazy-log'), 1, 'select * from team');
+    $('lazy-grid').innerHTML = '';
+    $('lazy-msg').hidden = true;
+    lazyTeams.forEach(function (t) {
+      var card = document.createElement('div'); card.className = 'team-card';
+      card.innerHTML = '<h4>' + t.name + '</h4><div class="box">members: 아직 가져오지 않음</div><button class="btn" type="button">team.getMembers().size()</button>';
+      var btn = card.querySelector('button'), box = card.querySelector('.box');
+      btn.addEventListener('click', function () {
+        lazyQ++;
+        addLog($('lazy-log'), lazyQ, 'select * from member where team_id = ' + t.id);
+        box.className = 'box filled';
+        box.textContent = 'members: ' + t.members.map(function (m) { return m + '○○'; }).join(', ') + ' (' + t.members.length + '명)';
+        btn.disabled = true; btn.textContent = '가져왔어요';
+        $('lazy-count').textContent = lazyQ + '번';
+        if (lazyQ === lazyTeams.length + 1) {
+          $('lazy-msg').hidden = false;
+          $('lazy-msg').textContent = '팀 3개의 멤버를 모두 꺼냈더니 1 + 3 = 4번이에요. 팀이 10개였다면 1 + 10 = 11번이에요.';
+        }
+      });
+      $('lazy-grid').appendChild(card);
+    });
+    $('lazy-count').textContent = '1번';
+  }
+  $('lazy-reset').addEventListener('click', lazyReset);
+  lazyReset();
+})();
+</script>

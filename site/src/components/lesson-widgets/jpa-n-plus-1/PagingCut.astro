@@ -1,0 +1,57 @@
+---
+/** 질문 4: join 결과를 행 기준으로 잘라 본다 */
+---
+<div class="field">
+  <div class="row-line"><label class="label" for="pg-limit">DB에서 행 기준으로 자르기 (LIMIT)</label><span class="mono" id="pg-limit-val">2행</span></div>
+  <input type="range" id="pg-limit" min="1" max="10" value="2">
+</div>
+<div class="sim">
+  <div class="rows" id="pg-rows" aria-label="team join member 결과 행"></div>
+  <div class="page-out" id="pg-out" aria-live="polite"></div>
+</div>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  /* 질문 4: join 결과를 행 기준으로 자르기 */
+  var pgData = [
+    { team: '팀 A', c: 'var(--team-a)', members: ['김○○', '이○○', '박○○'] },
+    { team: '팀 B', c: 'var(--team-b)', members: ['최○○', '정○○'] },
+    { team: '팀 C', c: 'var(--team-c)', members: ['강○○', '조○○', '윤○○', '장○○'] },
+    { team: '팀 D', c: 'var(--team-d)', members: ['임○○'] }
+  ];
+  function renderPaging() {
+    var lim = +$('pg-limit').value, rowsEl = $('pg-rows'), out = $('pg-out');
+    $('pg-limit-val').textContent = lim + '행';
+    rowsEl.innerHTML = '';
+    var idx = 0, got = {};
+    var head = document.createElement('div'); head.className = 'r'; head.style.setProperty('--c', 'transparent');
+    head.innerHTML = '<span class="muted">행</span><span class="muted">team</span><span class="muted">member</span>'; rowsEl.appendChild(head);
+    pgData.forEach(function (t) {
+      t.members.forEach(function (m) {
+        idx++;
+        if (idx === lim + 1) { var l = document.createElement('div'); l.className = 'limit'; l.innerHTML = '<span>LIMIT ' + lim + '</span>'; rowsEl.appendChild(l); }
+        var r = document.createElement('div'); r.className = 'r' + (idx > lim ? ' cut' : ''); r.style.setProperty('--c', t.c);
+        r.innerHTML = '<span>' + idx + '</span><span>' + t.team + '</span><span>' + m + '</span>';
+        rowsEl.appendChild(r);
+        if (idx <= lim) got[t.team] = (got[t.team] || 0) + 1;
+      });
+    });
+    var html = '<span class="label">원한 것: 팀 2개와 그 멤버 전부</span><span class="label">받은 것</span>';
+    var teams = 0, cutAny = false;
+    pgData.forEach(function (t) {
+      if (!got[t.team]) return;
+      teams++;
+      var full = got[t.team] === t.members.length;
+      if (!full) cutAny = true;
+      html += '<div>' + t.team + ': 멤버 ' + got[t.team] + '명' + (full ? '' : ' <span class="bad">(실제 ' + t.members.length + '명인데 잘림)</span>') + '</div>';
+    });
+    var ok = teams === 2 && !cutAny;
+    html += '<p class="muted" style="margin-top:6px">' + (ok
+      ? '원하는 결과가 나왔어요. 하지만 팀 A가 3명, 팀 B가 2명이라는 걸 미리 알아야만 고를 수 있는 숫자예요.'
+      : '팀 ' + teams + '개를 받았' + (cutAny ? '고 멤버 목록이 잘렸어요.' : '어요.') + ' 원한 결과가 아니에요.') + '</p>';
+    out.innerHTML = html;
+  }
+  $('pg-limit').addEventListener('input', renderPaging);
+  renderPaging();
+})();
+</script>
