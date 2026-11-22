@@ -2,6 +2,8 @@
  * 레슨 코드 블록에 색을 입힌다. 자바, JPQL·SQL, 설정 파일이 한 블록에 섞여 있어서 가볍게만 나눈다.
  * - 주석(//, --, 줄 맨 앞의 #), 문자열, 어노테이션, 키워드에 색을 준다
  * - 코드에서 [[이렇게]] 감싼 부분은 강조 표시한다. 이 줄에서 봐야 할 곳을 가리킬 때 쓴다
+ * - 줄 끝의 ⤶ 는 "좁은 화면에서만 줄을 바꾼다"는 표시다. 넓은 화면에서는 다음 줄과 빈칸 하나로 이어진다.
+ *   ⤷ 는 빈칸 없이 이어진다 (메서드 체인의 .isEqualTo(...)처럼 붙여 써야 하는 곳)
  * 쓰는 법: <pre set:html={highlight(code)} />
  */
 const KEYWORDS = [
@@ -29,7 +31,16 @@ const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').rep
 const marks = (s: string) => s.replace(/\[\[(.+?)\]\]/g, '<mark class="hl">$1</mark>');
 
 export function highlight(code: string): string {
-  return tokens(escape(code));
+  return softBreaks(tokens(escape(code)));
+}
+
+/**
+ * ⤶, ⤷ 뒤의 줄바꿈과 들여쓰기를 좁은 화면용(sb-n)으로 감싸고, 넓은 화면에서 대신 보일 것(sb-w)을 옆에 둔다.
+ * 어느 쪽을 보일지는 lesson.css가 화면 폭으로 정한다. 표시가 주석이나 문자열 색 안에 있어도 되게 닫는 태그는 건너뛴다
+ */
+function softBreaks(html: string): string {
+  return html.replace(/([⤶⤷])((?:<\/span>)*)\r?\n( *)/g, (_, kind, closing, indent) =>
+    `${closing}<span class="sb-n">${'\n'}${indent}</span><span class="sb-w">${kind === '⤶' ? ' ' : ''}</span>`);
 }
 
 function tokens(text: string): string {

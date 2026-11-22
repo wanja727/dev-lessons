@@ -42,9 +42,9 @@ class Team {
     [[List<Member> members]];
 }`;
 
-const codeEager = `@OneToMany(
-    mappedBy = "team",
-    [[fetch = FetchType.EAGER]]
+const codeEager = `@OneToMany(⤷
+    mappedBy = "team",⤶
+    [[fetch = FetchType.EAGER]]⤷
 )
 List<Member> members;`;
 
@@ -68,15 +68,15 @@ spring:
 
 -- 나가는 SQL (팀 10개일 때 2번)
 select * from team
-select * from member
+select * from member⤶
 where team_id [[in (1, 2, 3, ..., 10)]]`;
 
 const codePagingFix = `-- 1번째: 팀만 페이징해서 조회
-select * from team
+select * from team⤶
 order by id [[limit 2]]
 
 -- 2번째: 그 팀들의 멤버를 한 번에
-select * from member
+select * from member⤶
 where team_id [[in (1, 2)]]`;
 
 // 검증 테스트 하나를 그대로 보여 준다 (NPlusOneTest.eagerDoesNotFix)
@@ -86,7 +86,7 @@ void eagerDoesNotFix() {
     eagerTeamRepository.findAll();
 
     // 나간 SQL이 1 + 10번인지 확인
-    assertThat([[SqlCapture.count()]])
+    assertThat([[SqlCapture.count()]])⤷
         .isEqualTo(1 + TEAMS);
 }`;
 
