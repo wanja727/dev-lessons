@@ -27,6 +27,8 @@ const { title, description, theme } = Astro.props;
     <style is:global>
       html.embed .back { display: none; }
       html.embed body { padding-top: 20px; }
+      /* 앱의 하단 바가 본문 끝을 가리지 않도록 아래를 비워 둔다 */
+      html.embed body { padding-bottom: 88px; }
     </style>
   </head>
   <body>
@@ -37,6 +39,29 @@ const { title, description, theme } = Astro.props;
         document.querySelectorAll('a[href]').forEach(function (a) {
           if (a.getAttribute('href').charAt(0) !== '#') { a.target = '_blank'; a.rel = 'noopener'; }
         });
+
+        /*
+         * 앱에 스크롤 상태를 알린다. 앱은 아래로 읽는 동안 하단 바를 숨기고, 위로 올리거나 끝에 닿으면 다시 보여 준다.
+         * 본문은 다른 사이트라 앱이 스크롤을 직접 볼 수 없어서 postMessage로 보낸다. 보내는 값은 방향과 위치뿐이다.
+         */
+        (function () {
+          if (window.parent === window) return;
+          var lastY = window.scrollY, state = '';
+          function send() {
+            var y = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight;
+            var atTop = y < 40, atEnd = max - y < 160;
+            var dir = y > lastY + 6 ? 'down' : y < lastY - 6 ? 'up' : '';
+            if (dir) lastY = y;
+            var hide = atTop || atEnd ? false : dir === 'down' ? true : dir === 'up' ? false : null;
+            if (hide === null) return;
+            var next = hide ? 'hide' : 'show';
+            if (next === state) return;
+            state = next;
+            window.parent.postMessage({ source: 'dev-lessons', type: 'bar', hide: hide }, '*');
+          }
+          window.addEventListener('scroll', send, { passive: true });
+          window.addEventListener('resize', send);
+        })();
       }
     </script>
   </body>
