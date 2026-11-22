@@ -1,0 +1,67 @@
+---
+/** 질문 3: 풀 크기와 기다리는 시간을 바꿔 가며 누가 기다리고 누가 실패하는지 본다 */
+---
+<div class="sliders">
+  <label>풀 크기 <b id="v-pool"></b><input type="range" id="s-pool" min="1" max="6" value="2"></label>
+  <label>요청 수 <b id="v-req"></b><input type="range" id="s-req" min="2" max="10" value="3"></label>
+  <label>요청 하나가 연결을 쓰는 시간 <b id="v-hold"></b><input type="range" id="s-hold" min="200" max="2000" step="100" value="1000"></label>
+  <label>기다리는 최대 시간 <b id="v-timeout"></b><input type="range" id="s-timeout" min="100" max="2000" step="100" value="500"></label>
+</div>
+<div class="legend"><span><i class="sw wait"></i>기다림</span><span><i class="sw hold"></i>연결 사용</span><span><i class="sw fail"></i>실패</span></div>
+<div class="gantt" id="gantt" aria-hidden="true"></div>
+<p class="verdict" id="sim-text" aria-live="polite"></p>
+<style is:global>
+.sliders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.sliders label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.sliders label b { font-family: var(--font-mono); font-weight: 500; }
+.sliders input { width: 100%; }
+@media (max-width: 520px) { .sliders { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  /* 질문 3: 요청은 100ms 간격으로 도착하고, 가장 먼저 비는 연결을 기다린다 */
+  var ids = ['pool', 'req', 'hold', 'timeout'], s = {};
+  ids.forEach(function (k) { s[k] = $('s-' + k); });
+  function simulate(pool, n, hold, timeout) {
+    var free = [], rows = [];
+    for (var c = 0; c < pool; c++) free.push(0);
+    for (var i = 0; i < n; i++) {
+      var arrive = i * 100, k = 0;
+      for (var j = 1; j < pool; j++) if (free[j] < free[k]) k = j;
+      var start = Math.max(arrive, free[k]), wait = start - arrive;
+      if (wait > timeout) { rows.push({ arrive: arrive, wait: timeout, fail: true }); continue; }
+      free[k] = start + hold;
+      rows.push({ arrive: arrive, wait: wait, hold: hold, fail: false });
+    }
+    return rows;
+  }
+  function renderSim() {
+    var pool = +s.pool.value, n = +s.req.value, hold = +s.hold.value, timeout = +s.timeout.value;
+    $('v-pool').textContent = pool + '개'; $('v-req').textContent = n + '개';
+    $('v-hold').textContent = hold + 'ms'; $('v-timeout').textContent = timeout + 'ms';
+    var rows = simulate(pool, n, hold, timeout);
+    var end = Math.max.apply(null, rows.map(function (r) { return r.arrive + r.wait + (r.fail ? 0 : r.hold); }));
+    var scale = 100 / Math.max(end, 1);
+    var html = rows.map(function (r, i) {
+      var w = '<span class="g-wait" style="left:' + (r.arrive * scale) + '%;width:' + (r.wait * scale) + '%"></span>';
+      var h = r.fail
+        ? '<span class="g-fail" style="left:' + ((r.arrive + r.wait) * scale) + '%;width:2%"></span>'
+        : '<span class="g-hold" style="left:' + ((r.arrive + r.wait) * scale) + '%;width:' + (r.hold * scale) + '%"></span>';
+      return '<div class="g-row"><span>요청 ' + (i + 1) + '</span><div class="g-track">' + w + h + '</div></div>';
+    }).join('');
+    html += '<div class="g-axis"><span>0ms</span><span>' + Math.round(end / 2) + 'ms</span><span>' + end + 'ms</span></div>';
+    $('gantt').innerHTML = html;
+    var failed = rows.filter(function (r) { return r.fail; }).length;
+    var waited = rows.filter(function (r) { return !r.fail && r.wait > 0; });
+    var maxWait = Math.max.apply(null, [0].concat(waited.map(function (r) { return r.wait; })));
+    $('sim-text').textContent = failed
+      ? '요청 ' + n + '개 가운데 ' + failed + '개가 ' + timeout + 'ms를 기다려도 연결을 받지 못해 실패했어요.'
+      : waited.length
+        ? '모두 연결을 받았어요. ' + waited.length + '개는 기다렸다가 반납된 연결을 받았고, 가장 오래 기다린 시간은 ' + maxWait + 'ms예요.'
+        : '풀이 넉넉해서 아무도 기다리지 않았어요.';
+  }
+  ids.forEach(function (k) { s[k].addEventListener('input', renderSim); });
+  renderSim();
+})();
+</script>

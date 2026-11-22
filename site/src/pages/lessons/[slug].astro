@@ -1,0 +1,25 @@
+---
+// 자료 파일(src/content/lesson-pages/<슬러그>.yaml)이 있는 레슨의 페이지. 페이지의 모양은 LessonPage가 정한다.
+// 예전 구조 레슨은 아직 이 폴더에 <슬러그>.astro로 따로 있다. 새로 쓸 때 자료 파일로 옮기고 그 파일을 지운다.
+import { getCollection } from 'astro:content';
+import LessonPage from '../../components/lesson/LessonPage.astro';
+
+export async function getStaticPaths() {
+  const pages = await getCollection('lessonPages');
+  const lessons = await getCollection('lessons');
+  return pages.map((page) => {
+    // 레슨 목록(src/content/lessons)과 본문 자료가 같은 값을 두 번 적는다. 어긋나면 빌드를 멈춘다
+    const listed = lessons.find((l) => l.data.page === page.id);
+    if (!listed) throw new Error(`레슨 '${page.id}': src/content/lessons에 page가 '${page.id}'인 항목이 없다`);
+    for (const key of ['title', 'unit', 'minutes'] as const) {
+      if (listed.data[key] !== page.data[key]) {
+        throw new Error(`레슨 '${page.id}': ${key}가 레슨 목록(${listed.data[key]})과 본문 자료(${page.data[key]})에서 다르다`);
+      }
+    }
+    return { params: { slug: page.id }, props: { data: page.data } };
+  });
+}
+const { slug } = Astro.params;
+const { data } = Astro.props;
+---
+<LessonPage slug={slug} data={data} />

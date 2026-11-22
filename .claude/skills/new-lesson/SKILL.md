@@ -26,14 +26,13 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 3. 레슨 페이지
 
-- 파일: `site/src/pages/lessons/<slug>.astro`. `site/src/pages/lessons/jpa-n-plus-1.astro`를 본보기로 삼는다
-- 레이아웃 `<Base theme="soft pastel">`, 스타일은 `lesson.css` 다음에 `retrievo-theme.css`를 불러온다
-- 공통 도구를 쓴다: `core-question.css`를 불러오고 `<main>` 앞에 `<CoreQuestionKit />`를 넣는다. 예측, 확인 문제, 보지 않고 답하기, 진행 표시는 `window.Lesson`의 함수로 만든다 (쓰는 예: `tx-basics.astro`). 페이지에는 그 레슨만의 위젯 코드만 둔다
-- 구조는 표준 1장(핵심 질문). 조작 위젯은 페이지 안 `<script is:inline>`으로 작성
-- **중괄호 주의:** Astro 마크업에서 `{ }`는 표현식이다. 코드 예시는 프론트매터에 문자열로 두고 `<pre set:html={highlight(code)} />`로 넣는다. 한 줄 44자 이하, 강조는 `[[ ]]`(표준 3장)
-- 페이지 스타일을 고친 뒤 화면이 그대로면 개발 서버를 다시 켠다
-- 링크는 `/dev-lessons/...`처럼 base 경로를 포함한다
-- 마지막에 접어 둔 "검증" 구역: 상황과 확인한 결과 표, 테스트 하나, `<RunLocally>`
+- `.astro` 페이지를 쓰지 않는다. 자료 파일 `site/src/content/lesson-pages/<slug>.yaml`의 칸을 채우면 틀이 페이지를 만든다. 칸은 `docs/lesson-data-format.md`에 있고, `jpa-n-plus-1.yaml`과 `tx-basics.yaml`을 본보기로 삼는다
+- 구조는 표준 1장(핵심 질문)이고 틀이 정한다. 질문마다 결론, 본문 블록, 위젯 하나, 확인 문제, 다음 질문으로 잇는 말을 채운다
+- 위젯은 공통 위젯(`classify`, `toggle`, `steps`)에서 먼저 고른다. 안 되는 것만 `site/src/components/lesson-widgets/<slug>/<이름>.astro`에 직접 만들고, 왜 안 되는지 사용자에게 먼저 말한다
+- 글에 쓸 수 있는 표시는 굵게, 코드 조각, 링크 세 가지다 (자료 형식 문서의 "글 쓰는 법"). 다른 레슨으로 가는 링크의 주소는 `lesson:슬러그`로 적는다
+- 코드는 `codes`에 이름을 붙여 두고 블록에서 이름으로 쓴다. 한 줄 44자 이하, 강조는 `[[ ]]`(표준 3장)
+- 화면이 그대로면 개발 서버를 다시 켠다. 오래 켜 둔 서버는 옛 스타일을 내놓기도 한다
+- 마지막에 접어 둔 "검증" 구역(`verified`): 상황과 확인한 결과 표, 테스트 하나, `run` 블록
 
 ## 4. 메타데이터
 

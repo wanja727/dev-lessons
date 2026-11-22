@@ -1,0 +1,90 @@
+---
+/** 질문 3: 팀 수와 방법을 바꿔 가며 쿼리 수를 비교한다 */
+---
+<div class="sim">
+  <div class="controls">
+    <div class="field">
+      <div class="row-line"><label class="label" for="sim-n">팀 수 (N)</label><span class="mono" id="sim-n-val">10</span></div>
+      <input type="range" id="sim-n" min="1" max="20" value="10">
+    </div>
+    <div class="field">
+      <span class="label">방법</span>
+      <div class="seg" id="sim-fix">
+        <button type="button" data-v="none" aria-pressed="true">아무것도 안 함</button>
+        <button type="button" data-v="fetch" aria-pressed="false">fetch join</button>
+        <button type="button" data-v="batch" aria-pressed="false">배치 페치</button>
+      </div>
+    </div>
+    <div class="field" id="batch-field" hidden>
+      <span class="label">배치 크기</span>
+      <div class="seg" id="sim-batch">
+        <button type="button" data-v="3" aria-pressed="false">3</button>
+        <button type="button" data-v="5" aria-pressed="true">5</button>
+        <button type="button" data-v="10" aria-pressed="false">10</button>
+        <button type="button" data-v="100" aria-pressed="false">100</button>
+      </div>
+    </div>
+  </div>
+  <div class="result">
+    <div class="count-line">
+      <span class="big" id="sim-count">11</span>
+      <span class="formula" id="sim-formula"></span>
+    </div>
+    <div class="lane" id="sim-lane" aria-hidden="true"></div>
+    <p class="verdict" id="sim-verdict" aria-live="polite"></p>
+    <div class="log" id="sim-log"></div>
+  </div>
+</div>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  function addLog(el, n, sql, cls) {
+    var row = document.createElement('div');
+    row.className = 'row' + (cls ? ' ' + cls : '');
+    if (cls) row.textContent = sql;
+    else { row.innerHTML = '<span class="n">' + n + '</span><span></span>'; row.lastChild.textContent = sql; }
+    el.appendChild(row);
+  }
+  /* 질문 3: 방법별 쿼리 수 */
+  var fix = 'none';
+  pressGroup($('sim-fix'), function (v) { fix = v; renderSim(); });
+  $('sim-n').addEventListener('input', renderSim);
+  var batchSize = 5;
+  pressGroup($('sim-batch'), function (v) { batchSize = +v; renderSim(); });
+  function renderSim() {
+    var n = +$('sim-n').value, size = batchSize;
+    $('sim-n-val').textContent = n;
+    $('batch-field').hidden = fix !== 'batch';
+    var log = $('sim-log'); log.innerHTML = '';
+    var q = 0, formula, verdict;
+    function sql(s) { q++; addLog(log, q, s); }
+    if (fix === 'fetch') {
+      sql('select t.*, m.* from team t left join member m on m.team_id = t.id');
+      formula = '= 1';
+      verdict = '팀과 멤버를 한 번에 가져와요. 팀이 몇 개든 1번이에요.';
+    } else if (fix === 'batch') {
+      sql('select * from team');
+      var chunks = Math.ceil(n / size);
+      for (var c = 0; c < chunks; c++) {
+        var ids = [];
+        for (var i = c * size + 1; i <= Math.min(n, (c + 1) * size); i++) ids.push(i);
+        sql('select * from member where team_id in (' + ids.join(', ') + ')');
+      }
+      formula = '= 1 + (' + n + ' ÷ ' + size + ', 올림)';
+      verdict = '멤버를 ' + size + '팀씩 IN으로 묶어 ' + chunks + '번에 가져와요.';
+    } else {
+      sql('select * from team');
+      for (var t = 1; t <= n; t++) sql('select * from member where team_id = ' + t);
+      formula = '= 1 + N(' + n + ')';
+      verdict = '팀마다 멤버를 따로 조회해요. 팀 수만큼 쿼리가 늘어요.';
+    }
+    var count = $('sim-count');
+    count.textContent = q; count.className = 'big' + (fix === 'none' ? '' : ' good');
+    $('sim-formula').textContent = formula;
+    $('sim-verdict').textContent = verdict;
+    var lane = $('sim-lane'); lane.innerHTML = '';
+    for (var k = 0; k < q; k++) { var d = document.createElement('span'); d.className = 'tick' + (k === 0 ? ' first' : ''); lane.appendChild(d); }
+  }
+  renderSim();
+})();
+</script>

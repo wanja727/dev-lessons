@@ -1,0 +1,64 @@
+---
+/** 질문 2: 연결 2개짜리 풀에서 빌리고 반납하기를 반복한다 */
+---
+<div class="slots" id="c2-slots"></div>
+<div class="btn-row"><button class="btn primary" type="button" id="c2-borrow">빌리기 getConnection()</button><button class="btn" type="button" id="c2-reset">처음으로</button></div>
+<div class="count-line"><span class="label">DB 서버에 열려 있는 연결</span><span class="mono" style="font-weight:500">2개 그대로</span></div>
+<div class="log" id="c2-log" aria-live="polite"></div>
+<p id="c2-msg" class="verdict" hidden></p>
+<style is:global>
+.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.slot { border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.slot.busy { border-color: var(--accent); background: var(--accent-soft); }
+.slot .who { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.slot .state { font-weight: 600; font-size: 15px; }
+@media (max-width: 520px) { .slots { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  /* 로그 한 줄: 몇 번째인지와 내용 */
+  function addLog(el, text) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<span class="n">' + (el.children.length + 1) + '</span><span></span>';
+    row.lastChild.textContent = text;
+    el.appendChild(row);
+    el.scrollTop = el.scrollHeight;
+  }
+  /* 질문 2: 빌리고 반납하기. 연결 2개, 서버 프로세스 번호는 예시 값 */
+  var conns, borrowCount, reused;
+  function c2Render() {
+    $('c2-slots').innerHTML = '';
+    conns.forEach(function (c) {
+      var el = document.createElement('div'); el.className = 'slot' + (c.busy ? ' busy' : '');
+      el.innerHTML = '<span class="who">연결 ' + c.id + ' (서버 프로세스 ' + c.pid + ')</span><span class="state">' + (c.busy ? '빌려준 상태' : '풀에서 대기 중') + '</span>'
+        + (c.busy ? '<div><button class="btn" type="button">반납 close()</button></div>' : '');
+      if (c.busy) el.querySelector('button').addEventListener('click', function () {
+        c.busy = false; c.returned = true;
+        addLog($('c2-log'), 'close()  → 연결 ' + c.id + ' 반납 (끊지 않고 풀로 돌아감)');
+        c2Render();
+      });
+      $('c2-slots').appendChild(el);
+    });
+    var free = conns.filter(function (c) { return !c.busy; }).length;
+    $('c2-borrow').disabled = free === 0;
+    if (reused) { $('c2-msg').hidden = false; $('c2-msg').textContent = '반납했던 연결을 다시 빌렸어요. 서버 프로세스 번호가 그대로예요. 새로 만든 연결이 아니에요.'; }
+    else if (free === 0) { $('c2-msg').hidden = false; $('c2-msg').textContent = '연결 2개를 모두 빌려줬어요. 하나를 반납해야 다시 빌릴 수 있어요.'; }
+    else $('c2-msg').hidden = true;
+  }
+  function c2Reset() {
+    conns = [{ id: 1, pid: 4101, busy: false, returned: false }, { id: 2, pid: 4102, busy: false, returned: false }];
+    borrowCount = 0; reused = false; $('c2-log').innerHTML = ''; c2Render();
+  }
+  $('c2-borrow').addEventListener('click', function () {
+    var c = conns.filter(function (x) { return !x.busy; })[0]; if (!c) return;
+    borrowCount++; c.busy = true;
+    if (c.returned) reused = true;
+    addLog($('c2-log'), 'getConnection()  → 연결 ' + c.id + ' (서버 프로세스 ' + c.pid + ')' + (c.returned ? ', 반납했던 연결을 다시 씀' : ''));
+    c2Render();
+  });
+  $('c2-reset').addEventListener('click', c2Reset);
+  c2Reset();
+})();
+</script>

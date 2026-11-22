@@ -1,0 +1,452 @@
+# 트랜잭션 기초
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/tx-basics.yaml에 있다.
+title: 트랜잭션 기초
+description: 트랜잭션이 무엇이고 왜 필요한지, 커밋과 롤백이 무엇을 하는지, 커밋 전 변경이 남에게 보이는지, 코드에서는 어떻게 쓰는지, ACID가 무엇인지. 다섯 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
+unit: DB
+minutes: 20
+prerequisites: []
+assume: SQL의 SELECT와 UPDATE, 자바의 예외(try-catch). 예제는 계좌 이체 하나만 써요. kim의 잔액은 50, lee의 잔액은 0이에요.
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/txbasics/TransactionBasicsTest.java
+codes:
+  predict: |-
+    -- kim의 잔액 50, lee의 잔액 0
+    -- 잔액은 0보다 작아질 수 없어요
+
+    update account⤶
+    set balance = balance + 100⤶
+    where owner = 'lee';
+
+    update account⤶
+    set balance = balance - 100⤶
+    where owner = 'kim';
+  first: |-
+    [[update account]]⤶
+    [[set balance = balance + 100]]⤶
+    [[where owner = 'lee';]]
+
+    update account⤶
+    set balance = balance - 100⤶
+    where owner = 'kim';
+  tx: |-
+    [[begin;]]
+
+    update account⤶
+    set balance = balance + 100⤶
+    where owner = 'lee';
+
+    update account⤶
+    set balance = balance - 100⤶
+    where owner = 'kim';
+
+    [[commit;]]
+  jdbc: |-
+    Connection conn =⤶
+        dataSource.getConnection();
+    [[conn.setAutoCommit(false);]]
+    try {
+        deposit(conn, "lee", 100);
+        withdraw(conn, "kim", 100);
+        [[conn.commit();]]
+    } catch (SQLException e) {
+        [[conn.rollback();]]
+        throw e;
+    }
+  spring: |-
+    [[@Transactional]]
+    void transfer(long from, long to, int n) {
+        deposit(to, n);
+        withdraw(from, n);
+    }
+  test: |-
+    @Test
+    void transactionRollsBackAll() {
+        // 잔액 50인데 100을 보낸다
+        assertThatThrownBy(() ->⤶
+            service.transfer(1, 2, 100));
+
+        // 처음 그대로인지 확인
+        assertThat([[balance(1)]])⤷
+            .isEqualTo(50);
+        assertThat([[balance(2)]]).isZero();
+    }
+predict:
+  title: 둘째 문장이 실패하면 잔액은 어떻게 될까요?
+  text: kim이 lee에게 100을 보내요. SQL은 두 문장이에요. lee에게 100을 더하고, kim에게서 100을 빼요. 아무 설정 없이 DB에 한 문장씩 차례로 보냈어요. 그런데 kim의 잔액은 50뿐이라 둘째 문장이 실패해요. 모르는 게 정상이니 감으로 골라 보세요.
+  code: predict
+  label: 둘째 문장이 실패한 뒤의 잔액
+  options:
+    - value: orig
+      label: kim 50, lee 0
+    - value: half
+      label: kim 50, lee 100
+    - value: neg
+      label: kim -50, lee 100
+  answer: half
+  storageKey: txb-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 트랜잭션은 무엇이고 왜 필요한가요?
+    conclusion:
+      lead: 여러 SQL을 하나로 묶어, 전부 반영하거나 전부 취소하는 작업 단위예요.
+      sub: 묶지 않으면 문장마다 따로 확정돼요. 중간에 실패하면 앞 문장만 남아서 데이터가 어긋나요.
+    body:
+      - p: 예측한 코드의 답은 **kim 50, lee 100**이에요. {{predict-result}} 없던 돈 100이 생겼어요. 왜 그런지 직접 확인해 봐요.
+      - p: 아무 설정 없이 SQL을 보내면, DB는 **문장 하나가 끝날 때마다 바로 확정**해요. 이걸 **자동 커밋**이라고 해요. 그래서 첫 문장은 둘째 문장을 보내기 전에 이미 확정돼 있어요.
+      - code: first
+        notes:
+          - mark: 첫 문장
+            text: 끝나자마자 확정돼요. 뒤 문장이 실패해도 되돌아가지 않아요.
+      - p: 아래에서 두 문장을 차례로 보내 보세요. 오른쪽 숫자는 DB에 확정된 잔액이에요.
+      - widget:
+          kind: steps
+          layout:
+            - duo
+            - buttons
+            - log
+            - verdict
+          buttons: each
+          initial:
+            duo:
+              - label: 확정된 잔액
+                rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]
+              - label: 합계
+                rows: [{k: kim + lee, v: '50'}]
+          scenarios:
+            default:
+              - label: 첫 문장 보내기 (lee +100)
+                log: update ... + 100 where owner = 'lee'  → 성공, 바로 확정
+                duo: [{label: 확정된 잔액, rows: [{k: kim, v: '50'}, {k: lee, v: '100', mark: changed}]}, {label: 합계, rows: [{k: kim + lee, v: '150', mark: bad}]}]
+              - label: 둘째 문장 보내기 (kim -100)
+                log: 'update ... - 100 where owner = ''kim''  → 실패: 잔액이 0보다 작아질 수 없어요'
+                duo: [{label: 확정된 잔액, rows: [{k: kim, v: '50', mark: bad}, {k: lee, v: '100', mark: bad}]}, {label: 합계, rows: [{k: kim + lee, v: '150', mark: bad}]}]
+                verdict: 첫 문장은 이미 확정돼서 되돌릴 수 없어요. 합계가 50에서 150이 됐어요. 없던 돈 100이 생긴 거예요.
+      - ci:
+          key: autocommit
+          label: 실제 PostgreSQL에서 돌린 결과 보기
+          source: TransactionBasicsTest.autoCommitLeavesHalfDone
+      - p: 이체는 두 문장이 **함께 성공해야만** 뜻이 있는 작업이에요. 한 문장만 반영되면 돈이 생기거나 사라져요. 이렇게 함께 성공하거나 함께 실패해야 하는 SQL들을 하나로 묶은 것이 **트랜잭션**이에요.
+      - callout: '**DB 툴도 같아요.** SQL을 직접 실행하는 DB 툴도 자동 커밋으로 설정돼 있는 경우가 많아요. 그 상태에서 실행한 UPDATE는 바로 확정돼요.'
+      - quiz:
+          q: park의 잔액은 30, choi의 잔액은 10이에요. 트랜잭션 없이 choi에게 50을 더하는 문장과 park에게서 50을 빼는 문장을 차례로 보냈어요. 둘째 문장은 잔액이 모자라 실패했어요. 두 사람의 잔액은?
+          options:
+            - park 30, choi 10
+            - park 30, choi 60
+            - park -20, choi 60
+          answer: 2
+          explain: 자동 커밋이라 첫 문장은 이미 확정됐어요. 둘째 문장만 실패해서 choi의 +50이 남아요.
+      - next: 문장마다 따로 확정되는 게 문제였어요. 그러면 여러 문장을 어떻게 묶고, 언제 확정하나요?
+    recall: 여러 SQL을 하나로 묶어, 전부 반영하거나 전부 취소하는 작업 단위예요. 묶지 않으면 문장마다 자동 커밋으로 따로 확정돼요. 이체에서 둘째 문장이 실패하면 첫 문장만 남아 없던 돈이 생겨요.
+  - id: q2
+    title: 커밋과 롤백은 무엇을 하나요?
+    conclusion:
+      lead: 커밋은 트랜잭션의 변경을 한꺼번에 확정하고, 롤백은 한꺼번에 취소해요.
+      sub: BEGIN으로 트랜잭션을 시작하면 그 뒤의 변경은 확정 전 상태예요. COMMIT이나 ROLLBACK을 해야 트랜잭션이 끝나요.
+    body:
+      - p: 처음 코드의 앞뒤에 두 줄을 더하면 트랜잭션이 돼요.
+      - code: tx
+        notes:
+          - mark: begin;
+            text: 트랜잭션을 시작해요. 이제부터의 변경은 아직 확정이 아니에요.
+          - mark: commit;
+            text: 지금까지의 변경을 한꺼번에 확정해요. 중간에 실패했다면 이 자리에 `rollback;`을 보내 모두 취소해요.
+      - p: 아래에서 보낼 금액을 고르고 한 단계씩 실행해 보세요. 왼쪽은 아직 확정되지 않은 **내 트랜잭션**, 오른쪽은 **확정된 DB**예요.
+      - widget:
+          kind: steps
+          layout:
+            - selector
+            - duo
+            - log
+            - buttons
+            - verdict
+          selector:
+            label: kim이 보내는 금액 (kim의 잔액은 50)
+            options:
+              - value: '100'
+                label: 100 (잔액 부족)
+              - value: '30'
+                label: 30 (충분)
+          initial:
+            duo:
+              - label: 내 트랜잭션 (확정 전)
+                state: dim
+                text: 진행 중인 트랜잭션 없음
+              - label: 확정된 DB
+                state: active
+                rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]
+          scenarios:
+            '30':
+              - log: begin  → 트랜잭션 시작
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: update ... + 30 where owner = 'lee'  → 성공 (아직 확정 전)
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '50'}, {k: lee, v: '30', mark: changed}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: update ... - 30 where owner = 'kim'  → 성공 (아직 확정 전)
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '20', mark: changed}, {k: lee, v: '30', mark: changed}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: commit  → 트랜잭션의 변경을 한꺼번에 확정
+                duo: [{label: 내 트랜잭션 (확정 전), state: dim, text: 진행 중인 트랜잭션 없음}, {label: 확정된 DB, state: active, rows: [{k: kim, v: '20', mark: changed}, {k: lee, v: '30', mark: changed}]}]
+                verdict: 결과는 kim 20, lee 30. 두 문장이 한꺼번에 확정됐고 합계는 50 그대로예요.
+            '100':
+              - log: begin  → 트랜잭션 시작
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: update ... + 100 where owner = 'lee'  → 성공 (아직 확정 전)
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '50'}, {k: lee, v: '100', mark: changed}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: 'update ... - 100 where owner = ''kim''  → 실패: 잔액이 0보다 작아질 수 없어요'
+                duo: [{label: 내 트랜잭션 (확정 전), state: active, rows: [{k: kim, v: '50', mark: bad}, {k: lee, v: '100'}]}, {label: 확정된 DB, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+              - log: rollback  → 트랜잭션의 변경을 모두 취소
+                duo: [{label: 내 트랜잭션 (확정 전), state: dim, text: 진행 중인 트랜잭션 없음}, {label: 확정된 DB, state: active, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}]
+                verdict: 결과는 kim 50, lee 0. 처음 그대로예요. 첫 문장의 +100도 함께 취소됐어요.
+      - ci:
+          key: transaction
+          label: 실제 PostgreSQL에서 돌린 결과 보기
+          source: TransactionBasicsTest.transactionRollsBackAll
+      - p: 100을 보내면 둘째 문장이 실패하고, 롤백이 첫 문장의 +100까지 취소해요. 결과는 **kim 50, lee 0**으로 처음 그대로예요. 30을 보내면 두 문장이 함께 확정돼서 **kim 20, lee 30**이 돼요. 어느 쪽이든 합계는 50이에요.
+      - p: 롤백은 UPDATE만 되돌리는 게 아니에요. 트랜잭션 안에서 한 INSERT, UPDATE, DELETE를 모두 되돌려요.
+      - table:
+          head:
+            - 명령
+            - 하는 일
+          rows:
+            - - '`BEGIN`'
+              - 트랜잭션을 시작해요
+            - - '`COMMIT` (커밋)'
+              - 트랜잭션의 변경을 모두 확정하고 끝내요
+            - - '`ROLLBACK` (롤백)'
+              - 트랜잭션의 변경을 모두 취소하고 끝내요
+      - callout: '**DB 툴에서 운영 데이터를 고칠 때:** `BEGIN`으로 시작하고, 바뀐 결과를 확인한 다음 `COMMIT`해요. 잘못됐으면 `ROLLBACK`으로 되돌릴 수 있어요.'
+      - more:
+          summary: '더 알아보기: 실패한 뒤에는 롤백해야 해요'
+          body:
+            - p: PostgreSQL은 트랜잭션 안에서 문장 하나가 실패하면 그 트랜잭션을 더 쓸 수 없게 해요. 뒤에 보내는 문장은 모두 거절하고, `ROLLBACK`을 보내야 새로 시작할 수 있어요.
+      - quiz:
+          q: kim 50, lee 0에서 BEGIN 뒤에 lee에게 30을 더하고 kim에게서 30을 뺐어요. 아직 COMMIT은 보내지 않았어요. 확정된 DB의 lee 잔액은?
+          options:
+            - '0'
+            - '30'
+          answer: 1
+          explain: COMMIT을 보내기 전까지 트랜잭션의 변경은 확정되지 않아요.
+      - next: 트랜잭션 안의 변경은 커밋 전까지 확정이 아니에요. 그 사이에 다른 사람이 같은 데이터를 읽으면 무엇이 보일까요?
+    recall: BEGIN으로 트랜잭션을 시작하면 그 뒤의 변경은 확정 전 상태예요. 커밋은 그 변경을 한꺼번에 확정하고, 롤백은 INSERT, UPDATE, DELETE를 가리지 않고 한꺼번에 취소해요.
+  - id: q3
+    title: 커밋하기 전의 변경은 다른 연결에 보이나요?
+    conclusion:
+      lead: 보이지 않아요. 커밋한 순간부터 보여요.
+      sub: 커밋 전의 변경은 바꾼 연결에만 보여요. 다른 연결은 확정된 값을 읽고, 롤백한 변경은 끝까지 보지 못해요.
+    body:
+      - p: DB에는 여러 프로그램이 동시에 접속해요. 접속 하나하나를 **연결**(커넥션)이라고 해요. 트랜잭션은 연결마다 따로 진행돼요.
+      - p: 연결 A가 트랜잭션 안에서 kim의 잔액을 999로 바꾸고, 연결 B가 같은 잔액을 읽는 상황이에요. 아래에서 A의 버튼을 눌러 가며 B에게 보이는 값이 언제 바뀌는지 확인해 보세요.
+      - widget: {kind: custom, name: tx-basics/Visibility}
+      - ci:
+          key: visibility
+          label: 두 연결로 실험한 실제 결과 보기
+          source: TransactionBasicsTest.uncommittedChangesAreInvisible
+      - p: A가 바꾼 직후에 A는 999를 읽지만 B는 여전히 50을 읽어요. B는 기다리지 않고 확정된 값을 바로 받아요. A가 커밋해야 B도 999를 읽어요. A가 롤백하면 B는 그 변경이 있었는지도 알 수 없어요.
+      - p: 덕분에 다른 연결은 "lee에게는 더했는데 kim에게서는 아직 안 뺀" 중간 상태를 보지 않아요.
+      - more:
+          summary: '더 알아보기: DB와 설정에 따라 달라지는 부분'
+          body:
+            - p: 이 결과는 PostgreSQL 16의 기본 설정에서 확인했어요. 여러 트랜잭션이 서로의 변경을 얼마나 볼 수 있는지는 **격리 수준**이라는 설정으로 정해요. [격리 수준과 이상 현상](lesson:isolation-level) 레슨에서 이어서 다뤄요.
+      - quiz:
+          q: 연결 A가 트랜잭션 안에서 kim의 잔액을 50에서 999로 바꿨다가 ROLLBACK했어요. 그동안 연결 B가 여러 번 읽었다면 B가 읽은 값은?
+          options:
+            - 늘 50
+            - 롤백 전에는 999, 롤백 뒤에는 50
+          answer: 1
+          explain: 커밋하지 않은 변경은 다른 연결에 보이지 않아요. 롤백했으니 B는 999를 한 번도 읽지 못해요.
+      - next: 지금까지는 SQL을 직접 보냈어요. 자바 프로그램에서는 BEGIN과 COMMIT을 누가 보내나요?
+    recall: 보이지 않아요. 커밋 전의 변경은 바꾼 연결에만 보이고, 다른 연결은 확정된 값을 읽어요. 커밋한 순간부터 보이고, 롤백한 변경은 끝까지 보이지 않아요.
+  - id: q4
+    title: 자바와 스프링 코드에서는 어떻게 쓰나요?
+    conclusion:
+      lead: 스프링에서는 메서드에 @Transactional을 붙여요.
+      sub: 메서드가 시작할 때 트랜잭션을 열고, 정상으로 끝나면 커밋하고, 런타임 예외가 나면 롤백해요. 붙이지 않으면 문장마다 자동 커밋돼요.
+    body:
+      - p: 자바에서 DB에 SQL을 보내는 표준 방법이 **JDBC**예요. JDBC 연결도 기본은 자동 커밋이에요. 트랜잭션으로 묶으려면 자동 커밋을 끄고, 커밋과 롤백을 직접 불러야 해요.
+      - code: jdbc
+        notes:
+          - mark: conn.setAutoCommit(false);
+            as: code
+            text: 자동 커밋을 꺼요. 여기서부터 트랜잭션이에요.
+          - mark: conn.commit();
+            as: code
+            text: 두 문장이 모두 성공했을 때만 확정해요.
+          - mark: conn.rollback();
+            as: code
+            text: 하나라도 실패하면 모두 취소해요.
+      - p: '`deposit`과 `withdraw`는 각각 UPDATE 한 문장을 보내는 메서드예요. 이 코드를 메서드마다 쓰면 길고 빠뜨리기 쉬워요. 그래서 스프링은 어노테이션 하나로 같은 일을 대신 해 줘요. 아래는 서비스 클래스 안의 이체 메서드예요. `n`은 보내는 금액이에요.'
+      - code: spring
+        notes:
+          - mark: '@Transactional'
+            as: anno
+            text: 이 메서드 전체를 한 트랜잭션으로 묶어요.
+      - p: 아래에서 `@Transactional`을 뗐다 붙였다 하면서, kim이 lee에게 100을 보내는 `transfer`를 실행해 보세요.
+      - widget:
+          kind: toggle
+          layout:
+            - selector
+            - buttons
+            - duo
+            - log
+            - verdict
+          selector:
+            label: transfer 메서드에 @Transactional이
+            options:
+              - value: 'off'
+                label: 없음
+              - value: 'on'
+                label: 있음
+          run:
+            label: transfer(kim, lee, 100) 실행
+          initial:
+            duo:
+              - label: 실행한 뒤 확정된 잔액
+                rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]
+              - label: 합계
+                rows: [{k: kim + lee, v: '50'}]
+            log: []
+          scenes:
+            'off':
+              duo:
+                - {label: 실행한 뒤 확정된 잔액, rows: [{k: kim, v: '50'}, {k: lee, v: '100', mark: bad}]}
+                - {label: 합계, rows: [{k: kim + lee, v: '150', mark: bad}]}
+              log:
+                - deposit(lee, 100)  → 성공, 바로 확정
+                - 'withdraw(kim, 100)  → 실패: 잔액 부족으로 예외'
+              verdict: '@Transactional 없음: kim 50, lee 100. 문장마다 자동 커밋돼서 lee의 +100이 남았어요.'
+            'on':
+              duo:
+                - {label: 실행한 뒤 확정된 잔액, rows: [{k: kim, v: '50'}, {k: lee, v: '0'}]}
+                - {label: 합계, rows: [{k: kim + lee, v: '50'}]}
+              log:
+                - 트랜잭션 시작 (스프링이 대신 해요)
+                - deposit(lee, 100)  → 성공 (아직 확정 전)
+                - 'withdraw(kim, 100)  → 실패: 잔액 부족으로 예외'
+                - 롤백 (스프링이 대신 해요)
+              verdict: '@Transactional 있음: kim 50, lee 0. 예외가 나자 스프링이 롤백해서 처음 그대로예요.'
+      - p: 두 경우 모두 잔액이 모자라서 예외가 나요. 다른 점은 남는 결과예요. `@Transactional`이 없으면 lee의 +100이 남고, 있으면 처음 그대로예요.
+      - h3: 롤백이 되돌리지 못하는 것
+      - p: 롤백은 **DB의 변경만** 되돌려요. 트랜잭션 안에서 보낸 이메일이나 다른 서버로 보낸 요청은 이미 나갔고, 롤백해도 취소되지 않아요. 이런 일은 커밋한 뒤에 해요.
+      - h3: 트랜잭션은 짧게
+      - p: 트랜잭션이 끝날 때까지 그 연결은 다른 일에 쓸 수 없고, 바꾼 행은 다른 트랜잭션이 고치지 못하고 기다려요. 그래서 트랜잭션에는 함께 묶어야 하는 SQL만 넣어요.
+      - more:
+          summary: '더 알아보기: @Transactional이 실제로 동작하는 방식'
+          body:
+            - p: 어노테이션은 표시일 뿐이고, 트랜잭션을 여닫는 일은 스프링이 만든 프록시 객체가 해요. 그래서 같은 클래스 안에서 부르면 트랜잭션이 걸리지 않는 것 같은 함정이 있어요. [@Transactional 동작 원리와 내부 호출](lesson:transactional-proxy)에서 다뤄요. 체크 예외에서는 롤백하지 않는 규칙은 [트랜잭션 전파와 롤백 규칙](lesson:tx-propagation)에서 다뤄요.
+      - quiz:
+          q: '@Transactional이 붙은 메서드가 DB에 주문을 저장하고, 확인 메일을 보낸 다음, 런타임 예외를 던졌어요. 어떻게 될까요?'
+          options:
+            - 주문 저장과 메일 모두 취소된다
+            - 주문 저장은 롤백되지만 메일은 이미 나갔다
+            - 주문 저장은 남고 메일만 취소된다
+          answer: 2
+          explain: 롤백은 DB의 변경만 되돌려요. 이미 보낸 메일은 취소되지 않아요.
+      - next: 면접에서는 트랜잭션의 성질을 ACID라는 네 글자로 물어요. 지금까지 본 것이 각각 어느 글자일까요?
+    recall: JDBC 연결은 기본이 자동 커밋이라, 직접 쓰려면 자동 커밋을 끄고 commit과 rollback을 불러야 해요. 스프링에서는 메서드에 @Transactional을 붙이면 시작할 때 트랜잭션을 열고, 정상으로 끝나면 커밋, 런타임 예외가 나면 롤백해요. 롤백은 DB 변경만 되돌리므로 메일 같은 일은 커밋 뒤에 하고, 트랜잭션은 짧게 둬요.
+  - id: q5
+    title: ACID는 무엇인가요?
+    conclusion:
+      lead: 트랜잭션이 지켜 주는 네 가지 성질이에요. 원자성, 일관성, 격리성, 지속성이에요.
+      sub: 앞의 세 질문에서 본 것에 이름을 붙인 거예요. 전부 아니면 전무가 원자성, 커밋 전 변경이 남에게 안 보이는 것이 격리성이에요.
+    body:
+      - table:
+          head:
+            - 성질
+            - 뜻
+            - 이체 예제에서
+          rows:
+            - - 원자성 (Atomicity)
+              - 전부 반영되거나 하나도 반영되지 않아요
+              - 둘째 문장이 실패하면 lee의 +100도 취소돼요
+            - - 일관성 (Consistency)
+              - 트랜잭션 전후로 데이터의 규칙이 지켜져요
+              - 잔액은 0 이상이고, 두 잔액의 합계는 50 그대로예요
+            - - 격리성 (Isolation)
+              - 동시에 실행되는 트랜잭션이 서로의 중간 상태를 보지 않아요
+              - A가 커밋하기 전에는 B가 999를 읽지 못해요
+            - - 지속성 (Durability)
+              - 커밋된 변경은 서버가 꺼졌다 켜져도 남아요
+              - 커밋된 이체는 장애가 나도 사라지지 않아요
+      - p: 아래 상황이 각각 어느 성질을 말하는지 골라 보세요.
+      - widget:
+          kind: classify
+          categories:
+            - 원자성
+            - 일관성
+            - 격리성
+            - 지속성
+          items:
+            - text: 출금이 실패하자 이미 한 입금까지 함께 취소됐어요.
+              answer: 1
+              explain: 전부 반영되거나 하나도 반영되지 않는 것이 원자성이에요.
+            - text: 다른 연결은 "입금만 되고 출금은 아직 안 된" 상태를 읽지 못했어요.
+              answer: 3
+              explain: 다른 트랜잭션의 중간 상태를 보지 않는 것이 격리성이에요.
+            - text: 커밋 직후 DB 서버가 꺼졌다 켜졌는데 이체 결과가 남아 있었어요.
+              answer: 4
+              explain: 커밋된 변경이 장애 뒤에도 남는 것이 지속성이에요.
+            - text: 잔액이 0보다 작아지는 변경은 거절돼서, 트랜잭션이 끝난 뒤에도 모든 잔액이 0 이상이에요.
+              answer: 2
+              explain: 트랜잭션 전후로 데이터의 규칙이 지켜지는 것이 일관성이에요.
+      - muted: 지속성은 이 레슨의 테스트로 확인하지 않았어요. PostgreSQL 문서가 보장하는 내용이에요. DB는 커밋할 때 변경 기록을 디스크에 먼저 써 두고, 장애 뒤에 그 기록으로 복구해요.
+      - quiz:
+          q: '"이체 도중 실패하면 입금과 출금이 모두 취소된다"는 ACID의 어느 성질인가요?'
+          options:
+            - 원자성
+            - 일관성
+            - 격리성
+            - 지속성
+          answer: 1
+          explain: 전부 반영되거나 하나도 반영되지 않는 성질이 원자성이에요.
+    recall: 트랜잭션이 지켜 주는 네 가지 성질이에요. 원자성은 전부 아니면 전무, 일관성은 전후로 데이터의 규칙이 지켜지는 것, 격리성은 동시에 도는 트랜잭션이 서로의 중간 상태를 보지 않는 것, 지속성은 커밋된 변경이 장애 뒤에도 남는 것이에요.
+interview:
+  question: 트랜잭션이 무엇이고 왜 필요한가요?
+  model:
+    - label: 정의
+      text: 트랜잭션은 여러 SQL을 하나의 작업 단위로 묶어, 모두 반영(커밋)되거나 모두 취소(롤백)되게 하는 것입니다.
+    - label: 원리
+      text: 트랜잭션을 시작한 뒤의 변경은 커밋 전까지 확정이 아니라서 다른 연결에 보이지 않고, 실패하면 롤백으로 시작 전 상태로 돌아갑니다. 묶지 않으면 DB와 JDBC는 문장마다 바로 확정하는 자동 커밋이라, 계좌 이체처럼 여러 문장이 함께 성공해야 하는 작업은 중간에 실패하면 돈이 생기거나 사라집니다. 이런 성질을 ACID, 곧 원자성, 일관성, 격리성, 지속성으로 설명합니다.
+    - label: 주의할 점
+      text: 롤백은 DB 변경만 되돌리므로 메일 발송이나 외부 API 호출은 커밋 뒤에 둡니다. 트랜잭션이 길면 연결과 바꾼 행을 오래 붙잡으므로 필요한 SQL만 짧게 묶습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 이체 로직에 @Transactional을 두고, 출금이 실패하면 입금까지 롤백되는 것을 테스트로 확인했습니다.'
+verified:
+  summary: 이 레슨의 숫자는 어떻게 확인했나요? (검증 테스트)
+  body:
+    - p: 이 레슨에 나온 잔액은 짐작이 아니라, 실제 PostgreSQL 16에서 코드를 돌려 확인한 값이에요. 테스트([TransactionBasicsTest](link:test))는 kim 50, lee 0을 넣어 두고, 아래 상황마다 결과를 확인해요.
+    - table:
+        head:
+          - 상황
+          - 확인한 결과
+        rows:
+          - - 트랜잭션 없이 100을 보낸다
+            - 예외가 나고 kim 50, lee 100
+          - - 한 트랜잭션으로 100을 보낸다
+            - 예외가 나고 kim 50, lee 0
+          - - 한 트랜잭션으로 30을 보낸다
+            - kim 20, lee 30
+          - - 연결 A가 커밋 전에 바꾼 값을 연결 B가 읽는다
+            - B는 바뀌기 전 값 50을 읽는다
+          - - 연결 A가 커밋한 뒤 연결 B가 읽는다
+            - B는 바뀐 값 999를 읽는다
+          - - 연결 A가 다시 바꾸고 롤백한 뒤 연결 B가 읽는다
+            - B는 그대로 999를 읽는다
+          - - INSERT, UPDATE, DELETE를 하고 롤백한다
+            - 세 가지 모두 되돌아간다
+          - - JDBC 연결을 새로 얻는다
+            - 자동 커밋이 켜져 있다
+    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.
+    - h3: 테스트는 이렇게 생겼어요
+    - p: '"한 트랜잭션으로 100을 보낸다"를 확인하는 테스트예요. `service.transfer`는 `@Transactional`이 붙은 메서드예요. 계좌 1이 kim, 계좌 2가 lee예요.'
+    - code: test
+      notes:
+        - mark: balance(1)
+          as: code
+          text: 계좌의 잔액을 DB에서 다시 읽어 와요.
+    - run:
+        tests:
+          - lab.devlessons.txbasics.TransactionBasicsTest
+        docker: true
+    - h3: 직접 쳐 보기
+    - p: 브라우저 안에서 도는 진짜 PostgreSQL([PGlite](https://pglite.dev/))에 계좌 표를 만들어요. 서버로 보내는 것은 없고, 처음 한 번 약 13MB를 받아요. 아래 칸의 SQL은 한 문장씩 차례로 보내요.
+    - widget: {kind: custom, name: tx-basics/PgPlayground}
+footer: '근거: PostgreSQL 16 문서의 Transactions 튜토리얼, Oracle 자바 튜토리얼의 Using Transactions(JDBC), Spring Framework 참조 문서의 Using @Transactional. 잔액은 PostgreSQL 16과 Spring Boot 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

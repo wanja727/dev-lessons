@@ -1,0 +1,189 @@
+---
+/**
+ * 자료 파일만으로 만드는 공통 위젯의 스크립트 (docs/lesson-data-format.md "위젯").
+ * Widget.astro가 <div class="panel" data-lesson-widget="종류">와 그 안의 JSON을 내놓으면, 여기서 화면을 만든다.
+ *
+ *   classify  상황 분류하기: 상황마다 어느 것에 해당하는지 고른다
+ *   toggle    켜고 끄며 비교하기: 하나를 고르면 그 경우의 장면을 보여 준다. run이 있으면 실행 버튼을 눌러야 보인다
+ *   steps     한 단계씩 실행하기: 버튼을 누를 때마다 다음 장면으로 넘어간다
+ *
+ * 장면은 duo(두 칸), phases(구간별 로그), log(로그), gantt(시간 막대), verdict(한 줄 정리)로 이루어진다.
+ * 무엇을 어떤 순서로 놓을지는 위젯의 layout이 정한다. CoreQuestionKit 뒤에 한 번 넣는다.
+ */
+---
+<script is:inline>
+(function () {
+  var L = window.Lesson;
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function button(cls, text) { var b = el('button', cls, text); b.type = 'button'; return b; }
+
+  /* 장면을 그리는 화면 한 벌. layout에 적힌 순서대로 자리를 만들고, show(장면)이 내용을 채운다 */
+  function createView(panel, cfg) {
+    var slots = {}, count = { n: 0 };
+    (cfg.layout || []).forEach(function (key) {
+      var box;
+      if (key === 'selector') {
+        box = el('div', 'field');
+        box.appendChild(el('span', 'label', cfg.selector.label));
+        var seg = el('div', 'seg');
+        cfg.selector.options.forEach(function (o, i) {
+          var b = button('', o.label); b.dataset.v = o.value; b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+          seg.appendChild(b);
+        });
+        box.appendChild(seg); slots.seg = seg;
+      } else if (key === 'buttons') { box = el('div', 'btn-row'); }
+      else if (key === 'duo') { box = el('div', 'duo'); }
+      else if (key === 'phases') { box = el('div', 'phases'); }
+      else if (key === 'log') { box = el('div', 'log'); box.setAttribute('aria-live', 'polite'); }
+      else if (key === 'gantt') { box = el('div', 'gantt'); box.setAttribute('aria-hidden', 'true'); }
+      else if (key === 'legend') {
+        box = el('div', 'legend');
+        cfg.legend.forEach(function (item) {
+          var s = el('span'); s.appendChild(el('i', 'sw ' + item.kind)); s.appendChild(document.createTextNode(item.label)); box.appendChild(s);
+        });
+      } else if (key === 'verdict') { box = el('p', 'verdict'); box.setAttribute('aria-live', 'polite'); box.hidden = true; }
+      else throw new Error('모르는 layout 항목: ' + key);
+      slots[key] = box; panel.appendChild(box);
+    });
+
+    function addLog(log, entry) {
+      var row = el('div', 'row');
+      if (entry && entry.note) { row.className = 'row note'; row.textContent = entry.note; }
+      else { count.n++; row.appendChild(el('span', 'n', count.n)); row.appendChild(el('span', '', entry)); }
+      log.appendChild(row); log.scrollTop = log.scrollHeight;
+    }
+    function kv(row) {
+      var line = el('div', 'kv'); line.appendChild(el('span', '', row.k)); line.appendChild(el('b', row.mark || '', row.v)); return line;
+    }
+    function showDuo(cells) {
+      slots.duo.innerHTML = '';
+      cells.forEach(function (c) {
+        var cell = el('div', 'cell' + (c.state ? ' ' + c.state : ''));
+        cell.appendChild(el('span', 'label', c.label));
+        if (c.text !== undefined) { var w = el('div'); w.appendChild(el('span', 'muted', c.text)); cell.appendChild(w); }
+        else if (c.rows.length === 1) cell.appendChild(kv(c.rows[0]));
+        else { var wrap = el('div'); c.rows.forEach(function (r) { wrap.appendChild(kv(r)); }); cell.appendChild(wrap); }
+        slots.duo.appendChild(cell);
+      });
+    }
+    function showPhases(phases) {
+      slots.phases.innerHTML = '';
+      phases.forEach(function (p) {
+        var box = el('div', 'phase'), h = el('h4', '', p.title + ' ');
+        h.appendChild(el('span', '', p.count)); box.appendChild(h);
+        var log = el('div', 'log'); p.log.forEach(function (line) { addLog(log, line); });
+        box.appendChild(log); slots.phases.appendChild(box);
+      });
+    }
+    function showGantt(g) {
+      var total = g.total, scale = 100 / total, html = '';
+      slots.gantt.innerHTML = '';
+      g.rows.forEach(function (r) {
+        var row = el('div', 'g-row'); row.appendChild(el('span', '', r.label));
+        var track = el('div', 'g-track');
+        r.bars.forEach(function (b) {
+          var bar = el('span', 'g-' + b.kind);
+          bar.style.left = (b.from * scale) + '%';
+          bar.style.width = Math.max((b.to - b.from) * scale, 1.5) + '%';
+          track.appendChild(bar);
+        });
+        row.appendChild(track); slots.gantt.appendChild(row);
+      });
+      var axis = el('div', 'g-axis'); g.axis.forEach(function (a) { axis.appendChild(el('span', '', a)); });
+      slots.gantt.appendChild(axis);
+    }
+    return {
+      seg: function () { return slots.seg; },
+      buttons: function () { return slots.buttons; },
+      /* 로그 번호를 1부터 다시 센다 */
+      clearLog: function () { count.n = 0; if (slots.log) slots.log.innerHTML = ''; },
+      appendLog: function (line) { addLog(slots.log, line); },
+      show: function (scene) {
+        if (scene.duo && slots.duo) showDuo(scene.duo);
+        if (scene.phases && slots.phases) { count.n = 0; showPhases(scene.phases); }
+        if (scene.gantt && slots.gantt) showGantt(scene.gantt);
+        if (Array.isArray(scene.log) && slots.log) { this.clearLog(); scene.log.forEach(function (line) { addLog(slots.log, line); }); }
+        if (slots.verdict) { slots.verdict.hidden = !scene.verdict; slots.verdict.textContent = scene.verdict || ''; }
+      }
+    };
+  }
+
+  var kinds = {
+    /* 상황 분류하기 */
+    classify: function (panel, cfg) {
+      cfg.items.forEach(function (item) {
+        var row = el('div', 'classify-row');
+        row.appendChild(el('p', '', item.text));
+        var opts = el('div', 'choice-row'), fb = el('div', 'feedback'); fb.hidden = true;
+        cfg.categories.forEach(function (name, i) {
+          var b = button('chip', name); b.setAttribute('aria-pressed', 'false');
+          b.addEventListener('click', function () {
+            opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+            var right = i + 1 === item.answer;
+            fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+            fb.textContent = (right ? '맞아요. ' : '정답은 "' + cfg.categories[item.answer - 1] + '"이에요. ') + item.explain;
+          });
+          opts.appendChild(b);
+        });
+        row.appendChild(opts); row.appendChild(fb); panel.appendChild(row);
+      });
+    },
+
+    /* 켜고 끄며 비교하기 */
+    toggle: function (panel, cfg) {
+      var view = createView(panel, cfg), picked = cfg.selector.options[0].value;
+      function showPicked() { view.show(cfg.scenes[picked]); }
+      if (cfg.run) {
+        var run = button('btn primary', cfg.run.label);
+        view.buttons().appendChild(run);
+        run.addEventListener('click', showPicked);
+        L.pressGroup(view.seg(), function (v) { picked = v; view.show(cfg.initial); });
+        view.show(cfg.initial);
+      } else {
+        L.pressGroup(view.seg(), function (v) { picked = v; showPicked(); });
+        showPicked();
+      }
+    },
+
+    /* 한 단계씩 실행하기 */
+    steps: function (panel, cfg) {
+      var view = createView(panel, cfg), row = view.buttons();
+      var scenario = cfg.selector ? cfg.selector.options[0].value : Object.keys(cfg.scenarios)[0];
+      var at, stepButtons = [];
+      function steps() { return cfg.scenarios[scenario]; }
+      function enable() {
+        if (cfg.buttons === 'each') stepButtons.forEach(function (b, i) { b.disabled = i !== at + 1; });
+        else stepButtons[0].disabled = at >= steps().length - 1;
+      }
+      function reset() { at = -1; view.clearLog(); view.show(cfg.initial); enable(); }
+      function go() {
+        at++;
+        var s = steps()[at];
+        view.show({ duo: s.duo, verdict: s.verdict });
+        if (s.log) view.appendLog(s.log);
+        enable();
+      }
+      if (cfg.buttons === 'each') {
+        steps().forEach(function (s) { var b = button('btn primary', s.label); b.addEventListener('click', go); stepButtons.push(b); row.appendChild(b); });
+      } else {
+        var next = button('btn primary', '다음 단계'); next.addEventListener('click', go); stepButtons.push(next); row.appendChild(next);
+      }
+      var again = button('btn', '처음으로'); again.addEventListener('click', reset); row.appendChild(again);
+      if (cfg.selector) L.pressGroup(view.seg(), function (v) { scenario = v; reset(); });
+      reset();
+    }
+  };
+
+  document.querySelectorAll('[data-lesson-widget]').forEach(function (panel) {
+    var data = panel.querySelector('script[type="application/json"]');
+    var cfg = JSON.parse(data.textContent);
+    data.remove();
+    kinds[panel.dataset.lessonWidget](panel, cfg);
+  });
+})();
+</script>

@@ -1,0 +1,76 @@
+---
+/**
+ * 레슨 자료 파일의 본문 블록을 그린다 (docs/lesson-data-format.md "본문 블록").
+ * 블록 하나는 칸 하나짜리 객체다: { p: "..." }, { code: "이름", notes: [...] }, { table: {...} } ...
+ */
+import { highlight } from '../../lib/highlight';
+import { inline } from '../../lib/inline';
+import CiOutput from '../CiOutput.astro';
+import RunLocally from '../RunLocally.astro';
+import Widget from './Widget.astro';
+
+interface Props {
+  blocks: Record<string, any>[];
+  /** 레슨 슬러그. CI 출력 파일을 찾는 데 쓴다 */
+  lesson: string;
+  codes: Record<string, string>;
+  links: Record<string, string>;
+  /** 이 블록들이 속한 질문의 id. 확인 문제를 잇는 데 쓴다 */
+  questionId?: string;
+}
+const { blocks, lesson, codes, links, questionId } = Astro.props;
+const md = (text: string) => inline(text, { links });
+
+function codeOf(name: string): string {
+  if (!(name in codes)) throw new Error(`레슨 '${lesson}': codes에 '${name}'이 없다`);
+  return highlight(codes[name].replace(/\n$/, ''));
+}
+const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** 코드 아래 설명의 표시한 부분. as: code면 코드처럼 색을 입히고, str과 anno는 그 색 하나로 칠한다 */
+function mark(note: { mark: string; as?: string }): string {
+  if (note.as === 'code') return highlight(note.mark);
+  if (note.as === 'str') return `<span class="c-str">${escape(note.mark)}</span>`;
+  if (note.as === 'anno') return `<span class="c-key c-anno">${escape(note.mark)}</span>`;
+  return escape(note.mark);
+}
+const KNOWN = ['p', 'muted', 'h3', 'ol', 'ul', 'code', 'prewrap', 'table', 'callout', 'more', 'ci', 'run', 'quiz', 'next', 'widget'];
+for (const b of blocks) {
+  if (!KNOWN.some((k) => k in b)) throw new Error(`레슨 '${lesson}': 모르는 블록 ${JSON.stringify(b).slice(0, 80)}`);
+}
+---
+{blocks.map((b) => (
+  <>
+    {'p' in b && <p set:html={md(b.p)} />}
+    {'muted' in b && <p class="muted" set:html={md(b.muted)} />}
+    {'h3' in b && <h3 set:html={md(b.h3)} />}
+    {'ol' in b && <ol style="margin:0;padding-left:22px">{b.ol.map((item: string) => <li set:html={md(item)} />)}</ol>}
+    {'ul' in b && <ul>{b.ul.map((item: string) => <li set:html={md(item)} />)}</ul>}
+    {'code' in b && <pre set:html={codeOf(b.code)} />}
+    {'code' in b && b.notes && (
+      <ul class="code-note">
+        {b.notes.map((n: any) => <li><mark class="hl" set:html={mark(n)} />{' '}<Fragment set:html={md(n.text)} /></li>)}
+      </ul>
+    )}
+    {'prewrap' in b && <pre class="wrap" set:text={b.prewrap} />}
+    {'table' in b && (
+      <div class="table-wrap">
+        <table>
+          <thead><tr>{b.table.head.map((h: string) => <th set:html={md(h)} />)}</tr></thead>
+          <tbody>{b.table.rows.map((row: string[]) => <tr>{row.map((cell) => <td set:html={md(cell)} />)}</tr>)}</tbody>
+        </table>
+      </div>
+    )}
+    {'callout' in b && <div class="callout" set:html={md(b.callout)} />}
+    {'more' in b && (
+      <details class="more">
+        <summary>{b.more.summary}</summary>
+        <Astro.self blocks={b.more.body} lesson={lesson} codes={codes} links={links} />
+      </details>
+    )}
+    {'ci' in b && <CiOutput lesson={lesson} key={b.ci.key} label={b.ci.label} source={b.ci.source} />}
+    {'run' in b && <RunLocally tests={b.run.tests} docker={b.run.docker} />}
+    {'quiz' in b && <div class="panel quiz" data-quiz={questionId}></div>}
+    {'next' in b && <p class="next"><strong>다음 질문:</strong>{' '}<Fragment set:html={md(b.next)} /></p>}
+    {'widget' in b && <Widget widget={b.widget} />}
+  </>
+))}

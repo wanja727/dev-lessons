@@ -1,0 +1,82 @@
+---
+/** 검증: 브라우저 안의 PostgreSQL(PGlite)에 SQL을 직접 쳐 본다 */
+---
+<div><button class="btn primary" type="button" id="pg-start">PostgreSQL 시작하기</button></div>
+<p class="muted" id="pg-status" aria-live="polite">아직 시작하지 않았어요.</p>
+<div class="field">
+  <span class="label">예제 (누르면 아래 칸에 들어가요)</span>
+  <div class="choice-row" id="pg-presets"></div>
+</div>
+<label class="label" for="pg-sql">SQL (세미콜론으로 끝나는 문장을 하나씩 보내요)</label>
+<textarea id="pg-sql" class="pg-sql" spellcheck="false"></textarea>
+<div><button class="btn" type="button" id="pg-run" disabled>실행</button></div>
+<pre id="pg-out" class="pg-out wrap"></pre>
+<style is:global>
+.pg-sql { font-family: var(--font-mono); font-size: 14px; min-height: 120px; line-height: 1.5; width: 100%; box-sizing: border-box; }
+.pg-out { white-space: pre-wrap; font-size: 13px; min-height: 60px; }
+</style>
+<script is:inline type="module">
+  // 직접 쳐 보기: 브라우저 안의 PostgreSQL(PGlite). 문장을 하나씩 보내서 자동 커밋을 그대로 재현한다
+  const PGLITE = 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite@0.5.16/dist/index.js';
+  const RESET = `drop table if exists account;
+create table account (owner text primary key, balance int not null check (balance >= 0));
+insert into account values ('kim', 50), ('lee', 0);`;
+  const presets = [
+    ['트랜잭션 없이 100 보내기', "update account set balance = balance + 100 where owner = 'lee';\nupdate account set balance = balance - 100 where owner = 'kim';\nselect * from account order by owner;"],
+    ['트랜잭션으로 100 보내기', "begin;\nupdate account set balance = balance + 100 where owner = 'lee';\nupdate account set balance = balance - 100 where owner = 'kim';\nrollback;\nselect * from account order by owner;"],
+    ['트랜잭션으로 30 보내기', "begin;\nupdate account set balance = balance + 30 where owner = 'lee';\nupdate account set balance = balance - 30 where owner = 'kim';\ncommit;\nselect * from account order by owner;"],
+    ['바꾸고 롤백하기', "begin;\nupdate account set balance = 0 where owner = 'kim';\nselect * from account order by owner;\nrollback;\nselect * from account order by owner;"],
+    ['처음 상태로', RESET + "\nselect * from account order by owner;"]
+  ];
+  const $ = (id) => document.getElementById(id);
+  const sql = $('pg-sql'), out = $('pg-out'), status = $('pg-status'), runBtn = $('pg-run'), startBtn = $('pg-start');
+  sql.value = presets[0][1];
+  presets.forEach(([label, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = label;
+    b.addEventListener('click', () => { sql.value = text; });
+    $('pg-presets').appendChild(b);
+  });
+  let db = null;
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    try {
+      status.textContent = 'PostgreSQL을 내려받는 중이에요. (처음 한 번 약 13MB)';
+      const { PGlite } = await import(PGLITE);
+      db = await PGlite.create();
+      await db.exec(RESET);
+      status.textContent = '준비됐어요. account 표에 kim 50, lee 0이 있어요. 예제를 고르고 실행해 보세요.';
+      startBtn.textContent = '실행 중';
+      runBtn.disabled = false;
+    } catch (e) {
+      status.textContent = '시작하지 못했어요: ' + e.message;
+      startBtn.disabled = false;
+    }
+  });
+  function table(r) {
+    if (!r.fields || r.fields.length === 0) return '';
+    const names = r.fields.map((f) => f.name);
+    return '\n   ' + names.join(' | ') + '\n' + r.rows.map((x) => '   ' + names.map((n) => String(x[n])).join(' | ')).join('\n');
+  }
+  runBtn.addEventListener('click', async () => {
+    if (!db) return;
+    runBtn.disabled = true;
+    const stmts = sql.value.split(';').map((s) => s.trim()).filter(Boolean);
+    const lines = [];
+    for (const s of stmts) {
+      try {
+        const r = await db.query(s);
+        const first = s.split(/\s+/)[0].toUpperCase();
+        const note = first === 'UPDATE' ? `→ ${r.affectedRows}행 바뀜` : first === 'SELECT' ? '→' : '→ 완료';
+        lines.push(`${s};  ${note}${table(r)}`);
+      } catch (e) {
+        let hint = '';
+        if (/check constraint/i.test(e.message)) hint = ' (잔액이 0보다 작아질 수 없어요)';
+        if (/current transaction is aborted/i.test(e.message)) hint = ' (실패한 트랜잭션은 rollback을 보내기 전까지 아무 문장도 받지 않아요)';
+        lines.push(`${s};  → 오류: ${e.message}${hint}`);
+      }
+    }
+    out.textContent = lines.join('\n');
+    runBtn.disabled = false;
+  });
+</script>

@@ -1,0 +1,25 @@
+---
+/**
+ * 위젯 하나. 공통 위젯(classify, toggle, steps)은 자료만 내놓고 WidgetKit이 화면을 만든다.
+ * kind: custom은 그 레슨만 쓰는 위젯이다. components/lesson-widgets/<레슨>/<이름>.astro를 그대로 넣는다.
+ */
+interface Props {
+  widget: Record<string, any>;
+}
+const { widget } = Astro.props;
+const custom = import.meta.glob('../lesson-widgets/**/*.astro', { eager: true }) as Record<string, { default: any }>;
+
+let Custom: any = null;
+if (widget.kind === 'custom') {
+  const found = custom[`../lesson-widgets/${widget.name}.astro`];
+  if (!found) throw new Error(`레슨 전용 위젯이 없다: components/lesson-widgets/${widget.name}.astro`);
+  Custom = found.default;
+} else if (!['classify', 'toggle', 'steps'].includes(widget.kind)) {
+  throw new Error(`모르는 위젯 종류: ${widget.kind}`);
+}
+// </script>가 자료 안에 있어도 태그가 닫히지 않게 한다
+const json = JSON.stringify(widget).replace(/</g, '\\u003c');
+---
+{Custom
+  ? <div class="panel"><Custom /></div>
+  : <div class="panel" data-lesson-widget={widget.kind}><script type="application/json" set:html={json} /></div>}

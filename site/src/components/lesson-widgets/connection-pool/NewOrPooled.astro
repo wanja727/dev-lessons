@@ -1,0 +1,59 @@
+---
+/** 질문 1: 요청마다 새로 연결할 때와 풀에서 빌릴 때 새로 만든 연결 수를 센다 */
+---
+<div class="field">
+  <span class="label">방식</span>
+  <div class="seg" id="c1-mode">
+    <button type="button" data-v="raw" aria-pressed="true">요청마다 새로 연결</button>
+    <button type="button" data-v="pool" aria-pressed="false">풀에서 빌리기</button>
+  </div>
+</div>
+<div class="btn-row"><button class="btn primary" type="button" id="c1-run">요청 하나 처리하기</button><button class="btn" type="button" id="c1-reset">처음으로</button></div>
+<div class="duo">
+  <div class="cell"><span class="label">처리한 요청</span><div class="kv"><span>요청 수</span><b id="c1-req">0</b></div></div>
+  <div class="cell"><span class="label">새로 만든 연결</span><div class="kv"><span>접속, 인증, 준비</span><b id="c1-new">0</b></div></div>
+</div>
+<div class="log" id="c1-log" aria-live="polite"></div>
+<p id="c1-msg" class="verdict" hidden></p>
+<script is:inline>
+(function () {
+  var L = window.Lesson, $ = L.$, pressGroup = L.pressGroup;
+  /* 로그 한 줄: 몇 번째인지와 내용 */
+  function addLog(el, text) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<span class="n">' + (el.children.length + 1) + '</span><span></span>';
+    row.lastChild.textContent = text;
+    el.appendChild(row);
+    el.scrollTop = el.scrollHeight;
+  }
+  /* 질문 1: 요청마다 새로 연결하기와 풀에서 빌리기 */
+  var c1Mode = 'raw', c1Req, c1New;
+  function c1Reset() {
+    c1Req = 0; c1New = 0;
+    $('c1-req').textContent = '0'; $('c1-new').textContent = '0'; $('c1-new').className = '';
+    $('c1-log').innerHTML = ''; $('c1-msg').hidden = true;
+  }
+  L.pressGroup($('c1-mode'), function (v) { c1Mode = v; c1Reset(); });
+  $('c1-run').addEventListener('click', function () {
+    c1Req++;
+    var log = $('c1-log'), who = '요청 ' + c1Req + ': ';
+    if (c1Mode === 'raw') {
+      c1New++;
+      ['DB 서버에 접속', '아이디와 비밀번호로 인증', 'DB 서버가 프로세스를 띄움', 'SQL 실행', '연결 끊기'].forEach(function (s) { addLog(log, who + s); });
+    } else {
+      ['풀에서 연결 빌리기', 'SQL 실행', '풀에 연결 반납'].forEach(function (s) { addLog(log, who + s); });
+    }
+    $('c1-req').textContent = c1Req;
+    $('c1-new').textContent = c1New; $('c1-new').className = c1New ? 'bad' : '';
+    if (c1Req >= 3) {
+      $('c1-msg').hidden = false;
+      $('c1-msg').textContent = c1Mode === 'raw'
+        ? '요청 ' + c1Req + '개를 처리하려고 연결을 ' + c1New + '번 새로 만들었어요. SQL 한 번마다 접속, 인증, 준비가 따라붙어요.'
+        : '요청 ' + c1Req + '개를 처리하는 동안 새로 만든 연결은 0개예요. 미리 만들어 둔 연결을 빌려 썼어요.';
+    }
+  });
+  $('c1-reset').addEventListener('click', c1Reset);
+  c1Reset();
+})();
+</script>
