@@ -81,14 +81,6 @@ Optional<Stock> findForUpdate(@Param("id") Long id);
           <button class="chip" type="button" data-v="wait" aria-pressed="false">하나가 기다렸다가 둘 다 성공, 재고 80</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -241,12 +233,12 @@ Optional<Stock> findForUpdate(@Param("id") Long id);
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   var pl = { both: '둘 다 성공, 재고 80', lost: '둘 다 성공, 재고 90', one: '하나만 성공, 재고 90, 다른 하나는 예외', wait: '하나가 기다렸다가 둘 다 성공, 재고 80' };
-  var pred = { p1: store('lk-p1'), p2: store('lk-p2') };
+  var pred = { p1: store('lk-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "하나만 성공, 재고 90, 다른 하나는 예외"예요. @Version이 있어서 낙관적 락이 걸려요. 2장에서 "낙관적 락"으로 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + pl[pred.p1] + '. 정답은 "하나만 성공, 재고 90, 다른 하나는 예외"예요. @Version이 있어서 낙관적 락이 걸려요. 2장에서 "낙관적 락"으로 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('lk-' + k, v); showPred(); });

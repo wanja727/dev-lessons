@@ -56,14 +56,6 @@ ZUNIONSTORE ranking:week 7 ranking:2026-11-11 ... ranking:2026-11-17   # 7일 �
           <button class="chip" type="button" data-v="rand" aria-pressed="false">매번 다르다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -241,13 +233,13 @@ ZUNIONSTORE ranking:week 7 ranking:2026-11-11 ... ranking:2026-11-17   # 7일 �
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('rk-p1'), p2: store('rk-p2') };
+  var pred = { p1: store('rk-p1') };
   var LABEL = { ab: 'alice, bob', ba: 'bob, alice', rand: '매번 다르다' };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "bob, alice"예요. 이유는 3장에 있어요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + '. 정답은 "bob, alice"예요. 이유는 3장에 있어요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('rk-' + k, v); showPred(); });

@@ -76,14 +76,6 @@ try {
           <button class="chip" type="button" data-v="10000" aria-pressed="false">10,000원</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 3장 시뮬레이터에서 확인할 수 있어요.</p>
     </div>
   </section>
@@ -278,12 +270,12 @@ try {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('ca-p1'), p2: store('ca-p2') };
+  var pred = { p1: store('ca-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '10000' ? '10,000원' : '8,000원') + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "10,000원"이에요. 캐시가 살아 있는 동안은 옛 가격이 보여요. 3장의 "DB만 바꿈"으로 확인해 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + (pred.p1 === '10000' ? '10,000원' : '8,000원') + '. 정답은 "10,000원"이에요. 캐시가 살아 있는 동안은 옛 가격이 보여요. 3장의 "DB만 바꿈"으로 확인해 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('ca-' + k, v); showPred(); });

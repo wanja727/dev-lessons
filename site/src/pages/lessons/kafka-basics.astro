@@ -55,14 +55,6 @@ while (running) {
           <button class="chip" type="button" data-v="dup" aria-pressed="false">4대가 같은 메시지를 모두 받는다</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 직접 확인할 수 있어요.</p>
     </div>
   </section>
@@ -244,13 +236,13 @@ while (running) {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* 0. 예측 */
-  var pred = { p1: store('kf-p1'), p2: store('kf-p2') };
+  var pred = { p1: store('kf-p1') };
   var LABEL = { all: '4대가 모두 나눠서 읽는다', idle: '1대는 아무것도 읽지 않는다', dup: '4대가 같은 메시지를 모두 받는다' };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "1대는 아무것도 읽지 않는다"예요. 2장에서 컨슈머를 4개로 늘려 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + LABEL[pred.p1] + '. 정답은 "1대는 아무것도 읽지 않는다"예요. 2장에서 컨슈머를 4개로 늘려 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('kf-' + k, v); showPred(); });

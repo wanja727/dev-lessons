@@ -83,14 +83,6 @@ public class Team {
           <button class="chip" type="button" data-v="error" aria-pressed="false">저장할 때 예외</button>
         </div>
       </div>
-      <div class="field">
-        <span class="label">확신도</span>
-        <div class="choice-row" id="p2">
-          <button class="chip" type="button" data-v="확실" aria-pressed="false">확실</button>
-          <button class="chip" type="button" data-v="애매" aria-pressed="false">애매</button>
-          <button class="chip" type="button" data-v="모름" aria-pressed="false">모름</button>
-        </div>
-      </div>
       <p class="muted" id="predict-msg">고르면 2장에서 직접 해 볼 수 있어요.</p>
     </div>
   </section>
@@ -253,12 +245,12 @@ public class Team {
 
   /* 0. 예측 */
   var labels = { id: '팀의 id', null: 'null', error: '저장할 때 예외' };
-  var pred = { p1: store('assoc-p1'), p2: store('assoc-p2') };
+  var pred = { p1: store('assoc-p1') };
   function showPred() {
     if (!pred.p1) return;
-    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + (pred.p2 ? ' (' + pred.p2 + ')' : '') + '. 정답은 "null"이에요. 예외도 나지 않아요. 2장에서 "team.getMembers().add(kim)" → "커밋"을 눌러 보세요.';
+    document.getElementById('predict-msg').textContent = '내 예측: ' + labels[pred.p1] + '. 정답은 "null"이에요. 예외도 나지 않아요. 2장에서 "team.getMembers().add(kim)" → "커밋"을 눌러 보세요.';
   }
-  ['p1', 'p2'].forEach(function (k) {
+  ['p1'].forEach(function (k) {
     var el = document.getElementById(k);
     if (pred[k]) setPressed(el, pred[k]);
     pressGroup(el, function (v) { pred[k] = v; store('assoc-' + k, v); showPred(); });
