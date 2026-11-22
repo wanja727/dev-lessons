@@ -226,3 +226,10 @@ footer { color: var(--muted); font-size: 14px; max-width: 720px; }
 details.more { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
 details.more > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
 details.more[open] > summary { margin-bottom: 6px; }
+
+/* 코드의 ⤶ 표시: 좁은 화면에서는 줄을 바꾸고(sb-n), 넓은 화면에서는 한 줄로 잇는다(sb-w). site/src/lib/highlight.ts */
+pre .sb-w { display: none; }
+@media (min-width: 720px) {
+  pre .sb-n { display: none; }
+  pre .sb-w { display: inline; }
+}

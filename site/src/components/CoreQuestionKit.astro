@@ -1,0 +1,111 @@
+---
+/**
+ * 핵심 질문 구조 레슨(docs/lesson-standard.md 1장)이 함께 쓰는 진행 표시와 스크립트 도구.
+ * 페이지의 <main> 바로 앞에 한 번 넣고, 페이지의 인라인 스크립트에서 window.Lesson을 쓴다.
+ *
+ *   Lesson.predict({ key, opts, result, answer, right, wrong })   먼저 예측해 보기
+ *   Lesson.quizzes({ q1: { q, o, a, e }, ... })                     장마다 확인 문제 ([data-quiz])
+ *   Lesson.recalls('recall-list', [{ id, q, a }, ...])             보지 않고 답하기
+ *   Lesson.reveal('model-btn', 'model')                            모범 답 열기
+ *   Lesson.progress([['predict', '예측'], ['q1', '질문 1 / 4'], ...])  진행 표시
+ *   Lesson.pressGroup(el, onPick), Lesson.$(id), Lesson.store(k, v), Lesson.esc(s)
+ */
+---
+<div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+<div class="where" id="where" hidden></div>
+<script is:inline>
+window.Lesson = (function () {
+  function $(id) { return document.getElementById(id); }
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* 버튼 묶음에서 하나를 고른다. 고른 버튼만 aria-pressed="true" */
+  function pressGroup(container, onPick) {
+    container.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]'); if (!b || b.disabled) return;
+      container.querySelectorAll('button[data-v]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      onPick(b.dataset.v);
+    });
+  }
+
+  /* 먼저 예측해 보기: 고른 값을 기억해 두었다가 질문 1에서 맞았는지 알려 준다 */
+  function predict(c) {
+    var picked = store(c.key), opts = $(c.opts), out = $(c.result);
+    function show() {
+      if (!picked) { out.textContent = ''; return; }
+      out.textContent = picked === c.answer ? c.right : c.wrong(picked);
+    }
+    if (picked) opts.querySelectorAll('button[data-v]').forEach(function (x) { x.setAttribute('aria-pressed', x.dataset.v === picked ? 'true' : 'false'); });
+    pressGroup(opts, function (v) { picked = v; store(c.key, v); show(); });
+    show();
+  }
+
+  /* 장마다 확인 문제 하나. 기록하지 않는 연습이다 */
+  function quizzes(map) {
+    document.querySelectorAll('[data-quiz]').forEach(function (box) {
+      var item = map[box.dataset.quiz]; if (!item) return;
+      box.innerHTML = '<span class="label">확인</span><p></p><div class="opts"></div><div class="feedback" hidden></div>';
+      box.querySelector('p').textContent = item.q;
+      var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
+      item.o.forEach(function (o, oi) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+        b.addEventListener('click', function () {
+          opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+          var right = oi === item.a;
+          fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
+          fb.textContent = (right ? '맞아요. ' : '정답은 "' + item.o[item.a] + '"이에요. ') + item.e;
+        });
+        opts.appendChild(b);
+      });
+    });
+  }
+
+  /* 보지 않고 답하기: 모범 답은 각 장의 결론과 같은 내용이다 */
+  function recalls(listId, items) {
+    items.forEach(function (r, i) {
+      var el = document.createElement('div'); el.className = 'recall';
+      el.innerHTML = '<h3></h3><div><button class="btn" type="button">모범 답 보기</button></div><div class="model-a" hidden><p></p><a class="back-link"></a></div>';
+      el.querySelector('h3').textContent = (i + 1) + '. ' + r.q;
+      el.querySelector('.model-a p').textContent = r.a;
+      var link = el.querySelector('a'); link.href = '#' + r.id; link.textContent = '막혔다면 질문 ' + (i + 1) + '의 결론 다시 보기';
+      var btn = el.querySelector('button');
+      btn.addEventListener('click', function () { el.querySelector('.model-a').hidden = false; btn.disabled = true; btn.textContent = '모범 답을 열었어요'; });
+      $(listId).appendChild(el);
+    });
+  }
+
+  function reveal(btnId, targetId) {
+    $(btnId).addEventListener('click', function () { $(targetId).hidden = false; this.disabled = true; this.textContent = '모범 답을 열었어요'; });
+  }
+
+  /* 진행 표시: 얼마나 읽었는지와 지금 읽는 질문 */
+  function progress(marks) {
+    function update() {
+      var doc = document.documentElement, max = doc.scrollHeight - innerHeight;
+      $('progress-bar').style.width = (max > 0 ? Math.min(100, scrollY / max * 100) : 0) + '%';
+      var label = '';
+      marks.forEach(function (m) { var el = $(m[0]); if (el && el.getBoundingClientRect().top < innerHeight * 0.4) label = m[1]; });
+      $('where').hidden = !label; $('where').textContent = label;
+    }
+    addEventListener('scroll', update, { passive: true });
+    addEventListener('resize', update);
+    update();
+  }
+
+  /* 페이지가 다 그려진 뒤: 좁은 화면에서 표를 카드로 쌓을 때 쓸 칸 이름, 슬라이더의 채워진 부분 */
+  addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.table-wrap table').forEach(function (table) {
+      var heads = [].map.call(table.querySelectorAll('th'), function (th) { return th.textContent; });
+      table.querySelectorAll('tbody tr').forEach(function (tr) {
+        [].forEach.call(tr.children, function (td, i) { td.setAttribute('data-label', heads[i] || ''); });
+      });
+    });
+    document.querySelectorAll('input[type="range"]').forEach(function (el) {
+      function fill() { el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min) * 100) + '%'); }
+      el.addEventListener('input', fill); fill();
+    });
+  });
+
+  return { $: $, store: store, esc: esc, pressGroup: pressGroup, predict: predict, quizzes: quizzes, recalls: recalls, reveal: reveal, progress: progress };
+})();
+</script>

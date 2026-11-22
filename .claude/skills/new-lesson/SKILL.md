@@ -28,6 +28,7 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 - 파일: `site/src/pages/lessons/<slug>.astro`. `site/src/pages/lessons/jpa-n-plus-1.astro`를 본보기로 삼는다
 - 레이아웃 `<Base theme="soft pastel">`, 스타일은 `lesson.css` 다음에 `retrievo-theme.css`를 불러온다
+- 공통 도구를 쓴다: `core-question.css`를 불러오고 `<main>` 앞에 `<CoreQuestionKit />`를 넣는다. 예측, 확인 문제, 보지 않고 답하기, 진행 표시는 `window.Lesson`의 함수로 만든다 (쓰는 예: `tx-basics.astro`). 페이지에는 그 레슨만의 위젯 코드만 둔다
 - 구조는 표준 1장(핵심 질문). 조작 위젯은 페이지 안 `<script is:inline>`으로 작성
 - **중괄호 주의:** Astro 마크업에서 `{ }`는 표현식이다. 코드 예시는 프론트매터에 문자열로 두고 `<pre set:html={highlight(code)} />`로 넣는다. 한 줄 44자 이하, 강조는 `[[ ]]`(표준 3장)
 - 페이지 스타일을 고친 뒤 화면이 그대로면 개발 서버를 다시 켠다
