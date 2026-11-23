@@ -64,6 +64,31 @@
 .kv b.bad { color: var(--query); }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 520px) { .duo { grid-template-columns: minmax(0, 1fr); } }
+/* 두 칸 비교: 칸의 항목은 그대로 두고, 고른 것에 따라 고쳐야 하는 항목만 강조한다 */
+.side-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.side-items li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.side-items .name { font-family: var(--font-mono); font-size: 14px; overflow-wrap: anywhere; }
+.side-items .tag { font-size: 13px; color: var(--accent); }
+.side-items .note { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.side-items li.changed { border-color: var(--accent); background: var(--accent-soft); }
+.side-items li.bad { border-color: var(--query); background: var(--query-soft); }
+.side-items li.bad .tag { color: var(--query); }
+.side-items li.added { border-style: dashed; }
+.side-result { margin-top: auto; border-top: 1px dashed var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+/* 타임라인: 두 쪽이 주고받은 것을 차례로 쌓는다. 왼쪽에서 보낸 것은 왼쪽에, 오른쪽에서 보낸 것은 오른쪽에 붙는다 */
+.timeline, .tl-events { display: flex; flex-direction: column; gap: 8px; }
+.tl-lanes { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; }
+.tl-ev { max-width: 88%; min-width: 0; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; animation: in 0.25s ease-out; }
+.tl-ev.right { align-self: flex-start; }
+.tl-ev.left { align-self: flex-end; }
+.tl-ev.now { border-color: var(--accent); background: var(--accent-soft); }
+.tl-top { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; font-size: 14px; }
+.tl-top .n { font-family: var(--font-mono); color: var(--muted); }
+.tl-top .tl-dir { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+.tl-ev pre { margin: 0; padding: 8px 10px; font-size: 12.5px; }
+.timeline .tl-ev.now pre { background: var(--surface); }
+.tl-note, .tl-empty { margin: 0; font-size: 14px; }
+.tl-empty { color: var(--muted); }
 /* 상황 분류하기: 상황 하나와 고를 것들 */
 .classify-row { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
 .classify-row:first-child { border-top: 0; padding-top: 0; }

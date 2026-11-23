@@ -27,8 +27,9 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 ## 3. 레슨 페이지
 
 - `.astro` 페이지를 쓰지 않는다. 자료 파일 `site/src/content/lesson-pages/<slug>.yaml`의 칸을 채우면 틀이 페이지를 만든다. 칸은 `docs/lesson-data-format.md`에 있고, `jpa-n-plus-1.yaml`과 `tx-basics.yaml`을 본보기로 삼는다
+- 본문을 쓰기 전에 같은 파일을 `stage: design`으로 만들어 설계 단계의 칸만 채우고 확인받는다 (`docs/lesson-data-format.md`의 "두 단계"). 승인되면 `stage` 줄을 지우고 나머지 칸을 채운다
 - 구조는 표준 1장(핵심 질문)이고 틀이 정한다. 질문마다 결론, 본문 블록, 위젯 하나, 확인 문제, 다음 질문으로 잇는 말을 채운다
-- 위젯은 공통 위젯(`classify`, `toggle`, `steps`)에서 먼저 고른다. 안 되는 것만 `site/src/components/lesson-widgets/<slug>/<이름>.astro`에 직접 만들고, 왜 안 되는지 사용자에게 먼저 말한다
+- 위젯은 공통 위젯(`classify`, `toggle`, `steps`, `compare`, `timeline`)에서 먼저 고른다. 안 되는 것만 `site/src/components/lesson-widgets/<slug>/<이름>.astro`에 직접 만들고, 왜 안 되는지 사용자에게 먼저 말한다
 - 글에 쓸 수 있는 표시는 굵게, 코드 조각, 링크 세 가지다 (자료 형식 문서의 "글 쓰는 법"). 다른 레슨으로 가는 링크의 주소는 `lesson:슬러그`로 적는다
 - 코드는 `codes`에 이름을 붙여 두고 블록에서 이름으로 쓴다. 한 줄 44자 이하, 강조는 `[[ ]]`(표준 3장)
 - 화면이 그대로면 개발 서버를 다시 켠다. 오래 켜 둔 서버는 옛 스타일을 내놓기도 한다
