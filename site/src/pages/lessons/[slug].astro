@@ -5,7 +5,8 @@ import { getCollection } from 'astro:content';
 import LessonPage from '../../components/lesson/LessonPage.astro';
 
 export async function getStaticPaths() {
-  const pages = await getCollection('lessonPages');
+  // 설계 단계(stage: design)의 파일은 페이지를 만들지 않는다. 개발 서버의 /designs/에서 모아 본다
+  const pages = await getCollection('lessonPages', (page) => page.data.stage === 'full');
   const lessons = await getCollection('lessons');
   return pages.map((page) => {
     // 레슨 목록(src/content/lessons)과 본문 자료가 같은 값을 두 번 적는다. 어긋나면 빌드를 멈춘다

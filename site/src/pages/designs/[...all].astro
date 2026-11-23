@@ -1,0 +1,122 @@
+---
+// 설계 단계(stage: design)의 자료 파일을 모아 보는 페이지. 본문을 쓰기 전에 설계서를 한 번에 확인받는 데 쓴다
+// (docs/quality-plan.md 방법 4번). 개발 서버에서만 나온다. 배포 빌드에는 들어가지 않는다.
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import '../../styles/lesson.css';
+import '../../styles/retrievo-theme.css';
+import '../../styles/core-question.css';
+import { highlight } from '../../lib/highlight';
+import { inline } from '../../lib/inline';
+
+export async function getStaticPaths() {
+  return import.meta.env.DEV ? [{ params: { all: undefined } }] : [];
+}
+const designs = (await getCollection('lessonPages', (page) => page.data.stage === 'design'))
+  .sort((a, b) => a.data.roadmap.localeCompare(b.data.roadmap, 'ko', { numeric: true }));
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const WIDGETS: Record<string, string> = {
+  classify: '상황 분류하기', toggle: '켜고 끄며 비교하기', steps: '한 단계씩 실행하기',
+  compare: '두 칸 비교', timeline: '타임라인', custom: '직접 만든다',
+};
+---
+<Base theme="soft pastel" title="설계서 · Dev Lessons" description="본문을 쓰기 전에 확인받는 설계서 모음">
+<main>
+  <header class="top">
+    <a class="back" href={`${base}/`}>← 레슨 목록</a>
+    <h1>설계서 {designs.length}개</h1>
+    <p class="lede">본문을 쓰기 전의 자료 파일이에요. 결론 문장, 본문이 말할 것, 문제 개요가 맞는지 봐요.</p>
+    {designs.length > 0 && (
+      <ol class="goals">
+        {designs.map((d) => <li><a href={`#${d.id}`}>{d.data.roadmap} {d.data.title}</a></li>)}
+      </ol>
+    )}
+    {designs.length === 0 && <p class="muted">설계 단계의 파일이 없어요. <code>site/src/content/lesson-pages/</code>에 <code>stage: design</code>인 파일을 두면 여기에 나와요.</p>}
+  </header>
+
+  {designs.map(({ id, data }) => {
+    const md = (text: string) => inline(text, { links: data.links });
+    return (
+      <section id={id} class="read stack design">
+        <p class="meta"><span>{data.roadmap}</span><span>{data.unit}</span><span>{data.type} 유형</span></p>
+        <h2>{data.title}</h2>
+        <dl class="design-meta">
+          <dt>먼저 배울 레슨</dt>
+          <dd>{data.prerequisites.length === 0 ? '없음' : data.prerequisites.map((p) => p.title).join(', ')}</dd>
+          <dt>알고 있다고 보는 것</dt>
+          <dd set:html={md(data.assume)} />
+          <dt>예제</dt>
+          <dd set:html={md(data.example)} />
+          <dt>먼저 예측해 보기</dt>
+          <dd><Fragment set:html={md(data.predict.text)} /> <strong>답:</strong> <Fragment set:html={md(data.predict.answer)} /></dd>
+        </dl>
+
+        <h3>핵심 질문과 결론</h3>
+        <p class="muted">결론의 첫 줄만 이어 읽으면 레슨 요약이 돼야 해요.</p>
+        {data.questions.map((q, i) => (
+          <div class="answer">
+            <span class="label">질문 {i + 1}. {q.title}</span>
+            <p class="lead" set:html={md(q.conclusion.lead)} />
+            {q.conclusion.sub && <p class="sub" set:html={md(q.conclusion.sub)} />}
+            {q.conclusion.subList && <ul class="sub">{q.conclusion.subList.map((s) => <li set:html={md(s)} />)}</ul>}
+          </div>
+        ))}
+
+        {data.questions.map((q, i) => (
+          <>
+            <h3>질문 {i + 1}. {q.title}</h3>
+            <p class="label">본문이 말할 것 (문제는 여기에 적은 것만 물어요)</p>
+            <ul>{q.says.map((s) => <li set:html={md(s)} />)}</ul>
+            <p class="label">위젯: {WIDGETS[q.widget.kind]}</p>
+            <p><Fragment set:html={md(q.widget.note)} />{q.widget.why && <> <strong>공통 위젯으로 안 되는 이유:</strong> <Fragment set:html={md(q.widget.why)} /></>}</p>
+            <p class="label">문제 개요</p>
+            <ul>{q.asks.map((s) => <li set:html={md(s)} />)}</ul>
+          </>
+        ))}
+
+        <h3>테스트로 확인할 주장</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>주장</th><th>확인하는 방법</th></tr></thead>
+            <tbody>
+              {data.claims.map((c) => (
+                <tr>
+                  <td set:html={md(c.claim)} />
+                  <td data-label="확인"><Fragment set:html={md(c.how)} />{c.test && <> (<code>{c.test}</code>)</>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {data.sources.length > 0 && (
+          <>
+            <p class="label">테스트로 확인할 수 없는 것의 근거</p>
+            <ul>{data.sources.map((s) => <li set:html={md(s)} />)}</ul>
+          </>
+        )}
+
+        {Object.keys(data.codes).length > 0 && (
+          <details class="more">
+            <summary>레슨 전체에서 쓰는 코드 {Object.keys(data.codes).length}개</summary>
+            <div class="stack" style="padding-top:6px">
+              {Object.entries(data.codes).map(([name, code]) => (
+                <>
+                  <p class="label">{name}</p>
+                  <pre set:html={highlight(code.replace(/\n$/, ''))} />
+                </>
+              ))}
+            </div>
+          </details>
+        )}
+      </section>
+    );
+  })}
+</main>
+<style is:global>
+  .design { border-top: 1px solid var(--line); padding-top: 28px; }
+  .design-meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+  .design-meta dt { color: var(--muted); font-size: 14px; }
+  .design-meta dd { margin: 0; }
+  @media (max-width: 600px) { .design-meta { grid-template-columns: minmax(0, 1fr); gap: 2px; } .design-meta dd { margin-bottom: 8px; } }
+</style>
+</Base>

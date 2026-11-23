@@ -21,44 +21,99 @@ const lessons = defineCollection({
 
 // 레슨 본문 자료 (docs/lesson-data-format.md). 이 파일의 칸을 채우면 페이지가 나온다.
 // 틀이 아직 초안이라 본문 블록과 위젯의 칸은 느슨하게 받는다. 틀을 굳힐 때 조인다 (docs/quality-plan.md 진행 순서 5번)
+//
+// 파일은 두 단계를 거친다 (docs/quality-plan.md 방법 4번).
+//   stage: design  설계서. 질문, 결론, 본문이 말할 것, 위젯 계획, 문제 개요, 확인할 주장만 채운다. 페이지는 만들지 않는다
+//   stage: full    본문까지 다 채운 파일. stage를 적지 않으면 full로 본다
+// 설계 때 채운 칸은 full이 되어도 파일에 남는다. 페이지에는 나오지 않는다.
 const text = z.string().min(1);
 const block = z.record(z.any());
+const conclusion = z.object({ lead: text, sub: text.optional(), subList: z.array(text).optional() });
+const questionId = z.string().regex(/^q[1-9]$/);
+const prerequisites = z.array(z.object({ slug: text, title: text })).default([]);
+// 질문에 쓸 위젯의 계획. custom이면 왜 공통 위젯으로 안 되는지(why)를 적어야 한다
+const widgetPlan = z.object({
+  kind: z.enum(['classify', 'toggle', 'steps', 'compare', 'timeline', 'custom']),
+  note: text,
+  why: text.optional(),
+}).refine((w) => w.kind !== 'custom' || !!w.why, { message: 'kind: custom이면 why에 공통 위젯으로 안 되는 이유를 적는다' });
+// 테스트로 확인할 주장. how는 확인하는 방법, test는 이미 있는 테스트의 이름
+const claims = z.array(z.object({ claim: text, how: text, test: text.optional() }));
+
+const designPage = z.object({
+  stage: z.literal('design'),
+  title: text,
+  unit: text,
+  roadmap: text, // 로드맵의 번호 (예: J6)
+  type: z.enum(['동작 확인', '자바 실행', '설계', '개념 설명']),
+  prerequisites,
+  assume: text,
+  example: text, // 레슨 전체에서 쓰는 예제 한 줄
+  codes: z.record(z.string()).default({}),
+  links: z.record(z.string().url()).default({}),
+  predict: z.object({ text: text, answer: text }),
+  questions: z.array(z.object({
+    id: questionId,
+    title: text,
+    conclusion,
+    says: z.array(text).min(1),
+    widget: widgetPlan,
+    asks: z.array(text).min(2), // 문제 개요. 판정 문제 2개를 채우지 못하는 질문은 뺀다
+  })).min(3).max(5),
+  claims: claims.min(1),
+  sources: z.array(text).default([]), // 테스트로 확인할 수 없는 것의 근거 (정의, 용어)
+});
+
+const fullPage = z.object({
+  stage: z.literal('full'),
+  title: text,
+  description: text,
+  unit: text,
+  minutes: z.number().int().positive(),
+  prerequisites,
+  assume: text,
+  codes: z.record(z.string()).default({}),
+  links: z.record(z.string().url()).default({}),
+  predict: z.object({
+    title: text,
+    text: text,
+    code: text.optional(),
+    label: text,
+    options: z.array(z.object({ value: text, label: text })).min(2),
+    answer: text,
+    storageKey: text,
+    wrong: text,
+  }),
+  questions: z.array(z.object({
+    id: questionId,
+    title: text,
+    conclusion,
+    says: z.array(text).optional(),
+    widget: widgetPlan.optional(),
+    asks: z.array(text).optional(),
+    body: z.array(block).min(1),
+    recall: text,
+  })).min(3).max(5),
+  interview: z.object({
+    question: text,
+    model: z.array(z.object({ label: text, text: text })).min(3),
+  }),
+  verified: z.object({ summary: text, body: z.array(block).min(1) }),
+  footer: text,
+  // 설계 때 채운 칸. 남겨 둔다
+  roadmap: text.optional(),
+  type: text.optional(),
+  example: text.optional(),
+  claims: claims.optional(),
+  sources: z.array(text).optional(),
+});
+
 const lessonPages = defineCollection({
   loader: glob({ pattern: "**/*.yaml", base: "./src/content/lesson-pages" }),
-  schema: z.object({
-    title: text,
-    description: text,
-    unit: text,
-    minutes: z.number().int().positive(),
-    prerequisites: z.array(z.object({ slug: text, title: text })).default([]),
-    assume: text,
-    codes: z.record(z.string()).default({}),
-    links: z.record(z.string().url()).default({}),
-    predict: z.object({
-      title: text,
-      text: text,
-      code: text.optional(),
-      label: text,
-      options: z.array(z.object({ value: text, label: text })).min(2),
-      answer: text,
-      storageKey: text,
-      wrong: text,
-    }),
-    questions: z.array(z.object({
-      id: z.string().regex(/^q[1-9]$/),
-      title: text,
-      conclusion: z.object({ lead: text, sub: text.optional(), subList: z.array(text).optional() }),
-      says: z.array(text).optional(),
-      body: z.array(block).min(1),
-      recall: text,
-    })).min(3).max(5),
-    interview: z.object({
-      question: text,
-      model: z.array(z.object({ label: text, text: text })).min(3),
-    }),
-    verified: z.object({ summary: text, body: z.array(block).min(1) }),
-    footer: text,
-  }),
+  schema: z.preprocess(
+    (data) => (data && typeof data === 'object' && !('stage' in data) ? { ...data, stage: 'full' } : data),
+    z.discriminatedUnion('stage', [designPage, fullPage]),
+  ),
 });
 
 export const collections = { lessons, lessonPages };

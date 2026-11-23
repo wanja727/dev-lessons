@@ -6,8 +6,11 @@
  *   classify  상황 분류하기: 상황마다 어느 것에 해당하는지 고른다
  *   toggle    켜고 끄며 비교하기: 하나를 고르면 그 경우의 장면을 보여 준다. run이 있으면 실행 버튼을 눌러야 보인다
  *   steps     한 단계씩 실행하기: 버튼을 누를 때마다 다음 장면으로 넘어간다
+ *   compare   두 칸 비교: 칸 둘의 항목은 그대로 두고, 고른 것에 따라 양쪽에서 강조할 항목만 바꾼다. 고르는 방식은 toggle과 같다
+ *   timeline  타임라인: 두 쪽이 주고받는 것을 차례로 쌓는다. 넘기는 방식은 steps와 같다
  *
- * 장면은 duo(두 칸), phases(구간별 로그), log(로그), gantt(시간 막대), verdict(한 줄 정리)로 이루어진다.
+ * 장면은 duo(두 칸), phases(구간별 로그), log(로그), gantt(시간 막대), sides(항목이 정해진 두 칸),
+ * timeline(주고받은 것), verdict(한 줄 정리)로 이루어진다.
  * 무엇을 어떤 순서로 놓을지는 위젯의 layout이 정한다. CoreQuestionKit 뒤에 한 번 넣는다.
  */
 ---
@@ -24,7 +27,7 @@
 
   /* 장면을 그리는 화면 한 벌. layout에 적힌 순서대로 자리를 만들고, show(장면)이 내용을 채운다 */
   function createView(panel, cfg) {
-    var slots = {}, count = { n: 0 };
+    var slots = {}, count = { n: 0, e: 0 };
     (cfg.layout || []).forEach(function (key) {
       var box;
       if (key === 'selector') {
@@ -40,6 +43,14 @@
       else if (key === 'duo') { box = el('div', 'duo'); }
       else if (key === 'phases') { box = el('div', 'phases'); }
       else if (key === 'log') { box = el('div', 'log'); box.setAttribute('aria-live', 'polite'); }
+      else if (key === 'sides') { box = el('div', 'duo sides'); }
+      else if (key === 'timeline') {
+        box = el('div', 'timeline');
+        var lanes = el('div', 'tl-lanes');
+        cfg.lanes.forEach(function (name) { lanes.appendChild(el('span', '', name)); });
+        slots.events = el('div', 'tl-events'); slots.events.setAttribute('aria-live', 'polite');
+        box.appendChild(lanes); box.appendChild(slots.events);
+      }
       else if (key === 'gantt') { box = el('div', 'gantt'); box.setAttribute('aria-hidden', 'true'); }
       else if (key === 'legend') {
         box = el('div', 'legend');
@@ -70,6 +81,55 @@
         else { var wrap = el('div'); c.rows.forEach(function (r) { wrap.appendChild(kv(r)); }); cell.appendChild(wrap); }
         slots.duo.appendChild(cell);
       });
+    }
+    /* 칸과 항목은 cfg.sides에 정해져 있다. 장면은 칸마다 강조할 항목(marks), 새로 생긴 항목(add), 아래 결과(result)만 준다 */
+    function showSides(sides) {
+      slots.sides.innerHTML = '';
+      cfg.sides.forEach(function (base, i) {
+        var now = (sides && sides[i]) || {}, marks = {};
+        (now.marks || []).forEach(function (m) { marks[m.name] = m; });
+        var cell = el('div', 'cell'), list = el('ul', 'side-items');
+        cell.appendChild(el('span', 'label', base.label));
+        function item(it, m, added) {
+          var li = el('li', (m ? (m.mark || 'changed') : '') + (added ? ' added' : ''));
+          li.appendChild(el('span', 'name', it.name));
+          if (m && m.tag) li.appendChild(el('b', 'tag', m.tag));
+          if (it.note) li.appendChild(el('span', 'note', it.note));
+          list.appendChild(li);
+        }
+        base.items.forEach(function (it) { item(it, marks[it.name], false); });
+        (now.add || []).forEach(function (it) { item(it, it, true); });
+        cell.appendChild(list);
+        if (now.result) {
+          var res = el('div', 'side-result');
+          now.result.forEach(function (r) { res.appendChild(kv(r)); });
+          cell.appendChild(res);
+        }
+        slots.sides.appendChild(cell);
+      });
+    }
+    /* 글 안의 [[강조]]를 형광펜으로 바꿔 넣는다 */
+    function marked(box, text) {
+      text.split(/\[\[(.+?)\]\]/).forEach(function (part, i) {
+        if (i % 2) box.appendChild(el('mark', 'hl', part)); else if (part) box.appendChild(document.createTextNode(part));
+      });
+    }
+    function clearEvents() {
+      count.e = 0;
+      if (slots.events) { slots.events.innerHTML = ''; slots.events.appendChild(el('p', 'tl-empty', '아직 오간 것이 없어요.')); }
+    }
+    /* 주고받은 것 하나를 쌓는다. dir: right는 왼쪽에서 오른쪽으로, left는 오른쪽에서 왼쪽으로 간다 */
+    function addEvent(ev) {
+      if (count.e === 0) slots.events.innerHTML = '';
+      count.e++;
+      slots.events.querySelectorAll('.now').forEach(function (x) { x.classList.remove('now'); });
+      var left = ev.dir === 'left', box = el('div', 'tl-ev now ' + (left ? 'left' : 'right')), head = el('div', 'tl-top');
+      head.appendChild(el('span', 'n', count.e)); head.appendChild(el('b', '', ev.title));
+      head.appendChild(el('span', 'tl-dir', cfg.lanes[0] + (left ? ' ← ' : ' → ') + cfg.lanes[1]));
+      box.appendChild(head);
+      if (ev.text) { var pre = el('pre', 'wrap'); marked(pre, ev.text.replace(/\n$/, '')); box.appendChild(pre); }
+      if (ev.note) box.appendChild(el('p', 'tl-note', ev.note));
+      slots.events.appendChild(box);
     }
     function showPhases(phases) {
       slots.phases.innerHTML = '';
@@ -103,8 +163,11 @@
       /* 로그 번호를 1부터 다시 센다 */
       clearLog: function () { count.n = 0; if (slots.log) slots.log.innerHTML = ''; },
       appendLog: function (line) { addLog(slots.log, line); },
+      clearEvents: clearEvents,
+      appendEvent: addEvent,
       show: function (scene) {
         if (scene.duo && slots.duo) showDuo(scene.duo);
+        if (slots.sides) showSides(scene.sides);
         if (scene.phases && slots.phases) { count.n = 0; showPhases(scene.phases); }
         if (scene.gantt && slots.gantt) showGantt(scene.gantt);
         if (Array.isArray(scene.log) && slots.log) { this.clearLog(); scene.log.forEach(function (line) { addLog(slots.log, line); }); }
@@ -136,13 +199,20 @@
 
     /* 켜고 끄며 비교하기 */
     toggle: function (panel, cfg) {
-      var view = createView(panel, cfg), picked = cfg.selector.options[0].value;
+      var view = createView(panel, cfg), picked = cfg.selector ? cfg.selector.options[0].value : Object.keys(cfg.scenes)[0];
       function showPicked() { view.show(cfg.scenes[picked]); }
       if (cfg.run) {
         var run = button('btn primary', cfg.run.label);
         view.buttons().appendChild(run);
         run.addEventListener('click', showPicked);
-        L.pressGroup(view.seg(), function (v) { picked = v; view.show(cfg.initial); });
+        if (cfg.selector) L.pressGroup(view.seg(), function (v) { picked = v; view.show(cfg.initial); });
+        else {
+          /* 고를 것 없이 버튼 하나만 있으면, 누르기 전으로 돌아가는 버튼을 둔다 */
+          var again = button('btn', '처음으로');
+          view.buttons().appendChild(again);
+          run.addEventListener('click', function () { run.disabled = true; });
+          again.addEventListener('click', function () { run.disabled = false; view.show(cfg.initial); });
+        }
         view.show(cfg.initial);
       } else {
         L.pressGroup(view.seg(), function (v) { picked = v; showPicked(); });
@@ -160,12 +230,13 @@
         if (cfg.buttons === 'each') stepButtons.forEach(function (b, i) { b.disabled = i !== at + 1; });
         else stepButtons[0].disabled = at >= steps().length - 1;
       }
-      function reset() { at = -1; view.clearLog(); view.show(cfg.initial); enable(); }
+      function reset() { at = -1; view.clearLog(); view.clearEvents(); view.show(cfg.initial); enable(); }
       function go() {
         at++;
         var s = steps()[at];
-        view.show({ duo: s.duo, verdict: s.verdict });
+        view.show({ duo: s.duo, sides: s.sides, verdict: s.verdict });
         if (s.log) view.appendLog(s.log);
+        if (s.event) view.appendEvent(s.event);
         enable();
       }
       if (cfg.buttons === 'each') {
@@ -178,6 +249,9 @@
       reset();
     }
   };
+  /* 두 칸 비교는 toggle처럼 고르고, 타임라인은 steps처럼 넘긴다. 다른 것은 layout에 놓는 조각(sides, timeline)이다 */
+  kinds.compare = kinds.toggle;
+  kinds.timeline = kinds.steps;
 
   document.querySelectorAll('[data-lesson-widget]').forEach(function (panel) {
     var data = panel.querySelector('script[type="application/json"]');

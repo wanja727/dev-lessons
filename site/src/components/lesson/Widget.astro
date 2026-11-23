@@ -1,6 +1,6 @@
 ---
 /**
- * 위젯 하나. 공통 위젯(classify, toggle, steps)은 자료만 내놓고 WidgetKit이 화면을 만든다.
+ * 위젯 하나. 공통 위젯(classify, toggle, steps, compare, timeline)은 자료만 내놓고 WidgetKit이 화면을 만든다.
  * kind: custom은 그 레슨만 쓰는 위젯이다. components/lesson-widgets/<레슨>/<이름>.astro를 그대로 넣는다.
  */
 interface Props {
@@ -14,8 +14,25 @@ if (widget.kind === 'custom') {
   const found = custom[`../lesson-widgets/${widget.name}.astro`];
   if (!found) throw new Error(`레슨 전용 위젯이 없다: components/lesson-widgets/${widget.name}.astro`);
   Custom = found.default;
-} else if (!['classify', 'toggle', 'steps'].includes(widget.kind)) {
+} else if (!['classify', 'toggle', 'steps', 'compare', 'timeline'].includes(widget.kind)) {
   throw new Error(`모르는 위젯 종류: ${widget.kind}`);
+}
+const has = (key: string) => (widget.layout ?? []).includes(key);
+if (widget.kind === 'compare') {
+  // 칸은 둘이고 항목은 미리 정해 둔다. 장면이 강조하는 항목은 그 칸에 있는 것이어야 한다
+  if (!has('sides') || widget.sides?.length !== 2) throw new Error('compare 위젯: layout에 sides가 있고, sides는 칸 둘이어야 한다');
+  for (const scene of [widget.initial, ...Object.values(widget.scenes ?? {})] as any[]) {
+    (scene?.sides ?? []).forEach((side: any, i: number) => {
+      for (const m of side?.marks ?? []) {
+        if (!widget.sides[i].items.some((it: any) => it.name === m.name)) {
+          throw new Error(`compare 위젯: '${widget.sides[i].label}' 칸에 '${m.name}' 항목이 없다`);
+        }
+      }
+    });
+  }
+}
+if (widget.kind === 'timeline' && (!has('timeline') || widget.lanes?.length !== 2)) {
+  throw new Error('timeline 위젯: layout에 timeline이 있고, lanes는 이름 둘이어야 한다');
 }
 // </script>가 자료 안에 있어도 태그가 닫히지 않게 한다
 const json = JSON.stringify(widget).replace(/</g, '\\u003c');
