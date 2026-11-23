@@ -56,13 +56,17 @@ class CompletableFutureTest {
     @Test
     @DisplayName("thenApply는 값을 완성시킨 스레드에서, thenApplyAsync는 지정한 풀에서 실행된다")
     void thenApplyVsAsync() {
-        CompletableFuture<String> source = new CompletableFuture<>();
+        // 두 단계를 같은 future에 걸지 않는다. 같이 걸면 풀 스레드가 자기 단계를 마친 뒤
+        // 남아 있는 thenApply까지 대신 실행할 때가 있어서, thenApply가 도는 스레드가 실행마다 달라진다
+        CompletableFuture<String> syncSource = new CompletableFuture<>();
+        CompletableFuture<String> asyncSource = new CompletableFuture<>();
         AtomicReference<String> syncThread = new AtomicReference<>();
         AtomicReference<String> asyncThread = new AtomicReference<>();
-        CompletableFuture<Void> a = source.thenApply(v -> { syncThread.set(Thread.currentThread().getName()); return v; }).thenAccept(v -> { });
-        CompletableFuture<Void> b = source.thenApplyAsync(v -> { asyncThread.set(Thread.currentThread().getName()); return v; }, pool).thenAccept(v -> { });
+        CompletableFuture<Void> a = syncSource.thenApply(v -> { syncThread.set(Thread.currentThread().getName()); return v; }).thenAccept(v -> { });
+        CompletableFuture<Void> b = asyncSource.thenApplyAsync(v -> { asyncThread.set(Thread.currentThread().getName()); return v; }, pool).thenAccept(v -> { });
 
-        source.complete("ok"); // 테스트 스레드가 값을 완성
+        syncSource.complete("ok"); // 테스트 스레드가 값을 완성
+        asyncSource.complete("ok");
         a.join();
         b.join();
 
