@@ -3,7 +3,7 @@
 #
 # 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다.
 # true와 false, equals 호출 횟수는 verification의 EqualsHashCodeTest로 확인한 동작에서 나온다 (자바 21, OpenJDK).
-# 2026-11-23에 레슨을 쓰며 만든 문제다. 근거를 확인한 뒤 reviewed로 바꾼다.
+# 2026-11-23에 레슨을 쓰며 만든 문제다. 같은 날 정답 23개를 EqualsHashCodeTest의 결과와 하나씩 맞춰 보고 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals와 hashCode를 재정의하지 않았어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -63,7 +63,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals와 hashCode를 재정의하지 않았어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -93,7 +93,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals가 이메일을 비교하게 재정의했어요. 아래 코드의 두 줄은 차례로 무엇을 출력할까요?
     code: |-
@@ -131,7 +131,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 재정의하지 않은 equals는 두 객체의 필드 값이 모두 같으면 true를 돌려준다.
     answer: X
@@ -145,7 +145,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 1
     body: ==, 재정의하지 않은 equals, 재정의한 equals가 각각 무엇을 비교하는지 설명해 보세요.
     explanation: |-
@@ -169,9 +169,9 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: Member는 equals만 이메일을 비교하게 재정의했고 hashCode는 재정의하지 않았어요. 이메일이 같은 a와 b를 만들었는데 두 객체의 hashCode가 다르게 나왔어요. a를 넣은 HashSet에 contains(b)를 부르는 동안 Member의 equals는 몇 번 불릴까요?
+    body: 자바 21(OpenJDK)이에요. Member는 equals만 이메일을 비교하게 재정의했고 hashCode는 재정의하지 않았어요. 이메일이 같은 a와 b를 만들었는데 두 객체의 hashCode가 다르게 나왔어요. a를 넣은 HashSet에 contains(b)를 부르는 동안 Member의 equals는 몇 번 불릴까요?
     choices:
       - 0번
       - 1번
@@ -188,7 +188,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals만 이메일을 비교하게 재정의했고 hashCode는 재정의하지 않았어요. a와 b의 hashCode가 다르게 나왔어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -213,7 +213,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals만 이메일을 비교하게 재정의했고 hashCode는 재정의하지 않았어요. a와 b의 hashCode가 다르게 나왔어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -237,7 +237,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Member는 equals만 재정의했고, 이메일이 같은 a와 b의 hashCode가 다르게 나왔어요. a만 넣었을 때 list.contains(b)는 true인데 set.contains(b)는 false예요. 결과가 다른 까닭은 무엇일까요? list는 ArrayList, set은 HashSet이에요.
     choices:
@@ -257,7 +257,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: equals가 true를 돌려주게 재정의하기만 하면, hashCode가 서로 다른 두 객체도 HashSet이 같은 것으로 본다.
     answer: X
@@ -272,7 +272,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: equals만 재정의한 클래스의 객체를 HashSet에 넣으면 어떤 일이 생기는지, 왜 그런지 설명해 보세요.
     explanation: |-
@@ -296,9 +296,9 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려주게 재정의했어요. 이메일이 같은 a와 b를 만들고 a를 넣은 HashSet에 contains(b)를 불렀어요. 결과와, 그동안 Member의 equals가 불린 횟수는 무엇일까요?
+    body: 자바 21(OpenJDK)이에요. Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려주게 재정의했어요. 이메일이 같은 a와 b를 만들고 a를 넣은 HashSet에 contains(b)를 불렀어요. 결과와, 그동안 Member의 equals가 불린 횟수는 무엇일까요?
     choices:
       - true, 0번
       - true, 1번
@@ -315,7 +315,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려주게 재정의했어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -339,7 +339,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려주게 재정의했어요. 아래 코드의 두 줄은 차례로 무엇을 출력할까요?
     code: |-
@@ -367,7 +367,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: equals가 email만 비교하는 Member 클래스가 있어요. 필드는 email과 가입 시각 두 개예요. hashCode의 규약을 어기는 것은 무엇일까요?
     choices:
@@ -379,14 +379,14 @@ questions:
       **email과 가입 시각으로 만든 값이에요.** equals로 같은 두 객체의 hashCode가 달라질 수 있어요.
 
       - 규약은 equals로 같은 두 객체가 같은 hashCode를 돌려주는 것이에요
-      - 이메일이 같고 가입 시각이 다른 두 회원은 equals로 같은데 hashCode가 달라져요
+      - 이메일이 같고 가입 시각이 다른 두 회원은 equals로 같은데 hashCode가 달라질 수 있어요
       - 항상 1은 같은 객체에 같은 값을 주므로 규약을 지켜요. 대신 느려져요
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#hashCode()
   - key: eqh-no-compile-error
     concept: core
     coreQuestion: q3
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: equals와 hashCode 가운데 하나만 재정의하면 컴파일 오류가 난다.
     answer: X
@@ -400,7 +400,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: equals와 hashCode를 함께 재정의해야 하는 이유를 hashCode의 규약과 HashSet이 객체를 찾는 순서로 설명해 보세요.
     explanation: |-
@@ -424,7 +424,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 문자열 "Aa"와 "BB"의 hashCode는 둘 다 2112예요. Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려주게 재정의했어요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -446,9 +446,9 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: Member는 equals가 이메일을 비교하고 hashCode가 항상 1을 돌려줘요. 이메일이 서로 다른 회원 5명을 넣은 HashSet에서, 들어 있지 않은 회원을 contains로 찾았어요. 그동안 Member의 equals는 몇 번 불릴까요?
+    body: 자바 21(OpenJDK)이에요. Member는 equals가 이메일을 비교하고 hashCode가 항상 1을 돌려줘요. 이메일이 서로 다른 회원 5명을 넣은 HashSet에서, 들어 있지 않은 회원을 contains로 찾았어요. 그동안 Member의 equals는 몇 번 불릴까요?
     choices:
       - 0번
       - 1번
@@ -465,9 +465,9 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려줘요. 이메일이 서로 다른 회원 5명을 넣은 HashSet에서, 들어 있지 않은 회원을 contains로 찾았어요. 이메일 여섯 개의 hashCode는 모두 달라요. 그동안 Member의 equals는 몇 번 불릴까요?
+    body: 자바 21(OpenJDK)이에요. Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려줘요. 이메일이 서로 다른 회원 5명을 넣은 HashSet에서, 들어 있지 않은 회원을 contains로 찾았어요. 이메일 여섯 개의 hashCode는 모두 달라요. 그동안 Member의 equals는 몇 번 불릴까요?
     choices:
       - 0번
       - 1번
@@ -483,7 +483,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Member는 equals가 이메일을 비교하고 hashCode가 항상 1을 돌려줘요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -507,7 +507,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: hashCode가 항상 1을 돌려주게 재정의하는 것은 hashCode의 규약을 어긴다.
     answer: X
@@ -522,7 +522,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: hashCode가 항상 같은 값을 돌려주면 HashSet에서 무엇이 그대로이고 무엇이 달라지는지 설명해 보세요.
     explanation: |-
@@ -546,7 +546,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 자바 21(OpenJDK)이에요. Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려줘요. email은 final이 아니에요. "kim@a.com"과 "lee@a.com"의 hashCode는 달라요. 아래 코드의 두 줄은 차례로 무엇을 출력할까요?
     code: |-
@@ -575,7 +575,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 자바 21(OpenJDK)이에요. Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려줘요. email은 final이 아니에요. "kim@a.com"과 "lee@a.com"의 hashCode는 달라요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -602,7 +602,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member는 equals가 이메일을 비교하고 hashCode가 email.hashCode()를 돌려줘요. 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -624,7 +624,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member의 email 필드를 final String email로 선언했어요. HashMap에 a를 키로 넣은 뒤 a.email = "lee@a.com"을 실행하려고 하면 어떻게 될까요?
     choices:
@@ -638,12 +638,12 @@ questions:
 
       - 컴파일러가 "cannot assign a value to final variable email"이라고 알려 줘요
       - 그래서 키로 넣은 뒤에 hashCode가 바뀌는 실수를 실행하기 전에 막아요
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.12.4
   - key: eqh-mutate-explain
     concept: core
     coreQuestion: q5
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: HashMap의 키로 넣은 객체의 필드를 바꾸면 어떤 일이 생기는지, 어떻게 막는지 설명해 보세요.
     explanation: |-
