@@ -1,0 +1,259 @@
+# equals와 hashCode
+# 설계서다 (docs/lesson-data-format.md의 "두 단계"). 승인 뒤 stage 줄을 지우고 나머지 칸을 채운다.
+# 자바 실행 유형의 기준 레슨이다 (docs/quality-plan.md 진행 순서 5번).
+stage: design
+title: equals와 hashCode
+unit: Java
+roadmap: J6
+type: 자바 실행
+# J2 값과 참조는 아직 없는 레슨이다. 슬러그는 임시로 적었다. J2를 만들 때 맞춘다
+prerequisites:
+  - {slug: value-and-reference, title: 값과 참조}
+assume: >-
+  자바 21(OpenJDK). `==`는 두 변수가 같은 객체를 가리키는지 본다는 것, `ArrayList`와 `HashSet`과 `HashMap`에
+  넣고 꺼내는 방법. `HashMap`이 안에서 어떻게 저장하는지는 몰라도 돼요. 예제는 이메일 하나를 가진 회원 클래스 `Member` 하나만 써요.
+example: 회원 가입. 이메일이 같은 `Member`는 같은 회원으로 본다. 이미 가입한 이메일인지 `HashSet`으로 확인하고, 회원의 등급을 `HashMap`에 담는다
+links:
+  equals: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#equals(java.lang.Object)
+  hashCode: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#hashCode()
+  map: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Map.html
+  collection: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collection.html
+  record: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Record.html
+  string: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html#hashCode()
+codes:
+  plain: |-
+    class Member {
+        String email;
+        Member(String email) {
+            this.email = email;
+        }
+    }
+  equalsOnly: |-
+    class Member {
+        String email;
+        Member(String email) {
+            this.email = email;
+        }
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Member m)) {
+                return false;
+            }
+            return email.equals(m.email);
+        }
+    }
+  both: |-
+    class Member {
+        String email;
+        Member(String email) {
+            this.email = email;
+        }
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Member m)) {
+                return false;
+            }
+            return email.equals(m.email);
+        }
+        @Override
+        public int hashCode() {
+            return email.hashCode();
+        }
+    }
+  constant: |-
+    @Override
+    public int hashCode() {
+        return 1;
+    }
+  predict: |-
+    Member a = new Member("kim@a.com");
+    Member b = new Member("kim@a.com");
+    // a.hashCode()와 b.hashCode()는
+    // 서로 다른 값이 나왔어요
+
+    List<Member> list = new ArrayList<>();
+    list.add(a);
+    Set<Member> set = new HashSet<>();
+    set.add(a);
+
+    System.out.println(list.contains(b));
+    System.out.println(set.contains(b));
+  mutate: |-
+    Member a = new Member("kim@a.com");
+    Map<Member, String> map = new HashMap<>();
+    map.put(a, "VIP");
+
+    a.email = "lee@a.com";
+
+    System.out.println(map.get(a));
+    System.out.println(map.size());
+predict:
+  text: >-
+    `equals`만 재정의한 `Member`(코드 equalsOnly)로 코드 predict를 돌린다. 이메일이 같은 회원 `a`와 `b`를 만들고
+    `a`만 `ArrayList`와 `HashSet`에 넣었다. "두 줄에 무엇이 출력될까요?" 보기는 true와 true, true와 false,
+    false와 true, false와 false 네 개다.
+  answer: >-
+    true와 false. 질문 1에서 확인한다. 리스트는 찾고 `HashSet`은 못 찾는 까닭이 질문 2가 된다.
+questions:
+  - id: q1
+    title: 값이 같은 두 객체를 같다고 판정하게 하려면 어떻게 하나요?
+    conclusion:
+      lead: '`equals`를 재정의해서 무엇이 같으면 같은 객체로 볼지 정해요.'
+      sub: '재정의하지 않은 `equals`는 `==`처럼 두 변수가 같은 객체를 가리킬 때만 true예요.'
+    says:
+      - '`Object`의 `equals`는 `x == y`일 때만 true를 돌려준다. 재정의하지 않은 클래스는 이것을 그대로 쓴다'
+      - 코드 plain의 `Member`로 이메일이 같은 `a`와 `b`를 만들면 `a.equals(b)`는 false, `a.equals(a)`는 true다
+      - '`ArrayList`의 `contains`는 들어 있는 객체마다 `equals`를 불러 찾는다. 그래서 코드 plain에서는 `list.contains(b)`가 false다'
+      - 코드 equalsOnly처럼 `equals`가 이메일을 비교하게 재정의하면 `a.equals(b)`와 `list.contains(b)`가 true가 된다. `a == b`는 그대로 false다
+      - '`equals`의 인자는 `Object`다. `instanceof`로 `Member`인지 먼저 확인하고, 아니면 false를 돌려준다'
+      - 예측의 답을 밝힌다. 첫 줄은 true다. 둘째 줄 `set.contains(b)`는 false다. 이유는 다음 질문에서 본다
+    widget:
+      kind: classify
+      note: >-
+        식 여섯 개를 true와 false로 나눈다. 재정의하기 전의 `a == b`, `a.equals(b)`, `a.equals(a)`, `list.contains(b)`와
+        재정의한 뒤의 `a == b`, `a.equals(b)`. 고르면 그 식이 무엇을 비교하는지 설명이 나온다.
+    asks:
+      - 코드 plain의 `Member`로 이메일이 같은 두 객체를 만들었다. `a.equals(b)`는 무엇을 돌려주나 (false)
+      - 코드 plain에서 `a`만 넣은 `ArrayList`에 `contains(b)`를 부르면 (false)
+      - 코드 equalsOnly로 바꾼 뒤 `a == b`와 `a.equals(b)`는 각각 (false와 true)
+      - OX. 재정의하지 않은 `equals`는 필드 값이 모두 같으면 true를 돌려준다 (X)
+      - 설명형. `==`와 재정의하지 않은 `equals`와 재정의한 `equals`가 각각 무엇을 비교하는지 설명한다
+  - id: q2
+    title: equals를 재정의했는데 HashSet은 왜 같은 회원을 찾지 못하나요?
+    conclusion:
+      lead: '`HashSet`은 `hashCode`가 같은 객체에만 `equals`를 부르는데, `hashCode`를 재정의하지 않아 두 객체의 값이 달랐기 때문이에요.'
+      sub: '재정의하지 않은 `hashCode`는 필드 값과 상관없이 객체마다 따로 정해져요. 그래서 `equals`까지 가지 못해요.'
+    says:
+      - '`hashCode`는 객체가 돌려주는 int 값 하나다. `HashSet`과 `HashMap`은 이 값으로 찾을 곳을 먼저 좁히고, 값이 같은 객체에만 `equals`를 부른다'
+      - 이 레슨은 여기까지만 말한다. 찾을 곳이 어떻게 생겼는지(배열, 충돌했을 때, 크기를 늘릴 때)는 K4 해시 테이블에서 다룬다
+      - 코드 equalsOnly로 코드 predict를 돌리면 `set.contains(b)`는 false이고, 그동안 `equals`는 0번 불린다. `equals`에 호출 횟수를 세는 줄을 넣어 확인한다
+      - 같은 조건에서 `set.add(b)`는 true를 돌려주고 `set.size()`는 2가 된다. 같은 회원이 두 번 들어간다
+      - 같은 조건에서 `map.put(a, "VIP")` 뒤 `map.get(b)`는 null이다
+      - 조건을 적는 이유. `Object`의 `hashCode`는 서로 다른 객체에 되도록 다른 값을 주지만 명세가 다르다고 보장하지는 않는다. 그래서 예제는 두 값이 다르게 나온 것을 적어 두고 시작한다
+      - 더 알아보기. 객체를 많이 만들면 재정의하지 않은 `hashCode`가 같은 두 객체가 실제로 나온다. 그 둘이라면 `contains`가 true가 된다. 우연에 기대는 코드가 된다는 뜻이다
+      - '`hashCode`만 재정의하고 `equals`를 재정의하지 않아도 찾지 못한다. `hashCode`는 같지만 `equals`가 false다'
+    widget:
+      kind: steps
+      note: >-
+        `set.contains(b)`가 하는 일을 한 단계씩 넘긴다. b의 `hashCode` 구하기, 그 값과 같은 `hashCode`로 들어 있는 객체 찾기,
+        있으면 `equals` 부르기, 결과. 위의 두 칸(`duo`)에 a와 b의 `hashCode`를 나란히 두고, 로그에 `equals` 호출 횟수를 적는다.
+        시나리오는 "equals만 재정의"와 "둘 다 재정의" 둘을 고르게 한다. 둘째 시나리오는 질문 3으로 넘어가는 다리다.
+    asks:
+      - 코드 equalsOnly, 두 객체의 `hashCode`가 다르게 나왔다. `a`를 넣은 `HashSet`에 `contains(b)`를 부르는 동안 `equals`는 몇 번 불리나 (0번)
+      - 같은 조건에서 `set.add(a)`와 `set.add(b)`를 한 뒤 `set.size()`는 (2)
+      - 같은 조건에서 `map.put(a, "VIP")` 뒤 `map.get(b)`는 (null)
+      - 같은 조건에서 `list.contains(b)`와 `set.contains(b)`의 결과가 다른 까닭은 (`ArrayList`는 `hashCode`를 쓰지 않고 `equals`만 부른다)
+      - OX. `equals`가 true를 돌려주게 재정의하면 `HashSet`도 두 객체를 같은 것으로 본다 (X)
+      - 설명형. `equals`만 재정의한 클래스를 `HashSet`에 넣으면 생기는 일과 그 이유를 설명한다
+  - id: q3
+    title: 그러면 hashCode는 어떻게 재정의해야 하나요?
+    conclusion:
+      lead: '`equals`가 같다고 하는 두 객체는 `hashCode`도 같은 값을 돌려주게 재정의해요.'
+      sub: '`equals`에서 비교한 필드로 `hashCode`를 만들면 돼요. 이것이 `hashCode`의 규약이고, 둘을 함께 재정의해야 하는 이유예요.'
+    says:
+      - '`hashCode`의 규약: `equals`로 같은 두 객체는 `hashCode`가 같은 값을 돌려줘야 한다. 자바 API 문서가 정한 약속이고, `HashSet`과 `HashMap`은 이 약속을 믿고 동작한다'
+      - 규약은 컴파일러가 검사하지 않는다. 어겨도 컴파일되고 예외도 나지 않는다. 결과만 틀린다
+      - 코드 both는 `equals`가 비교하는 `email`로 `hashCode`를 만든다. 이메일이 같으면 `hashCode`도 같다
+      - 코드 both로 코드 predict를 돌리면 `set.contains(b)`는 true이고 `equals`는 1번 불린다. `set.add(b)`는 false, `set.size()`는 1, `map.get(b)`는 VIP다
+      - 필드가 여럿이면 `Objects.hash(a, b)`로 만든다. `equals`에서 비교하지 않는 필드는 `hashCode`에 넣지 않는다. 넣으면 `equals`는 같은데 `hashCode`가 달라질 수 있다
+      - 더 알아보기. `record`는 구성 요소로 `equals`와 `hashCode`를 함께 만들어 준다. 자세한 것은 J9 불변 객체에서 다룬다
+    widget:
+      kind: toggle
+      note: >-
+        `Member`를 세 가지(재정의 없음, equals만, 둘 다) 가운데 고르면 같은 코드의 결과가 바뀐다. 결과는 `list.contains(b)`,
+        `set.contains(b)`, `set.size()`, `map.get(b)`, `equals` 호출 횟수 다섯 줄이다. 재정의 없음과 equals만은
+        두 객체의 `hashCode`가 다르게 나왔을 때의 결과라고 적는다.
+    asks:
+      - 코드 both로 `a`를 넣은 `HashSet`에 `contains(b)`를 부르면 결과와 `equals` 호출 횟수는 (true, 1번)
+      - 코드 both로 `set.add(a)`와 `set.add(b)`를 한 뒤 `set.size()`는 (1)
+      - 코드 both로 `map.put(a, "VIP")`, `map.put(b, "GOLD")`를 한 뒤 `map.size()`와 `map.get(a)`는 (1, GOLD)
+      - '`equals`가 `email`만 비교하는 클래스에서 규약을 어기는 `hashCode`를 고른다. 보기: `email.hashCode()`, 항상 1, `email`과 가입 시각으로 만든 값 (가입 시각을 넣은 것)'
+      - OX. `equals`와 `hashCode` 가운데 하나만 재정의하면 컴파일 오류가 난다 (X)
+      - 설명형. `equals`와 `hashCode`를 함께 재정의해야 하는 이유를 `hashCode`의 규약과 `HashSet`이 찾는 순서로 설명한다
+  - id: q4
+    title: 거꾸로 hashCode가 같은 두 객체는 equals도 같아야 하나요?
+    conclusion:
+      lead: '아니요. 규약은 한 방향이에요. `equals`가 다른 두 객체가 같은 `hashCode`를 돌려줘도 결과는 맞아요.'
+      sub: '대신 `hashCode`가 같은 객체가 많을수록 `equals`로 비교하는 횟수가 늘어 느려져요.'
+    says:
+      - 규약은 "같은 객체면 같은 `hashCode`"만 요구한다. 다른 객체가 같은 `hashCode`를 가지는 것은 허용한다
+      - 실제 예. 문자열 "Aa"와 "BB"는 `hashCode`가 둘 다 2112이고 `equals`는 false다. 코드 both로 이메일이 "Aa"인 회원과 "BB"인 회원을 `HashSet`에 넣으면 `size()`는 2이고 둘 다 찾는다
+      - '`hashCode`가 같으면 `HashSet`은 `equals`로 마지막 확인을 한다. 그래서 결과가 틀리지 않는다'
+      - 코드 constant처럼 `hashCode`가 항상 1을 돌려줘도 규약을 지킨다. `contains`, `size()`, `get`의 결과는 코드 both와 같다
+      - 달라지는 것은 `equals` 호출 횟수다. 이메일이 서로 다른 회원 5명을 넣는 동안 코드 both는 0번, 코드 constant는 10번 부른다
+      - 들어 있지 않은 회원을 `contains`로 찾으면 코드 both는 0번, 코드 constant는 5번 부른다. 들어 있는 것 전부와 비교한다
+      - 회원 수가 늘면 코드 constant의 비교 횟수는 회원 수만큼 는다. 그래서 `hashCode`는 다른 객체에 되도록 다른 값을 주게 만든다. 왜 그런 차이가 나는지와 얼마나 빨라지는지는 K4 해시 테이블에서 다룬다
+    widget:
+      kind: toggle
+      note: >-
+        `hashCode`를 `email.hashCode()`와 "항상 1" 가운데 고르고 실행 버튼을 누른다. 회원 5명이 든 `HashSet`에서 없는 회원
+        `han@a.com`을 찾을 때 `equals`가 불린 것을 번호 붙은 로그로 보여 준다. 앞쪽은 0줄, 뒤쪽은 5줄이다. 결과(false)는 양쪽이 같다는 것을 한 줄 정리에 적는다.
+    asks:
+      - '"Aa"와 "BB"의 `hashCode`는 둘 다 2112다. 코드 both로 이메일이 "Aa"인 회원과 "BB"인 회원을 `HashSet`에 넣으면 `size()`는 (2)'
+      - 코드 constant로 이메일이 서로 다른 회원 5명을 넣은 `HashSet`에서 들어 있지 않은 회원을 `contains`로 찾는 동안 `equals`는 몇 번 불리나 (5번)
+      - 같은 일을 코드 both로 하면 몇 번 불리나. 이메일 여섯 개의 `hashCode`는 모두 다르다 (0번)
+      - 코드 constant로 이메일이 같은 `a`와 `b`를 `HashSet`에 넣으면 `size()`는 (1)
+      - OX. `hashCode`가 항상 1을 돌려주는 것은 `hashCode`의 규약을 어긴다 (X)
+      - 설명형. `hashCode`가 항상 같은 값을 돌려주면 무엇이 그대로이고 무엇이 달라지는지 설명한다
+  - id: q5
+    title: 둘 다 맞게 재정의하면 HashMap에서 언제나 찾을 수 있나요?
+    conclusion:
+      lead: '아니요. 키로 넣은 뒤에 `hashCode`에 쓰인 필드를 바꾸면 그 키로 찾지 못해요.'
+      sub: '넣을 때의 `hashCode`로 자리가 정해졌는데 찾을 때는 바뀐 `hashCode`로 찾기 때문이에요. 그래서 `equals`와 `hashCode`에 쓰는 필드는 바꾸지 못하게 만들어요.'
+    says:
+      - '`HashMap`은 키를 넣을 때의 `hashCode`로 둘 곳을 정한다. 넣은 뒤에 키의 필드가 바뀌어도 다시 옮기지 않는다'
+      - 코드 both와 코드 mutate. `map.put(a, "VIP")` 뒤 `a.email`을 "lee@a.com"으로 바꾸면 `map.get(a)`는 null이다. 넣을 때 쓴 바로 그 객체로도 찾지 못한다
+      - '`map.size()`는 1이다. 값은 맵 안에 남아 있고 찾을 길만 없다'
+      - '새 객체로도 찾지 못한다. `map.get(new Member("kim@a.com"))`은 `hashCode`는 맞지만 맵 안의 키가 이제 lee라서 `equals`가 false다. `map.get(new Member("lee@a.com"))`은 `hashCode`가 넣을 때의 것과 다르다. 둘 다 null이다'
+      - 조건을 적는 이유. 키로 든 객체를 `equals`에 영향을 주게 바꿨을 때의 동작은 `Map` 명세가 정하지 않는다. 위 결과는 자바 21(OpenJDK)의 `HashMap`에서, 두 이메일의 `hashCode`가 다를 때의 결과다
+      - '`HashSet`도 같다. 넣은 뒤 필드를 바꾸면 `contains`가 false다'
+      - 막는 방법. `email`을 `final`로 선언하면 넣은 뒤에 바꿀 수 없다. 불변 객체는 J9에서 다룬다
+    widget:
+      kind: steps
+      note: >-
+        코드 mutate를 한 줄씩 실행한다. 단계는 넣기, 이메일 바꾸기, `get(a)`, `get(new Member("kim@a.com"))`이다. 위의 두 칸(`duo`)에
+        "맵이 기억하는 것(넣을 때의 hashCode, 키의 이메일)"과 "지금 찾는 키(hashCode, 이메일)"를 나란히 두고 단계마다 바뀐 줄을 표시한다. 로그에는 출력이 쌓인다.
+    asks:
+      - 코드 both와 코드 mutate를 돌리면 두 줄에 무엇이 출력되나. "kim@a.com"과 "lee@a.com"의 `hashCode`는 다르다 (null과 1)
+      - 같은 코드 뒤에 `map.get(new Member("kim@a.com"))`을 부르면 (null)
+      - 같은 코드에서 `a.email`을 바꾸는 줄을 지우면 첫 줄에 무엇이 출력되나 (VIP)
+      - 코드 both에서 `email`을 `final`로 바꾸고 코드 mutate를 컴파일하면 (`a.email = "lee@a.com"` 줄에서 컴파일 오류)
+      - 설명형. `HashMap`의 키로 넣은 객체의 필드를 바꾸면 생기는 일과 막는 방법을 설명한다
+claims:
+  - claim: 코드 plain. 이메일이 같은 두 객체에서 `a.equals(b)`는 false, `a.equals(a)`는 true, `list.contains(b)`는 false다
+    how: 코드를 돌려 반환값을 본다. 돌려 봤다 (false, true, false)
+  - claim: 코드 equalsOnly. `a == b`는 false, `a.equals(b)`는 true, `list.contains(b)`는 true다
+    how: 코드를 돌려 반환값을 본다. 돌려 봤다 (false, true, true)
+  - claim: 코드 equalsOnly, 두 객체의 `hashCode`가 다를 때. `set.contains(b)`는 false이고 그동안 `equals`는 0번 불린다. `set.add(b)`는 true, `set.size()`는 2, `map.get(b)`는 null이다
+    how: >-
+      테스트가 `hashCode`가 `a`와 다른 `b`가 나올 때까지 `b`를 다시 만든 뒤 확인한다. `equals` 안에서 호출 횟수를 센다.
+      돌려 봤다. `b`는 첫 번째에 나왔다 (false, 0번, true, 2, null)
+  - claim: 코드 both. `set.contains(b)`는 true이고 `equals`는 1번 불린다. `set.add(b)`는 false, `set.size()`는 1, `map.get(b)`는 VIP다. `put(b, "GOLD")` 뒤 `map.size()`는 1, `map.get(a)`는 GOLD다
+    how: 코드를 돌려 반환값과 호출 횟수를 본다. 돌려 봤다 (true, 1번, false, 1, VIP, 1, GOLD)
+  - claim: '`hashCode`만 재정의한 `Member`는 두 객체의 `hashCode`가 같아도 `set.contains(b)`가 false이고 `size()`는 2가 된다'
+    how: 코드를 돌려 반환값을 본다. 돌려 봤다 (false, 2)
+  - claim: '"Aa"와 "BB"의 `hashCode`는 둘 다 2112이고 `equals`는 false다. 코드 both로 두 이메일의 회원을 넣으면 `size()`는 2이고 둘 다 `contains`가 true다'
+    how: 코드를 돌려 본다. 돌려 봤다 (2112, 2112, false, 2, true, true)
+  - claim: 이메일이 서로 다른 회원 5명을 `HashSet`에 넣는 동안 `equals`는 코드 both에서 0번, 코드 constant에서 10번 불린다
+    how: >-
+      `equals` 안에서 호출 횟수를 센다. 이메일 여섯 개(넣는 다섯과 찾는 `han@a.com`)의 `hashCode`가 모두 다른 것도 테스트가 확인한다.
+      돌려 봤다 (0번, 10번)
+  - claim: 그 `HashSet`에서 들어 있지 않은 회원을 `contains`로 찾으면 `equals`는 코드 both에서 0번, 코드 constant에서 5번 불린다. 결과는 둘 다 false다
+    how: 같은 방법. 돌려 봤다 (0번, 5번)
+  - claim: 코드 constant에서도 이메일이 같은 회원을 다시 `add`하면 false가 돌아오고 `size()`는 그대로 5다
+    how: 코드를 돌려 본다. 돌려 봤다 (false, 5)
+  - claim: 코드 both와 코드 mutate. 이메일을 바꾼 뒤 `map.get(a)`는 null, `map.size()`는 1이다. `map.get(new Member("kim@a.com"))`과 `map.get(new Member("lee@a.com"))`도 null이다
+    how: 코드를 돌려 본다. 두 이메일의 `hashCode`가 다른 것도 테스트가 확인한다. 돌려 봤다 (null, 1, null, null)
+  - claim: 넣은 뒤 필드를 바꾼 객체는 `HashSet`의 `contains`도 false다
+    how: 코드를 돌려 본다. 돌려 봤다 (false)
+  - claim: '`email`이 `final`이면 `a.email = "lee@a.com"`은 컴파일 오류다'
+    how: 테스트 안에서 자바 컴파일러(`javax.tools.JavaCompiler`)로 소스를 컴파일해 오류가 난 줄을 본다. `javac`로 돌려 봤다 (cannot assign a value to final variable email)
+  - claim: '`record Member(String email)`은 이메일이 같으면 `equals`가 true이고 `hashCode`가 같고 `set.contains`가 true다'
+    how: 코드를 돌려 본다. 돌려 봤다 (true, 같음, true)
+sources:
+  - '재정의하지 않은 `equals`는 `x == y`일 때만 true라는 것, `equals`를 재정의하면 `hashCode`도 재정의해야 한다는 것: [Object.equals (자바 21 API)](link:equals)'
+  - '`hashCode`의 규약 세 가지(같은 객체는 같은 값, 다른 객체가 같은 값이어도 된다, 비교에 쓰는 정보가 바뀌지 않으면 같은 값)와 `Object`의 `hashCode`가 서로 다른 객체에 "되도록" 다른 값을 준다는 것: [Object.hashCode (자바 21 API)](link:hashCode)'
+  - '구현이 `hashCode`를 먼저 비교해 `equals` 호출을 건너뛰어도 된다는 것: [Collection (자바 21 API)](link:collection)'
+  - '키로 든 객체를 `equals`에 영향을 주게 바꾸면 맵의 동작이 정해지지 않는다는 것: [Map (자바 21 API)](link:map)'
+  - '`record`의 `equals`와 `hashCode`가 구성 요소에서 만들어진다는 것: [Record (자바 21 API)](link:record)'
+  - '문자열의 `hashCode`를 계산하는 식: [String.hashCode (자바 21 API)](link:string)'
