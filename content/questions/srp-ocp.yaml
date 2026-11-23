@@ -1,10 +1,10 @@
-# 단일 책임과 개방 폐쇄 원칙 문제 (시험 삼아 쓴 것)
+# 단일 책임과 개방 폐쇄 원칙 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
 #
-# 품질 계획 3단계에서 설계 유형이 되는지 보려고 썼다. 설계서는 srp-ocp.md다.
-# content/questions에 두지 않아서 학습 앱이 가져가지 않는다. 레슨을 쓸 때 옮긴다.
-# 모든 문제는 설계서의 "질문마다 본문이 말할 것"에 근거가 있다.
-# 숫자와 컴파일 오류는 자바 21로 직접 돌려 확인했다 (2026-11-23).
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/srp-ocp.yaml의 says).
+# 금액, 고치는 파일, 컴파일 오류는 verification의 lab.devlessons.srpocp 테스트로 확인한 동작에서 나온다 (자바 21, OpenJDK).
+# 품질 계획 3단계에서 써 둔 초안(docs/type-trials)을 2026-11-23에 레슨을 쓰며 옮기고 본문과 맞췄다. 아직 draft다.
 subject:
   key: dev
   name: 개발자 면접
@@ -12,7 +12,7 @@ lesson:
   key: srp-ocp
   title: 단일 책임과 개방 폐쇄 원칙
   unit: 객체지향 설계와 패턴
-  order: 303
+  order: 35
 concepts:
   - key: core
     name: 단일 책임과 개방 폐쇄 원칙
@@ -207,7 +207,7 @@ questions:
       **DiscountCalculator만 고쳐요.** `price * 90 / 100`이 그 안에 있어요.
 
       - OrderService는 calculate()를 부르기만 해서 할인율이 바뀌어도 그대로예요
-      - 나눈 뒤에는 요구 하나에 클래스 하나만 고쳐요
+      - DiscountCalculator에는 할인 계산만 들어 있어요. 고치는 클래스 안에 다른 이유로 바뀌는 코드가 없어요
     source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
   - key: so-split-receipt
     concept: core
@@ -281,12 +281,12 @@ questions:
       - [코드 A]에서는 영수증 문구를 고치려고 해도 할인 계산이 든 pay()를 열어야 해요
       - 같은 이유로 바뀌는 코드끼리 모으고, 다른 이유로 바뀌는 코드는 나눠요
       - 할인 계산은 DiscountCalculator로, 영수증 문구는 ReceiptWriter로 나눴어요
-      - 나눈 뒤에는 요구 하나에 클래스 하나만 고쳐요
+      - 나눈 뒤에는 할인율이 바뀌면 할인 계산만 든 클래스를, 문구가 바뀌면 문구만 든 클래스를 고쳐요
     checklist:
       - 한 가지 이유로 고칠 때 상관없는 기능의 코드도 함께 건드리게 된다고 말했다
       - 같은 이유로 바뀌는 코드끼리 모으고 다른 이유로 바뀌는 코드는 나눈다고 말했다
       - 할인 계산은 DiscountCalculator로, 영수증 문구는 ReceiptWriter로 나눴다고 말했다
-      - 나눈 뒤에는 요구 하나에 클래스 하나만 고친다고 말했다
+      - 나눈 뒤에는 할인율이 바뀌면 할인 계산만 든 클래스를, 문구가 바뀌면 문구만 든 클래스를 고친다고 말했다
     source: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
 
   # ── 질문 3. 개방 폐쇄 원칙은 무엇인가요? ──
@@ -387,7 +387,8 @@ questions:
       **10000이에요.** 할인 없이 원래 금액이 나와요.
 
       - SILVER는 if에도 else if에도 맞지 않아서 마지막 `return price`로 가요
-      - 오류가 나지 않아요. 그래서 고치는 것을 빠뜨려도 알아채기 어려워요
+      - 오류는 나지 않아요. 고치는 것을 빠뜨리면 오류 없이 할인이 빠진 금액이 나와요
+      - calculate()에 else if를 더하면 9700이 나와요
     source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
   - key: so-ocp-explain
     concept: core
@@ -448,7 +449,7 @@ questions:
       - Grade에는 SILVER를 더해요
       - SilverDiscount 클래스를 새로 만들어요
       - 조립 코드의 목록에 `new SilverDiscount()`를 넣어요
-      - 고치는 곳이 없어지는 것이 아니라, 계산 코드 밖의 한 곳으로 모여요
+      - 고치는 곳이 없어지는 것이 아니라, 계산 코드 밖의 조립 코드로 옮겨 가요
     source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
   - key: so-ocp-not-registered
     concept: core
@@ -555,7 +556,7 @@ questions:
       **3개예요.** 인터페이스 1개와 구현 클래스 2개를 고쳐요.
 
       - 인터페이스에 메서드를 더하면 구현 클래스가 모두 그 메서드를 구현해야 해요
-      - [코드 C]는 새 등급을 더하는 변경에만 닫혀 있어요. 인터페이스를 바꾸는 변경에는 열려 있어요
+      - "[코드 C]는 새 등급을 더하는 변경에만 닫혀 있어요. 인터페이스를 바꾸는 변경에는 닫혀 있지 않아요"
     source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
   - key: so-ocp-compile
     concept: core
@@ -563,7 +564,7 @@ questions:
     type: code_predict
     status: draft
     difficulty: 2
-    body: DiscountPolicy에 name()을 더하고 VipDiscount만 고쳤어요. 이 코드를 컴파일하면 어떻게 될까요?
+    body: DiscountPolicy에 name()을 더하고 VipDiscount만 고쳤어요. default 메서드는 쓰지 않았어요. 이 코드를 컴파일하면 어떻게 될까요?
     code: |-
       interface DiscountPolicy {
           boolean supports(Grade grade);
@@ -571,7 +572,8 @@ questions:
           String name();
       }
 
-      class VipDiscount implements DiscountPolicy {
+      class VipDiscount
+              implements DiscountPolicy {
           public boolean supports(Grade grade) {
               return grade == Grade.VIP;
           }
@@ -601,7 +603,7 @@ questions:
     explanation: |-
       **GoldDiscount에서 컴파일 오류가 나요.** name()을 구현하지 않았기 때문이에요.
 
-      - 추상 클래스가 아닌 클래스는 인터페이스의 메서드를 모두 구현해야 해요
+      - 인터페이스를 구현하는 클래스는 인터페이스의 메서드를 모두 구현해야 해요
       - 구현 클래스가 많을수록 고칠 곳이 많아요
     source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
   - key: so-ocp-closed-against
@@ -610,7 +612,7 @@ questions:
     type: multiple_choice
     status: draft
     difficulty: 3
-    body: "[코드 C] 다음 가운데 DiscountCalculator와 있던 구현 클래스(VipDiscount, GoldDiscount)를 고치지 않고 할 수 있는 변경은?"
+    body: "[코드 C] 다음 가운데 DiscountCalculator와 있던 구현 클래스(VipDiscount, GoldDiscount)를 고치지 않고 할 수 있는 변경은? default 메서드는 쓰지 않아요."
     code: |-
       interface DiscountPolicy {
           boolean supports(Grade grade);

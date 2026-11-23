@@ -1,21 +1,23 @@
 # 단일 책임과 개방 폐쇄 원칙
-# 설계서다 (docs/lesson-data-format.md의 "두 단계"). 승인 뒤 stage 줄을 지우고 나머지 칸을 채운다.
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/srp-ocp.yaml에 있다.
 # 설계 유형의 기준 레슨이다 (docs/quality-plan.md 진행 순서 5번).
-# 품질 계획 3단계에서 써 본 docs/type-trials/srp-ocp.md를 이 형식으로 옮기며 고쳤다. 문제 초안은 docs/type-trials/srp-ocp.yaml이다.
-stage: design
+# 설계서는 2026-11-23에 승인받았다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 그대로 남겨 둔다.
 title: 단일 책임과 개방 폐쇄 원칙
+description: 클래스가 바뀌는 이유를 세는 법, 책임을 나누는 기준, if와 else if로 나눈 코드가 개방 폐쇄 원칙을 어기는 까닭, 인터페이스로 빼는 방법과 그 한계. 다섯 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 객체지향 설계와 패턴
+minutes: 20
 roadmap: O3
 type: 설계
-# O2 결합도와 응집도는 아직 없는 레슨이다. 슬러그는 임시로 적었다. O2를 만들 때 맞춘다
-prerequisites:
-  - {slug: coupling-cohesion, title: 결합도와 응집도}
+# O2 결합도와 응집도는 아직 없는 레슨이다. 링크가 깨지지 않게 비워 두었다. O2를 만들면 아래 줄을 되살린다 (슬러그는 임시다)
+#   - {slug: coupling-cohesion, title: 결합도와 응집도}
+prerequisites: []
 assume: >-
   자바 21. 인터페이스를 선언하고 클래스가 구현하는 문법(`interface`, `implements`)과 `enum`, `List`를 for 문으로 도는 방법.
   `record Order(...)`는 `order.grade()`처럼 값을 꺼내는 메서드가 있는 클래스라고만 알면 돼요.
   메일을 실제로 보내는 코드(메일 서버에 접속하는 코드)는 `MailSender` 안에 있다고 봐요.
 example: 쇼핑몰의 주문 결제. 회원 등급(VIP, GOLD)에 따라 할인하고, 결제 금액을 적은 영수증을 메일로 보낸다. 등급이 BASIC이면 할인이 없다
 links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/srpocp/SrpOcpChangeTest.java
   srp: https://blog.cleancoder.com/uncle-bob/2014/05/08/SingleReponsibilityPrinciple.html
   ocp: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
   jls: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
@@ -148,13 +150,219 @@ codes:
             return price * 95 / 100;
         }
     }
+  # 여기부터는 본문 단계에서 더한 코드다. 위의 코드를 강조만 바꾸거나 이어 붙였다
+  predictA: |-
+    enum Grade { VIP, GOLD, BASIC }
+
+    record Order(Grade grade, int price,
+                 String email) {}
+
+    class OrderService {
+        MailSender mail;
+        int pay(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            if (grade == Grade.VIP) {
+                price = price * 90 / 100;
+            } else if (grade == Grade.GOLD) {
+                price = price * 95 / 100;
+            }
+            String text =⤶
+                "결제 금액: " + price + "원";
+            mail.send(order.email(), text);
+            return price;
+        }
+    }
+  AMark: |-
+    class OrderService {
+        MailSender mail;
+        int pay(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            if (grade == Grade.VIP) {
+                [[price = price * 90 / 100;]]
+            } else if (grade == Grade.GOLD) {
+                price = price * 95 / 100;
+            }
+            String text =⤶
+                [["결제 금액: " + price + "원";]]
+            mail.send(order.email(), text);
+            return price;
+        }
+    }
+  BMark: |-
+    class [[DiscountCalculator]] {
+        int calculate(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            if (grade == Grade.VIP) {
+                return price * 90 / 100;
+            } else if (grade == Grade.GOLD) {
+                return price * 95 / 100;
+            }
+            return price;
+        }
+    }
+
+    class [[ReceiptWriter]] {
+        String write(int price) {
+            return "결제 금액: " + price + "원";
+        }
+    }
+
+    class OrderService {
+        DiscountCalculator calculator;
+        ReceiptWriter writer;
+        MailSender mail;
+        int pay(Order order) {
+            int price =⤶
+                calculator.calculate(order);
+            String text = writer.write(price);
+            mail.send(order.email(), text);
+            return price;
+        }
+    }
+  BSilver: |-
+    enum Grade { VIP, GOLD, SILVER, BASIC }
+
+    class DiscountCalculator {
+        int calculate(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            if (grade == Grade.VIP) {
+                return price * 90 / 100;
+            } else if (grade == Grade.GOLD) {
+                return price * 95 / 100;
+            [[} else if (grade == Grade.SILVER) {]]
+                [[return price * 97 / 100;]]
+            }
+            return price;
+        }
+    }
+  BForgot: |-
+    enum Grade { VIP, GOLD, SILVER, BASIC }
+
+    class DiscountCalculator {
+        int calculate(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            if (grade == Grade.VIP) {
+                return price * 90 / 100;
+            } else if (grade == Grade.GOLD) {
+                return price * 95 / 100;
+            }
+            [[return price;]]
+        }
+    }
+  CMark: |-
+    interface [[DiscountPolicy]] {
+        boolean supports(Grade grade);
+        int apply(int price);
+    }
+
+    class VipDiscount⤶
+            implements DiscountPolicy {
+        public boolean supports(Grade grade) {
+            return grade == Grade.VIP;
+        }
+        public int apply(int price) {
+            return price * 90 / 100;
+        }
+    }
+
+    class DiscountCalculator {
+        List<DiscountPolicy> policies;
+        int calculate(Order order) {
+            Grade grade = order.grade();
+            int price = order.price();
+            [[for (DiscountPolicy p : policies)]] {
+                if (p.supports(grade)) {
+                    return p.apply(price);
+                }
+            }
+            return price;
+        }
+    }
+  assembleSilver: |-
+    var policies = List.of(
+        new VipDiscount(),
+        new GoldDiscount(),
+        [[new SilverDiscount()]]);
+  namedMark: |-
+    interface DiscountPolicy {
+        boolean supports(Grade grade);
+        int apply(int price);
+        [[String name();]]
+    }
+
+    class VipDiscount⤶
+            implements DiscountPolicy {
+        public boolean supports(Grade grade) {
+            return grade == Grade.VIP;
+        }
+        public int apply(int price) {
+            return price * 90 / 100;
+        }
+        public String name() {
+            return "VIP 할인";
+        }
+    }
+
+    class [[GoldDiscount]]⤶
+            implements DiscountPolicy {
+        public boolean supports(Grade grade) {
+            return grade == Grade.GOLD;
+        }
+        public int apply(int price) {
+            return price * 95 / 100;
+        }
+    }
+  test: |-
+    @Test
+    void codeCChangesGradeAndWiringOnly() {
+        // 폴더 c와 csilver의 파일을 비교해요
+        Change c =⤶
+            Change.between("c", "csilver");
+
+        assertThat(c.changed)⤷
+            .containsExactly(⤷
+                "Grade", "Wiring");
+        assertThat(c.added)⤷
+            .containsExactly(⤷
+                "SilverDiscount");
+        assertThat([[c.same]]).containsExactly(
+            "DiscountCalculator",
+            "DiscountPolicy",
+            "GoldDiscount",
+            "Order",
+            "VipDiscount");
+    }
+# 설계 때의 predict는 이랬다. 본문 단계의 predict는 칸의 뜻이 달라서(text는 읽는 사람에게 보일 글, answer는 보기의 value) 새로 썼다
+#   text: 코드 A를 보여 주고 묻는다. "다음 세 요구 가운데 `OrderService`를 고쳐야 하는 것은 몇 개일까요?"
+#     요구는 VIP 할인율을 10%에서 15%로 바꾸기, 영수증 문구를 "결제 금액"에서 "결제하신 금액"으로 바꾸기, 메일 서버 주소 바꾸기다.
+#     보기는 0개, 1개, 2개, 3개 네 개다.
+#   answer: 2개. 질문 1에서 확인한다. 서로 다른 팀의 요구 둘이 같은 클래스를 고치게 한다는 것이 단일 책임 원칙으로 들어가는 문이다.
 predict:
+  title: OrderService를 고쳐야 하는 요구는 몇 개일까요?
   text: >-
-    코드 A를 보여 주고 묻는다. "다음 세 요구 가운데 `OrderService`를 고쳐야 하는 것은 몇 개일까요?"
-    요구는 VIP 할인율을 10%에서 15%로 바꾸기, 영수증 문구를 "결제 금액"에서 "결제하신 금액"으로 바꾸기, 메일 서버 주소 바꾸기다.
-    보기는 0개, 1개, 2개, 3개 네 개다.
-  answer: >-
-    2개. 질문 1에서 확인한다. 서로 다른 팀의 요구 둘이 같은 클래스를 고치게 한다는 것이 단일 책임 원칙으로 들어가는 문이다.
+    쇼핑몰의 주문 결제 코드예요. 회원 등급에 따라 할인하고, 결제 금액을 적은 영수증을 메일로 보내요.
+    메일 서버에 접속해서 보내는 코드는 `MailSender` 안에 있어요. 이 코드에 요구 세 개가 왔어요.
+    **VIP 할인율을 10%에서 15%로 바꾸기**, **영수증 문구를 "결제 금액"에서 "결제하신 금액"으로 바꾸기**, **메일 서버 주소 바꾸기**예요.
+    이 가운데 `OrderService`를 고쳐야 하는 것은 몇 개일까요? 모르는 게 정상이니 감으로 골라 보세요.
+  code: predictA
+  label: 내 예측 (OrderService를 고쳐야 하는 요구의 수)
+  options:
+    - value: n0
+      label: 0개
+    - value: n1
+      label: 1개
+    - value: n2
+      label: 2개
+    - value: n3
+      label: 3개
+  answer: n2
+  storageKey: srp-ocp-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 단일 책임 원칙은 무엇인가요?
@@ -184,6 +392,109 @@ questions:
       - 줄 고르기. 코드 A에서 영수증 문구를 바꾸라는 요구가 왔을 때 고쳐야 하는 줄 (12번째 줄)
       - OX. 단일 책임 원칙을 지키려면 클래스에 public 메서드가 하나만 있어야 한다 (X)
       - 설명형. 코드 A의 `OrderService`가 단일 책임 원칙을 어긴 이유를 바뀌는 이유를 세는 방법과 함께 설명한다
+    body:
+    - p: '단일 책임 원칙(SRP, Single Responsibility Principle)은 **클래스가 바뀌는 이유는 하나여야 한다**는 원칙이에요([로버트 마틴의 글](link:srp)). 여기서 "책임"은 클래스가 하는 일의 개수가 아니라 **바뀌는 이유**를 가리켜요.'
+    - p: 바뀌는 이유는 **그 변경을 요구하는 쪽**으로 세요. 이 쇼핑몰에서 할인 규칙은 마케팅팀이 바꾸라고 하고, 영수증 문구는 고객지원팀이 바꾸라고 해요.
+    - p: 처음에 본 코드에서 두 팀이 고치게 하는 곳을 찾아볼게요. 이 코드를 **코드 A**라고 부를게요.
+    - code: AMark
+      notes:
+      - mark: price = price * 90 / 100;
+        as: code
+        text: 할인 계산이에요. 아래의 GOLD 줄도 같아요. 마케팅팀이 할인율을 바꾸라고 하면 여기를 고쳐요.
+      - mark: '"결제 금액: " + price + "원";'
+        as: code
+        text: 영수증 문구예요. 고객지원팀이 문구를 바꾸라고 하면 여기를 고쳐요.
+    - p: VIP 할인율을 바꾸는 것과 GOLD 할인율을 바꾸는 것은 요구로는 둘이에요. 하지만 둘 다 마케팅팀이 요구해요. 그래서 바뀌는 이유는 하나예요.
+    - p: '메일 서버 주소는 어떨까요? 메일 서버에 접속해서 보내는 코드는 `MailSender` 안에 있어요. `OrderService`는 `mail.send()`를 부르기만 해요. 그래서 주소가 바뀌면 `MailSender`를 고치고 `OrderService`는 고치지 않아요.'
+    - p: 아래에서 요구를 하나씩 골라 보세요. 어느 클래스의 무엇을 고치는지, 누가 요구했는지 볼 수 있어요.
+    - widget:
+        kind: compare
+        layout:
+        - selector
+        - sides
+        - verdict
+        selector:
+          label: 들어온 요구
+          options:
+          - value: vip
+            label: VIP 할인율 변경
+          - value: gold
+            label: GOLD 할인율 변경
+          - value: text
+            label: 영수증 문구 변경
+          - value: server
+            label: 메일 서버 주소 변경
+        sides:
+        - label: OrderService가 하는 일
+          items:
+          - name: 할인 계산
+          - name: 영수증 문구 만들기
+          - name: 메일을 보내 달라고 부르기
+        - label: MailSender가 하는 일
+          items:
+          - name: 메일 서버에 접속해서 보내기
+        scenes:
+          vip:
+            sides:
+            - marks:
+              - name: 할인 계산
+                tag: 고침
+              result:
+              - k: 요구한 쪽
+                v: 마케팅팀
+            - result:
+              - k: 고칠 곳
+                v: 없음
+            verdict: 'VIP 할인율 변경: 마케팅팀의 요구로 OrderService를 고쳐요.'
+          gold:
+            sides:
+            - marks:
+              - name: 할인 계산
+                tag: 고침
+              result:
+              - k: 요구한 쪽
+                v: 마케팅팀
+            - result:
+              - k: 고칠 곳
+                v: 없음
+            verdict: 'GOLD 할인율 변경: 이것도 마케팅팀의 요구예요. 요구는 달라도 바뀌는 이유는 VIP 할인율 변경과 같아요.'
+          text:
+            sides:
+            - marks:
+              - name: 영수증 문구 만들기
+                tag: 고침
+              result:
+              - k: 요구한 쪽
+                v: 고객지원팀
+                mark: changed
+            - result:
+              - k: 고칠 곳
+                v: 없음
+            verdict: '영수증 문구 변경: 고객지원팀의 요구로도 OrderService를 고쳐요. OrderService를 고치게 하는 쪽이 둘이에요.'
+          server:
+            sides:
+            - result:
+              - k: 고칠 곳
+                v: 없음
+            - marks:
+              - name: 메일 서버에 접속해서 보내기
+                tag: 고침
+              result:
+              - k: 요구한 쪽
+                v: 운영팀
+            verdict: '메일 서버 주소 변경: MailSender를 고쳐요. OrderService는 고치지 않아요.'
+    - p: '처음에 예측한 문제의 답은 **2개**예요. `OrderService`는 할인율이 바뀔 때도, 영수증 문구가 바뀔 때도 고쳐야 해요. 메일 서버 주소가 바뀔 때는 고치지 않아요. {{predict-result}}'
+    - p: '`OrderService`를 고치게 하는 쪽이 마케팅팀과 고객지원팀 둘이에요. 바뀌는 이유가 둘이라서 단일 책임 원칙을 어겼어요.'
+    - callout: '**책임이 하나라는 것은 메서드나 필드가 하나라는 뜻이 아니에요.** 코드 A의 `OrderService`는 메서드가 `pay()` 하나뿐인데도 원칙을 어겼어요.'
+    - quiz:
+        q: 코드 A에 GOLD 할인율을 5%에서 7%로 바꾸라는 요구가 왔어요. VIP 할인율을 바꾸라는 요구와 견주면, OrderService가 바뀌는 이유는 같을까요 다를까요?
+        options:
+        - 같다. 둘 다 마케팅팀이 요구한다
+        - 다르다. 요구가 둘이니 바뀌는 이유도 둘이다
+        answer: 1
+        explain: 바뀌는 이유는 요구의 수가 아니라 그 변경을 요구하는 쪽으로 세요. 두 요구 모두 마케팅팀이 내요.
+    - next: 바뀌는 이유가 둘인 클래스는 무엇이 문제일까요? 그리고 어떻게 나눌까요?
+    recall: '클래스가 바뀌는 이유는 하나여야 한다는 원칙이에요. 바뀌는 이유는 그 변경을 요구하는 쪽으로 세요. 코드 A의 `OrderService`는 마케팅팀이 할인율을 바꾸라고 해도, 고객지원팀이 영수증 문구를 바꾸라고 해도 고쳐야 해서 바뀌는 이유가 둘이에요. 메서드가 하나여야 한다는 뜻은 아니에요.'
   - id: q2
     title: 책임이 섞여 있으면 어떤 문제가 생기고, 어떻게 나누나요?
     conclusion:
@@ -209,6 +520,103 @@ questions:
       - OX. 코드 B에서 영수증 문구가 바뀌면 `OrderService`도 고쳐야 한다 (X)
       - 영수증 문구가 맞는지 테스트할 때 코드 A와 코드 B에서 각각 불러야 하는 메서드 (A는 `OrderService.pay()`, B는 `ReceiptWriter.write()`)
       - 설명형. 책임이 여럿인 클래스의 문제와, 코드 A를 코드 B로 나눈 기준을 설명한다
+    body:
+    - p: 책임이 섞인 클래스는 한 가지 이유로 고칠 때 **상관없는 기능의 코드도 같은 메서드 안에서 함께 건드리게** 돼요.
+    - p: '코드 A에서 고객지원팀이 영수증 문구를 바꿔 달라고 했다고 해 볼게요. 문구는 `pay()` 안에 있어요. 그 메서드에는 마케팅팀이 정한 할인 계산도 들어 있어요. 문구 한 줄을 고치려고 할인 계산이 든 메서드를 열어야 해요.'
+    - p: '테스트할 때도 같아요. 코드 A에서 영수증 문구가 맞는지 보려면 `pay()`를 불러야 해요. 문구만 보려는데 할인 계산과 메일 보내기가 함께 실행돼요.'
+    - ci:
+        key: a-pay
+        label: 코드 A에서 실제로 돌린 출력 보기
+        source: CodeATest.payCalculatesWritesAndSends
+    - h3: 바뀌는 이유마다 나눠요
+    - p: '나누는 기준은 하나예요. **같은 이유로 바뀌는 코드끼리 모으고, 다른 이유로 바뀌는 코드는 나눠요.** 할인 계산은 `DiscountCalculator`로, 영수증 문구는 `ReceiptWriter`로 옮겼어요. 이 코드를 **코드 B**라고 부를게요.'
+    - code: BMark
+      notes:
+      - mark: DiscountCalculator
+        as: code
+        text: 할인 계산만 들어 있어요. 마케팅팀이 할인율을 바꾸라고 할 때만 고쳐요.
+      - mark: ReceiptWriter
+        as: code
+        text: 영수증 문구만 들어 있어요. 고객지원팀이 문구를 바꾸라고 할 때만 고쳐요.
+    - p: '`OrderService`에는 세 객체를 순서대로 부르는 일이 남았어요. 할인율이 바뀌어도 문구가 바뀌어도 고치지 않아요.'
+    - p: 아래에서 요구를 골라, 나누기 전과 나눈 뒤에 고치는 클래스를 비교해 보세요.
+    - widget:
+        kind: compare
+        layout:
+        - selector
+        - sides
+        - verdict
+        selector:
+          label: 들어온 요구
+          options:
+          - value: rate
+            label: VIP 할인율 변경
+          - value: text
+            label: 영수증 문구 변경
+        sides:
+        - label: 나누기 전 (코드 A)
+          items:
+          - name: OrderService
+            note: 할인 계산, 영수증 문구, 메일 보내기
+        - label: 나눈 뒤 (코드 B)
+          items:
+          - name: DiscountCalculator
+            note: 할인 계산
+          - name: ReceiptWriter
+            note: 영수증 문구
+          - name: OrderService
+            note: 세 객체를 순서대로 부르기
+        scenes:
+          rate:
+            sides:
+            - marks:
+              - name: OrderService
+                tag: 고침
+                mark: bad
+              result:
+              - k: 함께 든 다른 일
+                v: 영수증 문구, 메일 보내기
+                mark: bad
+            - marks:
+              - name: DiscountCalculator
+                tag: 고침
+              result:
+              - k: 함께 든 다른 일
+                v: 없음
+            verdict: 'VIP 할인율 변경: 나누기 전에는 영수증 문구와 메일 보내기가 함께 든 클래스를 고쳐요. 나눈 뒤에는 할인 계산만 든 클래스를 고쳐요.'
+          text:
+            sides:
+            - marks:
+              - name: OrderService
+                tag: 고침
+                mark: bad
+              result:
+              - k: 함께 든 다른 일
+                v: 할인 계산, 메일 보내기
+                mark: bad
+            - marks:
+              - name: ReceiptWriter
+                tag: 고침
+              result:
+              - k: 함께 든 다른 일
+                v: 없음
+            verdict: '영수증 문구 변경: 나누기 전에는 할인 계산과 메일 보내기가 함께 든 클래스를 고쳐요. 나눈 뒤에는 문구만 든 클래스를 고쳐요.'
+    - p: '고치는 클래스의 수는 나누기 전에도 나눈 뒤에도 하나예요. 달라진 것은 **고치는 클래스 안에 무엇이 함께 들어 있느냐**예요. 코드 B에서 할인율이 바뀌면 `DiscountCalculator`만, 영수증 문구가 바뀌면 `ReceiptWriter`만 고쳐요. 고치는 클래스 안에 다른 이유로 바뀌는 코드가 없어요.'
+    - p: '테스트도 따로 할 수 있어요. 코드 B에서 영수증 문구는 `ReceiptWriter.write()`만 불러 확인해요. `write(9000)`은 "결제 금액: 9000원"을 돌려주고, 메일은 나가지 않아요.'
+    - ci:
+        key: b-write
+        label: 코드 B에서 실제로 돌린 출력 보기
+        source: CodeBTest.receiptIsTestedAlone
+    - muted: '나누기만 했고 동작은 바꾸지 않았어요. 10,000원 주문에 `pay()`가 돌려주는 값은 코드 A와 코드 B가 같아요. VIP는 9000, GOLD는 9500, BASIC은 10000이에요.'
+    - quiz:
+        q: 코드 B에서 영수증 문구가 맞는지 보려고 ReceiptWriter의 write(9000)만 불렀어요. 그동안 mail.send()는 몇 번 불릴까요?
+        options:
+        - 0번
+        - 1번
+        answer: 1
+        explain: write()는 문구를 만들어 돌려주기만 해요. 메일을 보내는 것은 OrderService의 pay()가 하는 일이에요.
+    - next: '할인 계산을 `DiscountCalculator`에 모았어요. 여기에 새 등급을 더하려면 무엇을 고쳐야 할까요?'
+    recall: '한 가지 이유로 고칠 때 상관없는 기능의 코드까지 건드리게 돼요. 코드 A에서 영수증 문구를 고치려면 할인 계산이 든 `pay()`를 열어야 하고, 문구를 테스트하려고 해도 할인 계산과 메일 보내기가 함께 실행돼요. 그래서 같은 이유로 바뀌는 코드끼리 모으고 다른 이유로 바뀌는 코드는 나눠요. 할인 계산은 `DiscountCalculator`로, 영수증 문구는 `ReceiptWriter`로 나누면 고치는 클래스 안에 다른 이유로 바뀌는 코드가 없어요.'
   - id: q3
     title: 개방 폐쇄 원칙은 무엇인가요?
     conclusion:
@@ -235,6 +643,128 @@ questions:
       - 코드 B의 `DiscountCalculator`에 SILVER 등급 3% 할인을 더하려면 어떻게 해야 하나 (`calculate()` 안에 `else if`를 더한다)
       - 코드 B에서 `Grade`에 SILVER를 더하고 `calculate()`는 고치지 않았다. SILVER 등급 10,000원 주문으로 `calculate()`를 부르면 (10000)
       - 설명형. 등급을 `if`와 `else if`로 나눈 코드 B의 `DiscountCalculator`가 개방 폐쇄 원칙을 어긴 이유를 설명한다
+    body:
+    - p: '개방 폐쇄 원칙(OCP, Open-Closed Principle)은 **기능을 더할 때 있던 코드를 고치지 않고 새 코드를 더해서 할 수 있어야 한다**는 원칙이에요([로버트 마틴의 글](link:ocp)). 이름의 두 낱말은 이런 뜻이에요.'
+    - ul:
+      - '**확장에 열려 있다:** 새 기능을 더할 수 있어요.'
+      - '**수정에 닫혀 있다:** 그때 있던 코드를 고치지 않아요.'
+    - muted: 버그를 고치는 것은 기능을 더하는 것이 아니라서 이 원칙과 상관없어요.
+    - p: '코드 B의 `DiscountCalculator`는 등급을 `if`와 `else if`로 나눠요. 여기에 마케팅팀이 SILVER 등급 3% 할인을 더해 달라고 했어요. 할 일은 둘이에요. `Grade`에 SILVER를 더하고, `calculate()` 안에 `else if`를 더해요.'
+    - code: BSilver
+      notes:
+      - mark: '} else if (grade == Grade.SILVER) {'
+        as: code
+        text: '새 등급을 더하려고 있던 메서드 `calculate()` 안에 줄을 넣었어요.'
+    - p: '기능을 더하려고 **있던 메서드를 고쳤어요.** 개방 폐쇄 원칙을 어긴 코드예요.'
+    - p: 등급이 늘 때마다 같은 메서드를 다시 고쳐야 해요. 그 메서드에는 VIP와 GOLD의 계산이 함께 있어요. 그래서 고칠 때마다 이미 잘 돌던 계산을 잘못 건드릴 수 있어요.
+    - h3: 고치는 것을 빠뜨리면
+    - p: '`Grade`에 SILVER만 더하고 `calculate()`를 고치는 것을 빠뜨렸다고 해 볼게요.'
+    - code: BForgot
+      notes:
+      - mark: return price;
+        as: code
+        text: VIP도 GOLD도 아닌 등급은 여기로 와요. 할인 없이 원래 금액을 돌려줘요.
+    - p: 아래에서 이 코드에 10,000원 주문을 넣고 한 단계씩 넘겨 보세요. GOLD 주문과 SILVER 주문을 비교할 수 있어요.
+    - widget:
+        kind: steps
+        layout:
+        - selector
+        - duo
+        - buttons
+        - log
+        - verdict
+        selector:
+          label: 넣는 주문
+          options:
+          - value: gold
+            label: GOLD 10,000원
+          - value: silver
+            label: SILVER 10,000원
+        initial:
+          duo:
+          - label: 넣은 주문
+            state: dim
+            text: 아직 넣지 않았어요
+          - label: calculate()가 돌려준 값
+            state: dim
+            text: 아직 없어요
+        scenarios:
+          gold:
+          - log: calculate(주문)을 불러요
+            duo:
+            - label: 넣은 주문
+              state: active
+              rows:
+              - k: 등급
+                v: GOLD
+                mark: changed
+              - k: 금액
+                v: '10000'
+            - label: calculate()가 돌려준 값
+              state: dim
+              text: 아직 없어요
+          - log: grade == Grade.VIP  → false
+          - log: grade == Grade.GOLD  → true
+          - log: return price * 95 / 100  → 9500
+            duo:
+            - label: 넣은 주문
+              rows:
+              - k: 등급
+                v: GOLD
+              - k: 금액
+                v: '10000'
+            - label: calculate()가 돌려준 값
+              state: active
+              rows:
+              - k: 돌려준 값
+                v: '9500'
+                mark: changed
+            verdict: 'GOLD 주문: 두 번째 조건에 맞아서 5% 할인한 9500이 나왔어요.'
+          silver:
+          - log: calculate(주문)을 불러요
+            duo:
+            - label: 넣은 주문
+              state: active
+              rows:
+              - k: 등급
+                v: SILVER
+                mark: changed
+              - k: 금액
+                v: '10000'
+            - label: calculate()가 돌려준 값
+              state: dim
+              text: 아직 없어요
+          - log: grade == Grade.VIP  → false
+          - log: grade == Grade.GOLD  → false
+          - log: return price  → 10000
+            duo:
+            - label: 넣은 주문
+              rows:
+              - k: 등급
+                v: SILVER
+              - k: 금액
+                v: '10000'
+            - label: calculate()가 돌려준 값
+              state: active
+              rows:
+              - k: 돌려준 값
+                v: '10000'
+                mark: bad
+            verdict: 'SILVER 주문: 맞는 조건이 없어서 할인이 빠진 10000이 나왔어요. 오류는 나지 않았어요. 3% 할인이면 9700이어야 해요.'
+    - ci:
+        key: b-forgot
+        label: 실제로 돌린 출력 보기
+        source: CodeBForgotTest.silverGetsNoDiscountWithoutError
+    - p: 'SILVER 주문은 오류 없이 **10000**이 나와요. 할인이 빠진 원래 금액이에요. `calculate()`에 `else if`를 더하면 9700이 나와요.'
+    - quiz:
+        q: SILVER 등급 할인을 더하려고 코드 B의 calculate() 안에 else if를 더했어요. 개방 폐쇄 원칙으로 보면 어떤가요?
+        options:
+        - 지켰다. 새 기능을 더했다
+        - 어겼다. 기능을 더하려고 있던 메서드를 고쳤다
+        answer: 2
+        explain: 개방 폐쇄 원칙은 기능을 더할 때 있던 코드를 고치지 않아야 한다는 원칙이에요. calculate()는 SILVER를 더하기 전부터 있던 메서드예요.
+    - next: 있던 메서드를 고치지 않고 새 등급을 더하려면 코드를 어떻게 바꿔야 할까요?
+    recall: '기능을 더할 때 있던 코드를 고치지 않고 새 코드를 더해서 할 수 있어야 한다는 원칙이에요. 확장에 열려 있다는 것은 새 기능을 더할 수 있다는 뜻이고, 수정에 닫혀 있다는 것은 그때 있던 코드를 고치지 않는다는 뜻이에요. 등급을 `if`와 `else if`로 나눈 코드 B는 등급을 더할 때마다 `calculate()`를 고쳐야 해서 이 원칙을 어겨요. 고치는 것을 빠뜨리면 SILVER 주문은 오류 없이 할인이 빠진 금액이 나와요.'
   - id: q4
     title: 있던 코드를 고치지 않고 어떻게 기능을 더하나요?
     conclusion:
@@ -262,6 +792,116 @@ questions:
       - 코드 C에서 `SilverDiscount`를 만들었지만 정책 목록에 넣지 않았다. SILVER 등급 10,000원 주문으로 `calculate()`를 부르면 (10000)
       - OX. 코드 C의 `DiscountCalculator` 코드에는 `VipDiscount`라는 클래스 이름이 나오지 않는다 (O)
       - 설명형. 코드 B의 `if`와 `else if`를 코드 C처럼 바꾸는 방법과, 바꾼 뒤에 새 등급을 더할 때 달라지는 것을 설명한다
+    body:
+    - p: '코드 B에서 등급이 늘 때마다 바뀌는 부분은 "등급마다 다른 계산"이에요. 이 부분을 `DiscountPolicy` 인터페이스로 빼요. 인터페이스를 구현한 클래스를 구현 클래스라고 하는데, 등급 하나의 할인이 구현 클래스 하나가 돼요. 이 코드를 **코드 C**라고 부를게요.'
+    - code: CMark
+      notes:
+      - mark: DiscountPolicy
+        as: code
+        text: '`supports()`는 그 등급을 맡는지 답하고, `apply()`는 할인한 금액을 돌려줘요. `GoldDiscount`는 `VipDiscount`와 같은 모양이고 95를 곱해요.'
+      - mark: 'for (DiscountPolicy p : policies)'
+        as: code
+        text: '`DiscountCalculator`는 `DiscountPolicy`만 알아요. `VipDiscount` 같은 구현 클래스의 이름은 이 클래스의 코드에 나오지 않아요.'
+    - p: '정책 목록은 **조립 코드**에서 만들어 `DiscountCalculator`에 넣어요. 조립 코드는 객체를 만들어 서로 이어 주는 코드예요. 프로그램이 시작할 때 한 번 실행돼요.'
+    - code: assemble
+    - h3: SILVER 등급을 더하면
+    - p: 할 일은 셋이에요.
+    - ol:
+      - '`Grade`에 SILVER를 더해요.'
+      - '`SilverDiscount` 클래스를 새로 만들어요.'
+      - '조립 코드의 목록에 `new SilverDiscount()`를 넣어요.'
+    - code: silver
+    - code: assembleSilver
+      notes:
+      - mark: new SilverDiscount()
+        as: code
+        text: 조립 코드에서 고치는 곳은 이 한 줄이에요.
+    - p: '`DiscountCalculator`와 `DiscountPolicy`, 있던 구현 클래스 `VipDiscount`와 `GoldDiscount`는 고치지 않아요. 할인을 계산하는 코드 가운데 고치는 것이 없어요.'
+    - p: 아래 버튼을 눌러 코드 B와 코드 C에서 고치는 파일을 비교해 보세요. 인터페이스와 클래스는 파일 하나씩이에요.
+    - widget:
+        kind: compare
+        layout:
+        - buttons
+        - sides
+        - verdict
+        run:
+          label: SILVER 등급 더하기
+        sides:
+        - label: 코드 B
+          items:
+          - name: Grade
+            note: 등급의 목록
+          - name: DiscountCalculator
+            note: 모든 등급의 계산
+        - label: 코드 C
+          items:
+          - name: Grade
+            note: 등급의 목록
+          - name: DiscountPolicy
+            note: 인터페이스
+          - name: DiscountCalculator
+            note: 맞는 정책을 찾아 부르기
+          - name: VipDiscount
+            note: VIP의 계산
+          - name: GoldDiscount
+            note: GOLD의 계산
+          - name: 조립 코드
+            note: 정책 목록 만들기
+        initial:
+          sides:
+          - result:
+            - k: 고친 계산 코드
+              v: '?'
+          - result:
+            - k: 고친 계산 코드
+              v: '?'
+        scenes:
+          silver:
+            sides:
+            - marks:
+              - name: Grade
+                tag: 고침
+              - name: DiscountCalculator
+                tag: 고침
+                mark: bad
+              result:
+              - k: 고친 계산 코드
+                v: calculate()
+                mark: bad
+            - marks:
+              - name: Grade
+                tag: 고침
+              - name: 조립 코드
+                tag: 고침
+              add:
+              - name: SilverDiscount
+                note: SILVER의 계산
+                tag: 새로 만듦
+              result:
+              - k: 고친 계산 코드
+                v: 없음
+            verdict: 고친 파일은 양쪽 다 둘이에요. 코드 B는 계산이 든 calculate()를 고쳤고, 코드 C는 계산 코드를 그대로 두고 조립 코드를 고쳤어요.
+    - ci:
+        key: files
+        label: SILVER를 더하기 전과 후의 파일을 비교한 결과 보기
+        source: SrpOcpChangeTest.codeCChangesGradeAndWiringOnly
+    - p: '`Grade`에 SILVER를 더하는 것은 코드 B와 같아요. 다른 것은 그다음이에요. 코드 B는 계산이 든 `calculate()`를 고치고, 코드 C는 목록을 만드는 조립 코드를 고쳐요.'
+    - callout: '**고치는 곳이 없어지는 것이 아니에요.** 계산 코드 밖의 조립 코드로 옮겨 가요.'
+    - p: '그래서 빠뜨릴 수 있는 곳도 남아 있어요. `SilverDiscount` 클래스를 만들고 목록에 넣지 않으면 SILVER 주문은 원래 금액 10000이 나와요. 목록에 넣으면 9700이 나와요. 빠뜨리면 오류 없이 틀린다는 점은 코드 B와 같아요.'
+    - ci:
+        key: c-list
+        label: 실제로 돌린 출력 보기
+        source: CodeCSilverTest.silverNeedsToBeInTheList
+    - quiz:
+        q: 코드 C에 SILVER 등급을 더할 때 new SilverDiscount()를 넣는 곳은 어디일까요?
+        options:
+        - DiscountCalculator의 calculate()
+        - 정책 목록을 만드는 조립 코드
+        - DiscountPolicy 인터페이스
+        answer: 2
+        explain: 새 구현 클래스는 조립 코드의 목록에 넣어요. DiscountCalculator는 목록에 든 정책을 차례로 물어볼 뿐이라 고치지 않아요.
+    - next: 코드 C는 새 등급을 더할 때 계산 코드를 고치지 않아요. 그러면 어떤 변경이 와도 그럴까요?
+    recall: '바뀌는 부분을 인터페이스로 빼고, 새 기능은 그 인터페이스의 새 구현 클래스로 더해요. 등급마다 다른 계산을 `DiscountPolicy`로 빼면 `DiscountCalculator`는 인터페이스만 알아요. SILVER를 더할 때는 `Grade`에 SILVER를 더하고, `SilverDiscount`를 새로 만들고, 조립 코드의 목록에 넣어요. `DiscountCalculator`와 있던 구현 클래스는 고치지 않아요. 고치는 곳이 없어지는 것이 아니라 계산 코드 밖의 조립 코드로 옮겨 가요.'
   - id: q5
     title: 개방 폐쇄 원칙을 지키면 어떤 변경이든 있던 코드를 고치지 않고 할 수 있나요?
     conclusion:
@@ -288,33 +928,172 @@ questions:
       - 코드 named를 컴파일하면 어떻게 되나. 보기는 오류 없이 컴파일된다, `VipDiscount`에서 오류, `GoldDiscount`에서 오류, `DiscountPolicy`에서 오류 (`GoldDiscount`에서 컴파일 오류)
       - 코드 C에서 `DiscountCalculator`와 있던 구현 클래스를 고치지 않고 할 수 있는 변경. 보기는 SILVER 등급 할인 더하기, `DiscountPolicy`에 메서드 더하기, `apply()`가 돌려주는 타입 바꾸기, `supports()`가 받는 값 바꾸기 (SILVER 등급 할인 더하기)
       - 설명형. 코드 C에도 있던 코드를 고쳐야 하는 변경이 있다. 예를 하나 들고 이유를 설명한다
+    body:
+    - p: 코드 C는 **새 등급을 더하는 변경에만** 닫혀 있어요. 다른 방향의 변경이 오면 있던 코드를 고쳐야 해요.
+    - h3: 인터페이스에 메서드를 더하면
+    - p: '할인 이름을 돌려주는 `String name()`을 `DiscountPolicy`에 더한다고 해 볼게요. 인터페이스에 메서드를 더하면 구현 클래스가 모두 그 메서드를 구현해야 해요. 아래는 `VipDiscount`만 고친 코드예요.'
+    - code: namedMark
+      notes:
+      - mark: String name();
+        as: code
+        text: 인터페이스에 더한 메서드예요.
+      - mark: GoldDiscount
+        as: code
+        text: '`name()`을 구현하지 않았어요. 이 클래스에서 컴파일 오류가 나요.'
+    - p: 이 코드를 컴파일하면 컴파일러가 이런 오류를 내요.
+    - prewrap: 'error: GoldDiscount is not abstract and does not override abstract method name() in DiscountPolicy'
+    - p: '`GoldDiscount`가 `DiscountPolicy`의 `name()`을 구현하지 않았다는 뜻이에요. 인터페이스를 구현하는 클래스는 인터페이스의 메서드를 모두 구현해야 해요([자바 언어 명세 8.1.1.1](link:jls)).'
+    - ci:
+        key: named
+        label: 테스트에서 컴파일러가 낸 오류 보기
+        source: SrpOcpChangeTest.addingMethodBreaksImplementationsLeftBehind
+    - p: 구현이 둘이면 인터페이스 1개와 구현 2개, 파일 3개를 고쳐요. 구현 클래스가 많을수록 고칠 곳이 많아요.
+    - muted: '인터페이스의 메서드에 `default`를 붙이고 몸통까지 적어 두는 방법도 있어요. 이것을 default 메서드라고 해요. 그러면 구현 클래스를 고치지 않아도 컴파일돼요. 여기서는 default 메서드를 쓰지 않는 경우를 다뤄요.'
+    - h3: 메서드의 모양을 바꾸면
+    - p: '메서드의 모양을 바꾸는 변경은 고칠 곳이 더 많아요. `apply()`가 돌려주는 타입을 `long`으로 바꾸거나, `supports()`가 등급 대신 주문 금액을 받게 바꾸는 변경이 그래요. 인터페이스와 구현 클래스를 모두 고치고, 그 메서드를 부르는 `DiscountCalculator`도 고쳐야 해요.'
+    - p: '아래는 코드 C에 온 변경 요구예요. 있던 계산 코드를 고쳐야 하는지 골라 보세요. "있던 계산 코드"는 `DiscountPolicy`, `DiscountCalculator`, `VipDiscount`, `GoldDiscount` 네 파일이에요. default 메서드는 쓰지 않아요.'
+    - widget:
+        kind: classify
+        categories:
+        - 있던 계산 코드는 그대로
+        - 있던 계산 코드를 고친다
+        items:
+        - text: SILVER 등급 3% 할인 더하기
+          answer: 1
+          explain: SilverDiscount를 새로 만들고 Grade와 조립 코드를 고쳐요. 계산 코드 네 파일은 그대로예요.
+        - text: BRONZE 등급 1% 할인 더하기
+          answer: 1
+          explain: SILVER 때와 같아요. BronzeDiscount를 새로 만들고 Grade와 조립 코드를 고쳐요.
+        - text: DiscountPolicy에 String name() 더하기
+          answer: 2
+          explain: DiscountPolicy, VipDiscount, GoldDiscount 3개를 고쳐요. 구현 클래스가 모두 name()을 구현해야 해요.
+        - text: apply()가 돌려주는 타입을 long으로 바꾸기
+          answer: 2
+          explain: DiscountPolicy, VipDiscount, GoldDiscount, DiscountCalculator 4개를 고쳐요. apply()를 부르는 DiscountCalculator도 받는 타입이 달라져요.
+        - text: supports()가 등급 대신 주문 금액을 받게 바꾸기
+          answer: 2
+          explain: DiscountPolicy, VipDiscount, GoldDiscount, DiscountCalculator 4개를 고쳐요. supports()를 부르는 DiscountCalculator도 넘기는 값을 바꿔야 해요.
+    - p: '어느 방향의 변경에 닫을지는 인터페이스를 만들 때 정해져요. 코드 C는 등급마다 다른 계산을 인터페이스로 뺐어요. 그래서 등급이 느는 변경에 닫혀 있어요. 인터페이스를 미리 빼 두지 않은 방향의 변경에는 닫혀 있지 않아요. 그래서 개방 폐쇄 원칙은 실제로 자주 바뀌는 곳에 적용해요.'
+    - quiz:
+        q: 코드 C의 DiscountPolicy에 String name()을 더했어요. default 메서드는 쓰지 않았고, VipDiscount와 GoldDiscount는 고치지 않았어요. 컴파일하면 오류는 어디서 날까요?
+        options:
+        - VipDiscount와 GoldDiscount
+        - DiscountCalculator
+        - 오류가 나지 않는다
+        answer: 1
+        explain: 인터페이스에 더한 메서드를 구현하지 않은 구현 클래스마다 오류가 나요. DiscountCalculator는 name()을 부르지 않아서 오류가 나지 않아요.
+    recall: '아니요. 인터페이스로 빼 둔 방향의 변경에만 닫혀 있어요. 코드 C는 새 등급을 더하는 변경에는 닫혀 있지만, `DiscountPolicy`에 메서드를 더하면 구현 클래스를 모두 고쳐야 해요. 구현이 둘이면 인터페이스까지 파일 3개예요. 메서드의 모양을 바꾸면 그 메서드를 부르는 `DiscountCalculator`도 고쳐야 해요. 어느 방향에 닫을지는 인터페이스를 만들 때 정해지므로, 실제로 자주 바뀌는 곳에 적용해요.'
+interview:
+  question: 단일 책임 원칙과 개방 폐쇄 원칙을 설명해 주세요.
+  model:
+  - label: 정의
+    text: 단일 책임 원칙은 클래스가 바뀌는 이유가 하나여야 한다는 원칙이고, 개방 폐쇄 원칙은 기능을 더할 때 있던 코드를 고치지 않고 새 코드를 더해서 할 수 있어야 한다는 원칙입니다.
+  - label: 원리
+    text: 바뀌는 이유는 그 변경을 요구하는 쪽으로 셉니다. 할인 계산과 영수증 문구가 한 클래스에 있으면 마케팅팀의 요구와 고객지원팀의 요구가 같은 클래스를 고치게 하므로, 바뀌는 이유마다 클래스를 나눕니다. 또 등급을 if와 else if로 나누면 등급이 늘 때마다 그 메서드를 고쳐야 하므로, 등급마다 다른 계산을 인터페이스로 빼고 새 등급은 새 구현 클래스로 더합니다.
+  - label: 주의할 점
+    text: 고치는 곳이 없어지는 것이 아니라 구현을 목록에 넣는 조립 코드로 옮겨 갑니다. 그리고 인터페이스로 빼 둔 방향의 변경에만 닫힙니다. 인터페이스에 메서드를 더하면 구현 클래스를 모두 고쳐야 하므로, 실제로 자주 바뀌는 곳에 적용합니다.
+  - label: 경험
+    text: '(내 프로젝트로 채우기) 예: 결제 수단마다 다른 처리를 if 문으로 나눈 코드를 인터페이스와 구현 클래스로 바꿔서, 새 결제 수단을 더할 때 있던 처리 코드를 고치지 않게 했습니다.'
+verified:
+  summary: 이 레슨의 결과는 어떻게 확인했나요? (검증 테스트)
+  body:
+  - p: '이 레슨에 나온 금액과 호출 횟수, "어느 파일을 고치나", 컴파일 오류는 짐작이 아니라 자바 21(OpenJDK)에서 확인한 것이에요. 확인하는 방법은 세 가지예요.'
+  - ul:
+    - '금액과 `send()` 호출 횟수는 코드를 돌려서 봐요. `MailSender` 자리에는 받은 글을 적어 두는 가짜를 넣어요.'
+    - 고치는 파일은 요구를 반영하기 전의 코드와 후의 코드를 폴더 둘에 나란히 두고, 같은 이름의 파일끼리 비교해서 봐요.
+    - 컴파일 오류는 테스트 안에서 자바 컴파일러를 불러, 오류가 난 파일을 봐요.
+  - table:
+      head:
+      - 상황
+      - 확인한 결과
+      rows:
+      - - 코드 A에서 VIP 10,000원 주문으로 `pay()`를 부른다
+        - '9000, `send()` 호출 1번, 보낸 글은 "결제 금액: 9000원"'
+      - - 코드 B에서 `write(9000)`만 부른다
+        - '"결제 금액: 9000원", `send()` 호출 0번'
+      - - 코드 A와 코드 B에서 10,000원 주문으로 `pay()`를 부른다
+        - 둘 다 VIP 9000, GOLD 9500, BASIC 10000
+      - - 코드 B에서 `Grade`에 SILVER만 더한다
+        - SILVER 10,000원 주문은 10000
+      - - 코드 B에서 `calculate()`에 `else if`도 더한다
+        - SILVER 10,000원 주문은 9700
+      - - 코드 C에서 `SilverDiscount`를 목록에 넣지 않는다
+        - SILVER 10,000원 주문은 10000
+      - - 코드 C에서 `SilverDiscount`를 목록에 넣는다
+        - SILVER 10,000원 주문은 9700
+      - - 코드 B에 SILVER를 더하기 전과 후의 파일을 비교한다
+        - '`Grade`와 `DiscountCalculator`가 다르다'
+      - - 코드 C에 SILVER를 더하기 전과 후의 파일을 비교한다
+        - '`Grade`와 조립 코드가 다르고 `SilverDiscount`가 새로 생겼다. `DiscountPolicy`, `DiscountCalculator`, `VipDiscount`, `GoldDiscount`는 같다'
+      - - '`DiscountPolicy`에 `name()`을 더하고 `VipDiscount`만 고친다'
+        - '`GoldDiscount`에서 컴파일 오류 1개'
+      - - '`name()`을 인터페이스에만 더한다'
+        - '`VipDiscount`와 `GoldDiscount`에서 컴파일 오류가 하나씩'
+      - - '`name()`을 default 메서드로 더한다'
+        - 오류 없이 컴파일된다
+      - - '`apply()`가 돌려주는 타입을 long으로 바꾼다'
+        - '`VipDiscount`, `GoldDiscount`, `DiscountCalculator`에서 컴파일 오류'
+      - - '`supports()`가 주문 금액을 받게 바꾼다'
+        - '`VipDiscount`, `GoldDiscount`, `DiscountCalculator`에서 컴파일 오류'
+  - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.
+  - h3: 테스트는 이렇게 생겼어요
+  - p: '"코드 C에 SILVER를 더하기 전과 후의 파일을 비교한다"를 확인하는 테스트예요([SrpOcpChangeTest](link:test)). 읽기 쉽게 줄였어요. 폴더 `c`에는 SILVER를 더하기 전의 코드 C가, 폴더 `csilver`에는 더한 뒤의 코드가 파일 하나에 클래스 하나씩 들어 있어요. 조립 코드는 `Wiring`이라는 파일에 뒀어요.'
+  - code: test
+    notes:
+    - mark: c.same
+      as: code
+      text: 두 폴더에서 내용이 같은 파일이에요. 계산 코드 네 파일이 모두 여기에 있어요. `Order`는 주문을 담는 `record`예요.
+  - p: 내 코드에서도 같은 방법으로 확인할 수 있어요. 기능을 하나 더한 뒤에 `git diff --stat`으로 바뀐 파일을 보세요. 새 파일만 생겼는지, 있던 파일 가운데 어느 것을 고쳤는지 볼 수 있어요.
+  - run:
+      tests:
+      - lab.devlessons.srpocp.SrpOcpChangeTest
+      - lab.devlessons.srpocp.a.CodeATest
+      - lab.devlessons.srpocp.b.CodeBTest
+      - lab.devlessons.srpocp.bforgot.CodeBForgotTest
+      - lab.devlessons.srpocp.bsilver.CodeBSilverTest
+      - lab.devlessons.srpocp.c.CodeCTest
+      - lab.devlessons.srpocp.csilver.CodeCSilverTest
+      docker: false
+footer: '근거: 두 원칙의 정의는 Robert C. Martin의 글 [The Single Responsibility Principle](link:srp)과 [The Open Closed Principle](link:ocp). 구현하지 않은 메서드가 컴파일 오류라는 것은 [자바 언어 명세 8.1.1.1](link:jls). 금액, 호출 횟수, 고치는 파일, 컴파일 오류는 자바 21(OpenJDK)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+# test는 본문 단계에서 더했다. how는 설계 때 적은 그대로다 (그때는 테스트가 없어서 손으로 돌렸다)
 claims:
   - claim: '코드 A. VIP 10,000원 주문으로 `pay()`를 한 번 부르면 9000이 나오고, 그동안 `mail.send()`가 1번 불린다. 보낸 글은 "결제 금액: 9000원"이다'
     how: '`send()`가 불린 횟수와 받은 글을 적어 두는 가짜 `MailSender`를 넣고 돌린다. 돌려 봤다 (9000, 1번, 결제 금액: 9000원)'
+    test: CodeATest.payCalculatesWritesAndSends
   - claim: '코드 B. `ReceiptWriter.write(9000)`은 "결제 금액: 9000원"을 돌려주고, 그동안 `mail.send()`는 0번 불린다'
     how: '같은 방법. 돌려 봤다 (결제 금액: 9000원, 0번)'
+    test: CodeBTest.receiptIsTestedAlone
   - claim: 코드 A와 코드 B의 `pay()`는 10,000원 주문에 같은 값을 돌려준다. VIP 9000, GOLD 9500, BASIC 10000
     how: 코드를 돌려 반환값을 본다. 나누기만 하고 동작은 바꾸지 않았다는 확인이다. 돌려 봤다 (양쪽 모두 9000, 9500, 10000)
+    test: CodeATest.payByGrade, CodeBTest.payReturnsSameAsCodeA
   - claim: 코드 B에서 `Grade`에 SILVER를 더하고 `calculate()`를 고치지 않으면 SILVER 10,000원 주문은 10000이 나온다. `else if`를 더하면 9700이 나온다
     how: 코드를 돌려 반환값을 본다. 돌려 봤다 (10000, 9700)
+    test: CodeBForgotTest.silverGetsNoDiscountWithoutError, CodeBSilverTest.silverGetsThreePercent
   - claim: 코드 C에서 `SilverDiscount`를 목록에 넣지 않으면 SILVER 10,000원 주문은 10000, 넣으면 9700이 나온다
     how: 코드를 돌려 반환값을 본다. 돌려 봤다 (10000, 9700)
+    test: CodeCSilverTest.silverNeedsToBeInTheList
   - claim: 코드 B에 SILVER를 더하면 `Grade`와 `DiscountCalculator` 두 파일이 바뀐다
     how: >-
       요구를 반영하기 전과 후의 코드를 패키지 둘에 나란히 두고, 테스트가 두 패키지의 같은 이름 파일을 비교한다(패키지 선언 줄은 뺀다).
       테스트는 아직 없다. 폴더 둘을 `diff`로 비교해 봤다 (다른 파일은 `Grade`, `DiscountCalculator`)
+    test: SrpOcpChangeTest.codeBChangesGradeAndCalculator
   - claim: 코드 C에 SILVER를 더하면 `Grade`와 조립 코드가 바뀌고 `SilverDiscount`가 새로 생긴다. `DiscountPolicy`, `DiscountCalculator`, `VipDiscount`, `GoldDiscount`는 바뀌지 않는다
     how: 같은 방법. 조립 코드는 파일 하나(`Wiring`)에 두고 비교한다. `diff`로 비교해 봤다 (다른 파일은 `Grade`, `Wiring`. 새 파일은 `SilverDiscount`)
+    test: SrpOcpChangeTest.codeCChangesGradeAndWiringOnly
   - claim: 코드 named. `DiscountPolicy`에 `name()`을 더하고 `VipDiscount`만 고치면 `GoldDiscount`에서 컴파일 오류가 난다
     how: >-
       테스트 안에서 자바 컴파일러(`javax.tools.JavaCompiler`)로 소스를 컴파일해 오류가 난 클래스를 본다. `javac`로 돌려 봤다
       (GoldDiscount is not abstract and does not override abstract method name() in DiscountPolicy, 오류 1개)
+    test: SrpOcpChangeTest.addingMethodBreaksImplementationsLeftBehind
   - claim: '`name()`을 인터페이스에만 더하면 오류는 `VipDiscount`와 `GoldDiscount`에서 하나씩 나고 `DiscountCalculator`에서는 나지 않는다. 고칠 파일은 인터페이스까지 3개다'
     how: 같은 방법. `javac`로 돌려 봤다 (오류 2개, `VipDiscount`와 `GoldDiscount`)
+    test: SrpOcpChangeTest.addingMethodBreaksEveryImplementation
   - claim: '`name()`을 default 메서드로 더하면 구현 클래스를 고치지 않아도 컴파일된다'
     how: 같은 방법. `javac`로 돌려 봤다 (오류 없음)
+    test: SrpOcpChangeTest.defaultMethodBreaksNothing
   - claim: '`apply()`가 돌려주는 타입을 long으로 바꾸거나 `supports()`가 주문 금액(int)을 받게 바꾸면 구현 클래스 둘과 `DiscountCalculator`에서 컴파일 오류가 난다'
     how: 같은 방법. 인터페이스만 바꾸고 `javac`로 돌려 봤다 (두 경우 모두 `VipDiscount`, `GoldDiscount`, `DiscountCalculator`에서 오류)
+    test: SrpOcpChangeTest.changingReturnTypeBreaksCallerToo, SrpOcpChangeTest.changingParameterBreaksCallerToo
 sources:
   - '단일 책임 원칙의 정의(클래스가 바뀌는 이유는 하나), 바뀌는 이유를 그 변경을 요구하는 사람으로 센다는 것, 같은 이유로 바뀌는 것을 모으고 다른 이유로 바뀌는 것을 나눈다는 것: [Robert C. Martin, "The Single Responsibility Principle" (2014)](link:srp)'
   - '개방 폐쇄 원칙의 정의(고치지 않고 동작을 넓힐 수 있어야 한다, 새 기능은 새 코드를 써서 더한다): [Robert C. Martin, "The Open Closed Principle" (2014)](link:ocp)'

@@ -129,7 +129,7 @@
 | `classify` | 상황 분류하기. 상황마다 어느 것에 해당하는지 고른다. `categories`와 `items`(`{text, answer, explain}`, `answer`는 1부터) | `tx-basics`의 질문 5 |
 | `toggle` | 켜고 끄며 비교하기. `selector`에서 하나를 고르면 `scenes`에서 그 장면을 보여 준다. `run`이 있으면 실행 버튼을 눌러야 보이고, 그 전에는 `initial`을 보여 준다 | `jpa-n-plus-1`의 질문 2, `tx-basics`의 질문 4, `connection-pool`의 질문 4 |
 | `steps` | 한 단계씩 실행하기. 버튼을 누를 때마다 `scenarios`의 다음 장면으로 넘어간다. `buttons: each`면 단계마다 버튼을 따로 두고(`label`), 아니면 "다음 단계" 버튼 하나를 둔다. `selector`가 있으면 시나리오를 고른다 | `tx-basics`의 질문 1과 2 |
-| `compare` | 두 칸 비교. 칸 둘과 그 안의 항목을 `sides`에 한 번 적어 두고, 요구나 버튼을 고르면 양쪽에서 강조할 항목만 바뀐다. 고르는 방식은 `toggle`과 같다: `selector`로 고르거나, `run` 버튼 하나를 눌러 `initial`에서 `scenes`의 하나뿐인 장면으로 넘어간다. `layout`에 `sides`가 있어야 한다 | 아직 쓴 레슨이 없다. 아래 "두 칸 비교의 예" |
+| `compare` | 두 칸 비교. 칸 둘과 그 안의 항목을 `sides`에 한 번 적어 두고, 요구나 버튼을 고르면 양쪽에서 강조할 항목만 바뀐다. 고르는 방식은 `toggle`과 같다: `selector`로 고르거나, `run` 버튼 하나를 눌러 `initial`에서 `scenes`의 하나뿐인 장면으로 넘어간다. `layout`에 `sides`가 있어야 한다 | `srp-ocp`의 질문 1, 2, 4. 아래 "두 칸 비교의 예" |
 | `timeline` | 타임라인. 두 쪽(`lanes`, 이름 둘)이 주고받는 것을 차례로 쌓는다. 넘기는 방식은 `steps`와 같다. 단계마다 `log` 대신 `event`를 적는다. `layout`에 `timeline`이 있어야 한다 | 아직 쓴 레슨이 없다. 아래 "타임라인의 예" |
 
 장면은 아래 조각으로 이루어진다. 무엇을 어떤 순서로 놓을지는 위젯의 `layout`에 적는다.
@@ -147,7 +147,7 @@
 | `timeline` | `timeline`의 주고받은 것. 단계의 `event`는 `dir`(`right`는 왼쪽에서 오른쪽으로, `left`는 그 반대), `title`, `text`(요청이나 응답의 글. `[[ ]]`로 새로 생긴 헤더를 강조한다), `note`(아래 설명)다. 앞의 것은 남고 방금 것이 강조된다 |
 | `verdict` | 한 줄 정리 |
 
-`compare`와 `timeline`은 두 설계서(`docs/type-trials/`)가 쓰려는 모양에 맞춰 만들었고, 아직 쓴 레슨이 없다. 설계 유형과 개념 설명 유형의 기준 레슨을 쓰면서 고친다.
+`compare`와 `timeline`은 두 설계서(`docs/type-trials/`)가 쓰려는 모양에 맞춰 만들었다. `compare`는 설계 유형의 기준 레슨 `srp-ocp`가 처음 썼고, `timeline`은 아직 쓴 레슨이 없다. 개념 설명 유형의 기준 레슨을 쓰면서 고친다.
 
 #### 두 칸 비교의 예
 
