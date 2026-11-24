@@ -44,11 +44,11 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 5. 문제 초안
 
-표준 4장 규칙으로 문제를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 핵심 질문마다 판정 2개다: 본문의 예시로 묻는 문제를 먼저, 다른 상황으로 옮긴 문제를 그다음에 적는다. 레슨 전체로 판정 6~10개, 설명형은 핵심 질문 전체를 잇는 면접 질문(`coreQuestion: all`) 하나를 포함해 1~2개다. 같은 것을 겉모습만 바꿔 다시 묻지 않는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
+표준 4장 규칙으로 문제를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 핵심 질문마다 판정 2개다: 본문의 예시로 묻는 문제를 먼저, 다른 상황으로 옮긴 문제를 그다음에 적는다. 레슨 전체로 판정 6~10개, 설명형은 핵심 질문 전체를 잇는 면접 질문(`coreQuestion: all`) 하나를 포함해 1~2개다. 같은 것을 겉모습만 바꿔 다시 묻지 않는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
 
 ## 6. 마무리
 
-- 브랜치를 만들고 커밋, PR 생성. PR 본문은 `.github/pull_request_template.md`를 채운다
-- CI 두 개(`Verify lessons`, `Deploy site`)가 통과해야 완료
+- main에 바로 커밋하고 push한다 (`CLAUDE.md`의 "올리는 방식"). 커밋 메시지에 표준 5장의 숫자(자료 파일의 글자 수, 문제 수)를 적는다
+- push한 뒤 CI(`Deploy site`, `Check questions`, 검증 코드를 바꿨으면 `Verify lessons`)가 통과하는지 확인한다. 실패하면 바로 고쳐 다시 올린다
 - 배포된 페이지를 375px 너비에서 열어 가로 스크롤과 콘솔 오류를 확인한다. `?embed=1`을 붙여 앱 안 화면도 본다
 - 로드맵 이슈를 닫고 `docs/roadmap.md` 상태를 갱신한다
