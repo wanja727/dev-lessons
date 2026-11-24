@@ -57,50 +57,15 @@ questions:
     type: ox
     status: reviewed
     difficulty: 1
-    body: Team의 members가 지연 로딩(LAZY)일 때, findAll()로 팀 10개를 조회하고 members를 한 번도 쓰지 않으면 쿼리는 1번만 나간다.
-    answer: O
+    body: "쇼핑몰의 Order(주문)는 items(주문 상품 목록)를 지연 로딩(LAZY)으로 가지고 있어요. orderRepository.findAll()로 주문 10개를 조회했고, 화면에는 주문 번호만 보여 줘서 items는 한 번도 쓰지 않았어요. 이때 나가는 쿼리는 1번이다."
+    answer: "O"
     explanation: |-
       **O. 1번만 나가요.**
 
-      - 지연 로딩은 멤버를 처음 쓰는 순간에 조회해요. 쓰지 않으면 멤버 쿼리는 나가지 않아요
-      - N+1은 조회한 목록의 연관 데이터를 하나씩 쓸 때 드러나요
+      - 지연 로딩은 연관 데이터를 처음 쓰는 순간에 조회해요. items를 쓰지 않았으니 주문 목록을 가져오는 1번이 전부예요
+      - 팀과 멤버든 주문과 주문 상품이든 같아요. N+1은 조회한 목록의 연관 데이터를 하나씩 쓸 때 생겨요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-  - key: n1-what-and-why
-    concept: core
-    coreQuestion: q1
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: Team의 members가 지연 로딩(LAZY)이에요. 팀 목록을 조회한 뒤 반복문에서 팀마다 members를 쓰면 왜 N+1 문제가 생기는지, 그리고 이것이 왜 문제인지 설명해 보세요.
-    explanation: |-
-      **지연 로딩은 멤버를 처음 쓰는 순간에 그 팀의 멤버만 따로 조회하기 때문이에요.**
-
-      - 팀 목록은 쿼리 1번으로 가져와요. 이때 멤버는 가져오지 않아요
-      - 반복문이 팀마다 members를 처음 쓸 때 그 팀의 멤버를 가져오는 쿼리가 1번씩 나가요. 팀이 N개면 모두 1 + N번이에요
-      - 쿼리 한 번마다 애플리케이션과 DB 사이를 한 번씩 오가요. 쿼리 수가 데이터 개수를 따라 늘어나니 데이터가 쌓일수록 느려져요
-      - 멤버를 쓰지 않으면 추가 쿼리는 없어요
-    checklist:
-      - 팀 목록 조회는 쿼리 1번이고 이때 멤버는 가져오지 않는다고 말했다
-      - 멤버를 처음 쓰는 순간에 그 팀의 멤버만 조회한다고 말했다
-      - 팀이 N개면 쿼리가 모두 1 + N번이라고 말했다
-      - 쿼리 수가 데이터 개수를 따라 늘어나서 문제라고 말했다
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-
   # ── 질문 2. EAGER로 바꾸면 왜 해결되지 않나요? ──
-  - key: q-1935250f
-    concept: core
-    coreQuestion: q2
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 연관관계를 즉시 로딩(EAGER)으로 바꾸면 N+1 문제가 해결된다.
-    answer: X
-    explanation: |-
-      **X. 쿼리 수는 그대로예요.**
-
-      - JPQL은 적힌 대로 팀만 조회하고, 그 뒤에 팀마다 멤버를 조회해요. EAGER는 그 시점을 앞당길 뿐이에요
-      - 멤버가 필요 없는 화면에서도 쿼리가 나가서 오히려 손해예요. 그래서 연관관계는 모두 LAZY로 두고, 필요한 조회에서만 함께 가져와요
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-19b3c76f
     concept: core
     coreQuestion: q2
@@ -133,42 +98,20 @@ questions:
     type: multiple_choice
     status: reviewed
     difficulty: 2
-    body: Team의 members를 EAGER로 바꾸고 findAll()로 팀 10개를 조회했어요. 그 뒤 코드에서 members는 한 번도 쓰지 않았어요. 쿼리는 어떻게 나갈까요?
+    body: "게시판의 Post(게시글)는 comments(댓글 목록)를 가지고 있어요. comments를 즉시 로딩(EAGER)으로 바꾸고 Spring Data JPA의 postRepository.findAll()로 게시글 10개를 조회했어요. 그 뒤 코드에서 comments는 한 번도 쓰지 않았어요. 쿼리는 어떻게 나갈까요?"
     choices:
-      - 1번. 멤버를 쓰지 않았으니 팀만 조회한다
-      - 1번. 팀과 멤버를 join해서 한 번에 가져온다
-      - 11번. 팀 조회 1번 뒤에 곧바로 팀마다 멤버 조회가 10번 나간다
-      - 11번. 팀 조회 1번이 나가고, 나머지 10번은 트랜잭션이 끝날 때 나간다
+      - "1번. 댓글을 쓰지 않았으니 게시글만 조회한다"
+      - "1번. 게시글과 댓글을 join해서 한 번에 가져온다"
+      - "11번. 게시글 조회 1번 뒤에 곧바로 게시글마다 댓글 조회가 10번 나간다"
+      - "11번. 게시글 조회 1번이 나가고, 나머지 10번은 트랜잭션이 끝날 때 나간다"
     answer: "3"
     explanation: |-
       **11번이고, 모두 findAll()을 실행하는 동안 나가요.**
 
-      - EAGER는 멤버를 쓰든 안 쓰든 조회 직후에 채워요. 그래서 쓰지 않아도 10번이 나가요
-      - JPQL은 적힌 대로 팀만 조회하는 SQL이 돼요. EAGER라고 해서 join으로 바뀌지 않아요
-      - 1번(팀만 조회)은 LAZY일 때의 동작이에요
+      - findAll()은 JPQL로 게시글만 조회해요 (1번)
+      - 게시글을 받은 뒤에 EAGER 설정을 보고 게시글마다 댓글을 조회해요 (10번). 댓글을 쓰든 안 쓰든 나가요
+      - EAGER라고 해서 join으로 바뀌지 않아요. LAZY였다면 1번으로 끝났을 조회예요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-  - key: n1-why-eager-fails
-    concept: core
-    coreQuestion: q2
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: EAGER로 바꿔도 N+1 문제가 해결되지 않는 이유를 설명해 보세요.
-    explanation: |-
-      **EAGER는 멤버를 가져오는 시점만 앞당기고, 팀마다 따로 조회하는 방식은 바꾸지 않기 때문이에요.**
-
-      - findAll()은 JPQL `select t from Team t`를 실행하고, JPQL은 적힌 그대로 팀만 조회하는 SQL이 돼요 (1번)
-      - 팀을 받은 뒤에야 EAGER 설정을 보고 팀마다 멤버를 조회해요 (N번)
-      - 멤버가 필요 없는 조회에서도 N번이 나가서 LAZY보다 손해예요
-      - 그래서 모두 LAZY로 두고, 필요한 조회에서만 fetch join이나 배치 페치로 함께 가져와요
-    checklist:
-      - EAGER로 바꿔도 쿼리 수는 1 + N으로 같다고 말했다
-      - JPQL은 적힌 대로 팀만 조회하는 SQL이 된다고 말했다
-      - 멤버 조회는 그 뒤에 팀마다 따로 나간다고 말했다
-      - 멤버가 필요 없을 때도 쿼리가 나가 오히려 손해라고 말했다
-      - 연관관계는 LAZY로 두고 필요한 조회에서만 함께 가져온다고 말했다
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-
   # ── 질문 3. 어떻게 해결하나요? ──
   - key: n1-fetch-join-how
     concept: core
@@ -195,43 +138,19 @@ questions:
     type: multiple_choice
     status: reviewed
     difficulty: 2
-    body: members는 LAZY이고 배치 크기(default_batch_fetch_size)는 100이에요. 팀 250개를 조회한 뒤 모든 팀의 멤버를 썼어요. 쿼리는 모두 몇 번일까요?
+    body: "쇼핑몰의 Order(주문)는 items(주문 상품 목록)를 지연 로딩(LAZY)으로 가지고 있고, 배치 크기(default_batch_fetch_size)는 100이에요. 주문 250개를 조회한 뒤 모든 주문의 items를 썼어요. 쿼리는 모두 몇 번일까요?"
     choices:
-      - 1번
-      - 3번
-      - 4번
-      - 251번
+      - "1번"
+      - "3번"
+      - "4번"
+      - "251번"
     answer: "3"
     explanation: |-
-      **4번이에요.** 팀 목록 1번 + 멤버 3번이에요.
+      **4번이에요.** 주문 목록 1번 + items 3번이에요.
 
-      - 배치 페치는 멤버를 100팀씩 IN 절로 묶어 가져와요. 250팀이면 100, 100, 50으로 3번이에요
-      - 3번을 골랐다면 처음 팀 목록 조회를 빠뜨린 거예요. 251번은 배치 페치가 없을 때(1 + N)예요
+      - 배치 페치는 주문 100개씩의 items를 IN 절로 묶어서 가져와요. 250개면 100개, 100개, 50개로 3번이에요
+      - 배치 페치가 없었다면 1 + 250 = 251번이에요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-  - key: q-9d00afca
-    concept: core
-    coreQuestion: q3
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: N+1 문제의 해결책인 fetch join과 배치 페치를 비교해 보세요. 각각 어떻게 동작하고, 쿼리는 몇 번 나가나요?
-    explanation: |-
-      **둘 다 멤버를 팀마다 따로 가져오지 않고 묶어서 가져와요. 묶는 방식이 달라요.**
-
-      | | 하는 일 | 쿼리 수 |
-      | --- | --- | --- |
-      | fetch join | 팀과 멤버를 join한 SQL 한 번으로 가져온다 | 1 |
-      | 배치 페치 | LAZY는 그대로 두고, 여러 팀의 멤버를 IN 절로 묶어 가져온다 | 1 + (N ÷ 배치 크기, 올림) |
-
-      - 쿼리 수는 fetch join이 적어요
-      - 팀 목록에 멤버를 붙여 페이징할 때는 배치 페치를 써요. 컬렉션 fetch join은 DB에서 페이지를 자르지 못해요
-    checklist:
-      - fetch join은 팀과 멤버를 join해서 쿼리 1번에 가져온다고 말했다
-      - 배치 페치는 LAZY를 그대로 두고 IN 절로 묶어 가져온다고 말했다
-      - 배치 페치의 쿼리 수가 1 + (N ÷ 배치 크기, 올림)이라고 말했다
-      - 컬렉션을 페이징해야 하면 배치 페치를 쓴다고 말했다
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-
   # ── 질문 4. 페이징이 필요하면 어떤 방법을 써야 하나요? ──
   - key: n1-collection-paging
     concept: core
@@ -253,48 +172,25 @@ questions:
       - 팀과 멤버를 join한 결과는 멤버 단위 행이에요. DB의 LIMIT은 행을 기준으로 잘라서 "팀 20개"를 정확히 자를 수 없어요
       - 결과는 맞게 나오지만, 데이터가 많으면 전부 메모리에 올리다가 장애가 날 수 있어요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-  - key: q-ece217e3
-    concept: core
-    coreQuestion: q4
-    type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: 팀 목록을 20개씩 페이징하면서 각 팀의 멤버도 함께 보여 줘야 해요. 가장 적절한 방법은 무엇일까요?
-    choices:
-      - 팀과 멤버를 fetch join하고 페이징을 건다
-      - 페이징 없이 전체를 fetch join으로 가져온 뒤, 애플리케이션에서 20개만 쓴다
-      - 팀만 페이징해서 조회하고, 멤버는 배치 페치로 가져온다
-      - members를 EAGER로 바꾸고 팀을 페이징해서 조회한다
-    answer: "3"
-    explanation: |-
-      **팀만 페이징하고 멤버는 배치 페치로 가져와요. 쿼리 2번으로 끝나요.**
-
-      - 팀 페이지 조회 1번(LIMIT이 정상으로 붙음) + 그 20팀의 멤버를 IN으로 묶어 1번
-      - 1번: 컬렉션 fetch join에 페이징을 걸면 전체를 메모리로 가져와 잘라요
-      - 2번: 1번과 같은 일을 직접 하는 거예요. 전체 데이터를 메모리에 올려요
-      - 4번: EAGER는 쿼리 수를 줄이지 못해요. 1 + 20번이 나가요
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-0dd7b6b4
     concept: core
     coreQuestion: q4
     type: multiple_choice
     status: reviewed
     difficulty: 3
-    body: Member의 team은 @ManyToOne(LAZY)이에요. 멤버 목록을 20명씩 페이징하면서 각 멤버의 팀 이름도 보여 줘야 해요. DB에서 페이징하면서 쿼리 1번으로 끝내는 방법은 무엇일까요?
+    body: "게시판의 Comment(댓글)는 post(게시글)를 @ManyToOne(LAZY)으로 가지고 있어요. 댓글 목록을 20개씩 페이징하면서 각 댓글이 달린 게시글의 제목도 보여 줘야 해요. DB에서 페이징하면서 쿼리 1번으로 끝내는 방법은 무엇일까요?"
     choices:
-      - Member를 조회하면서 team을 fetch join하고 페이징을 건다
-      - Team을 조회하면서 members를 fetch join하고 페이징을 건다
-      - team을 EAGER로 바꾼다
-      - 아무것도 하지 않아도 쿼리 1번이다
+      - "Comment를 조회하면서 post를 fetch join하고 페이징을 건다"
+      - "Post를 조회하면서 comments를 fetch join하고 페이징을 건다"
+      - "post를 EAGER로 바꾼다"
+      - "아무것도 하지 않아도 쿼리 1번이다"
     answer: "1"
     explanation: |-
-      **Member에서 team을 fetch join하고 페이징해요.**
+      **Comment에서 post를 fetch join하고 페이징해요.**
 
-      - 멤버 한 명에 팀은 하나라서 join해도 행이 늘어나지 않아요. LIMIT이 그대로 붙고 쿼리 1번으로 끝나요
-      - 2번: 팀 → 멤버들은 컬렉션이라 행이 늘어나요. 페이징하면 메모리에서 잘라요
-      - 3번: EAGER는 쿼리 수를 줄이지 못해요
-      - 4번: 팀 이름을 쓸 때 추가 쿼리가 나가요
-      - 정리: fetch join과 페이징은 ToOne(멤버 → 팀)에서는 같이 써도 되고, 컬렉션(팀 → 멤버들)에서는 안 돼요
+      - 댓글 하나에 게시글은 하나라서 join해도 행이 늘지 않아요. 그래서 SQL에 LIMIT이 그대로 붙어요
+      - 반대로 Post에서 comments를 fetch join하면 행이 댓글 수만큼 늘어요. DB에서 자르지 못하고 전체를 메모리로 가져와 잘라요
+      - EAGER로 바꾸거나 아무것도 하지 않으면 게시글을 따로 조회하는 쿼리가 더 나가요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
   - key: q-73be0dc3
     concept: core
@@ -316,7 +212,6 @@ questions:
       - 팀만 페이징해서 조회하고 멤버는 배치 페치로 가져온다고 말했다
       - 고친 뒤의 쿼리 수(2번)를 말했다
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
-
   # ── 네 질문을 하나로 ──
   - key: q-59546d76
     concept: core

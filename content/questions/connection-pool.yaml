@@ -49,55 +49,23 @@ questions:
   - key: cp-server-process
     concept: core
     coreQuestion: q1
-    type: ox
+    type: multiple_choice
     status: reviewed
     difficulty: 1
-    body: 프로그램이 PostgreSQL에 연결 2개를 동시에 열어 두면, DB 서버에서는 서로 다른 서버 프로세스 2개가 연결을 하나씩 맡는다.
-    answer: O
+    body: "애플리케이션 서버가 3대 있고, 서버마다 PostgreSQL에 연결을 10개씩 열어 두고 있어요. PostgreSQL 서버에서 이 연결들을 맡고 있는 서버 프로세스는 몇 개일까요?"
+    choices:
+      - "1개"
+      - "3개"
+      - "10개"
+      - "30개"
+    answer: "4"
     explanation: |-
-      **O. PostgreSQL은 연결마다 서버 프로세스를 하나씩 띄워요.**
+      **30개예요.** PostgreSQL은 연결마다 서버 프로세스를 하나씩 띄워요.
 
-      - 그래서 연결 하나를 만드는 비용이 크고, DB 서버가 동시에 받을 수 있는 연결 수에 한계가 있어요
-      - PostgreSQL이 받는 연결 수의 기본 한계는 100개예요
+      - 연결이 3 × 10 = 30개니 서버 프로세스도 30개예요
+      - 그래서 연결을 무한정 만들 수 없어요. PostgreSQL이 동시에 받을 수 있는 연결 수의 기본값은 100개예요
     source: https://www.postgresql.org/docs/16/connect-estab.html
-  - key: cp-why-not-new
-    concept: core
-    coreQuestion: q1
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: 요청마다 DB 연결을 새로 만들고 끊으면 왜 안 되는지 설명해 보세요.
-    explanation: |-
-      **연결을 만드는 비용이 커서 요청마다 느려지고, DB 서버가 받을 수 있는 연결 수에도 한계가 있기 때문이에요.**
-
-      - 연결을 새로 만들려면 네트워크로 DB 서버에 접속해야 해요
-      - 아이디와 비밀번호로 인증해야 해요
-      - DB 서버가 연결을 맡을 준비를 해야 해요. PostgreSQL은 서버 프로세스를 띄워요
-      - 이 일을 SQL 한 번 보낼 때마다 반복하게 돼요
-      - DB 서버가 동시에 받을 수 있는 연결 수에는 한계가 있어요 (PostgreSQL 기본 100개)
-    checklist:
-      - 연결을 만드는 데 네트워크 접속이 필요하다고 말했다
-      - 인증이 필요하다고 말했다
-      - DB 서버 쪽의 준비(서버 프로세스)가 필요하다고 말했다
-      - 그 비용을 요청마다 반복하게 된다고 말했다
-      - DB 서버가 받을 수 있는 연결 수에 한계가 있다고 말했다
-    source: https://www.postgresql.org/docs/16/connect-estab.html
-
   # ── 질문 2. 커넥션 풀은 어떻게 동작하나요? ──
-  - key: q-be7e20b9
-    concept: core
-    coreQuestion: q2
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 커넥션 풀(HikariCP)에서 빌린 Connection의 close()를 부르면 DB와의 연결이 끊어진다.
-    answer: X
-    explanation: |-
-      **X. 끊지 않고 풀에 반납해요.**
-
-      - 풀에서 빌린 연결의 close()는 연결을 풀로 돌려보내는 일이에요
-      - 반납된 연결은 다음 요청이 다시 빌려 써요
-    source: https://github.com/brettwooldridge/HikariCP
   - key: cp-reuse
     concept: core
     coreQuestion: q2
@@ -123,28 +91,26 @@ questions:
       - 첫 번째 try 블록이 끝나면 close()가 불려서 연결이 풀로 돌아가요. 끊어지지 않아요
       - 두 번째 블록은 풀에 돌아와 있는 그 연결을 다시 빌려요. PostgreSQL에서 확인하면 두 번 모두 같은 서버 프로세스예요
     source: https://github.com/brettwooldridge/HikariCP
-  - key: cp-pool-explain
+  - key: q-be7e20b9
     concept: core
     coreQuestion: q2
-    type: descriptive
+    type: multiple_choice
     status: reviewed
     difficulty: 1
-    body: 커넥션 풀이 어떻게 동작하는지, 풀에서 빌린 연결의 close()가 무엇을 하는지 설명해 보세요.
+    body: "HikariCP 풀의 크기는 2, 연결을 기다리는 최대 시간은 500ms예요. 어떤 메서드에 버그가 있어서 getConnection()으로 연결을 빌린 뒤 close()를 부르지 않아요. 이 메서드가 두 번 실행된 뒤에 다른 요청이 getConnection()을 불렀어요. 어떻게 될까요?"
+    choices:
+      - "앞의 메서드가 끝났으니 연결이 저절로 반납돼서 바로 받는다"
+      - "풀이 연결을 하나 더 만들어 준다"
+      - "약 500ms 기다린 뒤 예외로 실패한다"
+      - "DB 서버에 새로 접속해서 연결을 받는다"
+    answer: "3"
     explanation: |-
-      **연결을 미리 만들어 두고 요청마다 빌려주고 돌려받아요. close()는 연결을 끊지 않고 풀에 반납해요.**
+      **약 500ms 기다린 뒤 예외로 실패해요.** 반납된 연결이 없기 때문이에요.
 
-      - 풀은 연결을 정해진 개수만큼 가지고 있어요
-      - 요청은 getConnection()으로 연결을 새로 만들지 않고 하나 빌려요
-      - close()를 부르면 연결이 풀로 돌아가고, 다음 요청이 같은 연결을 다시 써요
-      - 반납하지 않은 연결은 다른 요청이 쓸 수 없으므로 빌린 연결은 꼭 close()해요
-    checklist:
-      - 연결을 미리 만들어 둔다고 말했다
-      - 요청마다 빌려주고 돌려받는다고 말했다
-      - close()는 끊지 않고 반납이라고 말했다
-      - 반납된 연결을 다음 요청이 다시 쓴다고 말했다
-      - 빌린 연결은 꼭 close()해야 한다고 말했다
+      - 풀에서 빌린 연결은 close()를 불러야 풀로 돌아가요. 메서드가 끝났다고 저절로 반납되지 않아요
+      - 연결 2개가 모두 빌려준 상태로 남아 있어서, 다음 요청은 기다리다가 실패해요. 풀은 최대 크기를 넘겨 만들지 않아요
+      - 그래서 try-with-resources로 빌려요. 블록이 끝나면 close()가 자동으로 불려요
     source: https://github.com/brettwooldridge/HikariCP
-
   # ── 질문 3. 풀의 연결이 모두 쓰이고 있으면 다음 요청은 어떻게 되나요? ──
   - key: q-d4692514
     concept: core
@@ -184,81 +150,7 @@ questions:
       - 기다리던 요청은 누군가 연결을 반납하는 순간 그 연결을 받아요
       - 기다리는 최대 시간 3초는 그때까지 못 받으면 실패하는 한도예요. 꼭 그만큼 기다리는 시간이 아니에요
     source: https://github.com/brettwooldridge/HikariCP
-  - key: cp-no-extra
-    concept: core
-    coreQuestion: q3
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: HikariCP 풀은 연결이 모두 쓰이고 있을 때 새 요청이 오면, 최대 풀 크기를 넘겨서라도 연결을 하나 더 만들어 준다.
-    answer: X
-    explanation: |-
-      **X. 최대 풀 크기를 넘겨 만들지 않아요.**
-
-      - 새 요청은 다른 요청이 연결을 반납할 때까지 기다려요
-      - 기다리는 최대 시간(기본 30초) 안에 받지 못하면 예외로 실패해요
-    source: https://github.com/brettwooldridge/HikariCP
-  - key: cp-exhaust-explain
-    concept: core
-    coreQuestion: q3
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 커넥션 풀의 연결이 모두 쓰이고 있을 때 새 요청이 오면 어떻게 되는지 설명해 보세요.
-    explanation: |-
-      **연결이 반납될 때까지 기다리고, 정해진 시간 안에 받지 못하면 예외로 실패해요.**
-
-      - 풀은 최대 크기를 넘겨 연결을 더 만들지 않아요
-      - 기다리는 동안 다른 요청이 연결을 반납하면 그 연결을 바로 받아요
-      - 기다리는 최대 시간은 connection-timeout 설정이고 HikariCP 기본값은 30초예요
-      - 그 시간 안에 받지 못하면 SQLTransientConnectionException이 나요
-    checklist:
-      - 최대 크기를 넘겨 연결을 만들지 않는다고 말했다
-      - 반납될 때까지 기다린다고 말했다
-      - 반납되면 그 연결을 받는다고 말했다
-      - 기다리는 최대 시간(connection-timeout)이 있다고 말했다
-      - 그 시간이 지나면 예외로 실패한다고 말했다
-    source: https://github.com/brettwooldridge/HikariCP
-
   # ── 질문 4. 트랜잭션은 연결을 얼마나 오래 쥐고 있나요? ──
-  - key: q-96e767fb
-    concept: core
-    coreQuestion: q4
-    type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: 스프링의 @Transactional 메서드가 DB에 SQL을 보냈어요. 이 요청이 쥐고 있는 연결은 언제 풀로 돌아갈까요?
-    choices:
-      - SQL 한 문장의 실행이 끝날 때마다
-      - 트랜잭션이 커밋되거나 롤백될 때
-      - 애플리케이션이 종료될 때
-      - 다른 요청이 연결을 달라고 할 때
-    answer: "2"
-    explanation: |-
-      **트랜잭션이 커밋되거나 롤백될 때 돌아가요.**
-
-      - 트랜잭션은 연결 하나 위에서 진행돼요. 그래서 끝날 때까지 그 연결을 쥐고 있어요
-      - 다른 요청이 기다리고 있어도 트랜잭션이 끝나기 전에는 연결을 내주지 않아요
-    source: https://docs.spring.io/spring-boot/reference/data/sql.html
-  - key: cp-tx-active
-    concept: core
-    coreQuestion: q4
-    type: multiple_choice
-    status: reviewed
-    difficulty: 1
-    body: 다른 요청이 없는 서버에서 스프링 트랜잭션 하나가 SQL을 보냈어요. 풀에서 빌려준 상태인 연결의 수를 SQL을 보낸 직후에 한 번, 트랜잭션이 끝난 뒤에 한 번 셌어요. 차례로 몇 개일까요?
-    choices:
-      - 0개, 0개
-      - 1개, 0개
-      - 1개, 1개
-      - 2개, 0개
-    answer: "2"
-    explanation: |-
-      **1개, 0개예요.**
-
-      - 트랜잭션은 진행되는 동안 연결 하나를 쥐고 있어요
-      - 트랜잭션이 끝나면 그 연결을 풀에 돌려줘요
-    source: https://docs.spring.io/spring-boot/reference/data/sql.html
   - key: q-1a470682
     concept: core
     coreQuestion: q4
@@ -281,6 +173,26 @@ questions:
       - 그래서 DB는 한가한데 풀의 연결이 모자라요
       - 결제 호출을 트랜잭션 밖으로 빼고, 결과를 저장하는 부분만 짧은 트랜잭션으로 묶어요
     source: https://github.com/brettwooldridge/HikariCP
+  - key: q-96e767fb
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: "스프링의 @Transactional 메서드가 회원을 조회하고(0.02초), 다른 회사의 이미지 서버에 프로필 사진을 올리고(2초), 회원 정보를 저장해요(0.03초). 이 요청이 풀에서 빌린 연결을 쥐고 있는 시간은 얼마일까요?"
+    choices:
+      - "0.02초"
+      - "0.05초"
+      - "2초"
+      - "2.05초"
+    answer: "4"
+    explanation: |-
+      **2.05초예요.** 트랜잭션이 끝날 때까지 연결을 쥐고 있어요.
+
+      - 연결은 트랜잭션이 커밋되거나 롤백될 때 풀로 돌아가요. SQL 한 문장이 끝날 때마다 돌아가지 않아요
+      - 이미지 서버를 기다리는 2초 동안에는 SQL을 보내지 않지만 연결은 쥔 채예요
+      - 사진을 올리는 일을 트랜잭션 밖으로 빼면 연결을 쥐는 시간은 0.05초가 돼요
+    source: https://docs.spring.io/spring-boot/reference/data/sql.html
   - key: cp-tx-hold-explain
     concept: core
     coreQuestion: q4
@@ -302,7 +214,6 @@ questions:
       - 외부 호출을 트랜잭션 밖으로 뺀다고 말했다
       - 트랜잭션을 짧게 둔다고 말했다
     source: https://github.com/brettwooldridge/HikariCP
-
   # ── 네 질문을 하나로 ──
   - key: q-1ca0e891
     concept: core

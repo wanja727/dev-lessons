@@ -162,5 +162,5 @@
 | 무엇 | 지금 | 맞출 곳 |
 | --- | --- | --- |
 | 코드와 실제 출력 | 틀은 한 상자로 보여 줄 수 있다 (`ci` 블록의 `code`). 이미 쓴 레슨의 실제 출력 19곳 가운데 2곳만 그렇게 바꿨다 | 자료 파일 넷 (`equals-hashcode`, `srp-ocp`, `tx-basics`, `connection-pool`) |
-| 이미 쓴 레슨 다섯 개의 문제 수 | 판정 10~23개, 설명형 5~6개다. `equals-hashcode`에는 면접 질문이 없다. 검사는 경고만 한다. 다섯 파일을 줄인 뒤에 경고를 오류로 바꾼다 | `content/questions/`의 다섯 파일, `scripts/check-questions.mjs` |
+| 이미 쓴 레슨 두 개의 문제 수 | `equals-hashcode`는 판정 23개와 설명형 5개이고 면접 질문이 없다. `srp-ocp`는 판정 17개와 설명형 6개다. 검사는 경고만 한다. 두 파일을 본문과 함께 줄인 뒤에 경고를 오류로 바꾼다 | `content/questions/`의 두 파일, `scripts/check-questions.mjs` |
 | 이미 쓴 레슨의 분량 | `equals-hashcode`와 `srp-ocp`의 자료 파일이 6만 자다 | 두 자료 파일 |
