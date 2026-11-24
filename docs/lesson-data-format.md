@@ -64,7 +64,7 @@
 | `predict` | 먼저 예측해 보기. `title`, `text`, `code`(코드 이름), `label`, `options`(`{value, label}`), `answer`(정답의 `value`), `storageKey`(고른 값을 기억할 이름), `wrong`(틀렸을 때의 문장. `{value}`와 `{label}`이 고른 것으로 바뀐다) |
 | `questions` | 핵심 질문 3~5개. 아래 "질문 하나" |
 | `interview` | 면접 질문 `question`과 모범 답 `model`(`{label, text}`의 목록. 정의, 원리, 주의할 점, 경험) |
-| `verified` | 검증 구역. `summary`(접힌 제목)와 `body`(본문 블록) |
+| `verified` | 검증 구역. 무엇으로 확인했는지 한 줄과 테스트 파일 링크를 적은 글 하나 (표준 7장). 표나 테스트 코드는 넣지 않는다 |
 | `footer` | 근거를 적는 맨 아래 글 |
 
 ## 질문 하나
@@ -96,8 +96,7 @@
 | `table` | `head`(칸 이름들)와 `rows`(행들). 좁은 화면에서는 카드로 쌓인다 |
 | `callout` | 강조 상자 |
 | `more` | 접어 두는 "더 알아보기". `summary`와 `body`(본문 블록) |
-| `ci` | 검증 테스트가 남긴 실제 출력. `key`, `label`, `source` |
-| `run` | "저장소에서 이 테스트 돌려 보기". `tests`(테스트 클래스의 전체 이름들), `docker` |
+| `ci` | 검증 테스트가 남긴 실제 출력. `key`, `label`, `source`. `code`에 `codes`의 이름을 적으면 실행한 코드와 실제 출력이 한 상자에 나온다. 그 코드를 바로 위에 따로 또 보여 주지 않는다 |
 | `quiz` | 장마다 하나 있는 확인 문제. `q`, `options`, `answer`(보기 번호, 1부터), `explain` |
 | `next` | "다음 질문:" 뒤에 올 글 |
 | `widget` | 위젯. 아래 "위젯" |

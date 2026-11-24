@@ -58,18 +58,6 @@ codes:
         deposit(to, n);
         withdraw(from, n);
     }
-  test: |-
-    @Test
-    void transactionRollsBackAll() {
-        // 잔액 50인데 100을 보낸다
-        assertThatThrownBy(() ->⤶
-            service.transfer(1, 2, 100));
-
-        // 처음 그대로인지 확인
-        assertThat([[balance(1)]])⤷
-            .isEqualTo(50);
-        assertThat([[balance(2)]]).isZero();
-    }
 predict:
   title: 둘째 문장이 실패하면 잔액은 어떻게 될까요?
   text: kim이 lee에게 100을 보내요. SQL은 두 문장이에요. lee에게 100을 더하고, kim에게서 100을 빼요. 아무 설정 없이 DB에 한 문장씩 차례로 보냈어요. 그런데 kim의 잔액은 50뿐이라 둘째 문장이 실패해요. 모르는 게 정상이니 감으로 골라 보세요.
@@ -409,44 +397,5 @@ interview:
       text: 롤백은 DB 변경만 되돌리므로 메일 발송이나 외부 API 호출은 커밋 뒤에 둡니다. 트랜잭션이 길면 연결과 바꾼 행을 오래 붙잡으므로 필요한 SQL만 짧게 묶습니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 이체 로직에 @Transactional을 두고, 출금이 실패하면 입금까지 롤백되는 것을 테스트로 확인했습니다.'
-verified:
-  summary: 이 레슨의 숫자는 어떻게 확인했나요? (검증 테스트)
-  body:
-    - p: 이 레슨에 나온 잔액은 짐작이 아니라, 실제 PostgreSQL 16에서 코드를 돌려 확인한 값이에요. 테스트([TransactionBasicsTest](link:test))는 kim 50, lee 0을 넣어 두고, 아래 상황마다 결과를 확인해요.
-    - table:
-        head:
-          - 상황
-          - 확인한 결과
-        rows:
-          - - 트랜잭션 없이 100을 보낸다
-            - 예외가 나고 kim 50, lee 100
-          - - 한 트랜잭션으로 100을 보낸다
-            - 예외가 나고 kim 50, lee 0
-          - - 한 트랜잭션으로 30을 보낸다
-            - kim 20, lee 30
-          - - 연결 A가 커밋 전에 바꾼 값을 연결 B가 읽는다
-            - B는 바뀌기 전 값 50을 읽는다
-          - - 연결 A가 커밋한 뒤 연결 B가 읽는다
-            - B는 바뀐 값 999를 읽는다
-          - - 연결 A가 다시 바꾸고 롤백한 뒤 연결 B가 읽는다
-            - B는 그대로 999를 읽는다
-          - - INSERT, UPDATE, DELETE를 하고 롤백한다
-            - 세 가지 모두 되돌아간다
-          - - JDBC 연결을 새로 얻는다
-            - 자동 커밋이 켜져 있다
-    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.
-    - h3: 테스트는 이렇게 생겼어요
-    - p: '"한 트랜잭션으로 100을 보낸다"를 확인하는 테스트예요. `service.transfer`는 `@Transactional`이 붙은 메서드예요. 계좌 1이 kim, 계좌 2가 lee예요.'
-    - code: test
-      notes:
-        - mark: balance(1)
-          as: code
-          text: 계좌의 잔액을 DB에서 다시 읽어 와요.
-    - run:
-        tests:
-          - lab.devlessons.txbasics.TransactionBasicsTest
-        docker: true
-    - h3: 직접 쳐 보기
-    - p: 브라우저 안에서 도는 진짜 PostgreSQL([PGlite](https://pglite.dev/))에 계좌 표를 만들어요. 서버로 보내는 것은 없고, 처음 한 번 약 13MB를 받아요. 아래 칸의 SQL은 한 문장씩 차례로 보내요.
-    - widget: {kind: custom, name: tx-basics/PgPlayground}
+verified: "이 레슨의 잔액은 짐작이 아니라, 실제 PostgreSQL 16에서 코드를 돌려 확인한 값이에요. 코드가 바뀔 때마다 테스트([TransactionBasicsTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
 footer: '근거: PostgreSQL 16 문서의 Transactions 튜토리얼, Oracle 자바 튜토리얼의 Using Transactions(JDBC), Spring Framework 참조 문서의 Using @Transactional. 잔액은 PostgreSQL 16과 Spring Boot 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
