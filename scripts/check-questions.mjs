@@ -18,22 +18,27 @@ const MIDDLE_DOT = /[·ㆍ・‧]/;
 export const RULES = {
   coreQuestionsMin: 3,
   coreQuestionsMax: 5,
-  judgmentPerCoreQuestion: 2,
-  descriptivePerCoreQuestion: 1,
-  judgmentPerLesson: 8,
-  descriptivePerLesson: 3,
+  judgmentPerCoreQuestionMin: 2,
+  judgmentPerCoreQuestionMax: 3,
+  judgmentPerLessonMin: 6,
+  judgmentPerLessonMax: 10,
+  descriptivePerLessonMin: 1,
+  descriptivePerLessonMax: 2,
 };
 
 /**
  * 문제 파일 하나를 검사한다.
- * @returns {{skipped: boolean, errors: string[]}} skipped는 옛 구조 파일이라 검사하지 않았다는 뜻이다
+ * 오류는 CI를 실패시킨다. 경고는 알리기만 한다: 개수의 위쪽 한계를 넘은 것과, 면접 질문(all)이 없는 것은 경고다.
+ * 한계를 낮추기 전에 쓴 레슨이 있어서다 (docs/lesson-standard.md "아직 맞추지 않은 것"). 그 레슨들을 줄이면 오류로 바꾼다.
+ * @returns {{skipped: boolean, errors: string[], warnings: string[]}} skipped는 옛 구조 파일이라 검사하지 않았다는 뜻이다
  */
 export function checkQuestionFile(text) {
   const file = parse(text);
   if (!file || !Array.isArray(file.coreQuestions)) {
-    return { skipped: true, errors: [] };
+    return { skipped: true, errors: [], warnings: [] };
   }
   const errors = [];
+  const warnings = [];
 
   text.split(/\r?\n/).forEach((line, i) => {
     if (MIDDLE_DOT.test(line)) {
@@ -52,24 +57,29 @@ export function checkQuestionFile(text) {
   const isDescriptive = (q) => q.type === "descriptive";
 
   for (const c of core) {
-    const mine = questions.filter((q) => q.coreQuestion === c.key);
-    const judgment = mine.filter(isJudgment).length;
-    const descriptive = mine.filter(isDescriptive).length;
-    if (judgment < RULES.judgmentPerCoreQuestion) {
-      errors.push(`핵심 질문 '${c.key}': 판정 문제가 ${judgment}개다. ${RULES.judgmentPerCoreQuestion}개 이상 필요하다`);
-    }
-    if (descriptive < RULES.descriptivePerCoreQuestion) {
-      errors.push(`핵심 질문 '${c.key}': 설명형 문제가 ${descriptive}개다. ${RULES.descriptivePerCoreQuestion}개 이상 필요하다`);
+    const judgment = questions.filter((q) => q.coreQuestion === c.key && isJudgment(q)).length;
+    if (judgment < RULES.judgmentPerCoreQuestionMin) {
+      errors.push(`핵심 질문 '${c.key}': 판정 문제가 ${judgment}개다. ${RULES.judgmentPerCoreQuestionMin}개 이상 필요하다 (본문의 예시로 하나, 다른 상황으로 옮긴 것 하나)`);
+    } else if (judgment > RULES.judgmentPerCoreQuestionMax) {
+      warnings.push(`핵심 질문 '${c.key}': 판정 문제가 ${judgment}개다. ${RULES.judgmentPerCoreQuestionMax}개까지만 둔다`);
     }
   }
 
   const judgmentTotal = questions.filter(isJudgment).length;
-  const descriptiveTotal = questions.filter(isDescriptive).length;
-  if (judgmentTotal < RULES.judgmentPerLesson) {
-    errors.push(`판정 문제가 모두 ${judgmentTotal}개다. 레슨마다 ${RULES.judgmentPerLesson}개 이상 필요하다`);
+  if (judgmentTotal < RULES.judgmentPerLessonMin) {
+    errors.push(`판정 문제가 모두 ${judgmentTotal}개다. 레슨마다 ${RULES.judgmentPerLessonMin}개 이상 필요하다`);
+  } else if (judgmentTotal > RULES.judgmentPerLessonMax) {
+    warnings.push(`판정 문제가 모두 ${judgmentTotal}개다. 레슨마다 ${RULES.judgmentPerLessonMax}개까지만 둔다`);
   }
-  if (descriptiveTotal < RULES.descriptivePerLesson) {
-    errors.push(`설명형 문제가 모두 ${descriptiveTotal}개다. 레슨마다 ${RULES.descriptivePerLesson}개 이상 필요하다`);
+
+  const descriptive = questions.filter(isDescriptive);
+  if (descriptive.length < RULES.descriptivePerLessonMin) {
+    errors.push(`설명형 문제가 없다. 레슨마다 ${RULES.descriptivePerLessonMin}개 이상 필요하다`);
+  } else if (!descriptive.some((q) => q.coreQuestion === ALL)) {
+    warnings.push(`핵심 질문 전체를 잇는 설명형 문제(coreQuestion: ${ALL})가 없다. 면접 질문 하나를 둔다`);
+  }
+  if (descriptive.length > RULES.descriptivePerLessonMax) {
+    warnings.push(`설명형 문제가 ${descriptive.length}개다. 레슨마다 ${RULES.descriptivePerLessonMax}개까지만 둔다. 질문마다의 설명형은 만들지 않는다`);
   }
 
   for (const q of questions) {
@@ -79,7 +89,7 @@ export function checkQuestionFile(text) {
     }
   }
 
-  return { skipped: false, errors };
+  return { skipped: false, errors, warnings };
 }
 
 function main(dir) {
@@ -87,6 +97,7 @@ function main(dir) {
   let checked = 0;
   let skipped = 0;
   let errorCount = 0;
+  let warningCount = 0;
   for (const name of names) {
     const result = checkQuestionFile(readFileSync(join(dir, name), "utf8"));
     if (result.skipped) {
@@ -97,9 +108,13 @@ function main(dir) {
     for (const e of result.errors) {
       console.log(`오류 ${name}: ${e}`);
     }
+    for (const w of result.warnings) {
+      console.log(`경고 ${name}: ${w}`);
+    }
     errorCount += result.errors.length;
+    warningCount += result.warnings.length;
   }
-  console.log(`검사한 파일 ${checked}개, 옛 구조라 건너뛴 파일 ${skipped}개, 오류 ${errorCount}개`);
+  console.log(`검사한 파일 ${checked}개, 옛 구조라 건너뛴 파일 ${skipped}개, 오류 ${errorCount}개, 경고 ${warningCount}개`);
   if (checked === 0) {
     console.log("오류: 검사할 파일이 하나도 없다");
     process.exit(1);
