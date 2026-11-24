@@ -29,6 +29,8 @@ const { title, description, theme } = Astro.props;
       html.embed body { padding-top: 20px; }
       /* 앱의 하단 바가 본문 끝을 가리지 않도록 아래를 비워 둔다 */
       html.embed body { padding-bottom: 88px; }
+      /* 앱이 iframe을 본문 높이에 맞췄을 때: 이 페이지는 스크롤되지 않으므로 진행 표시를 앱이 그린다 */
+      html.embed-fit .progress, html.embed-fit .where { display: none; }
     </style>
   </head>
   <body>
@@ -61,6 +63,42 @@ const { title, description, theme } = Astro.props;
           }
           window.addEventListener('scroll', send, { passive: true });
           window.addEventListener('resize', send);
+        })();
+
+        /*
+         * 앱에 본문의 높이를 알린다. 앱이 iframe을 그 높이로 맞추면 본문이 iframe 안에서 따로 스크롤되지 않고
+         * 앱의 페이지 전체가 스크롤된다. 그래야 모바일 브라우저의 주소창이 접힌다.
+         * 높이가 맞춰진 것을 확인하면 html에 embed-fit을 붙인다. 그때는 진행 표시를 앱이 대신 그린다.
+         */
+        (function () {
+          if (window.parent === window) return;
+          var last = 0;
+          function height() {
+            var cs = getComputedStyle(document.body);
+            return Math.ceil(document.body.getBoundingClientRect().height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom));
+          }
+          function fitted() { return window.innerHeight >= height() - 2; }
+          function send() {
+            document.documentElement.classList.toggle('embed-fit', fitted());
+            var h = height();
+            if (h === last) return;
+            last = h;
+            window.parent.postMessage({ source: 'dev-lessons', type: 'height', height: h }, '*');
+          }
+          new ResizeObserver(send).observe(document.body);
+          window.addEventListener('load', send);
+          window.addEventListener('resize', send);
+          send();
+
+          /* 높이가 맞춰지면 이 페이지는 스크롤되지 않는다. 페이지 안의 #링크는 앱이 대신 그 자리로 스크롤한다 */
+          document.addEventListener('click', function (e) {
+            var a = e.target.closest && e.target.closest('a[href^="#"]');
+            if (!a || !fitted()) return;
+            var el = document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1)));
+            if (!el) return;
+            e.preventDefault();
+            window.parent.postMessage({ source: 'dev-lessons', type: 'scroll', top: Math.round(el.getBoundingClientRect().top + window.scrollY) }, '*');
+          });
         })();
       }
     </script>

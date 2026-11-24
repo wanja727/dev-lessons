@@ -90,6 +90,22 @@ window.Lesson = (function () {
     addEventListener('scroll', update, { passive: true });
     addEventListener('resize', update);
     update();
+
+    /* 앱 안 화면: 구역이 시작하는 위치를 앱에 알린다. 앱이 자기 스크롤로 "지금 읽는 질문"을 그린다 (layouts/Base.astro) */
+    if (document.documentElement.classList.contains('embed') && window.parent !== window) {
+      var sent = '';
+      function post() {
+        var list = [];
+        marks.forEach(function (m) { var el = $(m[0]); if (el) list.push({ label: m[1], top: Math.round(el.getBoundingClientRect().top + scrollY) }); });
+        var key = JSON.stringify(list);
+        if (key === sent) return;
+        sent = key;
+        window.parent.postMessage({ source: 'dev-lessons', type: 'marks', marks: list }, '*');
+      }
+      new ResizeObserver(post).observe(document.body);
+      addEventListener('load', post);
+      post();
+    }
   }
 
   /* 페이지가 다 그려진 뒤: 좁은 화면에서 표를 카드로 쌓을 때 쓸 칸 이름, 슬라이더의 채워진 부분 */
