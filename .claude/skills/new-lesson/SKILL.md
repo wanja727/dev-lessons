@@ -28,21 +28,22 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 - `.astro` 페이지를 쓰지 않는다. 자료 파일 `site/src/content/lesson-pages/<slug>.yaml`의 칸을 채우면 틀이 페이지를 만든다. 칸은 `docs/lesson-data-format.md`에 있고, `jpa-n-plus-1.yaml`과 `tx-basics.yaml`을 본보기로 삼는다
 - 본문을 쓰기 전에 같은 파일을 `stage: design`으로 만들어 설계 단계의 칸만 채우고 확인받는다 (`docs/lesson-data-format.md`의 "두 단계"). 승인되면 `stage` 줄을 지우고 나머지 칸을 채운다
-- 구조는 표준 1장(핵심 질문)이고 틀이 정한다. 질문마다 결론, 본문 블록, 위젯 하나, 확인 문제, 다음 질문으로 잇는 말을 채운다
+- 구조는 표준 1장(핵심 질문)이고 틀이 정한다. 질문은 3~4개로 짜고, 질문마다 결론, 본문 블록, 확인 문제, 다음 질문으로 잇는 말을 채운다. 자료 파일은 3만 자 안팎으로 쓴다 (표준 1장 "분량")
+- 위젯은 직접 눌러 봐야 이해되는 질문에만 둔다. 레슨에 1개 이상이면 된다
 - 위젯은 공통 위젯(`classify`, `toggle`, `steps`, `compare`, `timeline`)에서 먼저 고른다. 안 되는 것만 `site/src/components/lesson-widgets/<slug>/<이름>.astro`에 직접 만들고, 왜 안 되는지 사용자에게 먼저 말한다
 - 글에 쓸 수 있는 표시는 굵게, 코드 조각, 링크 세 가지다 (자료 형식 문서의 "글 쓰는 법"). 다른 레슨으로 가는 링크의 주소는 `lesson:슬러그`로 적는다
 - 코드는 `codes`에 이름을 붙여 두고 블록에서 이름으로 쓴다. 한 줄 44자 이하, 강조는 `[[ ]]`(표준 3장)
 - 화면이 그대로면 개발 서버를 다시 켠다. 오래 켜 둔 서버는 옛 스타일을 내놓기도 한다
-- 마지막에 접어 둔 "검증" 구역(`verified`): 상황과 확인한 결과 표, 테스트 하나, `run` 블록
+- "검증" 구역(`verified`)은 무엇으로 확인했는지 한 줄과 테스트 파일 링크만 둔다 (표준 7장). 표, 테스트 코드, `run` 블록은 넣지 않는다
 
 ## 4. 메타데이터
 
-`site/src/content/lessons/<slug>.md` 프론트매터: title, unit, order(배우는 순서 번호, 선수 레슨보다 뒤), stage(기초·동시성·트랜잭션과 JPA·DB와 운영·실무 시스템 중 하나), summary, minutes, page, verifiedBy(테스트 경로, 1개 이상 필수), sources(공식 문서 URL), updated.
+`site/src/content/lessons/<slug>.md` 프론트매터: title, unit, order(배우는 순서 번호, 선수 레슨보다 뒤), stage(기초, 동시성, 트랜잭션과 JPA, DB와 운영, 실무 시스템 중 하나), summary, minutes, page, verifiedBy(테스트 경로, 1개 이상 필수), sources(공식 문서 URL), updated.
 출처 URL은 `curl -o /dev/null -w '%{http_code}'`로 200인지 확인한다.
 
 ## 5. 문제 초안
 
-표준 4장 규칙으로 핵심 질문마다 판정 2개 이상과 설명형 1개를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
+표준 4장 규칙으로 문제를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 핵심 질문마다 판정 2개다: 본문의 예시로 묻는 문제를 먼저, 다른 상황으로 옮긴 문제를 그다음에 적는다. 레슨 전체로 판정 6~10개, 설명형은 핵심 질문 전체를 잇는 면접 질문(`coreQuestion: all`) 하나를 포함해 1~2개다. 같은 것을 겉모습만 바꿔 다시 묻지 않는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. 같은 PR의 CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
 
 ## 6. 마무리
 
