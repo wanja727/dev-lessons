@@ -20,7 +20,7 @@ const lessons = defineCollection({
 });
 
 // 레슨 본문 자료 (docs/lesson-data-format.md). 이 파일의 칸을 채우면 페이지가 나온다.
-// 틀이 아직 초안이라 본문 블록과 위젯의 칸은 느슨하게 받는다. 틀을 굳힐 때 조인다 (docs/quality-plan.md 진행 순서 5번)
+// 본문 블록과 위젯의 칸은 느슨하게 받는다. 틀린 칸 때문에 문제가 생기면 그때 조인다
 //
 // 파일은 두 단계를 거친다 (docs/quality-plan.md 방법 4번).
 //   stage: design  설계서. 질문, 결론, 본문이 말할 것, 위젯 계획, 문제 개요, 확인할 주장만 채운다. 페이지는 만들지 않는다
