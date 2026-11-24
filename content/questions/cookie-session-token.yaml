@@ -6,6 +6,7 @@
 # 응답은 verification의 CookieSessionTokenTest로 확인한 동작에서 나온다 (톰캣 10.1, 자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
 # JWT는 서명만 한 형태를 다룬다.
+# 2026-11-24에 문제 9개의 정답을 본문(says)과 테스트 결과에 하나씩 맞춰 보고 reviewed로 바꿨다. 고친 문제는 없다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 브라우저가 아래 응답을 받았어요. 같은 사이트로 보내는 다음 요청에 브라우저가 넣는 헤더는 무엇일까요?
     code: |-
@@ -55,7 +56,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "어떤 영상 사이트의 서버는 로그인한 사용자에게 Set-Cookie: grade=BASIC을 줘요. 그 뒤로는 요청의 Cookie 헤더에 든 grade 값만 보고, 값이 PREMIUM이면 유료 영상을 보여 줘요. 서버가 따로 저장하거나 확인하는 것은 없어요. 사용자가 개발자 도구로 쿠키를 grade=PREMIUM으로 고친 뒤 유료 영상을 요청하면 어떻게 될까요?"
     choices:
@@ -76,7 +77,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "세션 방식의 서버예요. 세션 저장소에 abc123 → kim이 들어 있었는데, kim이 로그아웃해서 서버가 이 세션을 지웠어요. 브라우저에는 쿠키가 지워지지 않고 남아 있어서 아래 요청이 갔어요. 서버는 어떻게 처리할까요?"
     code: |-
@@ -99,7 +100,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 사내 게시판은 서버 한 대로 돌아가고, 세션을 서버의 메모리에만 둬요. 파일이나 다른 저장소에는 남기지 않아요. lee가 로그인해서 글을 쓰는 동안, 새 버전을 배포하느라 서버를 껐다 켰어요. lee의 브라우저에는 세션 ID 쿠키가 그대로 있어요. lee의 다음 요청은 어떻게 될까요?
     choices:
@@ -120,7 +121,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 사용자가 받은 JWT의 페이로드에서 role을 USER에서 ADMIN으로 바꾸고, 서명 부분은 그대로 둔 채 서버에 보냈어요. 서버는 받은 토큰의 서명과 만료 시간을 확인해요. 만료 시간은 지나지 않았어요. 서버는 어떻게 처리할까요?
     choices:
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 어떤 배달 앱이 서명만 한 JWT의 페이로드에 사용자의 전화번호를 넣었어요. 서명 키를 모르는 사람이 이 토큰을 손에 넣었어요. 이 사람이 전화번호에 대해 할 수 있는 일은 무엇일까요? 서버는 요청마다 서명을 확인해요.
     choices:
@@ -161,7 +162,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서버 A와 B가 같은 서명 키를 가지고 있고, 두 서버가 함께 쓰는 저장소는 없어요. 서버는 서명과 만료 시간만 확인해요. A에서 로그인해 받은 만료 전의 JWT로 B에 요청하면 어떻게 될까요?
     choices:
@@ -180,7 +181,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 사내 도구가 JWT를 써요. 토큰은 받은 때부터 8시간 뒤에 만료돼요. 서버는 서명과 만료 시간만 확인하고, 막을 토큰을 따로 저장해 두지 않아요. 한 직원이 오전 10시에 로그인해 토큰을 받았고, 오전 11시에 인사팀이 DB에서 이 직원의 계정을 비활성화했어요. 오후 2시에 이 토큰으로 온 요청은 어떻게 될까요?
     choices:
@@ -201,7 +202,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "쿠키, 세션, 토큰(JWT)의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
