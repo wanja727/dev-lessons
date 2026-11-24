@@ -28,7 +28,7 @@ window.Lesson = (function () {
     });
   }
 
-  /* 먼저 예측해 보기: 고른 값을 기억해 두었다가 질문 1에서 맞았는지 알려 준다 */
+  /* 먼저 예측해 보기: 고른 값을 기억해 두었다가 답을 밝히는 질문에서 맞았는지 알려 준다 */
   function predict(c) {
     var picked = store(c.key), opts = $(c.opts), out = $(c.result);
     function show() {
@@ -40,20 +40,23 @@ window.Lesson = (function () {
     show();
   }
 
-  /* 장마다 확인 문제 하나. 기록하지 않는 연습이다 */
+  /* 글 안의 `코드`만 코드 조각으로 바꾼다. 나머지는 글자 그대로 보여 준다 */
+  function inline(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>'); }
+
+  /* 장마다 확인 문제 하나. 기록하지 않는 연습이다. 질문, 보기, 해설의 `코드`는 코드 조각이 된다 */
   function quizzes(map) {
     document.querySelectorAll('[data-quiz]').forEach(function (box) {
       var item = map[box.dataset.quiz]; if (!item) return;
       box.innerHTML = '<span class="label">확인</span><p></p><div class="opts"></div><div class="feedback" hidden></div>';
-      box.querySelector('p').textContent = item.q;
+      box.querySelector('p').innerHTML = inline(item.q);
       var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
       item.o.forEach(function (o, oi) {
-        var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.setAttribute('aria-pressed', 'false');
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.innerHTML = inline(o); b.setAttribute('aria-pressed', 'false');
         b.addEventListener('click', function () {
           opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
           var right = oi === item.a;
           fb.hidden = false; fb.className = 'feedback ' + (right ? 'right' : 'wrong');
-          fb.textContent = (right ? '맞아요. ' : '정답은 "' + item.o[item.a] + '"이에요. ') + item.e;
+          fb.innerHTML = inline((right ? '맞아요. ' : '정답은 "' + item.o[item.a] + '"이에요. ') + item.e);
         });
         opts.appendChild(b);
       });

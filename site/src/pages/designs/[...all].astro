@@ -67,8 +67,8 @@ const WIDGETS: Record<string, string> = {
             <h3>질문 {i + 1}. {q.title}</h3>
             <p class="label">본문이 말할 것 (문제는 여기에 적은 것만 물어요)</p>
             <ul>{q.says.map((s) => <li set:html={md(s)} />)}</ul>
-            <p class="label">위젯: {WIDGETS[q.widget.kind]}</p>
-            <p><Fragment set:html={md(q.widget.note)} />{q.widget.why && <> <strong>공통 위젯으로 안 되는 이유:</strong> <Fragment set:html={md(q.widget.why)} /></>}</p>
+            <p class="label">위젯: {q.widget ? WIDGETS[q.widget.kind] : '두지 않음'}</p>
+            {q.widget && <p><Fragment set:html={md(q.widget.note)} />{q.widget.why && <> <strong>공통 위젯으로 안 되는 이유:</strong> <Fragment set:html={md(q.widget.why)} /></>}</p>}
             <p class="label">문제 개요</p>
             <ul>{q.asks.map((s) => <li set:html={md(s)} />)}</ul>
           </>

@@ -11,12 +11,13 @@
 | 유형 | 레슨 | 설계서 | 문제 |
 | --- | --- | --- | --- |
 | 설계 | O3 단일 책임과 개방 폐쇄 원칙 | `site/src/content/lesson-pages/srp-ocp.yaml` (자료 파일) | `content/questions/srp-ocp.yaml` |
-| 개념 설명 | N7 쿠키, 세션, 토큰 | `cookie-session-token.md` | `cookie-session-token.yaml` |
+| 개념 설명 | N7 쿠키, 세션, 토큰 | `site/src/content/lesson-pages/cookie-session-token.yaml` (자료 파일) | `content/questions/cookie-session-token.yaml` |
 
 - 쉬운 레슨을 고르지 않았다. O3은 의견이 갈리기 쉬운 원칙 이야기이고, N7은 "세션과 토큰 가운데 무엇이 좋은가"로 흐르기 쉬운 주제다
 - O3은 그 뒤에 레슨으로 썼다 (2026-11-23). 이 폴더에 있던 설계서와 문제 초안은 지우고, 표는 레슨의 자료 파일과 문제 파일을 가리킨다. 설계서는 자료 파일의 설계 단계 칸(`says`, `widget`, `asks`, `claims`)에 남아 있다
+- N7도 그 뒤에 레슨으로 썼다 (2026-11-24). 낮춘 표준에 맞춰 판정 18개를 8개로, 설명형 5개를 1개로 줄였다. 이 폴더에 있던 설계서와 문제 초안은 지웠다
 - 써 볼 때는 페이지를 쓰지 않았다. 설계서의 "질문마다 본문이 말할 것"을 본문 대신 근거로 삼았다
-- 문제는 모두 `status: draft`다. N7의 문제는 `content/questions`에 두지 않아서 학습 앱이 가져가지 않는다. 레슨을 쓸 때 옮긴다
+- 써 볼 때의 문제는 모두 `status: draft`였다. 지금은 두 레슨 모두 검수를 마친 문제가 `content/questions`에 있다
 - 두 문제 파일은 Retrievo의 형식 검사와 `scripts/check-questions.mjs`를 오류 없이 통과한다
 
 ## 기준에 대 본 결과

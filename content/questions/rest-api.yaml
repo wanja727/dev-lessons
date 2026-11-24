@@ -7,7 +7,7 @@ subject:
 lesson:
   key: rest-api
   title: HTTP와 REST API 설계
-  unit: 네트워크·웹
+  unit: 네트워크와 웹
   order: 30
 concepts:
   - key: core

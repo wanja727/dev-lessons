@@ -15,7 +15,7 @@
 | 주소 | `site/src/pages/lessons/[slug].astro`가 자료 파일마다 `/lessons/<슬러그>/`를 만든다 |
 | 설계서 모아 보기 | `site/src/pages/designs/[...all].astro`. 개발 서버의 `/designs/`에서만 나온다 |
 
-예로 볼 파일: `jpa-n-plus-1.yaml`(기준 레슨), `tx-basics.yaml`(공통 위젯 네 가지를 쓴다).
+예로 볼 파일: `jpa-n-plus-1.yaml`(기준 레슨), `tx-basics.yaml`(공통 위젯 네 가지를 쓴다), `cookie-session-token.yaml`(타임라인과 두 칸 비교를 쓴다).
 
 ## 두 단계: 설계서와 본문
 
@@ -42,12 +42,12 @@
 | `prerequisites`, `assume` | 먼저 배울 레슨, 알고 있다고 보는 것 |
 | `example` | 레슨 전체에서 쓰는 예제 한 줄 |
 | `codes` | 선택. 레슨 전체에서 쓰는 코드. 요청과 응답 같은 글 덩어리도 여기에 둔다 |
-| `predict` | 먼저 예측해 보기의 `text`(물을 것)와 `answer`(답) |
-| `questions` | 핵심 질문 3~5개. 질문마다 `id`, `title`, `conclusion`, `says`(본문이 말할 것, 1개 이상), `widget`(쓸 위젯), `asks`(문제 개요, 2개 이상) |
+| `predict` | 먼저 예측해 보기의 `text`(물을 것)와 `answer`(답. 어느 질문에서 밝히는지도 적는다) |
+| `questions` | 핵심 질문 3~5개. 질문마다 `id`, `title`, `conclusion`, `says`(본문이 말할 것, 1개 이상), `widget`(쓸 위젯. 위젯을 두는 질문에만 적는다), `asks`(문제 개요, 2개 이상) |
 | `claims` | 테스트로 확인할 주장. `{claim, how, test}`의 목록. `how`는 확인하는 방법, `test`는 이미 있는 테스트의 이름(선택) |
 | `sources` | 선택. 테스트로 확인할 수 없는 것(정의, 용어)의 근거 |
 
-질문의 `widget`은 `{kind, note}`다. `kind`는 공통 위젯의 종류나 `custom`이고, `note`에는 그 위젯으로 무엇을 보여 줄지 적는다. `custom`이면 `why`에 공통 위젯으로 안 되는 이유를 적어야 한다. 빠지면 빌드가 실패한다.
+위젯은 레슨에 1개 이상이면 되므로 `widget`은 위젯을 두는 질문에만 적는다. 적지 않은 질문은 설계서 화면에 "두지 않음"으로 나온다. `widget`은 `{kind, note}`다. `kind`는 공통 위젯의 종류나 `custom`이고, `note`에는 그 위젯으로 무엇을 보여 줄지 적는다. `custom`이면 `why`에 공통 위젯으로 안 되는 이유를 적어야 한다. 빠지면 빌드가 실패한다.
 
 `asks`가 2개 이상이어야 하는 것은 범위를 줄이는 기준 때문이다. 판정 문제 2개를 채우지 못하는 질문은 뺀다.
 
@@ -97,7 +97,7 @@
 | `callout` | 강조 상자 |
 | `more` | 접어 두는 "더 알아보기". `summary`와 `body`(본문 블록) |
 | `ci` | 검증 테스트가 남긴 실제 출력. `key`, `label`, `source`. `code`에 `codes`의 이름을 적으면 실행한 코드와 실제 출력이 한 상자에 나온다. 그 코드를 바로 위에 따로 또 보여 주지 않는다 |
-| `quiz` | 장마다 하나 있는 확인 문제. `q`, `options`, `answer`(보기 번호, 1부터), `explain` |
+| `quiz` | 장마다 하나 있는 확인 문제. `q`, `options`, `answer`(보기 번호, 1부터), `explain`. 이 네 칸의 글에서는 `` `코드` ``만 해석한다. 굵게와 링크는 쓰지 않는다 |
 | `next` | "다음 질문:" 뒤에 올 글 |
 | `widget` | 위젯. 아래 "위젯" |
 
@@ -129,7 +129,7 @@
 | `toggle` | 켜고 끄며 비교하기. `selector`에서 하나를 고르면 `scenes`에서 그 장면을 보여 준다. `run`이 있으면 실행 버튼을 눌러야 보이고, 그 전에는 `initial`을 보여 준다 | `jpa-n-plus-1`의 질문 2, `tx-basics`의 질문 4, `connection-pool`의 질문 4 |
 | `steps` | 한 단계씩 실행하기. 버튼을 누를 때마다 `scenarios`의 다음 장면으로 넘어간다. `buttons: each`면 단계마다 버튼을 따로 두고(`label`), 아니면 "다음 단계" 버튼 하나를 둔다. `selector`가 있으면 시나리오를 고른다 | `tx-basics`의 질문 1과 2 |
 | `compare` | 두 칸 비교. 칸 둘과 그 안의 항목을 `sides`에 한 번 적어 두고, 요구나 버튼을 고르면 양쪽에서 강조할 항목만 바뀐다. 고르는 방식은 `toggle`과 같다: `selector`로 고르거나, `run` 버튼 하나를 눌러 `initial`에서 `scenes`의 하나뿐인 장면으로 넘어간다. `layout`에 `sides`가 있어야 한다 | `srp-ocp`의 질문 1, 2, 4. 아래 "두 칸 비교의 예" |
-| `timeline` | 타임라인. 두 쪽(`lanes`, 이름 둘)이 주고받는 것을 차례로 쌓는다. 넘기는 방식은 `steps`와 같다. 단계마다 `log` 대신 `event`를 적는다. `layout`에 `timeline`이 있어야 한다 | 아직 쓴 레슨이 없다. 아래 "타임라인의 예" |
+| `timeline` | 타임라인. 두 쪽(`lanes`, 이름 둘)이 주고받는 것을 차례로 쌓는다. 넘기는 방식은 `steps`와 같다. 단계마다 `log` 대신 `event`를 적는다. `layout`에 `timeline`이 있어야 한다 | `cookie-session-token`의 질문 2. 아래 "타임라인의 예" |
 
 장면은 아래 조각으로 이루어진다. 무엇을 어떤 순서로 놓을지는 위젯의 `layout`에 적는다.
 
@@ -146,7 +146,7 @@
 | `timeline` | `timeline`의 주고받은 것. 단계의 `event`는 `dir`(`right`는 왼쪽에서 오른쪽으로, `left`는 그 반대), `title`, `text`(요청이나 응답의 글. `[[ ]]`로 새로 생긴 헤더를 강조한다), `note`(아래 설명)다. 앞의 것은 남고 방금 것이 강조된다 |
 | `verdict` | 한 줄 정리 |
 
-`compare`와 `timeline`은 두 설계서(`docs/type-trials/`)가 쓰려는 모양에 맞춰 만들었다. `compare`는 설계 유형의 기준 레슨 `srp-ocp`가 처음 썼고, `timeline`은 아직 쓴 레슨이 없다. 개념 설명 유형의 기준 레슨을 쓰면서 고친다.
+`compare`는 설계 유형의 기준 레슨 `srp-ocp`가, `timeline`은 개념 설명 유형의 기준 레슨 `cookie-session-token`이 처음 썼다. 둘 다 고칠 곳 없이 썼다.
 
 #### 두 칸 비교의 예
 
