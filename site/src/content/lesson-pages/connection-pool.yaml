@@ -53,20 +53,6 @@ codes:
         Receipt r = paymentApi.pay(o);
         [[orderService.markPaid(id, r)]];
     }
-  test: |-
-    @Test
-    void closeReturnsToPool() {
-        // 연결이 1개뿐인 풀
-        int first, second;
-        try (var c = pool.getConnection()) {
-            first = [[backendPid(c)]];
-        }
-        try (var c = pool.getConnection()) {
-            second = [[backendPid(c)]];
-        }
-        // 같은 연결을 다시 받았는지 확인
-        assertThat(second).isEqualTo(first);
-    }
 predict:
   title: 연결이 남아 있지 않으면 세 번째 요청은 어떻게 될까요?
   text: 아래 코드는 풀에서 DB 연결을 하나 빌려 SQL을 실행해요. 풀이 가진 연결은 2개뿐이에요. 요청 두 개가 연결을 하나씩 빌려 오래 걸리는 SQL을 실행하는 중에, 세 번째 요청이 같은 코드를 실행했어요. 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에서 확인해요.
@@ -274,39 +260,5 @@ interview:
       text: 트랜잭션은 끝날 때까지 연결 하나를 쥐고 있습니다. 트랜잭션 안에서 외부 API처럼 느린 작업을 하면 DB는 한가해도 풀이 모자라므로, 느린 작업은 트랜잭션 밖으로 빼고 트랜잭션을 짧게 둡니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 연결 대기 타임아웃의 원인이 트랜잭션 안의 외부 API 호출인 것을 찾아, 호출을 트랜잭션 밖으로 옮겼습니다.'
-verified:
-  summary: 이 레슨의 내용은 어떻게 확인했나요? (검증 테스트)
-  body:
-    - p: 이 레슨에 나온 동작은 짐작이 아니라, 실제 PostgreSQL 16과 HikariCP에서 코드를 돌려 확인했어요. 테스트([ConnectionPoolTest](link:test))는 아래 상황마다 결과를 확인해요.
-    - table:
-        head:
-          - 상황
-          - 확인한 결과
-        rows:
-          - - 연결을 새로 만들어 SELECT 한 번, 풀에서 빌려 SELECT 한 번을 20번씩 잰다
-            - 새로 만드는 쪽이 더 오래 걸린다
-          - - 연결이 1개인 풀에서 빌리고, 반납하고, 다시 빌린다
-            - 두 번 모두 같은 서버 프로세스 번호
-          - - 연결 2개를 동시에 쥔다
-            - 서버 프로세스 번호가 서로 다르다
-          - - 풀 크기 2, 기다리는 최대 시간 500ms에서 세 번째로 빌린다
-            - 450ms 넘게 기다린 뒤 SQLTransientConnectionException
-          - - 연결이 1개인 풀에서 기다리는 중에 앞 요청이 반납한다
-            - 기다리던 요청이 그 연결을 받는다
-          - - 스프링 트랜잭션 안에서 SQL을 보낸 직후와 끝난 뒤
-            - 쓰이고 있는 연결은 1개, 끝난 뒤 0개
-          - - 스프링 부트가 만든 풀의 최대 크기
-            - '10'
-    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요. 질문 4의 3초와 0.05초는 설명하려고 정한 숫자이고, 잰 값이 아니에요.
-    - h3: 테스트는 이렇게 생겼어요
-    - p: '"반납한 연결을 다시 쓴다"를 확인하는 테스트예요. PostgreSQL은 연결마다 서버 프로세스가 따로 있어서, 프로세스 번호가 같으면 같은 연결이에요.'
-    - code: test
-      notes:
-        - mark: backendPid(c)
-          as: code
-          text: 이 연결을 맡은 DB 서버 프로세스의 번호를 DB에 물어봐요.
-    - run:
-        tests:
-          - lab.devlessons.connpool.ConnectionPoolTest
-        docker: true
+verified: "이 레슨의 동작은 짐작이 아니라, 실제 PostgreSQL 16과 HikariCP에서 코드를 돌려 확인했어요. 코드가 바뀔 때마다 테스트([ConnectionPoolTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요. 질문 4의 3초와 0.05초는 설명하려고 정한 숫자이고, 잰 값이 아니에요."
 footer: '근거: HikariCP 문서의 maximumPoolSize와 connectionTimeout, Spring Boot 참조 문서의 SQL Databases, PostgreSQL 16 문서의 How Connections Are Established와 max_connections. 동작은 PostgreSQL 16과 Spring Boot 3.5(HikariCP)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

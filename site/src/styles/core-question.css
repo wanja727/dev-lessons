@@ -106,3 +106,8 @@
 .g-track { position: relative; height: 16px; background: var(--code-bg); border-radius: 4px; overflow: hidden; }
 .g-track span { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
 .g-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-left: 58px; }
+/* 실행한 코드와 그 코드를 돌린 실제 출력을 한 상자에 둔다 */
+.ran { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+.ran pre { margin: 0; }
+/* 검증: 무엇으로 확인했는지 한 줄 */
+.verified-line { color: var(--muted); font-size: 15px; border-top: 1px dashed var(--line); padding-top: 14px; margin: 0; }

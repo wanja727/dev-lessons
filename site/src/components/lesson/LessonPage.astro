@@ -142,12 +142,7 @@ const order = interview.model.map((m: { label: string }) => (m.label === '경험
   </section>
 
   <section class="read" id="verified">
-    <details class="more">
-      <summary>{verified.summary}</summary>
-      <div class="stack" style="padding-top:6px">
-        <Blocks blocks={verified.body} lesson={slug} codes={codes} links={links} />
-      </div>
-    </details>
+    <p class="verified-line" set:html={md(verified)} />
   </section>
 
   <footer set:html={md(data.footer)} />

@@ -79,16 +79,6 @@ codes:
     -- 2번째: 그 팀들의 멤버를 한 번에
     select * from member⤶
     where team_id [[in (1, 2)]]
-  test: |-
-    @Test
-    void eagerDoesNotFix() {
-        // EAGER인 팀 10개를 조회. 멤버는 안 씀
-        eagerTeamRepository.findAll();
-
-        // 나간 SQL이 1 + 10번인지 확인
-        assertThat([[SqlCapture.count()]])⤷
-            .isEqualTo(1 + TEAMS);
-    }
   toOne: |-
     @Query("""
         select m from Member m
@@ -342,44 +332,5 @@ interview:
       text: 연관관계는 모두 LAZY로 두고, 필요한 조회에서 fetch join으로 한 번에 가져옵니다. 컬렉션을 페이징해야 하면 fetch join은 메모리에서 페이징하므로, 배치 페치로 IN 쿼리에 묶습니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 목록 화면에서 SQL 로그로 쿼리 수를 세어 보고 배치 페치를 적용해 줄였습니다.'
-verified:
-  summary: 이 레슨의 숫자는 어떻게 확인했나요? (검증 테스트)
-  body:
-    - p: 이 레슨에 나온 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 테스트([NPlusOneTest](link:test))는 팀 10개와 팀마다 멤버 3명을 넣어 두고, 아래 상황마다 결과를 확인해요.
-    - table:
-        head:
-          - 상황
-          - 확인한 결과
-        rows:
-          - - 지연 로딩에서 팀을 조회하고 멤버를 쓴다
-            - 쿼리 11번
-          - - 지연 로딩에서 팀만 조회한다
-            - 쿼리 1번
-          - - EAGER로 바꾸고 팀만 조회한다
-            - 쿼리 11번
-          - - fetch join으로 조회한다
-            - 쿼리 1번, 팀은 중복 없이 10개
-          - - '@EntityGraph로 조회한다'
-            - 쿼리 1번
-          - - 배치 크기 5로 조회하고 멤버를 쓴다
-            - 쿼리 3번
-          - - 팀과 멤버를 fetch join하고 페이징한다
-            - SQL에 LIMIT이 없고, 경고(HHH90003004)가 남는다
-          - - 팀만 페이징하고 멤버는 배치 페치로 가져온다
-            - 쿼리 2번, 첫 SQL에 LIMIT이 붙는다
-          - - 멤버에 팀을 fetch join하고 페이징한다
-            - 쿼리 1번, SQL에 LIMIT이 붙는다
-    - muted: 코드가 바뀔 때마다 이 테스트가 자동으로 다시 돌아요. 결과가 달라지면 레슨을 고쳐요.
-    - h3: 테스트는 이렇게 생겼어요
-    - p: '"EAGER로 바꾸고 팀만 조회한다"를 확인하는 테스트예요. 조회한 뒤에 나간 SQL 수가 11번인지 확인해요. `TEAMS`는 팀 수 10이에요.'
-    - code: test
-      notes:
-        - mark: SqlCapture.count()
-          as: code
-          text: Hibernate가 DB로 보낸 SQL을 모두 모아 두었다가 개수를 알려 줘요.
-    - p: 내 프로젝트에서도 같은 방법으로 확인할 수 있어요. 설정에 `logging.level.org.hibernate.SQL=debug`를 넣으면 나가는 SQL이 로그에 찍혀요. 목록 화면을 한 번 열고 SQL이 몇 번 찍히는지 세어 보세요.
-    - run:
-        tests:
-          - lab.devlessons.nplusone.NPlusOneTest
-        docker: true
+verified: "이 레슨의 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 코드가 바뀔 때마다 테스트([NPlusOneTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
 footer: '근거: Hibernate ORM 사용자 가이드의 Fetching 장, Spring Data JPA 참조 문서의 Entity Graph 절. 쿼리 수는 Spring Boot 3.5(Hibernate 6.6) 기본 설정에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

@@ -161,9 +161,7 @@ PR 설명에 적는다. 나중에 콘텐츠 비용과 품질을 숫자로 말하
 
 | 무엇 | 지금 | 맞출 곳 |
 | --- | --- | --- |
-| 검증 구역 | 틀이 표, 테스트 코드, 돌려 보는 방법을 받는다 | 틀 (`LessonPage.astro`, `docs/lesson-data-format.md`) |
-| 코드와 실제 출력 | 출력이 코드와 떨어진 상자에 따로 나온다 | 틀 (`ci` 블록) |
-| PGlite | `tx-basics`의 검증 구역에 있다 | `tx-basics` 자료 파일과 전용 위젯 |
+| 코드와 실제 출력 | 틀은 한 상자로 보여 줄 수 있다 (`ci` 블록의 `code`). 이미 쓴 레슨의 실제 출력 19곳 가운데 2곳만 그렇게 바꿨다 | 자료 파일 넷 (`equals-hashcode`, `srp-ocp`, `tx-basics`, `connection-pool`) |
 | 배운 날에 푸는 문제 | 앱이 판정 문제를 모두 묻는다. 질문마다 첫 문제 하나만 묻게 바꾼다 | Retrievo 앱 |
 | 이미 쓴 레슨 다섯 개의 문제 수 | 판정 10~23개, 설명형 5~6개다. `equals-hashcode`에는 면접 질문이 없다. 검사는 경고만 한다. 다섯 파일을 줄인 뒤에 경고를 오류로 바꾼다 | `content/questions/`의 다섯 파일, `scripts/check-questions.mjs` |
 | 이미 쓴 레슨의 분량 | `equals-hashcode`와 `srp-ocp`의 자료 파일이 6만 자다 | 두 자료 파일 |

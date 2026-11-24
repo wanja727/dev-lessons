@@ -98,7 +98,8 @@ const fullPage = z.object({
     question: text,
     model: z.array(z.object({ label: text, text: text })).min(3),
   }),
-  verified: z.object({ summary: text, body: z.array(block).min(1) }),
+  // 검증 구역: 무엇으로 확인했는지 한 줄과 테스트 파일 링크 (docs/lesson-standard.md 7장)
+  verified: text,
   footer: text,
   // 설계 때 채운 칸. 남겨 둔다
   roadmap: text.optional(),

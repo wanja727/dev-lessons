@@ -6,7 +6,6 @@
 import { highlight } from '../../lib/highlight';
 import { inline } from '../../lib/inline';
 import CiOutput from '../CiOutput.astro';
-import RunLocally from '../RunLocally.astro';
 import Widget from './Widget.astro';
 
 interface Props {
@@ -33,7 +32,7 @@ function mark(note: { mark: string; as?: string }): string {
   if (note.as === 'anno') return `<span class="c-key c-anno">${escape(note.mark)}</span>`;
   return escape(note.mark);
 }
-const KNOWN = ['p', 'muted', 'h3', 'ol', 'ul', 'code', 'prewrap', 'table', 'callout', 'more', 'ci', 'run', 'quiz', 'next', 'widget'];
+const KNOWN = ['p', 'muted', 'h3', 'ol', 'ul', 'code', 'prewrap', 'table', 'callout', 'more', 'ci', 'quiz', 'next', 'widget'];
 for (const b of blocks) {
   if (!KNOWN.some((k) => k in b)) throw new Error(`레슨 '${lesson}': 모르는 블록 ${JSON.stringify(b).slice(0, 80)}`);
 }
@@ -67,8 +66,14 @@ for (const b of blocks) {
         <Astro.self blocks={b.more.body} lesson={lesson} codes={codes} links={links} />
       </details>
     )}
-    {'ci' in b && <CiOutput lesson={lesson} key={b.ci.key} label={b.ci.label} source={b.ci.source} />}
-    {'run' in b && <RunLocally tests={b.run.tests} docker={b.run.docker} />}
+    {'ci' in b && !b.ci.code && <CiOutput lesson={lesson} key={b.ci.key} label={b.ci.label} source={b.ci.source} />}
+    {'ci' in b && b.ci.code && (
+      <div class="ran">
+        <span class="label">실행한 코드</span>
+        <pre set:html={codeOf(b.ci.code)} />
+        <CiOutput lesson={lesson} key={b.ci.key} label={b.ci.label} source={b.ci.source} />
+      </div>
+    )}
     {'quiz' in b && <div class="panel quiz" data-quiz={questionId}></div>}
     {'next' in b && <p class="next"><strong>다음 질문:</strong>{' '}<Fragment set:html={md(b.next)} /></p>}
     {'widget' in b && <Widget widget={b.widget} />}
