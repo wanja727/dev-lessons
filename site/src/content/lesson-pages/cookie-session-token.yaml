@@ -6,7 +6,8 @@ unit: 네트워크와 웹
 minutes: 20
 roadmap: N7
 type: 개념 설명
-prerequisites: []
+prerequisites:
+  - {slug: http-basics, title: HTTP 요청과 응답}
 assume: HTTP 요청과 응답에 헤더가 있다는 것. JWT는 서명만 한 형태를 다뤄요. 쿠키의 보안 속성과 XSS, CSRF는 웹 보안 기초 레슨에서 다뤄요.
 example: 사용자 kim이 쇼핑몰에 로그인하고 내 정보(GET /me)를 봐요. 질문에서는 요청과 응답의 헤더를 보여 주고, 실무 구역에서 같은 일을 스프링 컨트롤러로 옮겨요.
 intro:

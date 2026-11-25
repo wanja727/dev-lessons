@@ -6,6 +6,7 @@
 # 서버의 응답과 쿼리 결과는 verification의 WebSecurityTest로 확인했다 (스프링 부트 3.5, PostgreSQL 16, 자바 21).
 # 브라우저가 스크립트를 실행하고 쿠키를 싣는 동작은 OWASP, MDN, RFC 6265가 근거다.
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다. 정답을 본문(says)과 테스트 결과에 맞춰 봤고, 문제 하나만 보고 풀리는지 봤다. 고친 문제는 없다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "후기 내용 `<b>좋아요</b>`를 `HtmlUtils.htmlEscape`로 바꿔 HTML 응답에 넣었어요. 브라우저 화면에는 무엇이 보일까요?"
     choices:
@@ -51,7 +52,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "검색 결과 화면이 `\"검색어: \" + q`를 HTML에 그대로 넣어 보여 줘요. 공격자가 `?q=<script>...</script>`가 붙은 검색 주소를 메일로 뿌렸어요. 무슨 공격이고 누가 피해를 볼까요?"
     choices:
@@ -71,7 +72,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "kim이 shop.com에 로그인한 채 evil.com을 열었더니, evil.com의 숨은 폼이 shop.com으로 주문 POST를 보냈어요. 이 요청에 shop.com의 세션 쿠키를 실은 것은 누구일까요?"
     choices:
@@ -90,7 +91,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "어떤 은행이 이체를 `GET /transfer?to=...&amount=...`로 받아요. 공격자가 게시판 글에 그 주소를 `<img src=...>`로 넣었어요. 은행에 로그인해 둔 사용자가 그 글을 열면 어떻게 될까요?"
     choices:
@@ -110,7 +111,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "회원 표에 admin@shop.com이 있고 공격자는 비밀번호를 몰라요. 아래 코드에 email = `admin@shop.com' --`, pw = `아무거나`를 넣으면 쿼리는 몇 행을 돌려줄까요? (PostgreSQL 16)"
     code: |-
@@ -134,7 +135,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "상품 검색이 `\"SELECT * FROM product WHERE name LIKE '%\" + q + \"%'\"`로 만들어져요. q에 따옴표와 주석을 넣는 공격을 막으려면 어떻게 고쳐야 할까요?"
     choices:
@@ -153,7 +154,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "정렬 칸을 요청으로 받아 아래처럼 쿼리를 만들어요. 다른 곳은 모두 PreparedStatement로 바인딩해요. 이 코드에 대해 맞는 말은 무엇일까요?"
     code: |-
@@ -177,7 +178,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "\"HttpOnly가 붙은 세션 쿠키는 페이지의 자바스크립트가 document.cookie로 읽을 수 없다\""
     answer: O
@@ -191,7 +192,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "서비스가 로그인 JWT를 localStorage에 두고, 요청마다 자바스크립트로 Authorization 헤더에 넣어 보내요. CSRF와 XSS 가운데 무엇에 더 신경 써야 할까요?"
     choices:
@@ -211,7 +212,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "XSS, CSRF, SQL 인젝션이 각각 무엇이고 어떻게 막는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

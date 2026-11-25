@@ -6,6 +6,7 @@
 # 흐름의 규칙은 RFC 6749가 근거이고, verification의 OAuth2FlowTest가 그 규칙대로 만든 작은 인가 서버로 확인했다.
 # 실제 카카오나 구글 서버로 확인한 것은 아니다. 스프링 시큐리티 설정은 공식 문서가 근거다.
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다. 정답을 본문(says)과 테스트 결과에 맞춰 봤고, 문제 하나만 보고 풀리는지 봤다. 고친 문제는 없다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "쇼핑몰에 \"카카오로 로그인\"을 붙였어요. 사용자 kim, kim의 브라우저, 쇼핑몰 서버, 카카오 로그인 서버가 나와요. OAuth 2.0에서 \"클라이언트\" 역할은 누구일까요?"
     choices:
@@ -51,7 +52,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "일정 관리 앱이 사용자의 구글 캘린더 일정을 읽기만 하려고 OAuth 2.0을 써요. 사용자는 동의 화면에서 \"캘린더 읽기\"만 허락했어요. 앱이 받은 것과 그것으로 할 수 있는 일로 맞는 것은 무엇일까요?"
     choices:
@@ -71,7 +72,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "kim이 카카오에서 로그인하고 동의하자, 카카오 인가 서버가 kim의 브라우저를 쇼핑몰의 redirect_uri로 돌려보내요. 이때 주소에 붙는 것은 무엇일까요?"
     choices:
@@ -90,7 +91,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "쇼핑몰 서버가 흐름을 시작할 때 state=x7Kp2를 세션에 넣어 뒀어요. 그런데 콜백 주소로 돌아온 요청의 state는 attacker예요. 코드는 들어 있어요. 쇼핑몰 서버는 어떻게 해야 할까요?"
     choices:
@@ -110,7 +111,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "쇼핑몰 서버가 인가 코드로 액세스 토큰을 받았어요. 네트워크가 잠깐 끊겨 같은 코드로 토큰 요청을 한 번 더 보냈어요. RFC 6749를 따르는 인가 서버는 어떻게 답할까요?"
     choices:
@@ -129,7 +130,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "누군가 kim의 브라우저 방문 기록에서 아직 쓰이지 않은 인가 코드를 훔쳤어요. 쇼핑몰의 client_secret은 모르고, 코드가 만들어진 지 1분밖에 안 됐어요. 이 사람이 코드로 액세스 토큰을 받을 수 있을까요? (쇼핑몰은 client_secret을 가진 서버 앱이에요)"
     choices:
@@ -148,7 +149,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "스프링 시큐리티 OAuth2 Client로 카카오 로그인을 붙였어요. 카카오에는 redirect_uri를 `https://shop.com/login/oauth2/code/kakao`로 등록했어요. 운영 서버는 로드 밸런서 뒤에 있고 로드 밸런서가 TLS를 끝내요. forward 헤더 설정은 하지 않았어요. 로그인을 누르면 무슨 일이 생길까요?"
     choices:
@@ -168,7 +169,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "카카오 로그인으로 들어온 사용자를 쇼핑몰 회원과 이으려고 해요. 열쇠로 쓰기에 가장 알맞은 값은 무엇일까요?"
     choices:
@@ -187,7 +188,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "어떤 서비스는 클라이언트가 보낸 구글 토큰이 유효하기만 하면 그 사용자로 로그인시켜요. 토큰이 어느 앱(client_id)에게 발급됐는지는 확인하지 않아요. 공격자가 자기가 만든 다른 앱에서 받은 kim의 토큰을 들고 오면 어떻게 될까요?"
     choices:
@@ -207,7 +208,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "OAuth 2.0의 인가 코드 흐름을 설명하고, 소셜 로그인과 무엇이 다른지 말해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

@@ -8,6 +8,7 @@
 # (site/src/content/lesson-pages/rest-api.yaml의 says).
 # 동작에 관한 정답은 verification의 RestDesignTest로 확인했다 (스프링 부트 3.5, 자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다. 정답을 본문(says)과 테스트 결과에 맞춰 봤고, 문제 하나만 보고 풀리는지 봤다. 고친 문제는 없다.
 subject:
   key: dev
   name: 개발자 면접
@@ -34,7 +35,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "상품 API에서 7번 상품을 지우는 요청으로 REST에 가장 맞는 것은 무엇일까요?"
     choices:
@@ -53,7 +54,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "회원 3번이 등록한 배송지 목록을 읽는 API를 만들려고 해요. REST에 가장 맞는 것은 무엇일까요?"
     choices:
@@ -73,7 +74,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`DELETE /products/7`을 두 번 보냈더니 첫 번째는 204, 두 번째는 404가 왔어요. DELETE에 대해 맞는 말은 무엇일까요?"
     choices:
@@ -92,7 +93,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "포인트 100점 적립을 `POST /points`로 만들었어요. 모바일 앱이 요청을 보냈는데 응답을 기다리다 시간 초과가 나서 같은 요청을 다시 보냈어요. 사실 첫 요청은 서버에서 처리됐어요. 어떻게 될까요?"
     choices:
@@ -112,7 +113,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`POST /products`로 새 상품을 만들었어요. 응답의 상태 코드와 함께 주면 좋은 헤더로 가장 알맞은 것은 무엇일까요?"
     choices:
@@ -131,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "이미 취소된 주문에 다시 취소 요청이 왔어요. 요청의 형식은 맞고 주문도 있어요. 가장 알맞은 상태 코드는 무엇일까요?"
     choices:
@@ -150,7 +151,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "아래 컨트롤러에 없는 상품 99번을 요청하면 응답의 상태 코드는 무엇이고, 무엇이 문제일까요? (스프링 부트 3.5)"
     code: |-
@@ -181,7 +182,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "스프링 부트 3.5에서 @ExceptionHandler가 ProblemDetail을 돌려줬어요. 에러 응답의 Content-Type은 무엇일까요?"
     choices:
@@ -200,7 +201,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "결제 API는 실패하면 본문에 자바 예외의 스택 트레이스와 실패한 SQL을 그대로 담아 줘요. 주소마다 본문 모양도 달라요. 무엇이 문제일까요?"
     choices:
@@ -220,7 +221,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "REST API를 설계할 때 무엇을 신경 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

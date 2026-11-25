@@ -15,7 +15,7 @@ lesson:
   key: cookie-session-token
   title: 쿠키, 세션, 토큰
   unit: 네트워크와 웹
-  order: 36
+  order: 61
 concepts:
   - key: core
     name: 쿠키, 세션, 토큰
