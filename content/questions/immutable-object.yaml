@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/immutable-object.yaml의 says).
 # 동작에 관한 정답은 verification의 ImmutableObjectTest로 확인했다 (자바 21, 스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -55,7 +55,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Money는 불변이고 plus는 합계를 가진 새 Money를 돌려줘요. 아래 코드를 실행한 뒤 a의 금액은 얼마일까요?
     code: |-
@@ -79,7 +79,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 Order는 클래스도 필드도 final이고 setter가 없어요. 마지막 줄은 무엇을 출력할까요?
     code: |-
@@ -110,7 +110,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행한 뒤 scores[0]은 얼마일까요?
     code: |-
@@ -133,13 +133,23 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
-    body: 앞 문제의 Order 생성자를 아래처럼 바꾸고 같은 코드를 다시 실행했어요. 마지막 줄 order.getItems().size()는 무엇을 출력할까요?
+    body: 아래 Order는 생성자에서 받은 리스트를 List.copyOf로 복사해 필드에 담아요. 마지막 줄은 무엇을 출력할까요?
     code: |-
-      Order(List<String> items) {
-        this.items = List.copyOf(items);
+      final class Order {
+        private final List<String> items;
+        Order(List<String> items) {
+          this.items = List.copyOf(items);
+        }
+        List<String> getItems() { return items; }
       }
+
+      List<String> cart = new ArrayList<>();
+      cart.add("키보드");
+      Order order = new Order(cart);
+      cart.add("마우스");
+      System.out.println(order.getItems().size());
     choices:
       - "1"
       - "2"
@@ -156,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행한 뒤 view.size()와 copy.size()는 각각 얼마일까요?
     code: |-
@@ -180,7 +190,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 응답 record에 간결한 생성자가 없어요. 서비스가 엔티티의 ArrayList를 그대로 넘겨 응답을 만든 뒤, 다른 곳에서 response.items().add("모니터")를 실행했어요. 어떻게 될까요?
     code: |-
@@ -206,7 +216,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 두 줄은 각각 무엇을 출력할까요?
     code: |-
@@ -232,7 +242,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'record Point(int x, int y) {}의 객체 p에 대해 아래 셋 가운데 컴파일되는 것은 무엇일까요? p.x = 5; / p.getX() / p.x()'
     choices:
@@ -252,7 +262,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "불변 객체를 어떻게 만들고 왜 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

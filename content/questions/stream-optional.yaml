@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/stream-optional.yaml의 says).
 # 동작에 관한 정답은 verification의 StreamOptionalTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -34,7 +34,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 금액과 상태가 (10000, PAID), (5000, CREATED), (20000, PAID)인 주문 셋에 아래 코드를 실행했어요. prices와 orders.size()는 각각 무엇일까요?
     code: |-
@@ -58,7 +58,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행하면 어떻게 될까요?
     code: |-
@@ -81,7 +81,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: filter와 map의 람다는 실행될 때마다 한 줄을 출력해요. 아래 코드를 실행하면 출력되는 줄은 무엇일까요?
     code: |-
@@ -107,7 +107,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: orders에 주문이 셋 있어요. 아래 한 줄만 실행했어요. 뒤에 다른 연산은 없어요. 메일은 몇 통 발송될까요?
     code: |-
@@ -132,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 회원 번호와 금액이 (1, 10000), (1, 5000), (2, 20000)인 주문 셋에 아래 코드를 실행했어요. 결과 맵에서 키 1의 리스트 크기는 얼마일까요?
     code: |-
@@ -154,9 +154,9 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: 같은 주문 셋에 아래 코드를 실행하면 어떻게 될까요?
+    body: 회원 번호와 금액이 (1, 10000), (1, 5000), (2, 20000)인 주문 셋에 아래 코드를 실행하면 어떻게 될까요?
     code: |-
       orders.stream().collect(
           Collectors.toMap(Order::getMemberId,
@@ -178,7 +178,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 두 줄은 각각 어떻게 될까요?
     code: |-
@@ -200,7 +200,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 두 줄은 각각 어떻게 될까요?
     code: |-
@@ -226,7 +226,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: repo.findByEmail(email)이 회원을 찾아 돌려줬어요. 아래 두 코드에서 createMember는 각각 몇 번 실행될까요?
     code: |-
@@ -248,31 +248,11 @@ questions:
       - orElseGet의 람다는 비어 있을 때만 실행돼요
       - 찾았을 때 orElse는 만든 것을 버리지만, createMember가 한 일은 이미 일어났어요
     source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12.4
-  - key: sop-or-else-load
-    concept: core
-    coreQuestion: q5
-    type: code_predict
-    status: draft
-    difficulty: 2
-    body: load()는 "load"를 출력하고 "B"를 돌려줘요. 아래 코드를 실행하면 무엇이 출력되고, v는 무엇일까요?
-    code: |-
-      String v = Optional.of("A").orElse(load());
-    choices:
-      - 출력 없음, v는 "A"
-      - '"load"가 출력되고 v는 "A"'
-      - '"load"가 출력되고 v는 "B"'
-      - 출력 없음, v는 "B"
-    answer: "2"
-    explanation: |-
-      **"load"가 출력되고 v는 "A"예요.** orElse의 인자가 먼저 계산되어 load()가 실행되고, 값이 있으니 "A"를 돌려줘요.
-
-      - orElseGet(() -> load())로 쓰면 load()가 실행되지 않아요
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html#orElseGet(java.util.function.Supplier)
   - key: sop-or-else-save
     concept: core
     coreQuestion: q5
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서비스에 아래 줄이 있어요. 이미 가입한 이메일로 이 줄을 세 번 실행하면 save는 몇 번 불릴까요?
     code: |-
@@ -297,7 +277,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스트림의 지연 평가와 Optional을 올바르게 쓰는 법을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

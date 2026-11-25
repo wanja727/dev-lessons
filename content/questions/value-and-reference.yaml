@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/value-and-reference.yaml의 says).
 # 동작에 관한 정답은 verification의 ValueReferenceTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Order는 int price 필드 하나를 가진 클래스예요. 아래 코드를 실행한 뒤 마지막 줄은 무엇을 출력할까요?
     code: |-
@@ -57,7 +57,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행한 뒤 x[0]은 얼마일까요?
     code: |-
@@ -83,7 +83,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드를 실행하면 무엇이 출력될까요?
     code: |-
@@ -111,7 +111,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '"kim" 하나가 든 ArrayList를 아래 메서드에 넘겼어요. 메서드가 끝난 뒤 호출한 쪽 리스트에 든 것은 무엇일까요?'
     code: |-
@@ -137,7 +137,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서비스에 아래 메서드가 있어요. 컨트롤러가 원소 3개가 든 리스트 cart를 넘겨 reset(cart)를 부른 뒤 cart.size()를 출력하면 얼마일까요?
     code: |-
@@ -161,7 +161,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Order는 equals를 재정의하지 않았어요. 아래 세 비교의 결과는 차례로 무엇일까요?
     code: |-
@@ -189,7 +189,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'String s = new String("PAID"); String t = new String("PAID");일 때 s == t와 s.equals(t)의 결과는 무엇일까요?'
     choices:
@@ -209,7 +209,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Member를 만들고 필드에 아무것도 넣지 않았어요. 아래 두 줄을 차례로 실행하면 어떻게 될까요?
     code: |-
@@ -238,7 +238,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'String status = null;일 때 아래 셋 가운데 NullPointerException이 나는 것은 무엇일까요?'
     choices:
@@ -259,7 +259,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "자바는 값으로 넘기나요, 참조로 넘기나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

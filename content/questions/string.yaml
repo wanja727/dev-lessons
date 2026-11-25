@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/string.yaml의 says).
 # 동작에 관한 정답은 verification의 StringTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -55,7 +55,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행한 뒤 t의 값은 무엇일까요?
     code: |-
@@ -79,7 +79,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 세 줄은 차례로 무엇을 출력할까요?
     code: |-
@@ -105,7 +105,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 클래스 A에 static String x = "KRW";가, 클래스 B에 static String y = "KRW";가 있어요. A.x == B.y의 결과는 무엇일까요?
     choices:
@@ -124,7 +124,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: half는 final이 아닌 지역 변수예요. 아래 두 줄은 각각 무엇을 출력할까요?
     code: |-
@@ -148,7 +148,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 두 줄은 각각 무엇을 출력할까요?
     code: |-
@@ -172,7 +172,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 컨트롤러에 아래 코드가 있어요. 클라이언트가 GET /orders?status=PAID를 보냈어요. if의 조건은 어떻게 될까요?
     code: |-
@@ -201,7 +201,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: ids에 원소가 1000개 있어요. 아래 반복문이 도는 동안 csv에 새 String 객체가 몇 번 대입될까요?
     code: |-
@@ -225,7 +225,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행한 뒤 sb2.toString()은 무엇일까요?
     code: |-
@@ -248,7 +248,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 로그 수준을 INFO로 둔 서버에서 아래 두 줄이 요청마다 실행돼요. debug 로그는 남지 않아요. order.toString()이 불리는 줄은 어느 것일까요?
     code: |-
@@ -271,7 +271,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "String은 왜 불변이고, 문자열은 왜 equals로 비교해야 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

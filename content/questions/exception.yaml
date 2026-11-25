@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/exception.yaml의 says).
 # 동작에 관한 정답은 verification의 ExceptionTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Files.readString은 IOException을 던질 수 있어요. 아래 메서드를 컴파일하면 어떻게 될까요?
     code: |-
@@ -55,7 +55,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'class OrderNotFoundException extends RuntimeException과 class FileFormatException extends Exception이 있어요. 던지는 메서드에 throws를 쓰지 않아도 컴파일되는 것은 무엇일까요?'
     choices:
@@ -75,7 +75,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: controller()를 부르면 출력되는 것은 무엇일까요?
     code: |-
@@ -112,7 +112,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: f()를 부르면 F가 출력될까요, 그리고 반환값은 무엇일까요?
     code: |-
@@ -140,7 +140,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Res는 닫힐 때 "이름 닫힘"을 출력해요. 아래 코드에서 예외가 나지 않으면 출력의 순서는 어떻게 될까요?
     code: |-
@@ -168,7 +168,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'try (Res r = new Res("R")) { throw new IllegalStateException("본문"); }에서 Res의 close()도 IllegalArgumentException("닫기")를 던져요. try 밖에서 잡히는 예외의 타입과, 그 예외의 getSuppressed() 길이는 무엇일까요?'
     choices:
@@ -187,7 +187,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: client.request(orderId)가 IOException을 던졌어요. pay를 부른 쪽은 무엇을 받을까요?
     code: |-
@@ -215,7 +215,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드가 던진 예외를 밖에서 잡아 getCause()를 부르면 무엇이 나올까요?
     code: |-
@@ -240,7 +240,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 두 catch 블록이 있어요. 로그에 IOException의 스택 트레이스가 남는 쪽은 어느 것일까요? (SLF4J와 Logback)
     code: |-
@@ -269,7 +269,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "체크 예외와 언체크 예외의 차이, 그리고 예외를 다루는 원칙을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

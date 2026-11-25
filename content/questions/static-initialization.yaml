@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/static-initialization.yaml의 says).
 # 동작에 관한 정답은 verification의 StaticInitializationTest로 확인했다 (자바 21, 스프링 프레임워크 6.2).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -30,7 +30,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 Coupon으로 객체를 두 개 만들었어요. a.number, b.number, Coupon.issued는 각각 얼마일까요?
     code: |-
@@ -61,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 클래스를 컴파일하면 어떻게 될까요?
     code: |-
@@ -88,7 +88,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드는 무엇을 출력할까요?
     code: |-
@@ -116,7 +116,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 프로그램이 Rates에 대해 아래 한 줄만 실행했어요. "Rates 초기화"가 출력될까요?
     code: |-
@@ -143,7 +143,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 두 클래스에서 new VipCoupon()을 이미 한 번 실행했어요. 그다음 new Coupon()을 실행하면 출력되는 번호는 무엇일까요?
     code: |-
@@ -173,7 +173,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'class Timer { long start = System.nanoTime(); long limit; Timer() { limit = start + 1000; } }에서 생성자 본문이 실행될 때 start에는 값이 들어 있을까요?'
     choices:
@@ -191,7 +191,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링이 아래 빈을 만들 때 어떻게 될까요? OrderRepository 빈은 따로 등록되어 있어요.
     code: |-
@@ -222,7 +222,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "클래스와 객체가 초기화되는 순서를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

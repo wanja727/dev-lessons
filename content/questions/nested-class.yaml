@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/nested-class.yaml의 says).
 # 동작에 관한 정답은 verification의 NestedClassTest로 확인했다 (자바 21, 스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드에서 Item과 Line은 각각 무엇일까요?
     code: |-
@@ -61,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: class Cart { record Line(String name, int qty) {} }에서 Line을 바깥 Cart 객체 없이 new Cart.Line("펜", 2)로 만들 수 있을까요?
     choices:
@@ -80,7 +80,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Item은 Order의 내부 클래스, Line은 Order의 static 중첩 클래스예요. Order 밖의 static 메서드에 아래 두 줄을 쓰면 어떻게 될까요?
     code: |-
@@ -104,7 +104,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 컴파일하면 어떻게 될까요?
     code: |-
@@ -133,7 +133,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드를 실행한 뒤 GC가 돌았어요. Order 객체는 치워졌을까요?
     code: |-
@@ -168,10 +168,25 @@ questions:
   - key: nested-listener-fixed
     concept: core
     coreQuestion: q3
-    type: multiple_choice
-    status: draft
+    type: code_predict
+    status: reviewed
     difficulty: 2
-    body: 앞의 Watcher를 int size 하나만 생성자로 받는 static 중첩 클래스로 바꾸고, watchers.add(new Order.Watcher(order.data.length)); order = null;을 실행했어요. GC 뒤 Order 객체는 치워질 수 있을까요?
+    body: Watcher는 int 값 하나만 생성자로 받는 static 중첩 클래스예요. watchers는 static 리스트예요. 아래 코드를 실행한 뒤 GC가 돌면 Order 객체는 치워질 수 있을까요?
+    code: |-
+      class Order {
+        byte[] data = new byte[10_000_000];
+
+        static class Watcher implements Runnable {
+          private final int size;
+          Watcher(int size) { this.size = size; }
+          public void run() { print(size); }
+        }
+      }
+
+      Order order = new Order();
+      int size = order.data.length;
+      watchers.add(new Order.Watcher(size));
+      order = null;
     choices:
       - 치워질 수 없다. Watcher가 Order 안에 선언됐다
       - 치워질 수 있다. Watcher가 가진 것은 int 값뿐이다
@@ -188,9 +203,9 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
-    body: Order의 name은 "주문"이에요. 아래 익명 클래스의 run()이 출력하는 것은 무엇일까요?
+    body: 아래 익명 클래스는 Order의 인스턴스 메서드 안에서 만들었고, 그 Order 객체의 name 필드는 "주문"이에요. run()이 출력하는 것은 무엇일까요?
     code: |-
       Runnable a = new Runnable() {
         String name = "익명";
@@ -214,7 +229,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 같은 메서드 안에서 int count = 1; 아래에 r1과 r2를 썼어요. 컴파일하면 어떻게 될까요?
     code: |-
@@ -244,7 +259,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 MVC 컨트롤러가 아래 OrderRequest를 @RequestBody로 받아요. {"lines":[{"name":"펜","qty":2}]}를 보내면 어떻게 될까요?
     code: |-
@@ -273,7 +288,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "내부 클래스와 static 중첩 클래스, 익명 클래스와 람다의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

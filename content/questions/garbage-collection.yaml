@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/garbage-collection.yaml의 says).
 # 동작에 관한 정답은 verification의 GarbageCollectionTest로 확인했다 (자바 21, HotSpot).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 handle()을 한 번 부르고 끝났어요. temp가 가리키던 객체와 saved가 가리키던 객체 가운데 가비지 컬렉터가 치울 대상은 무엇일까요?
     code: |-
@@ -60,7 +60,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 노드 셋이 A는 B를, B는 C를, C는 A를 가리키는 고리를 이뤄요. 지역 변수 head가 A를 가리키다가 head = null;이 됐고, 이 노드들을 가리키는 다른 변수는 없어요. 치울 대상은 몇 개일까요?
     choices:
@@ -80,7 +80,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 에덴에 객체 여섯이 있고 그 가운데 하나만 닿을 수 있어요. 마이너 GC가 돈 직후 에덴과 서바이버에 있는 객체는 각각 몇 개일까요?
     choices:
@@ -99,7 +99,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서버 A는 요청마다 응답 DTO를 만들어 보내고 버려요. 서버 B는 요청마다 만든 객체를 static 리스트에 담아 둬요. 시간이 지날수록 늙은 세대의 사용량이 계속 오르는 쪽은 어디일까요?
     choices:
@@ -118,7 +118,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 자바 21을 CPU 8개, 메모리 16GB인 서버에서 GC 옵션 없이 실행했어요. 쓰이는 수집기는 무엇일까요?
     choices:
@@ -137,7 +137,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 평소 응답 시간이 10ms인 서버에서 300ms짜리 stop-the-world 수집이 한 번 일어났어요. 그 구간이 시작될 때 처리 중이던 요청은 어떻게 될까요?
     choices:
@@ -157,7 +157,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 RateCache 객체는 static 필드에서 닿아요. get을 서로 다른 키 100만 개로 한 번씩 부르고, 그 뒤 어떤 키도 다시 쓰지 않아요. GC가 돈 뒤 맵에 남은 항목은 몇 개일까요?
     code: |-
@@ -186,7 +186,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: static final List<byte[]> buffers에 1MB 배열을 요청마다 하나씩 add하고 빼지 않아요. 어느 요청도 예전 배열을 읽지 않아요. 이 배열들은 가비지 컬렉터가 치울 대상일까요?
     choices:
@@ -205,7 +205,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 SearchCache 빈은 검색어마다 결과를 넣고 지우지 않아요. 검색어의 종류에는 끝이 없어요. 서버를 오래 켜 두면 큰 수집 뒤의 늙은 세대 사용량은 어떻게 될까요?
     code: |-
@@ -236,7 +236,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "가비지 컬렉션이 어떻게 동작하고, 자바에서 메모리 누수는 왜 생기는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

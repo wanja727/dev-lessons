@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/jvm-memory.yaml의 says).
 # 동작에 관한 정답은 verification의 JvmMemoryTest로 확인했다 (자바 21, HotSpot).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 둘이 같은 메서드를 동시에 실행하고 있어요. 그 메서드의 지역 변수 int tax는 스레드마다 따로 있을까요, 하나를 함께 쓸까요?
     choices:
@@ -51,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 톰캣의 요청 처리 스레드 200개가 일하는 서버에서 힙, 스택, 메서드 영역은 각각 몇 개일까요? 요청 처리 스레드만 세요.
     choices:
@@ -70,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 dive()를 실행하면 어떻게 될까요?
     code: |-
@@ -96,7 +96,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: sum(3)을 불렀어요. 가장 깊이 들어갔을 때 스택에 sum의 프레임은 몇 개 쌓여 있을까요?
     code: |-
@@ -121,7 +121,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: main이 Order o = createOrder(10000);으로 아래 메서드를 불렀어요. createOrder가 끝난 직후 사라진 것은 무엇일까요?
     code: |-
@@ -146,7 +146,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'class Point { int x; int y; }의 객체를 메서드 안에서 Point p = new Point();로 만들었어요. p와 p.x는 각각 어디에 있을까요?'
     choices:
@@ -166,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 최대 힙이 64MB인 JVM에서 아래 코드를 돌려요. 1MB 배열을 1024개(1024MB) 만들지만 어디에도 담지 않아요. 어떻게 될까요?
     code: |-
@@ -189,7 +189,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '서버 로그에 Exception in thread "http-nio-8080-exec-3" java.lang.StackOverflowError가 찍혔어요. 가득 찬 것은 무엇이고, -Xmx를 두 배로 늘리면 풀릴까요?'
     choices:
@@ -208,7 +208,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 회원과 주문이 서로를 가리키게 만든 뒤 log.info("{}", member)로 회원을 로그에 찍었어요. 어떻게 될까요?
     code: |-
@@ -241,7 +241,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "JVM의 메모리 구조와 두 메모리 에러의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
