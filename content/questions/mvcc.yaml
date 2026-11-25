@@ -1,0 +1,218 @@
+# MVCC 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/mvcc.yaml의 says).
+# 동작에 관한 정답은 verification의 MvccTest로 확인했다 (PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: mvcc
+  title: MVCC
+  unit: DB
+  order: 613
+concepts:
+  - key: core
+    name: MVCC
+coreQuestions:
+  - key: q1
+    text: "쓰는 중인 행을 읽는데 왜 기다리지 않나요?"
+  - key: q2
+    text: "각 트랜잭션은 어떤 버전을 보나요?"
+  - key: q3
+    text: "옛 버전은 언제 사라지고, 긴 트랜잭션은 왜 문제인가요?"
+  - key: q4
+    text: "MVCC에서도 기다리거나 실패하는 것은 무엇인가요?"
+questions:
+  # ── 질문 1 ──
+  - key: mvcc-read-old
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "A가 kim의 잔액을 100에서 50으로 UPDATE하고 아직 커밋하지 않았어요. 이때 B가 잠금 없는 일반 SELECT로 kim의 잔액을 읽으면? (PostgreSQL 16, 기본 격리 수준)"
+    choices:
+      - A가 끝날 때까지 기다린다
+      - 기다리지 않고 100을 읽는다
+      - 기다리지 않고 50을 읽는다
+      - 오류가 난다
+    answer: "2"
+    explanation: |-
+      **기다리지 않고 옛 값 100을 읽어요.** A가 만든 새 버전은 커밋 전이라 B에게 보이지 않아요.
+
+      - MVCC는 덮어쓰지 않고 새 버전을 만들어 옛 버전이 남아요
+      - `for update`로 읽거나 같은 행을 고치려 하면 기다려요
+    source: https://www.postgresql.org/docs/16/mvcc-intro.html
+  - key: mvcc-batch-read
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "배치가 주문 100만 행의 상태를 한 트랜잭션으로 고치는 중이에요. 같은 주문을 일반 SELECT로 조회하는 API는 어떻게 되나요? (PostgreSQL 16)"
+    choices:
+      - 배치가 커밋할 때까지 기다린다
+      - 기다리지 않고 배치 전 값을 읽는다
+      - 기다리지 않고 배치가 고친 값을 읽는다
+      - 오류가 난다
+    answer: "2"
+    explanation: |-
+      **기다리지 않고 배치 전 값을 읽어요.** 읽기는 쓰기를 기다리지 않아요.
+
+      - 배치의 새 버전은 커밋 전이라 보이지 않아요
+      - 같은 주문을 고치려는 요청만 행 락으로 기다려요
+    source: https://www.postgresql.org/docs/16/mvcc-intro.html
+  # ── 질문 2 ──
+  - key: mvcc-ctid-changes
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "PostgreSQL에서 행을 UPDATE하면 그 행의 ctid(물리적 위치)는 그대로이고 값만 바뀐다."
+    answer: X
+    explanation: |-
+      **X. ctid가 바뀌어요.** UPDATE는 덮어쓰지 않고 새 자리에 새 버전을 만들어요.
+
+      - 옛 버전에는 xmax(지운 트랜잭션)가 적혀 남아요
+      - 새 버전의 xmin은 UPDATE한 트랜잭션의 id예요
+    source: https://www.postgresql.org/docs/16/ddl-system-columns.html
+  - key: mvcc-rr-version
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "REPEATABLE READ의 C가 kim의 잔액(100)을 한 번 읽었어요. 그 뒤 A가 kim의 잔액을 세 번 고치고(150, 200, 250) 각각 커밋했어요. C가 같은 트랜잭션에서 다시 읽으면?"
+    choices:
+      - "100"
+      - "150"
+      - "250"
+      - 40001 오류
+    answer: "1"
+    explanation: |-
+      **100이에요.** C는 첫 문장 때 찍은 스냅샷을 계속 써서, 그때 커밋돼 있던 버전을 봐요.
+
+      - A가 만든 새 버전들은 C의 스냅샷에서는 아직 커밋 전이에요
+      - 읽기만 하면 40001은 나지 않아요
+    source: https://www.postgresql.org/docs/16/mvcc-intro.html
+  # ── 질문 3 ──
+  - key: mvcc-vacuum-blocked
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "다른 연결에서 REPEATABLE READ 트랜잭션을 열고 SELECT 하나만 한 채 두었어요. 그동안 같은 행을 1000번 UPDATE하고 VACUUM을 돌리면, 죽은 행은 어떻게 되나요?"
+    choices:
+      - 모두 치워진다
+      - 치우지 못하고 남는다
+      - VACUUM이 그 트랜잭션을 강제로 끝낸다
+      - 죽은 행이 생기지 않는다
+    answer: "2"
+    explanation: |-
+      **치우지 못해요.** 열린 트랜잭션의 스냅샷이 옛 버전을 볼 수도 있어서예요.
+
+      - VACUUM VERBOSE에 "1000 are dead but not yet removable"이 나왔어요
+      - 그 트랜잭션을 끝내자 1000개를 치웠어요
+    source: https://www.postgresql.org/docs/16/routine-vacuuming.html
+  - key: mvcc-idle-admin
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "관리자 도구가 DB 연결을 열고 `begin` 뒤 SELECT 하나를 한 채 몇 시간을 놀았어요. 그동안 업데이트가 많은 주문 테이블에 생길 수 있는 일은?"
+    choices:
+      - 아무 일도 없다. 읽기만 했다
+      - 옛 버전을 VACUUM이 치우지 못해 테이블이 계속 불어난다
+      - 모든 주문 UPDATE가 그 세션을 기다린다
+      - 주문 테이블이 읽기 전용이 된다
+    answer: "2"
+    explanation: |-
+      **테이블이 불어나요(bloat).** 읽기만 한 트랜잭션도 스냅샷이 있어 옛 버전 청소를 막아요.
+
+      - 일반 SELECT는 행 락을 잡지 않아 UPDATE를 막지는 않아요
+      - `idle_in_transaction_session_timeout`으로 이런 세션을 끊어요
+    source: https://www.postgresql.org/docs/16/routine-vacuuming.html
+  - key: mvcc-tx-external-call
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`@Transactional` 주문 메서드 안에서 주문을 저장한 뒤 외부 결제 API를 부르고, 응답을 받아 주문 상태를 바꿔요. 결제 API가 자주 10초씩 걸려요. DB에 생기는 문제로 맞는 것은?"
+    choices:
+      - 문제없다. API는 DB와 상관없다
+      - 트랜잭션이 10초씩 열려 행 락을 쥐고, 그동안 VACUUM이 옛 버전을 치우지 못한다
+      - 결제 API가 DB 트랜잭션을 롤백한다
+      - 주문 테이블의 인덱스가 깨진다
+    answer: "2"
+    explanation: |-
+      **긴 트랜잭션이 돼요.** 락을 오래 쥐고, 옛 버전 청소를 막아요.
+
+      - 외부 호출은 트랜잭션 밖으로 빼요
+      - 주문 저장과 상태 변경을 각각 짧은 트랜잭션으로 나눠요
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+  # ── 질문 4 ──
+  - key: mvcc-write-write-wait
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "READ COMMITTED에서 A가 kim의 행을 UPDATE하고 커밋하기 전에, B도 같은 행을 UPDATE해요. B는 어떻게 되나요?"
+    choices:
+      - 기다리지 않고 옛 버전을 고친다
+      - A가 끝날 때까지 기다린다
+      - 바로 40001로 실패한다
+      - 바로 데드락 오류가 난다
+    answer: "2"
+    explanation: |-
+      **기다려요.** MVCC가 없애는 것은 읽기와 쓰기 사이의 기다림이고, 쓰기끼리는 행 락으로 기다려요.
+
+      - A가 커밋하면 B는 A의 새 버전을 다시 읽어 그 위에 고쳐요
+    source: https://www.postgresql.org/docs/16/mvcc-intro.html
+  - key: mvcc-rr-rollback
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "REPEATABLE READ의 B가 kim의 행을 읽은 뒤, A가 같은 행을 UPDATE했어요. B도 그 행을 UPDATE하려다 기다리는 중에 A가 롤백했어요. B의 UPDATE는?"
+    choices:
+      - 40001로 실패한다
+      - 성공한다
+      - A가 다시 시작할 때까지 기다린다
+      - 데드락으로 실패한다
+    answer: "2"
+    explanation: |-
+      **성공해요.** A의 새 버전이 없던 일이 돼서, 고칠 행의 최신 버전이 B가 본 그 버전이에요.
+
+      - A가 커밋했다면 B는 40001로 실패해요
+    source: https://www.postgresql.org/docs/16/transaction-iso.html#XACT-REPEATABLE-READ
+  # ── 면접 질문 ──
+  - key: mvcc-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 면접에서 "MVCC가 무엇이고, 긴 트랜잭션이 왜 문제가 되나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **행을 고칠 때 새 버전을 만들어 읽기와 쓰기가 서로 기다리지 않게 하고, 긴 트랜잭션은 옛 버전 청소를 막아요.**
+
+      - **원리:** 덮어쓰지 않고 새 버전. 스냅샷과 xmin, xmax로 보일 버전을 정한다
+      - **기다림:** 읽기와 쓰기는 안 기다리고, 같은 행의 쓰기끼리만 행 락으로 기다린다
+      - **VACUUM:** 아무도 못 보는 옛 버전을 치운다. 열린 트랜잭션이 있으면 못 치워 테이블이 불어난다
+      - **대책:** 트랜잭션을 짧게, 외부 호출은 밖에서, idle_in_transaction_session_timeout
+    checklist:
+      - 행을 고칠 때 새 버전을 만든다고 말했다
+      - 읽기와 쓰기가 서로 기다리지 않는다고 말했다
+      - 스냅샷에 따라 보이는 버전이 정해진다고 말했다
+      - 옛 버전은 VACUUM이 치우고 긴 트랜잭션이 이를 막는다고 말했다
+      - 트랜잭션을 짧게 하는 방법을 말했다
+    source: https://www.postgresql.org/docs/16/mvcc-intro.html
