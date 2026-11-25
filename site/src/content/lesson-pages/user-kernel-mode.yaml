@@ -1,14 +1,15 @@
-# 사용자 모드와 커널 모드 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 사용자 모드와 커널 모드
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/user-kernel-mode.yaml에 있다.
 title: 사용자 모드와 커널 모드
+description: CPU는 왜 사용자 모드와 커널 모드를 나누는지, 시스템 콜은 무엇이고 자바 코드에서는 어디서 일어나는지, 입출력은 왜 비싸고 버퍼는 어떻게 빠르게 하는지. 같은 파일을 한 바이트씩과 8KB씩 읽어 시간을 재 보며 배우는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 16
 roadmap: C11
 type: 개념 설명
 prerequisites:
   - {slug: context-switching, title: 컨텍스트 스위칭}
 assume: '자바 21(OpenJDK). 커널이 스레드를 바꾸고 레지스터를 저장한다는 것(컨텍스트 스위칭 레슨). 파일을 `FileInputStream`으로 읽는 문법.'
-example: '10MB 파일을 읽어 바이트 수를 세는 코드. 한 바이트씩 읽을 때와 버퍼로 8KB씩 읽을 때, 운영체제에게 부탁하는 횟수(시스템 콜)가 얼마나 다르고 시간이 얼마나 다른지 재요. 실무 구역에서는 로그 출력과 DB 배치로 옮겨요.'
+example: '1MB 파일을 읽어 바이트 수를 세는 코드. 한 바이트씩 읽을 때와 버퍼로 8KB씩 읽을 때, 운영체제에게 부탁하는 횟수(시스템 콜)가 얼마나 다르고 시간이 얼마나 다른지 재요. 실무 구역에서는 로그 출력과 DB 배치로 옮겨요.'
 intro:
   - '대용량 CSV를 읽는 배치가 너무 느려서 들여다보니 `FileInputStream.read()`로 한 바이트씩 읽고 있었어요. `BufferedInputStream`으로 감싸기만 했는데 수십 배 빨라졌어요. 디스크는 그대로인데 무엇이 달라진 걸까요?'
   - '자바 개발자가 파일, 소켓, 로그를 다루는 코드는 결국 운영체제에게 "읽어 줘, 써 줘"라고 부탁해요. 그 부탁에는 매번 정해진 비용이 들어서, 같은 양을 몇 번에 나눠 부탁하느냐가 성능을 크게 바꿔요. 버퍼, 배치, 커넥션 재사용이 모두 이 비용을 줄이는 방법이에요.'
@@ -42,7 +43,7 @@ covers:
     where: '실무에서는. 리눅스 도구는 리눅스 기초(T8)'
 codes:
   predict: |-
-    // 10MB 파일
+    // 1MB 파일
     try (var in = new FileInputStream(f)) {
       while (in.read() != -1) count++;
     }
@@ -71,9 +72,28 @@ codes:
       for (int i = 0; i < 100_000; i++)
         out.write(lineText(i));
     }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/userkernel/UserKernelModeTest.java
+  syscalls: https://man7.org/linux/man-pages/man2/syscalls.2.html
+  read2: https://man7.org/linux/man-pages/man2/read.2.html
+  bis: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/BufferedInputStream.html
+  fileChannel: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/channels/FileChannel.html
+  logback: https://logback.qos.ch/manual/appenders.html
 predict:
-  text: '10MB 파일을 `FileInputStream.read()`로 한 바이트씩 읽는 코드와, 같은 코드를 `BufferedInputStream`으로 감싼 코드가 있어요. 두 코드의 시간은 어떻게 다를까요? 보기: 거의 같다 / 버퍼 쪽이 몇 배에서 수십 배 빠르다 / 버퍼 쪽이 느리다'
-  answer: '버퍼 쪽이 훨씬 빠르다. 한 바이트마다 시스템 콜을 부르던 것을 8KB마다 한 번으로 줄였다. 질문 3에서 밝힌다.'
+  title: 한 바이트씩과 버퍼로
+  text: '1MB 파일을 `FileInputStream.read()`로 한 바이트씩 읽는 코드와, 같은 코드를 `BufferedInputStream`으로 감싼 코드가 있어요. 두 코드는 똑같이 `read()`로 한 바이트씩 받아요. 시간은 어떻게 다를까요? 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: same
+      label: 거의 같다
+    - value: faster
+      label: 버퍼 쪽이 몇 배에서 수십 배 빠르다
+    - value: slower
+      label: 버퍼 쪽이 느리다
+  answer: faster
+  storageKey: user-kernel-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: CPU는 왜 사용자 모드와 커널 모드를 나누나요?
@@ -89,6 +109,30 @@ questions:
     asks:
       - '본문의 예시: 자바 프로그램이 디스크 장치에 직접 명령을 보내 파일을 읽을 수 있나 (없다. 사용자 모드에서는 장치를 직접 다룰 수 없고 커널에 부탁한다)'
       - '옮긴 상황: 한 프로세스가 버그로 엉뚱한 주소에 썼다. 다른 프로세스나 커널의 메모리가 망가지나 (망가지지 않는다. 그 프로세스만 끝난다. 주소 공간과 모드가 막는다)'
+    body:
+      - p: 'CPU는 지금 어느 **모드**인지 표시해 둬요.'
+      - table:
+          head: ['', 사용자 모드, 커널 모드]
+          rows:
+            - [누가, '자바 코드, JVM, 우리가 짠 모든 프로그램', '운영체제의 핵심(커널)']
+            - [할 수 있는 것, '계산, 자기 주소 공간의 메모리 읽고 쓰기', '모든 명령. 장치 다루기, 페이지 테이블 바꾸기, 다른 프로세스 전환']
+            - [못 하는 것, '장치를 직접 다루는 특권 명령, 커널의 메모리', '없음']
+      - p: '나누는 이유는 **보호**예요. 잘못된 프로그램 하나가 디스크를 망가뜨리거나 다른 프로세스의 메모리를 바꾸면 시스템 전체가 위험해요. 위험한 일은 검사를 거치는 커널을 통해서만 하게 해요. 가상 메모리 레슨의 주소 공간 격리도 이 위에 있어요.'
+      - p: '그래서 자바 프로그램이 파일을 읽고, 소켓으로 보내고, 스레드를 만들고, 메모리를 받는 일은 모두 **커널에게 부탁**해요.'
+      - more:
+          summary: '더 알아보기: 커널 모드로 들어가는 다른 길'
+          body:
+            - p: '시스템 콜 말고도 커널 모드로 들어가는 길이 있어요. 장치가 보내는 **인터럽트**(타이머, 네트워크 카드)와 프로그램이 일으킨 **예외**(페이지 폴트, 0으로 나누기)예요. 타임 슬라이스가 끝났다는 타이머 인터럽트가 컨텍스트 스위칭을 일으키고, 처음 만진 페이지의 페이지 폴트가 물리 메모리를 붙여요(가상 메모리 레슨).'
+      - quiz:
+          q: '한 프로세스가 버그로 엉뚱한 주소에 값을 썼어요. 다른 프로세스나 커널의 메모리가 망가질까요?'
+          options:
+            - 망가진다
+            - 망가지지 않는다. 그 프로세스만 끝난다
+            - 커널만 망가진다
+          answer: 2
+          explain: '사용자 모드에서는 자기 주소 공간 밖에 닿을 수 없어요. 잘못된 접근은 그 프로세스의 오류로 끝나요.'
+      - next: '커널에게 부탁한다고 했어요. 부탁은 어떻게 하고, 자바 코드의 어디에서 일어날까요?'
+    recall: '프로그램이 장치와 다른 프로세스의 메모리를 직접 건드리지 못하게 막으려고, 위험한 일은 커널 모드에서만 할 수 있게 나눠요. 자바 코드와 JVM은 사용자 모드에서 돌고, 파일을 읽거나 네트워크로 보내는 일은 커널에게 부탁해요.'
   - id: q2
     title: 시스템 콜은 무엇이고 자바 코드에서는 어디서 일어나나요?
     conclusion:
@@ -105,6 +149,52 @@ questions:
     asks:
       - '본문의 예시: 1000바이트를 `FileInputStream.read()`로 하나씩 읽으면 read 시스템 콜은 몇 번인가 (1000번 남짓. 부를 때마다 한 번이다)'
       - '옮긴 상황: 스레드가 read 시스템 콜을 불렀는데 데이터가 디스크에 있어 기다려야 한다. 그 사이 CPU는 무엇을 하나 (다른 스레드를 실행한다. 기다리는 스레드는 코어를 내려놓는다)'
+    body:
+      - p: '**시스템 콜**은 커널이 열어 둔 정해진 입구예요. 리눅스에는 read, write, open, close, socket, clone(스레드 만들기), mmap(메모리 받기) 같은 수백 개가 있어요([syscalls 문서](link:syscalls)).'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: CPU 모드, state: dim, text: 사용자 모드}
+              - {label: 실행 중인 코드, state: dim, text: 자바 코드}
+          scenarios:
+            default:
+              - log: '자바 코드가 in.read() 호출'
+                duo:
+                  - {label: CPU 모드, rows: [{k: 모드, v: 사용자}]}
+                  - {label: 실행 중인 코드, rows: [{k: 코드, v: 'FileInputStream.read()', mark: changed}]}
+              - log: 'read 시스템 콜 → 커널 모드로 바뀜'
+                duo:
+                  - {label: CPU 모드, rows: [{k: 모드, v: 커널, mark: changed}]}
+                  - {label: 실행 중인 코드, rows: [{k: 코드, v: 커널의 read}]}
+              - log: '커널이 파일 캐시에서 1바이트를 사용자 메모리로 복사'
+                duo:
+                  - {label: CPU 모드, rows: [{k: 모드, v: 커널}]}
+                  - {label: 실행 중인 코드, rows: [{k: 코드, v: '복사 (1바이트)', mark: changed}]}
+              - log: '사용자 모드로 돌아와 다음 줄 실행'
+                duo:
+                  - {label: CPU 모드, rows: [{k: 모드, v: 사용자, mark: changed}]}
+                  - {label: 실행 중인 코드, rows: [{k: 코드, v: 'count++'}]}
+              - log: '다음 바이트를 위해 또 read 시스템 콜'
+                duo:
+                  - {label: CPU 모드, rows: [{k: 모드, v: 커널, mark: bad}]}
+                  - {label: 실행 중인 코드, rows: [{k: 코드, v: 커널의 read}]}
+                verdict: '한 바이트마다 커널에 들어갔다 나와요. 1MB면 100만 번이에요.'
+      - ul:
+          - '부르는 순서: 인자를 레지스터에 넣고 특별한 명령을 실행하면 CPU가 커널 모드로 바뀌어 커널의 정해진 코드로 가요. 커널이 검사하고 일을 하고, 결과를 돌려주며 사용자 모드로 돌아와요.'
+          - '**자바에서:** `FileInputStream.read()`는 네이티브 코드를 거쳐 read 시스템 콜을 불러요([read 문서](link:read2)). 한 바이트를 읽어도 한 번이에요. `read(byte[])`는 한 번에 여러 바이트를 받아요. 소켓, 파일 쓰기, `Thread.start()`도 시스템 콜을 불러요.'
+      - callout: '**시스템 콜과 컨텍스트 스위칭은 달라요.** 시스템 콜은 같은 스레드가 커널에 들어갔다 나오는 거예요. 다만 디스크나 네트워크를 기다려야 하면, 그 사이에 커널이 다른 스레드로 바꿔요(컨텍스트 스위칭 레슨).'
+      - quiz:
+          q: '1000바이트를 `FileInputStream.read()`로 하나씩 읽으면 read 시스템 콜은 대략 몇 번일까요?'
+          options:
+            - 1번
+            - 1000번 남짓
+            - 0번. 자바가 알아서 모은다
+          answer: 2
+          explain: '`FileInputStream.read()`는 부를 때마다 read 시스템 콜이에요. 모아 주는 것은 `BufferedInputStream`이에요.'
+      - next: '한 번에 1바이트든 8KB든 시스템 콜은 한 번이에요. 그러면 몇 번 부르느냐가 시간을 정할까요?'
+    recall: '사용자 프로그램이 커널에게 일을 부탁하는 정해진 입구예요. 부르면 CPU가 커널 모드로 바뀌어 일을 하고, 끝나면 사용자 모드로 돌아와요. 자바의 입출력 메서드는 결국 시스템 콜을 부르고, `FileInputStream.read()`는 부를 때마다 read 시스템 콜이에요. 같은 스레드가 들어갔다 나오는 것이라 컨텍스트 스위칭과는 달라요.'
   - id: q3
     title: 입출력은 왜 비싸고, 버퍼는 어떻게 빠르게 하나요?
     conclusion:
@@ -112,14 +202,54 @@ questions:
       sub: '버퍼는 한 번에 많이(기본 8KB) 받아 두고 나눠 줘서 시스템 콜 수를 수천 분의 일로 줄여요. 쓸 때는 다 쓴 뒤 flush나 close로 내보내야 해요.'
     says:
       - '비용 셋: 시스템 콜의 고정 비용(모드 전환과 검사), 커널의 버퍼에서 사용자 메모리로 복사, 장치를 기다리는 시간. 앞의 둘은 부르는 횟수에 비례한다'
-      - '예측의 답을 밝힌다. 10MB를 한 바이트씩 읽으면 read 시스템 콜이 천만 번 남짓이다. `BufferedInputStream`은 8KB씩 받아 두고 나눠 주므로 천이백여 번이다. 두 시간을 실제 출력으로 보인다'
+      - '예측의 답을 밝힌다. 1MB를 한 바이트씩 읽으면 read 시스템 콜이 100만 번 남짓이다. `BufferedInputStream`은 8KB씩 받아 두고 나눠 주므로 130번쯤이다. 두 시간을 실제 출력으로 보인다'
       - '쓰기도 같다. 줄마다 `FileOutputStream.write`를 부르면 줄마다 write 시스템 콜이다. `BufferedWriter`는 모아서 쓴다. 10만 줄을 두 방식으로 쓴 시간을 보인다'
       - '버퍼로 쓸 때는 버퍼가 다 차거나 `flush()`, `close()`를 불러야 실제로 나간다. try-with-resources로 닫으면 마지막 내용이 나간다. 닫지 않고 끝나면 마지막 부분이 사라진다. 테스트로 보인다'
       - '더 알아보기: 파일을 소켓으로 보낼 때 `FileChannel.transferTo`는 데이터를 사용자 메모리로 복사하지 않고 커널 안에서 바로 보낸다(제로 카피). 메모리 맵 파일(`FileChannel.map`)은 파일을 주소 공간에 붙여 시스템 콜 없이 읽는다(C10의 페이징)'
     asks:
-      - '본문의 예시: 10MB 파일을 `BufferedInputStream`으로 감싸 `read()`로 한 바이트씩 읽었다. read 시스템 콜은 대략 몇 번인가 (1300번쯤. 8KB마다 한 번)'
+      - '본문의 예시: 1MB 파일을 `BufferedInputStream`으로 감싸 `read()`로 한 바이트씩 읽었다. read 시스템 콜은 대략 몇 번인가 (130번쯤. 8KB마다 한 번)'
       - '옮긴 상황: `BufferedWriter`로 로그 파일에 줄을 쓰고 `close()`나 `flush()` 없이 프로그램이 끝났다. 마지막 몇 줄은 어떻게 되나 (사라질 수 있다. 버퍼에만 있고 파일로 나가지 않았다)'
       - '실무 구역: 주문 1만 건을 `INSERT` 한 줄씩 1만 번 보내는 코드와 JDBC 배치로 1000건씩 보내는 코드가 있다. 무엇이 줄어 배치가 빠른가 (DB와 주고받는 횟수, 곧 네트워크 시스템 콜과 왕복이 줄어든다)'
+    body:
+      - p: '입출력의 비용은 세 가지예요.'
+      - ol:
+          - '시스템 콜의 고정 비용: 모드 전환과 검사'
+          - '커널의 버퍼와 사용자 메모리 사이의 복사'
+          - '장치를 기다리는 시간'
+      - p: '앞의 둘은 **부르는 횟수**에 비례해요. 처음 예측의 답은 **버퍼 쪽이 훨씬 빠르다**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 두 코드의 실제 시간 보기
+          source: UserKernelModeTest.bufferedReadIsFaster
+          code: predict
+      - p: '두 코드 모두 우리 눈에는 `read()`로 한 바이트씩 받아요. 다른 것은 **커널에 몇 번 부탁하느냐**예요. `BufferedInputStream`은 8KB씩 한 번에 받아 두고 메모리에서 나눠 줘서, 1MB에 100만 번이던 시스템 콜이 130번쯤으로 줄어요([API 문서](link:bis)).'
+      - p: '쓰기도 같아요. 줄마다 `FileOutputStream.write`를 부르면 줄마다 write 시스템 콜이에요.'
+      - code: write
+      - ci:
+          key: write
+          label: 10만 줄을 쓴 실제 시간 보기
+          source: UserKernelModeTest.bufferedWriteIsFaster
+          code: writeBuffered
+      - h3: 버퍼는 내보내야 나가요
+      - p: '버퍼로 쓰면 버퍼가 다 차거나 `flush()`, `close()`를 불러야 실제로 파일에 나가요.'
+      - ci:
+          key: flush
+          label: close 전과 뒤의 파일 크기 보기
+          source: UserKernelModeTest.unflushedBufferStaysInMemory
+      - p: 'try-with-resources로 닫으면 마지막 내용이 나가요. 닫지 않고 프로그램이 끝나면 버퍼에 남은 마지막 몇 줄이 사라져요.'
+      - more:
+          summary: '더 알아보기: 커널을 덜 거치는 방법'
+          body:
+            - p: '파일을 소켓으로 보낼 때 `FileChannel.transferTo`는 데이터를 사용자 메모리로 복사하지 않고 커널 안에서 바로 보내요(제로 카피). 메모리 맵 파일(`FileChannel.map`)은 파일을 주소 공간에 붙여 시스템 콜 없이 읽어요([FileChannel 문서](link:fileChannel)). 가상 메모리 레슨의 페이징이 그 바탕이에요.'
+      - quiz:
+          q: '`BufferedWriter`로 로그 파일에 몇 줄을 쓰고 `flush()`나 `close()` 없이 프로그램이 끝났어요. 마지막 몇 줄은 어떻게 될까요?'
+          options:
+            - 파일에 남는다
+            - 사라질 수 있다. 버퍼에만 있었다
+            - 다음 실행 때 쓰인다
+          answer: 2
+          explain: '버퍼의 내용은 차거나 flush, close할 때 나가요. 실제로 close 전의 파일 크기는 0바이트였어요.'
+    recall: '시스템 콜마다 모드를 바꾸고 데이터를 커널과 사용자 영역 사이에 복사하는 고정 비용이 들어서, 조금씩 자주 부르면 그 비용이 쌓여요. 버퍼는 한 번에 많이(기본 8KB) 받아 두고 나눠 줘서 시스템 콜 수를 크게 줄여요. 쓸 때는 다 쓴 뒤 flush나 close로 내보내야 해요.'
 practice:
   says:
     - '로그: 로그를 줄마다 바로 파일에 쓰면 줄마다 write 시스템 콜이다. 로그백은 버퍼를 쓰고(immediateFlush를 끄면 더 모은다), AsyncAppender는 로그를 다른 스레드가 모아서 쓴다. 요청 스레드가 디스크를 기다리지 않는다(로그백 문서 근거)'
@@ -127,13 +257,46 @@ practice:
     - '커넥션 풀이 비싼 이유도 같다. 연결을 새로 만들면 소켓을 열고 여러 번 주고받는 시스템 콜이 든다(D6)'
     - '흔한 실수: 큰 파일을 버퍼 없이 `FileInputStream.read()`로 읽거나, 반복문 안에서 `System.out.println`으로 대량 출력한다. 고친 코드: `BufferedInputStream`, `BufferedWriter`, 또는 `Files.newBufferedReader`. 질문 3의 측정을 근거로 든다'
     - '리눅스에서 `strace -c -p <pid>`를 붙이면 시스템 콜을 종류별로 센다. read가 비정상적으로 많으면 버퍼가 빠진 곳이다(T8)'
+  title: 스프링 서버에서는 이렇게 만나요
+  body:
+    - p: '이 레슨의 원리는 로그, DB 호출, 커넥션 풀처럼 매일 쓰는 곳에 있어요. 측정은 질문 3의 테스트이고, 로그백과 JDBC의 설정은 공식 문서가 근거예요.'
+    - h3: 로그
+    - p: '로그를 줄마다 바로 파일에 쓰면 줄마다 write 시스템 콜이에요. 로그백의 파일 출력은 버퍼를 쓰고, `AsyncAppender`는 로그를 다른 스레드가 모아서 써서 요청 스레드가 디스크를 기다리지 않아요([로그백 문서](link:logback)).'
+    - h3: JDBC 배치와 커넥션
+    - ul:
+        - '`INSERT`를 한 건씩 보내면 건마다 DB와 왕복하고, 왕복마다 소켓에 쓰고 읽는 시스템 콜이 들어요. `addBatch`와 `executeBatch`, JPA의 `hibernate.jdbc.batch_size`로 모아서 보내요(대량 DML, 식별자 생성 전략 레슨).'
+        - '커넥션을 새로 만드는 것이 비싼 이유도 같아요. 소켓을 열고 여러 번 주고받는 시스템 콜이 들어서 커넥션 풀로 다시 써요(DB 커넥션과 커넥션 풀 레슨).'
+    - h3: '흔한 실수: 버퍼 없이 큰 파일 다루기'
+    - code: unbuffered
+      notes:
+        - mark: read()
+          as: code
+          text: '부를 때마다 시스템 콜이에요. 큰 파일에서는 질문 3처럼 수십 배 느려요.'
+    - p: '고친 코드는 `BufferedInputStream`으로 감싸거나 `Files.newBufferedReader`를 쓰는 거예요. 반복문 안에서 `System.out.println`으로 대량 출력하는 것도 같은 문제라, 모아서 한 번에 써요.'
+    - muted: '리눅스에서 `strace -c -p <pid>`를 붙이면 시스템 콜을 종류별로 세어 줘요. read나 write가 비정상적으로 많으면 버퍼가 빠진 곳이에요. 리눅스 기초 레슨에서 다뤄요.'
+interview:
+  question: 사용자 모드와 커널 모드, 시스템 콜을 설명해 주세요
+  model:
+    - label: 정의
+      text: CPU는 제한된 사용자 모드와 모든 것을 할 수 있는 커널 모드를 나눠, 프로그램이 장치와 다른 프로세스의 메모리를 직접 건드리지 못하게 막습니다. 시스템 콜은 사용자 프로그램이 커널에게 일을 부탁하는 정해진 입구입니다.
+    - label: 원리
+      text: 파일, 소켓, 스레드 만들기 같은 일은 시스템 콜로 커널 모드에 들어가 처리하고 돌아옵니다. 자바의 FileInputStream.read()도 부를 때마다 read 시스템 콜입니다.
+    - label: 주의할 점
+      text: 시스템 콜마다 모드 전환과 복사의 고정 비용이 들어 조금씩 자주 부르면 느립니다. BufferedInputStream이나 BufferedWriter로 모아서 부르고, 쓴 뒤에는 flush나 close로 내보냅니다. JDBC 배치와 커넥션 풀도 같은 이유로 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 큰 CSV를 FileInputStream.read()로 읽던 배치를 BufferedInputStream으로 감싸 수십 배 빠르게 했습니다.'
+verified: 이 레슨의 시간은 짐작이 아니라 자바 21에서 같은 일을 두 방법으로 해서 잰 값이에요. 시스템 콜 수를 직접 세지는 않았고, 숫자는 파일 크기와 버퍼 크기로 계산했어요. 코드가 바뀔 때마다 테스트([UserKernelModeTest](link:test))가 다시 돌아요.
+footer: '근거: 시스템 콜은 리눅스 syscalls(2)와 read(2) 문서([링크](link:syscalls)), 버퍼 크기는 BufferedInputStream API 문서([링크](link:bis)), 제로 카피는 FileChannel API 문서, 로그백은 로그백 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '10MB 파일을 버퍼 없이 한 바이트씩 읽는 시간이 BufferedInputStream으로 읽는 시간보다 몇 배 이상 길다'
+  - claim: '1MB 파일을 버퍼 없이 한 바이트씩 읽는 시간이 BufferedInputStream으로 읽는 시간보다 몇 배 이상 길다'
+    test: UserKernelModeTest.bufferedReadIsFaster
     how: '임시 파일을 만들어 두 방식으로 읽고 시간을 잰다. 3배 넘게 차이 나는지만 단정하고 값은 남긴다'
   - claim: '10만 줄을 줄마다 FileOutputStream.write로 쓰는 시간이 BufferedWriter로 쓰는 시간보다 길다'
     how: '두 방식으로 쓰고 시간을 잰다'
+    test: UserKernelModeTest.bufferedWriteIsFaster
   - claim: 'BufferedWriter로 쓰고 flush나 close 없이 두면 파일에 아직 내용이 없다'
     how: '몇 줄 쓰고 파일 크기를 본 뒤 close하고 다시 본다'
+    test: UserKernelModeTest.unflushedBufferStaysInMemory
 sources:
   - '시스템 콜의 정의와 목록: 리눅스 man 페이지 syscalls(2) https://man7.org/linux/man-pages/man2/syscalls.2.html'
   - 'read(2): https://man7.org/linux/man-pages/man2/read.2.html'

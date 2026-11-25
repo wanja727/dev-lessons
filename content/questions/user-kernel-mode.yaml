@@ -1,0 +1,177 @@
+# 사용자 모드와 커널 모드 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/user-kernel-mode.yaml의 says).
+# 동작에 관한 정답은 verification의 userkernel/UserKernelModeTest로 확인했다 (자바 21).
+# 모드와 시스템 콜의 정의는 리눅스 문서가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: user-kernel-mode
+  title: 사용자 모드와 커널 모드
+  unit: 운영체제와 동시성
+  order: 411
+concepts:
+  - key: core
+    name: 사용자 모드와 커널 모드
+coreQuestions:
+  - key: q1
+    text: "CPU는 왜 사용자 모드와 커널 모드를 나누나요?"
+  - key: q2
+    text: "시스템 콜은 무엇이고 자바 코드에서는 어디서 일어나나요?"
+  - key: q3
+    text: "입출력은 왜 비싸고, 버퍼는 어떻게 빠르게 하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: uk-device-direct
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 자바 프로그램이 디스크 장치에 직접 명령을 보내 파일을 읽을 수 있을까요?
+    choices:
+      - 있다. JVM은 커널 모드에서 돈다
+      - 없다. 사용자 모드에서는 장치를 직접 다룰 수 없어 커널에게 부탁한다
+      - native 메서드를 쓰면 언제나 된다
+      - 관리자 계정이면 된다
+    answer: "2"
+    explanation: |-
+      **없어요.** 자바 코드와 JVM은 사용자 모드에서 돌고, 장치를 다루는 특권 명령은 커널 모드에서만 실행돼요.
+
+      - 파일을 읽는 일은 시스템 콜로 커널에게 부탁해요
+    source: https://man7.org/linux/man-pages/man2/syscalls.2.html
+  - key: uk-bad-pointer
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"한 프로세스가 버그로 엉뚱한 주소에 값을 쓰면, 다른 프로세스나 커널의 메모리가 망가질 수 있다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 사용자 모드의 프로그램은 자기 주소 공간 밖에 닿을 수 없어서, 잘못된 접근은 그 프로세스의 오류로 끝나요.
+
+      - 모드를 나누고 주소 공간을 따로 두는 이유가 이 보호예요
+    source: https://man7.org/linux/man-pages/man2/syscalls.2.html
+  # ── 질문 2 ──
+  - key: uk-read-count
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 1000바이트짜리 파일을 아래처럼 읽어요. read 시스템 콜은 대략 몇 번 불릴까요?
+    code: |-
+      try (var in = new FileInputStream(f)) {
+        while (in.read() != -1) count++;
+      }
+    choices:
+      - 1번
+      - 1000번 남짓
+      - 0번
+      - 8번
+    answer: "2"
+    explanation: |-
+      **1000번 남짓이에요.** FileInputStream.read()는 부를 때마다 read 시스템 콜을 불러요. 한 바이트를 읽어도 한 번이에요.
+
+      - 모아서 부르는 것은 BufferedInputStream이에요
+    source: https://man7.org/linux/man-pages/man2/read.2.html
+  - key: uk-wait-switch
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스레드가 read 시스템 콜을 불렀는데 데이터가 아직 디스크에 있어 기다려야 해요. 그 사이 그 코어는 무엇을 할까요?
+    choices:
+      - 그 스레드가 기다리는 동안 코어도 함께 멈춘다
+      - 다른 스레드를 실행한다. 기다리는 스레드는 코어를 내려놓는다
+      - 시스템 콜이 실패한다
+      - 커널이 데이터를 만들어 바로 돌려준다
+    answer: "2"
+    explanation: |-
+      **다른 스레드를 실행해요.** 시스템 콜 자체는 같은 스레드가 커널에 들어갔다 나오는 것이지만, 장치를 기다려야 하면 커널이 그 사이에 다른 스레드로 바꿔요.
+    source: https://man7.org/linux/man-pages/man2/read.2.html
+  # ── 질문 3 ──
+  - key: uk-buffered-count
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 1MB 파일을 BufferedInputStream(기본 버퍼 8KB)으로 감싸 read()로 한 바이트씩 읽었어요. read 시스템 콜은 대략 몇 번일까요?
+    choices:
+      - 100만 번쯤
+      - 130번쯤
+      - 1번
+      - 8000번쯤
+    answer: "2"
+    explanation: |-
+      **130번쯤이에요.** 버퍼가 8KB씩 한 번에 받아 두고 메모리에서 나눠 줘서, 1MB ÷ 8KB만큼만 부탁해요.
+
+      - 버퍼 없이 읽으면 100만 번이라 테스트에서 몇십 배 느렸어요
+      - 검증: UserKernelModeTest.bufferedReadIsFaster
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/BufferedInputStream.html
+  - key: uk-no-flush
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: BufferedWriter로 로그 파일에 몇 줄을 쓰고, flush()나 close() 없이 프로그램이 끝났어요. 마지막 몇 줄은 어떻게 될까요?
+    choices:
+      - 파일에 남는다
+      - 사라질 수 있다. 버퍼에만 있고 파일로 나가지 않았다
+      - 다음 실행 때 쓰인다
+      - 운영체제가 대신 써 준다
+    answer: "2"
+    explanation: |-
+      **사라질 수 있어요.** 버퍼의 내용은 버퍼가 차거나 flush, close를 불러야 write 시스템 콜로 나가요.
+
+      - try-with-resources로 닫으면 마지막 내용이 나가요
+      - 검증: UserKernelModeTest.unflushedBufferStaysInMemory (close 전 파일 크기 0바이트)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/BufferedInputStream.html
+  - key: uk-jdbc-batch
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 1만 건을 INSERT 한 줄씩 1만 번 보내는 코드와, JDBC 배치로 1000건씩 묶어 보내는 코드가 있어요. 배치가 빠른 이유로 맞는 것은?
+    choices:
+      - DB가 배치를 더 빠른 디스크에 쓴다
+      - DB와 주고받는 횟수, 곧 네트워크 왕복과 시스템 콜이 줄어든다
+      - 배치는 트랜잭션을 쓰지 않는다
+      - 자바가 배치를 다른 스레드에서 보낸다
+    answer: "2"
+    explanation: |-
+      **주고받는 횟수가 줄어서예요.** 한 건마다 소켓에 쓰고 응답을 읽는 왕복과 시스템 콜이 드는데, 배치는 그것을 묶어서 줄여요.
+
+      - 버퍼로 시스템 콜을 줄이는 것과 같은 원리예요
+    source: https://man7.org/linux/man-pages/man2/syscalls.2.html
+  # ── 세 질문을 하나로 ──
+  - key: uk-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "사용자 모드와 커널 모드, 시스템 콜을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **위험한 일은 커널 모드에서만 하게 나누고, 프로그램은 시스템 콜로 부탁해요. 부탁마다 비용이 있어 모아서 불러요.**
+
+      - **모드:** 사용자 모드는 제한, 커널 모드는 모든 것. 보호를 위해 나눈다
+      - **시스템 콜:** read, write, socket 같은 입구. 자바의 입출력도 결국 시스템 콜이다
+      - **비용:** 모드 전환과 복사의 고정 비용, 장치 대기
+      - **줄이기:** 버퍼(8KB), flush와 close, JDBC 배치, 커넥션 재사용
+    checklist:
+      - 두 모드를 구분하고 나누는 이유(보호)를 말했다
+      - 시스템 콜을 커널에게 부탁하는 입구로 설명했다
+      - 자바의 입출력이 시스템 콜을 부른다는 예를 들었다
+      - 시스템 콜에 고정 비용이 있어 버퍼로 줄인다고 말했다
+      - flush, 배치, 커넥션 풀 같은 실무의 예를 들었다
+    source: https://man7.org/linux/man-pages/man2/syscalls.2.html
