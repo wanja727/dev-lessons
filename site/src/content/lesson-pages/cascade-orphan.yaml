@@ -1,8 +1,9 @@
-# cascade와 orphanRemoval (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# cascade와 orphanRemoval
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/cascade-orphan.yaml에 있다.
 title: cascade와 orphanRemoval
+description: 부모만 저장하면 자식은 어떻게 되는지, 부모를 지우면 자식은 어떻게 되는지, 컬렉션에서 뺀 자식은 어떻게 되는지, cascade와 orphanRemoval은 언제 쓰는지. 네 가지 질문에 스스로 답할 수 있게, 주문과 주문 상품을 저장하고 지우며 나간 SQL을 세는 대화형 레슨.
 unit: JPA
+minutes: 15
 roadmap: P7
 type: 동작 확인
 prerequisites:
@@ -36,7 +37,44 @@ covers:
     where: '질문 2의 더 알아보기'
   - topic: '애그리거트와 경계'
     where: '다루지 않음: 도메인 모델과 트랜잭션 스크립트(A2)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cascade/CascadeOrphanTest.java
+  spec: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
 codes:
+  plain: |-
+    @OneToMany(mappedBy = "order")
+    private List<OrderItem> items =
+        new ArrayList<>();
+  cascadeOnly: |-
+    @OneToMany(mappedBy = "order",
+        [[cascade = CascadeType.ALL]])
+    private List<OrderItem> items =
+        new ArrayList<>();
+  addItem: |-
+    public void addItem(OrderItem item) {
+      items.add(item);
+      item.setOrder(this);
+    }
+  removeRun: |-
+    Order order = em.find(Order.class, id);
+    em.remove(order); // 상품 2개가 있다
+    em.flush();
+  orphanRun: |-
+    Order order = em.find(Order.class, id);
+    order.getItems().remove(0);
+    em.flush();
+  replace: |-
+    // orphanRemoval = true인 컬렉션
+    order.items = [[new ArrayList<>()]];
+  memberBad: |-
+    @ManyToOne(fetch = FetchType.LAZY,
+        [[cascade = CascadeType.ALL]])
+    @JoinColumn(name = "team_id")
+    private Team team;
+  removeItem: |-
+    public void removeItem(OrderItem item) {
+      items.remove(item);
+    }
   predict: |-
     Order order = new Order("A-1");
     order.addItem(new OrderItem("펜", 2));
@@ -52,13 +90,22 @@ codes:
 
       @OneToMany(mappedBy = "order",
           cascade = CascadeType.ALL,
-          orphanRemoval = true)
+          [[orphanRemoval = true]])
       private List<OrderItem> items =
           new ArrayList<>();
     }
 predict:
-  text: '코드 predict는 주문에 상품 둘을 넣고 주문만 저장해요. `Order.items`는 `@OneToMany(mappedBy = "order")`이고 cascade는 적지 않았어요. `order_item`에 나가는 INSERT는 몇 번일까요? 보기: 0번, 1번, 2번, 저장할 때 예외가 난다.'
-  answer: '0번. JPA는 엔티티마다 따로 저장하므로 cascade가 없으면 자식은 저장되지 않는다. 질문 1에서 밝힌다.'
+  title: 주문 상품은 몇 개 저장될까요?
+  text: '주문에 상품 둘을 넣고 주문만 저장해요. `Order.items`는 `@OneToMany(mappedBy = "order")`이고 cascade는 적지 않았어요. `addItem`은 양쪽을 맞추는 편의 메서드예요. `order_item`에 나가는 INSERT는 몇 번일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '0', label: 0번}
+    - {value: '2', label: 2번}
+    - {value: error, label: 저장할 때 예외가 난다}
+  answer: '0'
+  storageKey: cascade-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 부모만 저장하면 자식은 어떻게 되나요?
@@ -73,6 +120,34 @@ questions:
     asks:
       - '본문의 예시: cascade 없는 주문에 상품 셋을 넣고 주문만 저장했다. `order_item`의 행 수는 (0)'
       - '옮긴 상황: 게시글(`Post`)의 `comments`에 `cascade = PERSIST`가 있다. 새 게시글에 새 댓글 둘을 `addComment`로 넣고 `postRepository.save(post)`만 불렀다. 댓글은 저장되나 (저장된다. 부모 저장이 자식에게 넘어간다)'
+    body:
+      - code: plain
+      - p: 'cascade를 적지 않은 주문으로 처음 코드를 돌렸어요.'
+      - ci:
+          key: no-cascade
+          label: 실제 출력 보기
+          source: CascadeOrphanTest.noCascadeSavesOnlyParent
+          code: predict
+      - p: '답은 **0번**이에요. {{predict-result}} 주문만 INSERT됐고 상품은 저장되지 않았어요. 예외도 없어서 놓치기 쉬워요.'
+      - p: 'JPA는 엔티티를 **하나씩 따로** 저장해요. `persist(order)`는 주문 하나를 영속 상태로 만들 뿐, 컬렉션 안의 상품은 그대로 비영속이에요([영속성 컨텍스트](lesson:jpa-persistence-context)). 상품도 저장하려면 하나씩 `persist`하거나, 부모에게 한 일을 자식에게 넘기라고 설정해요. 그 설정이 **cascade**(영속성 전이)예요.'
+      - code: cascadeOnly
+      - ci:
+          key: cascade-persist
+          label: 실제 출력 보기
+          source: CascadeOrphanTest.cascadePersistSavesChildren
+      - p: '이번에는 상품 INSERT가 두 번 더 나갔어요. `CascadeType.PERSIST`는 저장을, `ALL`은 저장, 병합(MERGE), 삭제(REMOVE), 새로 읽기(REFRESH), 떼어 내기(DETACH)를 모두 넘겨요.'
+      - p: 'cascade는 저장을 넘길 뿐 외래 키와는 상관없어요. 상품의 `order_id`는 여전히 주인인 `OrderItem.order`가 정해요([연관관계 매핑](lesson:association-owner)). 그래서 편의 메서드로 양쪽을 맞춰요.'
+      - code: addItem
+      - quiz:
+          q: '게시글의 `comments`에 `cascade = PERSIST`가 있어요. 새 게시글에 새 댓글 둘을 `addComment`로 넣고 `postRepository.save(post)`만 불렀어요. 댓글은 저장될까요?'
+          options:
+            - 저장된다
+            - 저장되지 않는다
+            - 예외가 난다
+          answer: 1
+          explain: '부모를 저장할 때 cascade PERSIST가 컬렉션의 자식에게도 저장을 넘겨요.'
+      - next: '저장은 넘길 수 있어요. 그러면 상품이 든 주문을 지우면 상품은 어떻게 될까요?'
+    recall: 'cascade가 없으면 저장되지 않아요. JPA는 엔티티를 하나씩 따로 저장해서, 부모를 `persist`해도 컬렉션의 자식은 비영속으로 남아요. `cascade = PERSIST`나 `ALL`을 붙이면 부모를 저장할 때 자식도 함께 저장해요. cascade는 외래 키와 상관없어서 편의 메서드로 양쪽을 맞춰요.'
   - id: q2
     title: 부모를 지우면 자식은 어떻게 되나요?
     conclusion:
@@ -86,6 +161,34 @@ questions:
     asks:
       - '본문의 예시: cascade 없는 주문(상품 2개)을 `orderRepository.delete(order)`로 지웠다. 무슨 일이 생기나 (외래 키 위반으로 실패한다)'
       - '옮긴 상황: `cascade = REMOVE`인 게시글에 댓글이 5개 있다. 게시글을 지우면 댓글 테이블에 나가는 DELETE는 몇 번인가 (5번)'
+    body:
+      - p: '상품 둘이 든 주문을 cascade 없이 지웠어요.'
+      - ci:
+          key: no-cascade-remove
+          label: 실제 출력 보기
+          source: CascadeOrphanTest.noCascadeRemoveFails
+          code: removeRun
+      - p: '커밋할 때 실패했어요. 상품 행이 아직 주문을 가리키는데 주문 행만 지우려 했으니, DB의 외래 키 제약이 막았어요. 주문은 그대로 남아요.'
+      - p: '`CascadeType.REMOVE`(또는 `ALL`)가 있으면 JPA가 자식을 먼저 지워요.'
+      - ci:
+          key: cascade-remove
+          label: 실제 출력 보기
+          source: CascadeOrphanTest.cascadeRemoveDeletesChildrenFirst
+      - p: '상품 DELETE가 **상품 수만큼 하나씩** 나간 뒤 주문 DELETE가 나갔어요. JPA는 자식을 하나씩 엔티티로 지우기 때문이에요. 상품이 1만 개면 DELETE도 1만 번이에요. 많이 지울 때는 조건으로 한 번에 지우는 벌크 연산을 써요([벌크 연산과 영속성 컨텍스트](lesson:jpa-bulk-update)).'
+      - more:
+          summary: '더 알아보기: DB가 지우게 하기'
+          body:
+            - p: 'Hibernate의 `@OnDelete(action = OnDeleteAction.CASCADE)`를 자식의 `@ManyToOne`에 붙이면 외래 키에 `ON DELETE CASCADE`가 붙어요. 주문 DELETE 하나로 DB가 상품까지 지워요. 대신 JPA는 지워진 상품을 몰라서, 같은 트랜잭션에 상품 객체가 남아 있으면 DB와 어긋나요.'
+      - quiz:
+          q: '`cascade = REMOVE`인 게시글에 댓글이 5개 있어요. 게시글을 `em.remove`로 지우면 댓글 테이블에 나가는 DELETE는 몇 번일까요?'
+          options:
+            - 1번
+            - 5번
+            - 0번
+          answer: 2
+          explain: 'cascade REMOVE는 자식을 하나씩 엔티티로 지워서 댓글 수만큼 DELETE가 나가요.'
+      - next: '주문을 통째로 지우는 것 말고, 상품 하나만 주문에서 빼면 어떻게 될까요?'
+    recall: 'cascade REMOVE가 없으면 자식이 남은 부모는 지울 수 없어요. 외래 키 제약이 막아 커밋할 때 실패해요. `CascadeType.REMOVE`를 붙이면 JPA가 자식을 하나씩 먼저 DELETE한 뒤 부모를 지워서, 자식 수만큼 DELETE가 나가요.'
   - id: q3
     title: 컬렉션에서 자식을 빼면 어떻게 되나요?
     conclusion:
@@ -99,6 +202,33 @@ questions:
     asks:
       - '본문의 예시: orphanRemoval이 있는 주문에서 상품 하나를 `items.remove`로 뺐다. 커밋 때 나가는 SQL은 (그 상품의 DELETE)'
       - '옮긴 상황: 게시글의 `comments`가 `mappedBy`이고 cascade만 `ALL`이다(orphanRemoval 없음). 댓글 하나를 목록에서 뺐다. DB의 댓글은 (그대로다)'
+    body:
+      - p: '주문에서 상품 하나를 빼고 flush했어요. 같은 코드를 orphanRemoval이 없는 주문과 있는 주문에서 돌렸어요.'
+      - ci:
+          key: orphan
+          label: 실제 출력 보기
+          source: CascadeOrphanTest.orphanRemoval
+          code: orphanRun
+      - p: 'orphanRemoval이 없으면 **SQL이 하나도 없어요**. `items`는 `mappedBy` 쪽이라 빼도 외래 키가 그대로예요. 상품 행은 여전히 주문을 가리켜요.'
+      - p: '`orphanRemoval = true`면 뺀 상품의 **DELETE**가 나갔어요. 부모와의 연결이 끊긴 자식을 **고아**라고 하고, orphanRemoval은 고아를 지우라는 설정이에요. 부모를 지울 때도 자식을 지우니, REMOVE와 겹치는 부분도 있어요.'
+      - code: order
+      - h3: 컬렉션을 통째로 바꾸지 않아요
+      - code: replace
+      - ci:
+          key: replace
+          label: 실제 오류 보기
+          source: CascadeOrphanTest.replacingOrphanCollectionFails
+      - p: 'Hibernate는 처음 넣어 준 컬렉션 객체를 지켜보며 빠진 자식을 찾아요. 새 리스트로 바꾸면 지켜보던 컬렉션이 사라져서 flush할 때 예외를 던져요. 비우려면 `items.clear()`를 써요.'
+      - quiz:
+          q: '게시글의 `comments`가 `mappedBy`이고 `cascade = ALL`만 있어요(orphanRemoval 없음). 댓글 하나를 목록에서 뺐어요. DB의 그 댓글은 어떻게 될까요?'
+          options:
+            - 지워진다
+            - 그대로다
+            - post_id가 null이 된다
+          answer: 2
+          explain: '고아를 지우는 것은 orphanRemoval이에요. cascade ALL은 부모에게 한 일을 넘길 뿐, 목록에서 빼는 것은 부모에게 한 일이 아니에요.'
+      - next: '저장, 삭제, 고아 삭제까지 부모가 맡으면 편해요. 그러면 모든 연관에 붙이면 될까요?'
+    recall: '`orphanRemoval = true`면 컬렉션에서 뺀 자식(고아)을 DELETE하고, 없으면 아무 일도 없어요. `mappedBy` 쪽 컬렉션이라 빼도 외래 키가 그대로이기 때문이에요. orphanRemoval은 부모를 지울 때도 자식을 지워요. 컬렉션을 새 리스트로 바꾸면 Hibernate가 예외를 던지니 `clear()`로 비워요.'
   - id: q4
     title: cascade와 orphanRemoval은 언제 쓰나요?
     conclusion:
@@ -114,7 +244,60 @@ questions:
     asks:
       - '본문의 예시: 팀의 `members`에 `cascade = REMOVE`를 붙이고 팀을 지웠다. 회원들은 어떻게 되나 (모두 지워진다. 회원의 주문이 있으면 외래 키 위반으로 실패한다)'
       - '옮긴 상황: 장바구니(`Cart`)와 장바구니 항목(`CartItem`). 항목은 장바구니에서만 쓰이고 다른 엔티티가 가리키지 않는다. cascade ALL과 orphanRemoval을 붙이나 (붙인다)'
+    body:
+      - p: 'cascade와 orphanRemoval을 붙이면 부모가 자식의 저장과 삭제를 모두 맡아요. 그래서 **자식의 생명주기를 부모 하나가 온전히 가질 때만** 붙여요. 두 가지를 물어 봐요.'
+      - ol:
+          - '자식이 부모 없이는 뜻이 없나요? 주문 상품은 주문 없이 존재하지 않아요.'
+          - '다른 엔티티가 이 자식을 가리키지 않나요? 주문 상품은 주문만 가리켜요.'
+      - p: '둘 다 그렇다면 `cascade = ALL`과 `orphanRemoval = true`를 붙여요. 팀과 회원은 달라요. 회원은 팀을 옮길 수 있고, 주문과 게시글이 회원을 가리켜요. 팀의 `members`에 REMOVE를 붙이면 팀을 지울 때 회원이 모두 지워지거나, 회원의 주문 때문에 외래 키 위반이 나요.'
+      - widget:
+          kind: classify
+          categories:
+            - 붙인다
+            - 붙이지 않는다
+          items:
+            - text: 주문(Order)과 주문 상품(OrderItem)
+              answer: 1
+              explain: 주문 상품은 주문 없이 뜻이 없고 다른 곳이 가리키지 않아요.
+            - text: 팀(Team)과 회원(Member)
+              answer: 2
+              explain: 회원은 팀을 옮기고, 주문 같은 다른 엔티티가 회원을 가리켜요.
+            - text: 게시글(Post)과 첨부 파일(Attachment)
+              answer: 1
+              explain: 첨부 파일은 그 게시글에만 딸려요.
+            - text: 회원(Member)과 주문(Order)
+              answer: 2
+              explain: 주문은 회원을 탈퇴시켜도 남겨야 하는 기록이에요.
+            - text: 카테고리(Category)와 상품(Product)
+              answer: 2
+              explain: 상품은 카테고리를 옮기고, 주문 상품이 상품을 가리켜요.
+      - p: '붙였다면 자식은 부모의 메서드로만 다뤄요. 생명주기가 한곳에 모여요.'
+      - code: removeItem
+      - quiz:
+          q: '장바구니(`Cart`)와 장바구니 항목(`CartItem`)이 있어요. 항목은 장바구니에서만 쓰이고 다른 엔티티가 가리키지 않아요. `Cart.items`에 cascade ALL과 orphanRemoval을 붙일까요?'
+          options:
+            - 붙인다
+            - 붙이지 않는다
+          answer: 1
+          explain: '항목은 장바구니 없이 뜻이 없고 다른 곳이 가리키지 않아서, 장바구니가 생명주기를 온전히 가져요.'
+    recall: '자식의 생명주기를 부모 하나가 온전히 가질 때만 써요. 자식이 부모 없이는 뜻이 없고 다른 엔티티가 그 자식을 가리키지 않을 때예요. 주문과 주문 상품에는 붙이고, 팀과 회원처럼 자식이 따로 살고 다른 곳에서도 가리키면 붙이지 않아요. 붙였다면 자식은 부모의 메서드로만 다뤄요.'
 practice:
+  title: 엔티티에서는 이렇게 해요
+  body:
+    - p: '실무 모양은 질문 3의 `Order`예요. `@OneToMany`에 `cascade = ALL`과 `orphanRemoval = true`를 두고, `addItem`과 `removeItem`으로만 상품을 바꿔요.'
+    - h3: '흔한 실수: 다 쪽에 cascade를 걸기'
+    - code: memberBad
+      notes:
+        - mark: cascade = CascadeType.ALL
+          as: code
+          text: '회원에게 한 일을 팀에게 넘겨요. 회원을 지우면 팀도 지워요.'
+    - p: 'cascade는 어느 쪽에나 붙일 수 있어서, 회원의 `@ManyToOne`에 붙이기도 해요. 팀 레드에 kim과 lee가 있을 때 kim을 지웠어요.'
+    - ci:
+        key: many-to-one
+        label: 실제 출력 보기
+        source: CascadeOrphanTest.cascadeOnManyToOneRemovesParent
+    - p: 'kim을 지우면서 팀까지 지우려 했고, lee가 아직 그 팀을 가리켜서 실패했어요. lee가 없었다면 실패하지 않고 팀이 조용히 지워졌을 거예요. 고친 코드는 `cascade`를 지우는 거예요. 다 쪽(자식)은 부모의 생명주기를 정하지 않아요.'
+    - muted: '근거: cascade와 orphanRemoval의 규칙은 [Jakarta Persistence 3.1 명세](link:spec) 3.2절. SQL과 예외는 테스트로 확인했어요.'
   says:
     - '실무 모양: 코드 order와 `addItem`, `removeItem` 편의 메서드. 테스트로 저장, 빼기, 지우기의 SQL을 보인다'
     - '흔한 실수: `@ManyToOne(cascade = CascadeType.ALL)`로 회원에서 팀으로 cascade를 건다. 회원 하나를 지우면 팀까지 지우려 하고, 다른 회원이 그 팀을 가리켜 외래 키 위반으로 실패한다. 고친 코드는 cascade를 지운다. 테스트로 예외를 보인다'
@@ -133,3 +316,16 @@ claims:
     how: '팀 하나에 회원 둘을 두고 하나를 지운다'
 sources:
   - 'cascade와 orphanRemoval: Jakarta Persistence 3.1 명세 3.2 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
+interview:
+  question: cascade와 orphanRemoval은 무엇이고 언제 쓰나요?
+  model:
+    - label: 정의
+      text: cascade는 부모 엔티티에 한 저장, 삭제 같은 일을 연관된 자식에게도 넘기는 설정이고, orphanRemoval은 부모의 컬렉션에서 빠진 자식을 지우는 설정입니다.
+    - label: 원리
+      text: JPA는 엔티티를 하나씩 따로 저장하므로 cascade가 없으면 부모만 저장되고 자식은 저장되지 않습니다. cascade REMOVE는 자식을 하나씩 먼저 DELETE하고, orphanRemoval이 없으면 mappedBy 컬렉션에서 빼도 외래 키가 그대로라 아무 일도 없습니다.
+    - label: 주의할 점
+      text: 자식의 생명주기를 부모 하나가 온전히 가질 때만 씁니다. 다른 엔티티가 가리키는 자식이나 다 쪽의 ManyToOne에 걸면 지우면 안 되는 행을 지우려 합니다. cascade REMOVE는 자식 수만큼 DELETE가 나가서 대량 삭제는 벌크 연산으로 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문만 저장하고 주문 상품이 저장되지 않던 버그를 cascade PERSIST와 편의 메서드로 고쳤습니다.'
+verified: 이 레슨의 SQL과 예외는 짐작이 아니라 스프링 부트 3.5와 Hibernate 6.6으로 PostgreSQL 16 컨테이너에 실제로 보내고 받은 값이에요. 코드가 바뀔 때마다 테스트([CascadeOrphanTest](link:test))가 다시 돌아요.
+footer: '근거: cascade와 orphanRemoval은 [Jakarta Persistence 3.1 명세](link:spec). 결과는 Hibernate 6.6과 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
