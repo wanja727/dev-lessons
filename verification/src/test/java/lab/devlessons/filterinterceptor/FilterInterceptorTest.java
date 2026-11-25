@@ -248,6 +248,12 @@ class FilterInterceptorTest {
             b.header("X-User", user);
         }
         int status = web.exchange(b).statusCode();
+        // 응답 바이트는 afterCompletion과 필터 뒤보다 먼저 클라이언트에 닿을 수 있다.
+        // 서버 스레드가 가장 바깥 필터의 뒤를 기록할 때까지 기다린 뒤 읽는다(CI에서 가끔 끝이 잘렸다)
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (!LOG.contains("필터 뒤") && !LOG.contains("필터A 뒤") && System.nanoTime() < deadline) {
+            Thread.onSpinWait();
+        }
         List<String> copy = new ArrayList<>(LOG);
         copy.add("→ 응답 " + status);
         return copy;
@@ -294,7 +300,8 @@ class FilterInterceptorTest {
     void forgottenInterceptor() {
         ForgottenInterceptor.CALLS.set(0);
         try (MiniWeb web = MiniWeb.start(OrderController.class, ForgottenInterceptor.class)) {
-            call(web, "/orders/1", null);
+            // 필터가 없는 앱이라 call의 기다림을 쓰지 않는다
+            web.exchange(web.request("/orders/1").GET());
 
             assertThat(web.context().getBeansOfType(ForgottenInterceptor.class)).hasSize(1);
             assertThat(ForgottenInterceptor.CALLS.get()).isZero();
