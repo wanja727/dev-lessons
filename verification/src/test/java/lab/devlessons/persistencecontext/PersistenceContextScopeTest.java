@@ -33,6 +33,27 @@ class PersistenceContextScopeTest {
         assertThat(bookRepository.findById(bookId).orElseThrow().getTitle()).isEqualTo("JPA 입문 2판");
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.transaction.support.TransactionTemplate tx;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    jakarta.persistence.EntityManager em;
+
+    @Test
+    @DisplayName("flush는 커밋이 아니다: flush한 뒤 롤백하면 INSERT한 행이 남지 않는다")
+    void flushIsNotCommit() {
+        long before = bookRepository.count();
+        tx.executeWithoutResult(status -> {
+            em.persist(new Book("새 책 1"));
+            em.persist(new Book("새 책 2"));
+            em.persist(new Book("새 책 3"));
+            em.flush();
+            status.setRollbackOnly();
+        });
+
+        assertThat(bookRepository.count()).isEqualTo(before);
+    }
+
     @Test
     @DisplayName("readOnly 트랜잭션에서는 바꿔도 반영되지 않는다")
     void readOnlySkipsDirtyChecking() {

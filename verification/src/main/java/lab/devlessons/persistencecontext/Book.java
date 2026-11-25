@@ -14,6 +14,9 @@ public class Book {
 
     private String title;
 
+    /** 바꾸지 않는 컬럼. 기본 UPDATE가 바꾸지 않은 컬럼도 SET에 넣는지 보려고 둔다 */
+    private String author = "kim";
+
     protected Book() {
     }
 

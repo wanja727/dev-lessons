@@ -7,7 +7,7 @@ roadmap: P3
 type: 동작 확인
 prerequisites:
   - {slug: jpa-persistence-context, title: 영속성 컨텍스트}
-  - {slug: join, title: 조인}
+  - {slug: sql-join, title: 조인}
 assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16. 외래 키와 조인(키와 제약 조건, 조인 레슨), 영속 상태와 flush, 변경 감지(영속성 컨텍스트 레슨).'
 example: '팀 `Team`과 멤버 `Member`. 멤버 테이블의 `team_id`가 팀을 가리킨다. 멤버를 팀에 넣고 빼면서 DB의 `team_id`에 무엇이 저장되는지 직접 읽는다.'
 intro:

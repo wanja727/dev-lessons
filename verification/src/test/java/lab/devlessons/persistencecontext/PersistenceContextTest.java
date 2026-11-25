@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import lab.devlessons.support.SqlCapture;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,6 +44,12 @@ class PersistenceContextTest {
 
         assertThat(selects()).isEqualTo(1);
         assertThat(a).isSameAs(b);
+        CiOutput.record("jpa-persistence-context", "find-twice", String.join("\n",
+                "나간 SQL:",
+                String.join("\n", SqlCapture.sqls()),
+                "",
+                "SELECT 수: " + selects(),
+                "a == b: " + (a == b)));
     }
 
     @Test
@@ -55,6 +62,9 @@ class PersistenceContextTest {
 
         assertThat(selects()).isEqualTo(2);
         assertThat(a).isSameAs(b);
+        CiOutput.record("jpa-persistence-context", "jpql", String.join("\n",
+                "SELECT 수: " + selects(),
+                "find의 결과 == JPQL의 결과: " + (a == b)));
     }
 
     @Test
@@ -73,10 +83,14 @@ class PersistenceContextTest {
         em.persist(new Book("새 책 1"));
         em.persist(new Book("새 책 2"));
         em.persist(new Book("새 책 3"));
-        assertThat(inserts()).isZero();
+        long before = inserts();
+        assertThat(before).isZero();
 
         em.flush();
         assertThat(inserts()).isEqualTo(3);
+        CiOutput.record("jpa-persistence-context", "write-behind", String.join("\n",
+                "persist 세 번 뒤 INSERT 수: " + before,
+                "flush 뒤 INSERT 수: " + inserts()));
     }
 
     @Test
@@ -108,8 +122,14 @@ class PersistenceContextTest {
         em.flush();
 
         assertThat(updates()).isEqualTo(1);
+        String update = SqlCapture.sqls().stream()
+                .filter(s -> s.toLowerCase().startsWith("update")).findFirst().orElseThrow();
+        // 바꾼 것은 title뿐이지만 기본 UPDATE는 author도 SET에 넣는다
+        assertThat(update).contains("author=").contains("title=");
         em.clear();
         assertThat(em.find(Book.class, bookId).getTitle()).isEqualTo("JPA 입문 2판");
+        CiOutput.record("jpa-persistence-context", "dirty", String.join("\n",
+                "나간 SQL:", String.join("\n", SqlCapture.sqls().subList(0, 2))));
     }
 
     @Test
