@@ -1,8 +1,9 @@
-# 데드락 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 데드락
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/deadlock.yaml에 있다.
 title: 데드락
+description: 데드락은 어떻게 생기는지, 생기려면 어떤 네 조건이 모두 있어야 하는지, 어떻게 막는지, 났는지 어떻게 알아보는지. 계좌 이체 두 개로 데드락을 일부러 만들고 락 순서를 정해 풀어 보며 배우는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 20
 roadmap: C5
 type: 자바 실행
 prerequisites:
@@ -93,6 +94,11 @@ codes:
     "transfer-2":
       waiting to lock monitor (object A),
       which is held by "transfer-1"
+  dbFixed: |-
+    long first = Math.min(fromId, toId);
+    long second = Math.max(fromId, toId);
+    repo.findByIdForUpdate(first);
+    repo.findByIdForUpdate(second);
   dbTransfer: |-
     @Transactional
     public void transfer(long fromId, long toId,
@@ -102,9 +108,27 @@ codes:
       from.withdraw(amount);
       to.deposit(amount);
     }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/deadlock/DeadlockTest.java
+  jls17: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  threadMx: https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html
+  jstack: https://docs.oracle.com/en/java/javase/21/docs/specs/man/jstack.html
+  pgDeadlock: https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS
 predict:
-  text: '코드 predict는 스레드 둘이 a→b와 b→a 이체를 동시에 1만 번씩 되풀이해요. 어떻게 될까요? 보기: 2만 번 모두 끝난다 / 두 스레드가 멈춰서 끝나지 않을 수 있다 / IllegalMonitorStateException이 난다'
-  answer: '두 스레드가 멈춰서 끝나지 않을 수 있다. 1이 a를, 2가 b를 잡은 채 서로의 것을 기다리면 데드락이다. 질문 1에서 밝힌다.'
+  title: 반대 방향의 이체 둘
+  text: '스레드 둘이 a→b 이체와 b→a 이체를 동시에 1만 번씩 되풀이해요. 이체는 보내는 계좌, 받는 계좌 순서로 락을 잡아요. 어떻게 될까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: done
+      label: 2만 번 모두 끝난다
+    - value: stuck
+      label: 두 스레드가 멈춰서 끝나지 않을 수 있다
+    - value: error
+      label: IllegalMonitorStateException이 난다
+  answer: stuck
+  storageKey: deadlock-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 데드락은 어떻게 생기나요?
@@ -122,6 +146,73 @@ questions:
     asks:
       - '본문의 예시: 스레드 1이 a를 잡고 b를 기다리고, 스레드 2가 b를 잡고 a를 기다린다. 1초 뒤 두 스레드의 상태는 (BLOCKED. 둘 다 락을 기다린다)'
       - '옮긴 상황: 주문 처리는 재고 락을 잡고 주문 락을 잡는다. 주문 취소는 주문 락을 잡고 재고 락을 잡는다. 둘이 같은 상품에 동시에 들어오면 무엇이 생길 수 있나 (데드락. 같은 락 둘을 반대 순서로 잡는다)'
+    body:
+      - p: '처음 예측의 답은 **멈춰서 끝나지 않을 수 있다**예요. {{predict-result}}'
+      - widget:
+          kind: steps
+          layout: [selector, duo, log, buttons, verdict]
+          selector:
+            label: 두 이체가
+            options:
+              - {value: apart, label: 어긋나게 들어옴}
+              - {value: overlap, label: 겹쳐서 들어옴}
+          initial:
+            duo:
+              - {label: 스레드 1 (a→b), state: dim, text: 가진 락 없음}
+              - {label: 스레드 2 (b→a), state: dim, text: 가진 락 없음}
+          scenarios:
+            apart:
+              - log: '스레드 1이 a의 락을 잡음'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: a, mark: changed}]}
+                  - {label: 스레드 2 (b→a), text: 아직 시작 전}
+              - log: '스레드 1이 b의 락을 잡고 이체한 뒤 둘 다 풂'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: '없음 (끝남)'}]}
+                  - {label: 스레드 2 (b→a), text: 아직 시작 전}
+              - log: '스레드 2가 b, a 차례로 잡고 이체한 뒤 풂'
+                duo:
+                  - {label: 스레드 1 (a→b), state: dim, text: 끝남}
+                  - {label: 스레드 2 (b→a), rows: [{k: 가짐, v: '없음 (끝남)'}]}
+                verdict: '한쪽이 끝난 뒤 다른 쪽이 들어오면 문제없어요. 대부분은 이렇게 지나가요.'
+            overlap:
+              - log: '스레드 1이 a의 락을 잡음'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: a, mark: changed}]}
+                  - {label: 스레드 2 (b→a), text: 가진 락 없음}
+              - log: '그 사이 스레드 2가 b의 락을 잡음'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: a}]}
+                  - {label: 스레드 2 (b→a), rows: [{k: 가짐, v: b, mark: changed}]}
+              - log: '스레드 1이 b를 기다림 (스레드 2가 가짐)'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: a}, {k: 기다림, v: b, mark: bad}]}
+                  - {label: 스레드 2 (b→a), rows: [{k: 가짐, v: b}]}
+              - log: '스레드 2가 a를 기다림 (스레드 1이 가짐)'
+                duo:
+                  - {label: 스레드 1 (a→b), rows: [{k: 가짐, v: a}, {k: 기다림, v: b, mark: bad}]}
+                  - {label: 스레드 2 (b→a), rows: [{k: 가짐, v: b}, {k: 기다림, v: a, mark: bad}]}
+                verdict: '서로가 가진 락을 기다려요. 아무도 풀지 않으니 둘 다 영원히 멈춰요.'
+      - p: '래치로 두 스레드가 **첫 락을 잡은 뒤에** 둘째 락을 잡게 맞추면 매번 멈춰요. 1초 뒤의 상태를 봤어요.'
+      - ci:
+          key: predict
+          label: 실제 결과 보기
+          source: DeadlockTest.deadlockHappensAndIsDetected
+          code: predict
+      - p: '두 스레드 모두 `BLOCKED`이고 끝난 이체는 0건이에요. 이것이 **데드락**이에요. 둘 이상의 스레드가 서로가 가진 락을 기다리며 아무도 나아가지 못하고, 저절로 풀리지 않아요.'
+      - ul:
+          - '**래치가 없으면 대부분은 지나가요.** 두 스레드가 거의 같은 순간에 첫 락을 잡아야 생기기 때문이에요. 테스트에서는 안 보이다가 요청이 몰리는 운영에서 며칠에 한 번 생기는 이유예요.'
+          - '**조용히 멈춰요.** 기다리는 스레드는 CPU를 쓰지 않고(컨텍스트 스위칭 레슨), 예외도 로그도 없어요. 그 요청은 응답하지 못하고, 같은 락을 원하는 다음 스레드들도 줄줄이 멈춰요.'
+      - quiz:
+          q: '주문 처리는 재고 락 → 주문 락, 주문 취소는 주문 락 → 재고 락 순서로 잡아요. 둘이 같은 상품에 동시에 들어오면 무엇이 생길 수 있을까요?'
+          options:
+            - 아무 일 없다. 락이 둘이라 안전하다
+            - 데드락. 같은 락 둘을 반대 순서로 잡는다
+            - 둘 다 예외로 실패한다
+          answer: 2
+          explain: '처리가 재고를, 취소가 주문을 먼저 잡으면 서로의 것을 기다리며 멈춰요.'
+      - next: '어떤 조건이 갖춰져야 데드락이 생기는 걸까요? 조건을 알면 막는 방법이 보여요.'
+    recall: '두 스레드가 각자 락 하나씩을 잡은 채 상대가 가진 락을 기다리면, 아무도 풀지 않으니 둘 다 영원히 멈춰요. 같은 락 둘을 반대 순서로 잡는 코드에서 생기고, 타이밍이 맞을 때만 생겨서 운영에서 드물게 드러나요. 멈춘 스레드는 CPU도 쓰지 않고 에러도 내지 않아요.'
   - id: q2
     title: 데드락이 생기려면 어떤 조건이 모두 있어야 하나요?
     conclusion:
@@ -139,6 +230,35 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에서 바깥 `synchronized (from)` 안에서 `synchronized (to)`를 기다리는 것은 네 조건 가운데 무엇인가 (잡고 기다리기)'
       - '옮긴 상황: 스레드 셋이 각각 A→B, B→C, C→A 순서로 락 둘을 잡는다. 데드락이 생길 수 있나 (있다. 셋이 고리를 이루면 순환 대기다)'
+    body:
+      - p: '데드락은 아래 네 조건이 **모두** 있어야 생겨요. 하나라도 없으면 생기지 않아요.'
+      - table:
+          head: [조건, 뜻, 코드 predict에서]
+          rows:
+            - [상호 배제, '자원을 한 번에 한 스레드만 써요', '`synchronized`의 락']
+            - [잡고 기다리기, '이미 하나를 가진 채 다른 것을 기다려요', '바깥 `synchronized (from)` 안에서 `to`를 기다려요']
+            - [빼앗을 수 없음, '가진 스레드가 스스로 풀기 전에는 가져갈 수 없어요', '`synchronized`의 락은 빼앗을 수 없어요']
+            - [순환 대기, '1은 2의 것을, 2는 1의 것을 기다리는 고리', 'a→b와 b→a']
+      - p: '순환 대기는 둘만의 일이 아니에요. 스레드 셋이 A→B, B→C, C→A로 잡아도 고리가 되어 멈춰요.'
+      - p: '그래서 **막는 방법은 네 조건 가운데 하나를 깨는 것**이에요. 아래 방법들이 각각 어느 조건을 깨는지 골라 보세요.'
+      - widget:
+          kind: classify
+          categories: [상호 배제, 잡고 기다리기, 빼앗을 수 없음, 순환 대기]
+          items:
+            - {text: '모든 이체가 계좌 id가 작은 쪽의 락을 먼저 잡는다', answer: 4, explain: '모두 같은 순서로 잡으면 고리가 생길 수 없어요.'}
+            - {text: '필요한 락을 한꺼번에 모두 잡거나, 하나도 잡지 않는다', answer: 2, explain: '하나를 가진 채 다른 것을 기다리는 상황이 없어요.'}
+            - {text: 'tryLock으로 둘째 락을 못 잡으면 가진 락도 내려놓고 다시 한다', answer: 3, explain: '스스로 내려놓아 다른 스레드가 가져갈 수 있게 해요. 기다리며 쥐고 있지 않으니 잡고 기다리기도 깨져요.'}
+            - {text: '값을 바꾸지 않는 불변 객체로 바꿔 락 자체가 필요 없게 한다', answer: 1, explain: '함께 고치는 값이 없으면 한 번에 하나만 쓸 필요가 없어요.'}
+      - quiz:
+          q: '코드 predict에서 바깥 `synchronized (from)` 안에서 `synchronized (to)`를 기다리는 것은 네 조건 가운데 무엇일까요?'
+          options:
+            - 상호 배제
+            - 잡고 기다리기
+            - 순환 대기
+          answer: 2
+          explain: 'from의 락을 가진 채 to의 락을 기다려요.'
+      - next: '네 조건 가운데 실제 코드에서 가장 깨기 쉬운 것은 무엇일까요?'
+    recall: '상호 배제, 잡고 기다리기, 빼앗을 수 없음, 순환 대기의 네 가지가 모두 있어야 생겨요. 하나라도 없으면 생기지 않아서, 막는 방법은 네 조건 가운데 하나를 깨는 것이에요.'
   - id: q3
     title: 데드락은 어떻게 막나요?
     conclusion:
@@ -154,6 +274,42 @@ questions:
     asks:
       - '본문의 예시: 코드 ordered로 스레드 1은 `transfer(a, b)`, 스레드 2는 `transfer(b, a)`를 동시에 부른다(a.id = 1, b.id = 2). 두 스레드가 처음 잡으려는 락은 (둘 다 a)'
       - '옮긴 상황: 상품 여러 개의 재고를 한 주문에서 함께 줄인다. 주문마다 상품 순서가 다르다. 데드락을 막으려면 (상품 id로 정렬한 순서로 락을 잡는다)'
+    body:
+      - p: '가장 흔한 방법은 **락을 잡는 순서를 전체에서 하나로 정하는 것**이에요. 두 계좌 가운데 id가 작은 쪽을 먼저 잡아요.'
+      - code: ordered
+        notes:
+          - mark: from.id < to.id
+            as: code
+            text: 'a→b도 b→a도 a(id 1)를 먼저 잡아요. 둘째 스레드는 a에서 기다리고 b를 잡지 않아요.'
+      - ci:
+          key: ordered
+          label: 같은 이체 1만 번씩의 실제 결과 보기
+          source: DeadlockTest.lockOrderingPreventsDeadlock
+      - p: '고리가 생길 수 없으니(순환 대기를 깸) 멈추지 않고 끝났고, 두 잔액의 합도 그대로예요. 순서의 기준은 **바뀌지 않고 겹치지 않는 값**이어야 해요. id가 좋아요. `hashCode`는 서로 다른 객체가 같을 수 있어요.'
+      - h3: 순서를 정하기 어려우면 tryLock
+      - code: tryLock
+      - p: '둘째 락을 시간 안에 못 잡으면 **첫째 락도 내려놓고** 처음부터 다시 해요(잡고 기다리기를 깸). 다시 할 때 조금 쉬는 시간을 무작위로 줘요.'
+      - ci:
+          key: try-lock
+          label: 실제 결과 보기
+          source: DeadlockTest.tryLockBackoffPreventsDeadlock
+      - ul:
+          - '**락을 하나로 합치기:** 두 계좌를 은행 전체의 락 하나로 지키면 데드락은 없지만, 서로 상관없는 이체도 한 줄로 서요.'
+          - '**락을 잡은 채 밖의 코드를 부르지 않기:** 콜백, 다른 서비스, 이벤트 리스너가 어떤 락을 잡을지 몰라요. 락 안에서는 값만 고치고 나와요.'
+      - more:
+          summary: '더 알아보기: 라이브락과 기아'
+          body:
+            - p: '**라이브락**은 멈추지는 않지만 서로 양보하다가 둘 다 계속 다시 하는 상태예요. tryLock 방식에서 두 스레드가 똑같은 시간만큼 쉬고 다시 하면 생길 수 있어서, 쉬는 시간을 무작위로 줘요. **기아**는 한 스레드만 계속 락을 못 받는 상태예요. 공정 모드 락(뮤텍스와 세마포어 레슨)이 줄여 줘요.'
+      - quiz:
+          q: '`ordered` 방식(id가 작은 쪽을 먼저)으로 스레드 1은 `transfer(a, b)`, 스레드 2는 `transfer(b, a)`를 동시에 불러요(a.id = 1, b.id = 2). 두 스레드가 처음 잡으려는 락은?'
+          options:
+            - 스레드 1은 a, 스레드 2는 b
+            - 둘 다 a
+            - 둘 다 b
+          answer: 2
+          explain: '보내는 쪽이 누구든 id가 작은 a를 먼저 잡아요. 그래서 고리가 생기지 않아요.'
+      - next: '막는 법을 알아도 이미 운영 중인 서버가 멈췄다면, 데드락인지 어떻게 알아볼까요?'
+    recall: '모든 코드가 락을 같은 순서(예: id 순서)로 잡게 정하는 것이 가장 흔한 방법이에요. 고리가 생길 수 없어요. 순서를 정하기 어려우면 `tryLock`에 시간을 주고, 못 잡으면 가진 락을 풀고 무작위로 쉰 뒤 다시 해요. 락을 하나로 합치거나 락을 잡은 채 밖의 코드를 부르지 않는 것도 방법이에요.'
   - id: q4
     title: 데드락이 났는지 어떻게 알아보나요?
     conclusion:
@@ -169,6 +325,30 @@ questions:
       - '본문의 예시: 스레드 덤프에 `"transfer-1": waiting to lock (object B), which is held by "transfer-2"`와 그 반대가 나왔다. 무엇을 고쳐야 하나 (두 스레드가 락을 잡는 순서. 같은 순서로 잡게 한다)'
       - '옮긴 상황: 데드락이 난 서버에서 JVM이 그 스레드들을 알아서 풀어 주나 (풀지 않는다. 찾기만 하고 재시작해야 한다)'
       - '실무 구역: 코드 dbTransfer를 두 요청이 1→2, 2→1로 동시에 부르면 PostgreSQL에서 무슨 일이 생기나 (한 트랜잭션이 "deadlock detected"로 실패하고 롤백된다. DB는 찾아서 하나를 실패시킨다)'
+    body:
+      - p: '증상은 이래요. **CPU는 낮은데 특정 요청만 응답이 없고**, 스레드 수가 늘고, 에러 로그가 없어요.'
+      - p: '**스레드 덤프**는 그 순간 모든 스레드가 무엇을 하는지 적은 것이에요. `jstack <pid>`로 떠요([jstack 문서](link:jstack)). 데드락이 있으면 덤프 끝에 이런 부분이 나와요.'
+      - code: dump
+      - p: '같은 정보를 프로그램 안에서 `ThreadMXBean.findDeadlockedThreads()`로 얻을 수 있어요([API 문서](link:threadMx)). 질문 1의 데드락에서 찾은 결과도 함께 실려 있어요. 누가 어떤 락을 기다리고, 그 락을 누가 가졌는지가 서로 엇갈려 있어요.'
+      - code: detect
+      - callout: '**JVM은 찾아서 알려 줄 뿐 풀지 않아요.** 운영체제 교과서는 데드락을 다루는 방법으로 예방(조건 깨기), 회피(위험한 할당을 미리 거절), 탐지 후 회복(하나를 끝내기)을 들어요. 자바의 락은 멈춘 스레드를 안전하게 풀 방법이 없어서 결국 재시작해요. 그래서 질문 3의 **예방**이 답이에요.'
+      - more:
+          summary: '더 알아보기: 락이 없어도 생기는 데드락'
+          body:
+            - p: '스레드 2개짜리 풀의 작업 둘이 각자 같은 풀에 안쪽 작업을 넣고 `get()`으로 기다리면, 안쪽 작업을 실행할 스레드가 없어 모두 멈춰요. 서로를 기다리는 고리가 락 대신 풀의 스레드로 생긴 거예요.'
+            - ci:
+                key: pool
+                label: 실제 결과 보기
+                source: DeadlockTest.poolStarvationDeadlock
+      - quiz:
+          q: '데드락이 난 서버에서 JVM이 그 스레드들을 알아서 풀어 줄까요?'
+          options:
+            - 풀어 준다. 하나를 골라 예외를 던진다
+            - 풀지 않는다. 찾기만 하고, 보통 재시작해야 한다
+            - 일정 시간이 지나면 저절로 풀린다
+          answer: 2
+          explain: 'JVM은 스레드 덤프와 ThreadMXBean으로 찾아 줄 뿐이에요. 락 순서를 고쳐 배포해야 해요.'
+    recall: '스레드 덤프(jstack)를 떠서 "Found one Java-level deadlock"과 서로를 기다리는 스레드 목록을 봐요. 프로그램 안에서는 `ThreadMXBean.findDeadlockedThreads()`로 찾아요. JVM은 찾아서 알려 줄 뿐 풀지 않아서, 락 순서를 고쳐 배포해야 해요.'
 practice:
   says:
     - '스프링 서비스의 이체는 보통 DB 트랜잭션 안에서 행 락(`SELECT ... FOR UPDATE`, 코드 dbTransfer)을 잡는다. 같은 문제가 DB에서 생긴다. 두 트랜잭션이 행 1과 2를 반대 순서로 잠그면 DB 데드락이다'
@@ -176,17 +356,46 @@ practice:
     - '고친 코드: 두 id를 정렬해 작은 id부터 `findByIdForUpdate`로 잠근다. 질문 3의 순서 정하기와 같다'
     - '흔한 실수: 트랜잭션 안에서 `synchronized`를 잡고 DB 락도 기다린다. JVM 락과 DB 락이 섞이면 JVM도 DB도 고리를 보지 못한다. 한쪽만 쓴다'
     - '운영에서: 응답이 멈추면 스레드 덤프를 2~3번 떠서 같은 스레드가 같은 곳에 있는지 본다(T10)'
+  body:
+    - p: '스프링 서비스의 이체는 보통 JVM의 락이 아니라 **DB 트랜잭션 안의 행 락**을 잡아요. 같은 문제가 DB에서 생기고, DB는 JVM과 다르게 풀어요. DB의 동작은 PostgreSQL 문서가 근거이고, 실제로 일으키는 테스트는 DB 데드락 레슨이 맡아요.'
+    - code: dbTransfer
+    - p: '두 요청이 1→2, 2→1로 동시에 들어오면 두 트랜잭션이 행 1과 2를 반대 순서로 잠가요. 질문 1과 같은 고리예요.'
+    - ul:
+        - '**DB는 찾아서 하나를 실패시켜요.** PostgreSQL은 잠시 기다린 뒤 고리를 찾아 한 트랜잭션을 `deadlock detected` 에러로 롤백해요. 다른 하나는 이어서 끝나요([PostgreSQL 문서](link:pgDeadlock)). 실패한 쪽은 다시 시도하면 돼요.'
+        - '**고치는 방법은 질문 3과 같아요.** 두 id를 정렬해 작은 id부터 잠가요.'
+    - code: dbFixed
+    - h3: '흔한 실수: JVM 락과 DB 락을 섞기'
+    - p: '트랜잭션 안에서 `synchronized`를 잡은 채 DB 락을 기다리고, 다른 요청은 DB 락을 잡은 채 `synchronized`를 기다리면, JVM도 DB도 고리의 절반만 봐서 **아무도 찾지 못해요.** 둘 가운데 하나만 써요. 값이 DB에 있다면 DB 락이에요.'
+    - muted: '운영에서는 응답이 멈추면 스레드 덤프를 몇 초 간격으로 2~3번 떠서 같은 스레드가 같은 곳에 있는지 봐요. 스레드 덤프와 힙 덤프 레슨에서 다뤄요.'
+interview:
+  question: 데드락이 무엇이고 어떻게 막는지 설명해 주세요
+  model:
+    - label: 정의
+      text: 둘 이상의 스레드가 서로가 가진 락을 기다리며 아무도 나아가지 못하는 상태입니다. 같은 락 둘을 반대 순서로 잡는 코드에서 생기고 저절로 풀리지 않습니다.
+    - label: 원리
+      text: 상호 배제, 잡고 기다리기, 빼앗을 수 없음, 순환 대기의 네 조건이 모두 있어야 생기므로 하나를 깨면 막힙니다. 가장 흔한 방법은 모든 코드가 락을 id 같은 정해진 순서로 잡아 순환 대기를 없애는 것이고, tryLock에 시간을 주고 못 잡으면 가진 락을 풀고 다시 하는 방법도 있습니다.
+    - label: 주의할 점
+      text: 타이밍이 맞을 때만 생겨 테스트에서 잘 보이지 않고, 멈춘 스레드는 CPU도 로그도 남기지 않습니다. 스레드 덤프의 Found one Java-level deadlock으로 찾고, JVM은 풀어 주지 않아 순서를 고쳐야 합니다. DB의 행 락 데드락은 DB가 찾아 한 트랜잭션을 실패시킵니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 계좌 이체에서 두 계좌를 id 순서로 잠가 반대 방향 이체가 서로를 기다리지 않게 했습니다.'
+verified: 이 레슨의 데드락은 짐작이 아니라 자바 21에서 실제로 일으킨 거예요. 래치로 두 스레드의 타이밍을 맞춰 매번 멈추게 했고, 멈춘 스레드는 데몬이라 테스트가 끝날 수 있어요. 코드가 바뀔 때마다 테스트([DeadlockTest](link:test))가 다시 돌아요.
+footer: '근거: 모니터는 자바 언어 명세 17장([링크](link:jls17)), 데드락 찾기는 ThreadMXBean API 문서([링크](link:threadMx))와 jstack 문서, DB의 데드락 처리는 PostgreSQL 문서([링크](link:pgDeadlock)), 네 조건은 Coffman 외(1971). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '래치로 두 스레드가 첫 락을 잡은 뒤 반대쪽 락을 잡게 하면 둘 다 BLOCKED로 멈춘다'
     how: '1초 뒤 두 스레드의 상태와 이체 수를 본다. 스레드는 데몬으로 두어 테스트가 끝나게 한다'
+    test: DeadlockTest.deadlockHappensAndIsDetected
   - claim: 'ThreadMXBean.findDeadlockedThreads는 그 두 스레드를 찾고, 기다리는 락과 가진 스레드를 알려 준다'
     how: 'ThreadInfo의 이름, lockName, lockOwnerName을 `CiOutput`에 남긴다'
+    test: DeadlockTest.deadlockHappensAndIsDetected
   - claim: 'id 순서로 잡는 transfer는 a→b와 b→a를 1만 번씩 동시에 해도 끝나고 두 잔액의 합이 그대로다'
-    how: '두 스레드를 10초 안에 join하고 합을 본다'
+    how: '두 스레드를 20초 안에 join하고 합을 본다'
+    test: DeadlockTest.lockOrderingPreventsDeadlock
   - claim: 'tryLock으로 못 잡으면 풀고 다시 하는 transfer도 끝나고 합이 그대로다'
     how: '같은 조건으로 돌린다'
+    test: DeadlockTest.tryLockBackoffPreventsDeadlock
   - claim: '스레드 2개짜리 풀에서 두 작업이 같은 풀의 작업을 get으로 기다리면 끝나지 않는다'
     how: '래치로 두 바깥 작업이 동시에 돌게 하고, get에 시간을 줘 TimeoutException을 본다'
+    test: DeadlockTest.poolStarvationDeadlock
 sources:
   - '모니터와 스레드: 자바 언어 명세 17장 https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html'
   - 'findDeadlockedThreads: `ThreadMXBean` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html'

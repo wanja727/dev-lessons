@@ -1,0 +1,234 @@
+# 데드락 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/deadlock.yaml의 says).
+# 동작에 관한 정답은 verification의 deadlock/DeadlockTest로 확인했다 (자바 21).
+# DB 데드락에 관한 정답은 PostgreSQL 문서가 근거다(실제로 일으키는 테스트는 D11).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: deadlock
+  title: 데드락
+  unit: 운영체제와 동시성
+  order: 405
+concepts:
+  - key: core
+    name: 데드락
+coreQuestions:
+  - key: q1
+    text: "데드락은 어떻게 생기나요?"
+  - key: q2
+    text: "데드락이 생기려면 어떤 조건이 모두 있어야 하나요?"
+  - key: q3
+    text: "데드락은 어떻게 막나요?"
+  - key: q4
+    text: "데드락이 났는지 어떻게 알아보나요?"
+questions:
+  # ── 질문 1 ──
+  - key: dl-blocked-state
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 스레드 1은 계좌 a의 락을 잡고 b의 락을 기다리고, 스레드 2는 b의 락을 잡고 a의 락을 기다려요(둘 다 synchronized). 1초 뒤 두 스레드의 상태와 CPU 사용은?
+    choices:
+      - 둘 다 RUNNABLE, CPU를 100% 쓴다
+      - 둘 다 BLOCKED, CPU를 거의 쓰지 않는다
+      - 하나는 예외로 끝나고 하나는 계속 돈다
+      - 둘 다 TERMINATED
+    answer: "2"
+    explanation: |-
+      **둘 다 BLOCKED이고 CPU를 거의 쓰지 않아요.** 서로가 가진 락을 기다리는 데드락이라 아무도 나아가지 못하고, 기다리는 스레드는 차례를 받지 않아요.
+
+      - 예외도 로그도 없어서 조용히 멈춘 것처럼 보여요
+      - 검증: DeadlockTest.deadlockHappensAndIsDetected
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html
+  - key: dl-order-cancel
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 처리는 재고 락을 잡고 주문 락을 잡아요. 주문 취소는 주문 락을 잡고 재고 락을 잡아요. 둘이 같은 상품과 주문에 거의 동시에 들어오면 무엇이 생길 수 있을까요?
+    choices:
+      - 아무 일 없다. 락이 둘이라 더 안전하다
+      - 데드락. 같은 락 둘을 반대 순서로 잡는다
+      - 둘 다 IllegalMonitorStateException으로 실패한다
+      - 주문 처리가 항상 먼저 끝난다
+    answer: "2"
+    explanation: |-
+      **데드락이 생길 수 있어요.** 처리가 재고를, 취소가 주문을 먼저 잡은 순간 서로의 것을 기다려요.
+
+      - 타이밍이 맞을 때만 생겨서 테스트에서는 잘 안 보이고 운영에서 드물게 드러나요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 2 ──
+  - key: dl-hold-and-wait
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 바깥 synchronized (from) 안에서 synchronized (to)를 기다리는 것은 데드락의 네 조건 가운데 무엇일까요?
+    code: |-
+      synchronized (from) {
+        synchronized (to) {
+          from.balance -= amount;
+          to.balance += amount;
+        }
+      }
+    choices:
+      - 상호 배제
+      - 잡고 기다리기
+      - 빼앗을 수 없음
+      - 순환 대기
+    answer: "2"
+    explanation: |-
+      **잡고 기다리기예요.** from의 락을 가진 채 to의 락을 기다려요.
+
+      - 상호 배제는 락이 한 번에 하나만 들여보내는 것, 빼앗을 수 없음은 가진 스레드만 풀 수 있는 것, 순환 대기는 서로를 기다리는 고리예요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: dl-three-cycle
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"스레드 셋이 각각 A→B, B→C, C→A 순서로 락 둘을 잡으면, 반대 순서로 잡는 짝이 없으니 데드락이 생기지 않는다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 1은 B를, 2는 C를, 3은 A를 기다리는 고리가 생기면 순환 대기예요. 셋 이상이어도 고리면 데드락이에요.
+
+      - 모두 같은 순서(예: A, B, C)로 잡게 정하면 고리가 생기지 않아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 3 ──
+  - key: dl-ordered-first
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 transfer를 스레드 1은 transfer(a, b), 스레드 2는 transfer(b, a)로 동시에 불러요(a.id = 1, b.id = 2). 두 스레드가 처음 잡으려는 락은?
+    code: |-
+      Account first = from.id < to.id
+          ? from : to;
+      Account second = first == from
+          ? to : from;
+      synchronized (first) {
+        synchronized (second) { ... }
+      }
+    choices:
+      - 스레드 1은 a, 스레드 2는 b
+      - 둘 다 a
+      - 둘 다 b
+      - 스레드 1은 b, 스레드 2는 a
+    answer: "2"
+    explanation: |-
+      **둘 다 a예요.** 보내는 쪽이 누구든 id가 작은 쪽을 먼저 잡아요. 둘째 스레드는 a에서 기다리고 b를 잡지 않으니 고리가 생기지 않아요.
+
+      - 검증: DeadlockTest.lockOrderingPreventsDeadlock (a→b, b→a 1만 번씩이 멈추지 않고 끝남)
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: dl-multi-item
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 하나에서 상품 여러 개의 재고를 함께 줄이고, 상품마다 락이 있어요. 주문마다 담긴 상품의 순서가 달라요. 데드락을 막는 방법으로 맞는 것은?
+    choices:
+      - 주문에 담긴 순서대로 락을 잡는다
+      - 상품 id로 정렬한 순서로 락을 잡는다
+      - 상품마다 hashCode가 큰 것부터 잡는다
+      - 락을 잡은 채 다른 주문 서비스를 불러 확인한다
+    answer: "2"
+    explanation: |-
+      **상품 id로 정렬한 순서로 잡아요.** 모든 주문이 같은 순서로 잡으면 순환 대기가 생기지 않아요.
+
+      - 기준은 바뀌지 않고 겹치지 않아야 해요. hashCode는 서로 다른 객체가 같을 수 있어요
+      - 락을 잡은 채 밖의 코드를 부르면 그 코드가 어떤 락을 잡을지 몰라 위험해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 4 ──
+  - key: dl-thread-dump
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 스레드 덤프 끝에 Found one Java-level deadlock과 함께 "transfer-1이 B를 기다리고 B는 transfer-2가 가졌다", "transfer-2가 A를 기다리고 A는 transfer-1이 가졌다"가 나왔어요. 무엇을 고쳐야 할까요?
+    choices:
+      - 스레드 풀의 크기를 늘린다
+      - 두 스레드가 락을 잡는 순서를 같게 한다
+      - 힙 크기(-Xmx)를 늘린다
+      - 데드락 감지가 켜져 있으니 JVM이 곧 풀어 준다
+    answer: "2"
+    explanation: |-
+      **락을 잡는 순서를 같게 해요.** 두 스레드가 A와 B를 반대 순서로 잡아 고리가 생겼어요.
+
+      - JVM은 찾아서 알려 줄 뿐 풀지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/specs/man/jstack.html
+  - key: dl-jvm-no-recover
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"JVM은 자바 스레드의 데드락을 찾으면, DB처럼 한 스레드를 골라 예외를 던져 풀어 준다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** JVM은 스레드 덤프와 ThreadMXBean으로 찾아 줄 뿐 풀지 않아요. 멈춘 스레드를 안전하게 풀 방법이 없어 보통 재시작해요.
+
+      - PostgreSQL 같은 DB는 데드락을 찾아 한 트랜잭션을 실패시켜요. 둘이 다른 점이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html
+  - key: dl-db-deadlock
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 메서드를 두 요청이 transfer(1, 2, ...)와 transfer(2, 1, ...)로 동시에 불렀고, 두 트랜잭션이 첫 행을 잠근 뒤 서로의 행을 기다리게 됐어요. PostgreSQL에서 무슨 일이 생길까요?
+    code: |-
+      @Transactional
+      public void transfer(long fromId, long toId,
+                           long amount) {
+        Account from = repo.findByIdForUpdate(fromId);
+        Account to = repo.findByIdForUpdate(toId);
+        from.withdraw(amount);
+        to.deposit(amount);
+      }
+    choices:
+      - 두 요청이 영원히 멈춘다
+      - 한 트랜잭션이 deadlock detected로 실패해 롤백되고, 다른 하나는 끝난다
+      - 두 트랜잭션 모두 커밋된다
+      - 스프링이 자동으로 다시 시도해 둘 다 성공한다
+    answer: "2"
+    explanation: |-
+      **한 트랜잭션이 deadlock detected로 실패하고 롤백돼요.** PostgreSQL은 고리를 찾아 하나를 실패시키고, 다른 하나는 이어서 끝나요.
+
+      - 실패한 쪽은 다시 시도하면 돼요. 근본적으로는 작은 id부터 잠가요
+      - 근거는 PostgreSQL 문서예요. 실제로 일으키는 테스트는 DB 데드락 레슨이 맡아요
+    source: https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS
+  # ── 네 질문을 하나로 ──
+  - key: dl-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "데드락이 무엇이고 어떻게 막는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **서로가 가진 락을 기다려 아무도 나아가지 못하는 상태이고, 네 조건 가운데 하나를 깨서 막아요. 가장 흔한 것은 락 순서를 정하는 것이에요.**
+
+      - **생기는 모양:** 같은 락 둘을 반대 순서로 잡는다. 타이밍이 맞을 때만 생겨 운영에서 드물게 드러난다
+      - **네 조건:** 상호 배제, 잡고 기다리기, 빼앗을 수 없음, 순환 대기
+      - **막기:** id 순서로 잡기(순환 대기), tryLock 뒤 풀고 다시(잡고 기다리기), 락을 잡은 채 밖의 코드를 부르지 않기
+      - **찾기:** 스레드 덤프의 Found one Java-level deadlock. JVM은 풀지 않는다. DB는 찾아서 하나를 실패시킨다
+    checklist:
+      - 서로가 가진 락을 기다린다는 정의를 말했다
+      - 네 조건을 말했다
+      - 락 순서를 정하는 방법을 말했다
+      - tryLock이나 다른 방법 하나를 더 말했다
+      - 스레드 덤프로 찾는 법이나 DB 데드락과의 차이를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html
