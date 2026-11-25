@@ -31,7 +31,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 회원 가입이 컨트롤러 메서드 하나에 다 들어 있어요. 저장을 `JdbcTemplate`에서 JPA로 바꾸면 어디를 고쳐야 할까요?
     code: |-
@@ -64,15 +64,15 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"배송이 시작된 주문은 취소할 수 없다\"는 규칙을 앱 API와 고객센터 관리자 화면에서 함께 써야 해요. 두 화면은 컨트롤러가 따로 있어요. 규칙을 어디에 두는 것이 알맞을까요?"
     choices:
-      - 앱 API의 컨트롤러에 두고 관리자 컨트롤러에 복사한다
       - 주문 서비스에 두고 두 컨트롤러가 같은 서비스를 부른다
       - 관리자 컨트롤러가 앱 API에 HTTP 요청을 보내게 한다
       - 주문 리포지토리의 SQL 조건으로만 둔다
-    answer: "2"
+      - 앱 API의 컨트롤러에 두고 관리자 컨트롤러에 복사한다
+    answer: "1"
     explanation: |-
       **주문 서비스에 둬요.** 서비스는 HTTP를 모르니 어느 입구에서든 부를 수 있어요.
 
@@ -83,7 +83,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 가입하면 회원을 저장하고 포인트 1000점을 주는 코드가 `@Transactional`을 붙인 컨트롤러 메서드에 있어요. 관리자 일괄 등록에서도 같은 가입을 해야 할 때 생기는 문제는 무엇일까요?
     code: |-
@@ -97,11 +97,11 @@ questions:
         return new MemberResponse(m.getId());
       }
     choices:
+      - 문제가 없다. 일괄 등록이 이 컨트롤러 메서드를 부르면 된다
       - 컨트롤러에는 @Transactional을 붙일 수 없어 컴파일 오류가 난다
       - 규칙과 트랜잭션이 컨트롤러에 있어 일괄 등록에서 다시 만들어야 한다
       - 포인트가 두 번 저장된다
-      - 문제가 없다. 일괄 등록이 이 컨트롤러 메서드를 부르면 된다
-    answer: "2"
+    answer: "3"
     explanation: |-
       **가입 규칙과 트랜잭션을 일괄 등록에서 다시 만들어야 해요.** 한 업무가 컨트롤러에 있기 때문이에요.
 
@@ -113,7 +113,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`MemberService.join(HttpServletRequest req)`처럼 서비스가 HTTP 요청을 받아 파라미터를 꺼내요. 이 서비스를 관리자 엑셀 일괄 등록 배치에서 부르려 할 때의 문제는 무엇일까요?"
     choices:
@@ -132,15 +132,15 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "`OrderService.place`가 재고가 모자라면 `ResponseEntity.status(409)`를 돌려줘요. 이 서비스를 카프카 메시지 컨슈머에서도 쓰려고 해요. 어떻게 고치는 것이 알맞을까요?"
     choices:
-      - 컨슈머가 ResponseEntity의 상태 코드를 읽어 409인지 확인한다
-      - 서비스는 재고 부족 예외를 던지고, 409로 바꾸는 일은 컨트롤러 쪽(@RestControllerAdvice)이 한다
       - 컨슈머용 OrderService를 하나 더 복사해 만든다
       - 서비스가 HTTP 요청을 직접 보내게 한다
-    answer: "2"
+      - 컨슈머가 ResponseEntity의 상태 코드를 읽어 409인지 확인한다
+      - 서비스는 재고 부족 예외를 던지고, 409로 바꾸는 일은 컨트롤러 쪽(@RestControllerAdvice)이 한다
+    answer: "4"
     explanation: |-
       **서비스는 예외로 알리고, 상태 코드는 컨트롤러 쪽이 정해요.** 상태 코드는 HTTP의 일이라 컨슈머에게는 뜻이 없어요.
 
@@ -152,7 +152,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 서비스를 테스트할 때 DB 대신 메모리 저장소를 넣고 싶어요. 어디를 고쳐야 할까요?
     code: |-
@@ -168,11 +168,11 @@ questions:
         }
       }
     choices:
-      - 고칠 곳이 없다. 테스트가 알아서 메모리 저장소를 쓴다
-      - 서비스. 구현을 직접 만들지 말고 생성자로 MemberRepository를 받게 한다
       - JdbcMemberRepository를 지운다
       - join 메서드의 if 문
-    answer: "2"
+      - 고칠 곳이 없다. 테스트가 알아서 메모리 저장소를 쓴다
+      - 서비스. 구현을 직접 만들지 말고 생성자로 MemberRepository를 받게 한다
+    answer: "4"
     explanation: |-
       **서비스가 구현을 직접 만들고 있어서 서비스를 고쳐요.** 생성자로 인터페이스를 받게 하면 무엇을 넣을지 바깥이 정해요.
 
@@ -183,15 +183,15 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "상품 정보를 우리 DB가 아니라 외부 상품 API에서 읽기로 했어요. `ProductService`는 `ProductReader` 인터페이스를 생성자로 받아 `reader.find(id)`를 불러요. 무엇을 해야 할까요?"
     choices:
-      - ProductService의 find 호출을 HTTP 호출 코드로 바꾼다
-      - 외부 API를 부르는 ProductReader의 새 구현을 만들어 주입한다. ProductService는 그대로다
       - 컨트롤러가 외부 API를 부르고 ProductService를 건너뛴다
       - ProductReader 인터페이스를 지운다
-    answer: "2"
+      - ProductService의 find 호출을 HTTP 호출 코드로 바꾼다
+      - 외부 API를 부르는 ProductReader의 새 구현을 만들어 주입한다. ProductService는 그대로다
+    answer: "4"
     explanation: |-
       **새 구현 하나를 만들어 넣어요.** 서비스는 인터페이스만 알아서 구현이 바뀌어도 고치지 않아요.
 
@@ -203,7 +203,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`Member` 엔티티에는 `getId`, `getEmail`, `getName`, `getPassword` 게터가 있어요. 컨트롤러가 엔티티를 그대로 돌려주면 응답 JSON에 무엇이 들어갈까요?"
     code: |-
@@ -212,11 +212,11 @@ questions:
         return service.find(id);
       }
     choices:
-      - id만 들어간다
       - id, email, name만 들어간다
       - id, email, name, password가 모두 들어간다
       - 엔티티는 JSON으로 바꿀 수 없어 오류가 난다
-    answer: "3"
+      - id만 들어간다
+    answer: "2"
     explanation: |-
       **password까지 모두 들어가요.** 잭슨은 게터가 있는 값을 모두 JSON에 써요.
 
@@ -227,15 +227,15 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "`Product` 엔티티의 `price` 칸을 `salePrice`로 이름을 바꿨어요. A API는 엔티티를 그대로 돌려주고, B API는 `record ProductResponse(Long id, long price)`로 바꿔 돌려줘요. 두 API를 쓰는 앱이 받는 가격 필드 이름은 각각 무엇일까요?"
     choices:
-      - A는 price, B는 price
       - A는 salePrice, B는 price
       - A는 price, B는 salePrice
       - A는 salePrice, B는 salePrice
-    answer: "2"
+      - A는 price, B는 price
+    answer: "1"
     explanation: |-
       **A는 salePrice로 바뀌고 B는 price 그대로예요.** 엔티티를 그대로 내보내면 칸 이름이 곧 API의 필드 이름이에요.
 
@@ -247,7 +247,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "계층형 아키텍처에서 계층을 왜 나누고, 각 계층은 무엇을 맡나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

@@ -31,7 +31,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 주문 취소 코드에서 "배송된 주문은 취소할 수 없다"는 규칙은 어느 클래스에 있고, 이 코드는 어느 방식일까요?
     code: |-
@@ -60,7 +60,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "`MemberService.use(memberId, amount)`가 `member.getPoint()`를 읽어 모자라면 예외를 던지고, `member.setPoint(member.getPoint() - amount)`로 줄여요. 이 기능을 도메인 모델로 바꾸면 어떤 모양이 될까요?"
     choices:
@@ -80,7 +80,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`Order`는 세터가 없고 취소하는 길은 `cancel()` 하나예요. `cancel()`은 배송된 주문이면 `CannotCancel`을 던져요. 아래 일괄 취소에 배송된 주문의 id가 섞여 들어오면 어떻게 될까요?"
     code: |-
@@ -93,11 +93,11 @@ questions:
         }
       }
     choices:
-      - 배송된 주문도 취소된다
       - 배송된 주문에서 CannotCancel 예외가 난다
       - 배송된 주문은 건너뛰고 나머지만 취소된다
       - 컴파일 오류가 난다
-    answer: "2"
+      - 배송된 주문도 취소된다
+    answer: "1"
     explanation: |-
       **CannotCancel 예외가 나요.** 규칙이 cancel() 안에 있어서 일괄 취소도 그 확인을 거쳐요.
 
@@ -108,15 +108,15 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"만료된 쿠폰은 쓸 수 없다\"는 확인이 주문 서비스와 선물 서비스에 if 문으로 하나씩 있어요. 여기에 \"회원 등급이 맞아야 쓸 수 있다\"를 더해야 해요. 지금 고칠 곳은 몇 곳이고, 한 곳으로 만들려면 규칙을 어디로 옮기나요?"
     choices:
-      - 한 곳. 이미 모여 있다
-      - 두 곳. Coupon.use() 같은 쿠폰의 메서드로 옮긴다
       - 두 곳. 컨트롤러로 옮긴다
       - 쿠폰을 쓰는 화면 수만큼. 옮길 방법이 없다
-    answer: "2"
+      - 한 곳. 이미 모여 있다
+      - 두 곳. Coupon.use() 같은 쿠폰의 메서드로 옮긴다
+    answer: "4"
     explanation: |-
       **지금은 두 곳이고, Coupon.use()로 옮기면 한 곳이 돼요.** 확인이 서비스마다 있으면 규칙이 바뀔 때 모두 찾아 고쳐야 해요.
 
@@ -127,7 +127,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "`Order`에 `cancel()`을 만들어 규칙을 넣었지만 롬복 `@Data`는 그대로 뒀어요. 새로 만든 관리자 기능이 아래처럼 배송된 주문의 상태를 바꾸면 어떻게 될까요?"
     code: |-
@@ -145,11 +145,11 @@ questions:
       // 관리자 기능
       order.setStatus(CANCELED);
     choices:
-      - CannotCancel 예외가 난다
-      - 배송된 주문이 취소된다. @Data가 만든 세터가 cancel()을 거치지 않는 길을 열어 둔다
       - 컴파일 오류가 난다. cancel()이 있으면 setStatus는 만들어지지 않는다
       - 변경 감지가 막아서 DB는 바뀌지 않는다
-    answer: "2"
+      - CannotCancel 예외가 난다
+      - 배송된 주문이 취소된다. @Data가 만든 세터가 cancel()을 거치지 않는 길을 열어 둔다
+    answer: "4"
     explanation: |-
       **배송된 주문이 취소돼요.** @Data는 모든 필드에 세터를 만들어서 규칙을 건너뛰는 길이 생겨요.
 
@@ -161,15 +161,15 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "주문 애그리거트에는 \"주문 금액은 주문 상품 금액의 합\"이라는 규칙이 있어요. 주문 상품에 `setQuantity`를 열어 두고 다른 서비스가 `orderLine.setQuantity(5)`로 수량만 바꾸면 무엇이 깨지나요?"
     choices:
-      - 아무것도 깨지지 않는다
-      - 주문 금액이 주문 상품 금액의 합이라는 규칙. 주문이 수량이 바뀐 것을 모른다
       - 주문 상품의 id
       - 회원의 포인트
-    answer: "2"
+      - 아무것도 깨지지 않는다
+      - 주문 금액이 주문 상품 금액의 합이라는 규칙. 주문이 수량이 바뀐 것을 모른다
+    answer: "4"
     explanation: |-
       **주문 금액의 규칙이 깨져요.** 수량이 바뀌어도 주문의 totalPrice는 그대로예요.
 
@@ -180,15 +180,15 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 게시글을 지우면 그 댓글도 함께 지워져요. 회원은 게시글과 상관없이 가입하고 탈퇴해요. 게시글 애그리거트를 어떻게 잡는 것이 알맞을까요?
     choices:
-      - 댓글과 회원을 모두 게시글 애그리거트에 넣는다
       - 댓글은 게시글 애그리거트에 넣고, 회원은 id로 가리킨다
       - 댓글과 회원 모두 id로만 가리킨다
       - 회원은 넣고 댓글은 id로 가리킨다
-    answer: "2"
+      - 댓글과 회원을 모두 게시글 애그리거트에 넣는다
+    answer: "1"
     explanation: |-
       **댓글은 넣고 회원은 id로 가리켜요.** 댓글은 게시글과 함께 생기고 사라지고, 회원은 따로 바뀌는 다른 애그리거트예요.
 
@@ -200,15 +200,15 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 주문을 취소하면 외부 결제사의 환불 API도 불러야 해요. 주문은 도메인 모델로 짰어요. 환불 API 호출은 어디에 두는 것이 알맞을까요?
     choices:
-      - Order.cancel() 안. 엔티티에 환불 클라이언트를 주입한다
-      - 서비스. order.cancel()을 부른 뒤 환불 클라이언트를 부른다
       - 주문 리포지토리
       - 주문 상품 엔티티
-    answer: "2"
+      - Order.cancel() 안. 엔티티에 환불 클라이언트를 주입한다
+      - 서비스. order.cancel()을 부른 뒤 환불 클라이언트를 부른다
+    answer: "4"
     explanation: |-
       **서비스에 둬요.** 엔티티는 자기 필드와 규칙만 다루고 바깥 시스템을 몰라요.
 
@@ -219,15 +219,15 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: FAQ 글을 등록하고 고치는 관리자 기능이에요. 지킬 규칙은 "제목은 비울 수 없다" 하나뿐이에요. 어느 방식이 알맞을까요?
     choices:
+      - 애그리거트를 셋으로 나눈다
       - 트랜잭션 스크립트. 입력 검증으로 충분하고 지킬 상태 규칙이 없다
       - 도메인 모델. 모든 엔티티는 도메인 모델로 짜야 한다
       - 둘 다 맞지 않아 컨트롤러에서 SQL을 쓴다
-      - 애그리거트를 셋으로 나눈다
-    answer: "1"
+    answer: "2"
     explanation: |-
       **트랜잭션 스크립트가 알맞아요.** 규칙이 없으면 엔티티 메서드가 세터와 다를 게 없어 얻는 것이 없어요.
 
@@ -239,7 +239,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "트랜잭션 스크립트와 도메인 모델은 무엇이 다르고, 언제 무엇을 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
