@@ -1,0 +1,144 @@
+# 리눅스 기초 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 리눅스 기초
+unit: 테스트와 운영
+roadmap: T8
+type: 동작 확인
+prerequisites:
+  - {slug: process-and-thread, title: 프로세스와 스레드}
+  - {slug: docker-container, title: 도커와 컨테이너}
+assume: '리눅스 셸(bash)을 열어 명령을 쳐 본 적이 있다는 것까지. 프로세스와 PID(프로세스와 스레드 레슨), 컨테이너가 격리된 리눅스 프로세스라는 것(도커와 컨테이너 레슨). 이 레슨의 명령은 테스트가 우분투 컨테이너 안에서 실제로 돌려 확인한다.'
+example: '서버에 접속해 주문 서버(`java -jar order-api.jar`)가 떠 있는지, 8080 포트를 듣고 있는지, 로그에 무슨 오류가 있는지 보고, 멈춘 서버를 끈다. 우분투 컨테이너 안에 작은 자바 서버를 띄워 같은 일을 한다.'
+intro:
+  - '배포한 서버에서 "8080 포트가 이미 사용 중"이라며 새 서버가 뜨지 않아요. 옛 서버가 아직 떠 있는 것 같은데, 무엇이 그 포트를 잡고 있는지, 어떻게 끄는지 몰라 서버를 통째로 재시작했어요.'
+  - '대부분의 자바 서버는 리눅스에서 돌아요. 장애가 나면 서버에 접속해 프로세스가 살아 있는지, 포트를 듣는지, 로그에 무엇이 남았는지, 디스크가 차지 않았는지를 직접 봐야 해요. 컨테이너 안에 들어가도 같은 명령을 써요.'
+  - '이 레슨에서는 우분투 컨테이너에 작은 서버를 띄우고, 프로세스를 찾고, 포트를 확인하고, 로그를 거르고, 신호로 끄는 명령을 실제로 돌려 출력을 확인해요.'
+covers:
+  - topic: '프로세스 보기: `ps aux`, `ps -ef`, `pgrep -f`. PID, 부모 PID, 사용자, 명령'
+    where: '질문 1'
+  - topic: '`top`(또는 `htop`)으로 CPU와 메모리를 많이 쓰는 프로세스 보기. 자바 프로세스의 RSS'
+    where: '질문 1의 더 알아보기'
+  - topic: '신호로 끄기: `kill PID`(SIGTERM, 정리하고 끈다)와 `kill -9 PID`(SIGKILL, 바로 죽인다)의 차이. 자바의 종료 훅'
+    where: '질문 2. 스프링의 우아한 종료는 CI/CD와 무중단 배포(T6)'
+  - topic: '포트를 누가 듣는지 보기: `ss -ltnp`(또는 `netstat`). "Address already in use"의 원인 찾기'
+    where: '질문 3'
+  - topic: '`curl`로 서버에 요청을 보내 응답 확인하기, `-v`로 헤더 보기'
+    where: '질문 3'
+  - topic: '로그 보기: `tail -f`로 새 줄 따라가기, `grep`으로 거르기, `grep -A`, `-B`로 앞뒤 줄, `less`'
+    where: '질문 4'
+  - topic: '디스크와 파일: `df -h`(디스크 남은 양), `du -sh`(폴더 크기). 로그가 디스크를 채우는 장애'
+    where: '질문 4'
+  - topic: '파일 권한(`rwx`), 소유자, `chmod`. 실행 권한이 없으면 스크립트가 돌지 않는다'
+    where: '실무에서는'
+  - topic: '환경 변수(`env`, `export`)와 프로세스가 물려받는 것'
+    where: '실무에서는'
+  - topic: '`ssh`로 서버에 접속하기, 키 인증'
+    where: '실무에서는 (문서 근거. 테스트로 돌리지 않는다)'
+  - topic: '`systemd`로 서버를 서비스로 등록하기'
+    where: '실무에서는 (문서 근거)'
+  - topic: '파이프(`|`)로 명령 잇기'
+    where: '질문 4'
+  - topic: '스레드 덤프를 뜨는 `jstack`, `jcmd`'
+    where: '다루지 않음: 스레드 덤프와 힙 덤프(T10)'
+codes:
+  ps: |-
+    $ ps aux | grep order-api
+    $ pgrep -f order-api
+  kill: |-
+    $ kill 1234      # SIGTERM
+    $ kill -9 1234   # SIGKILL
+  ss: |-
+    $ ss -ltnp | grep 8080
+    LISTEN 0 100 *:8080 *:* ⤶
+    users:(("java",pid=1234,fd=9))
+  logs: |-
+    $ tail -n 100 app.log
+    $ grep -n "ERROR" app.log
+    $ grep -B 2 -A 5 "Exception" app.log
+  disk: |-
+    $ df -h /
+    $ du -sh /var/log/*
+predict:
+  text: '8080 포트를 쓰는 자바 서버에 `kill -9`를 보냈어요. 서버의 종료 훅(`Runtime.addShutdownHook`)에 적어 둔 "정리 완료" 로그는 찍힐까요? 보기: 찍힌다, 찍히지 않는다.'
+  answer: '찍히지 않는다. SIGKILL은 프로세스가 아무것도 하지 못하게 커널이 바로 죽인다. `kill`(SIGTERM)이면 종료 훅이 돌아 찍힌다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 서버에서 내 프로그램이 떠 있는지 어떻게 보나요?
+    conclusion:
+      lead: '`ps`로 지금 도는 프로세스의 목록을 보고, `grep`이나 `pgrep`으로 내 프로그램을 골라요.'
+      sub: '목록에서 PID(프로세스 번호)를 얻어야 그 프로세스에 신호를 보내거나 포트, 스레드를 볼 수 있어요.'
+    says:
+      - '`ps aux`의 열(사용자, PID, CPU, 메모리, 명령). 우분투 컨테이너에 자바 서버를 띄우고 `ps aux`의 실제 출력을 보인다'
+      - '`ps aux | grep order-api`는 grep 자신도 찍는다. `pgrep -f`는 PID만 돌려준다. 두 출력을 비교한다'
+      - 'PID는 프로세스를 가리키는 번호다. 프로세스가 끝나면 번호는 다시 쓰인다. 프로세스와 스레드 레슨의 프로세스를 운영체제가 이 번호로 관리한다'
+      - '더 알아보기: `top`은 CPU와 메모리를 많이 쓰는 프로세스를 실시간으로 보여 준다. 자바 프로세스의 RSS(실제로 쓰는 메모리)가 힙 최대 크기보다 큰 이유(힙 밖의 메모리, T5)'
+    asks:
+      - '본문의 예시: `ps aux | grep order-api`의 출력에 줄이 두 개 나왔다. 하나가 `grep order-api`라면 다른 하나는 (자바 서버. grep 명령 자신도 목록에 나온다)'
+      - '옮긴 상황: 서버를 껐다고 생각했는데 새 서버가 뜨지 않는다. 옛 서버가 아직 있는지 확인하는 명령은 (`pgrep -f order-api`나 `ps aux | grep order-api`)'
+  - id: q2
+    title: kill과 kill -9는 무엇이 다른가요?
+    conclusion:
+      lead: '`kill`은 SIGTERM을 보내 프로그램이 스스로 정리하고 끝나게 하고, `kill -9`는 SIGKILL로 커널이 그 자리에서 죽여요.'
+      sub: 'SIGKILL은 막거나 처리할 수 없어서 종료 훅, 버퍼 비우기, 처리 중인 요청 마무리가 모두 건너뛰어져요. 먼저 `kill`을 쓰고 기다려요.'
+    says:
+      - '신호는 운영체제가 프로세스에 보내는 짧은 알림이다. SIGTERM(15)은 "끝내 달라", SIGKILL(9)은 "죽인다"'
+      - '예측의 답. 종료 훅에서 파일에 "정리 완료"를 쓰는 자바 프로그램에 `kill`과 `kill -9`를 각각 보내고 파일을 본다. SIGTERM에서만 쓰여 있다. 종료 코드도 143(128+15)과 137(128+9)로 다르다'
+      - 'JVM은 SIGTERM을 받으면 종료 훅을 돌린다. 스프링 부트는 그 훅에서 컨텍스트를 닫으며 우아한 종료를 한다(T6)'
+      - '`kill -9`는 SIGTERM에 응답하지 않을 때만 쓴다. 쓰고 나면 정리되지 않은 것(임시 파일, 처리 중이던 요청)을 따로 본다'
+    widget:
+      kind: toggle
+      note: '같은 자바 서버에 `kill`과 `kill -9`를 골라 보낸다. 종료 훅이 돌았는지, 로그 파일에 "정리 완료"가 있는지, 종료 코드(143, 137)를 실제 출력으로 나란히 보인다'
+    asks:
+      - '본문의 예시: 종료 훅에서 "정리 완료"를 쓰는 서버에 `kill -9`를 보냈다. 로그에 "정리 완료"가 있나 (없다. SIGKILL은 종료 훅을 돌릴 틈을 주지 않는다)'
+      - '옮긴 상황: 배포 스크립트가 옛 서버를 `kill -9`로 끈다. 결제 처리 중이던 요청은 어떻게 되나 (끊긴다. SIGTERM을 보내고 기다려야 우아한 종료가 돈다)'
+  - id: q3
+    title: 포트를 누가 쓰고 있는지 어떻게 찾나요?
+    conclusion:
+      lead: '`ss -ltnp`로 듣고 있는(LISTEN) 포트와 그 포트를 잡은 프로세스의 PID를 봐요.'
+      sub: '"Address already in use"는 그 포트를 이미 다른 프로세스가 듣고 있다는 뜻이에요. PID를 찾아 끄거나 다른 포트를 써요.'
+    says:
+      - '서버 프로그램은 포트를 열고 듣는다(LISTEN). `ss -ltnp`의 열: 상태, 주소와 포트, 프로세스와 PID. 실제 출력을 보인다'
+      - '같은 포트로 두 번째 자바 서버를 띄우면 `BindException: Address already in use`로 실패한다. 실제 출력을 보인다. `ss`로 먼저 뜬 프로세스의 PID를 찾는다'
+      - '`curl -v http://localhost:8080/health`로 서버가 응답하는지 확인한다. `-v`는 요청과 응답의 헤더를 보인다'
+      - '듣는 주소가 `127.0.0.1`이면 서버 안에서만, `0.0.0.0`(또는 `*`)이면 바깥에서도 닿는다'
+    asks:
+      - '본문의 예시: 새 서버가 "Address already in use"로 뜨지 않는다. 어느 프로세스가 8080을 쓰는지 찾는 명령은 (`ss -ltnp | grep 8080`)'
+      - '옮긴 상황: 서버 안에서 `curl localhost:8080`은 되는데 바깥에서는 닿지 않는다. `ss -ltn`에 `127.0.0.1:8080`이 보인다. 이유는 (서버 안의 주소에서만 듣는다. `0.0.0.0`에서 듣게 바꾼다)'
+  - id: q4
+    title: 로그에서 오류를 어떻게 찾나요?
+    conclusion:
+      lead: '`tail`로 끝부분과 새로 쌓이는 줄을 보고, `grep`으로 원하는 줄만 골라요. `-A`, `-B`로 그 줄의 앞뒤를 함께 봐요.'
+      sub: '파이프(`|`)로 명령을 이어 거르고 세요. 로그가 디스크를 채우지 않는지는 `df`와 `du`로 봐요.'
+    says:
+      - '`tail -n 100`은 마지막 100줄, `tail -f`는 새로 쌓이는 줄을 따라간다'
+      - '`grep -n ERROR app.log`로 오류 줄과 줄 번호를 찾고, `grep -A 5 Exception`으로 스택 트레이스까지 본다. 컨테이너 안의 로그 파일로 실제 출력을 보인다'
+      - '파이프: `grep ERROR app.log | wc -l`로 오류 줄을 세고, `grep -o "requestId=[a-z0-9]*" | sort | uniq -c`로 요청별로 센다(T7의 요청 ID)'
+      - '`df -h`로 디스크의 남은 양을, `du -sh /var/log/*`로 어느 폴더가 큰지 본다. 디스크가 차면 로그를 못 쓰고 DB가 멈춘다. 로그 파일을 날짜별로 나누고 오래된 것을 지우는 롤링 설정이 필요하다(T7)'
+    asks:
+      - '본문의 예시: 예외 줄과 그 아래 스택 트레이스 다섯 줄을 함께 보려면 (`grep -A 5 Exception app.log`)'
+      - '옮긴 상황: 서버가 갑자기 로그를 쓰지 못하고 DB도 멈췄다. `df -h /`에 사용률 100%가 보인다. 무엇부터 확인하나 (`du -sh`로 어느 폴더가 큰지. 보통 로그 파일이다)'
+practice:
+  says:
+    - '`ssh 사용자@서버`로 접속한다. 비밀번호 대신 키(`~/.ssh/id_ed25519`)로 인증한다 (문서 근거)'
+    - '`systemd`로 서버를 서비스로 등록하면 `systemctl start|stop|status order-api`로 다루고, `journalctl -u order-api -f`로 로그를 본다. `systemctl stop`은 SIGTERM을 보낸다 (문서 근거)'
+    - '흔한 실수 하나: 배포 스크립트에 실행 권한이 없어 "Permission denied". `ls -l`의 `rwx`를 읽고 `chmod +x deploy.sh`로 고친다 (컨테이너에서 확인)'
+    - '흔한 실수 둘: 습관처럼 `kill -9`로 끈다. 질문 2대로 `kill` 다음 기다리고, 그래도 안 끝날 때만 `-9`를 쓴다'
+    - '환경 변수는 `export`한 셸에서 띄운 프로세스가 물려받는다. `env | grep SPRING`으로 확인한다. 스프링 부트가 환경 변수를 설정 값으로 읽는 것은 S5'
+claims:
+  - claim: '`ps aux | grep java`는 grep 자신의 줄도 찍고, `pgrep -f`는 자바 서버의 PID만 돌려준다'
+    how: 'Testcontainers로 `eclipse-temurin:21-jdk`(우분투 기반)를 띄우고, 작은 자바 서버를 백그라운드로 돌린 뒤 `execInContainer`로 명령을 돌린다'
+  - claim: '`kill`(SIGTERM)을 받은 자바 프로그램은 종료 훅을 돌리고 143으로 끝나며, `kill -9`는 종료 훅 없이 137로 끝난다'
+    how: '종료 훅에서 파일을 쓰는 단일 파일 자바 프로그램을 컨테이너에서 돌리고 신호를 보낸 뒤 파일과 종료 코드를 본다'
+  - claim: '`ss -ltnp`에 듣고 있는 포트와 PID가 나오고, 같은 포트로 두 번째 서버를 띄우면 BindException이 난다'
+    how: '`ss`가 없으면 `iproute2`를 깔거나 `/proc/net/tcp`를 읽는다. 실제로 쓴 명령을 레슨에 적는다'
+  - claim: '`grep -n`, `grep -A`, 파이프로 센 결과가 로그 파일의 내용과 맞는다'
+    how: '정해 둔 로그 파일을 컨테이너에 넣고 명령의 출력을 남긴다'
+  - claim: '실행 권한이 없는 스크립트는 Permission denied로 실패하고 `chmod +x` 뒤에 돈다'
+    how: '컨테이너에서 확인한다'
+sources:
+  - '신호와 기본 동작(SIGTERM, SIGKILL은 처리할 수 없다): signal(7) https://man7.org/linux/man-pages/man7/signal.7.html'
+  - '`ss`: ss(8) https://man7.org/linux/man-pages/man8/ss.8.html'
+  - '`ps`: ps(1) https://man7.org/linux/man-pages/man1/ps.1.html'
+  - '자바의 종료 훅: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runtime.html#addShutdownHook(java.lang.Thread)'
+  - '`systemctl stop`이 보내는 신호(KillSignal 기본 SIGTERM): systemd.kill(5) https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html'
