@@ -1,0 +1,238 @@
+# TCP와 UDP 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/tcp-udp.yaml의 says).
+# 동작에 관한 정답은 verification의 TcpUdpTest로 확인했다 (자바 21).
+# SYN, ACK, FIN, TIME_WAIT처럼 자바에서 보이지 않는 것은 RFC 9293이 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: tcp-udp
+  title: TCP와 UDP
+  unit: 네트워크와 웹
+  order: 57
+concepts:
+  - key: core
+    name: TCP와 UDP
+coreQuestions:
+  - key: q1
+    text: "TCP는 연결을 어떻게 맺나요?"
+  - key: q2
+    text: "TCP는 어떻게 데이터를 빠짐없이 순서대로 전하나요?"
+  - key: q3
+    text: "TCP 연결은 어떻게 끊나요?"
+  - key: q4
+    text: "UDP는 무엇이 다르고 언제 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: tu-syn-ack
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "주문 서버가 결제 서버에 TCP 연결을 맺어요. 3-way handshake에서 결제 서버(연결을 받는 쪽)가 보내는 것은 무엇일까요?"
+    choices:
+      - SYN
+      - SYN-ACK
+      - ACK
+      - FIN
+    answer: "2"
+    explanation: |-
+      **SYN-ACK예요.** 클라이언트의 SYN을 받았다는 ACK와 자기 쪽 첫 순서 번호를 알리는 SYN을 한 번에 보내요.
+
+      - 순서는 SYN(클라이언트), SYN-ACK(서버), ACK(클라이언트)예요
+      - 이 일은 서버 프로그램이 아니라 OS가 해요. 프로그램의 accept는 맺어진 연결을 꺼낼 뿐이에요
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
+  - key: tu-refused
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "결제 서버의 자바 프로그램이 죽어서 8081 포트를 듣는 프로그램이 없어요. 컴퓨터와 네트워크는 정상이에요. 주문 서버가 이 컴퓨터의 8081 포트로 연결하면 어떻게 될까요?"
+    choices:
+      - 연결은 맺어지고 첫 read에서 -1이 나온다
+      - 상대 OS가 거절(RST)해서 바로 ConnectException(Connection refused)이 난다
+      - 연결 시간 제한까지 기다린 뒤 시간 초과가 난다
+      - 프로그램이 다시 뜰 때까지 대기열에서 기다린다
+    answer: "2"
+    explanation: |-
+      **바로 Connection refused가 나요.** 컴퓨터의 OS가 그 포트에 아무도 없다고 RST로 답해요.
+
+      - 듣는 프로그램이 있어야 OS가 handshake를 하고 대기열에 연결을 쌓아요
+      - 시간 초과는 답이 아예 오지 않을 때(방화벽이 버리거나 컴퓨터가 꺼짐) 나요
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
+  # ── 질문 2 ──
+  - key: tu-stream
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "TCP 연결에서 보내는 쪽이 아래처럼 두 번 썼어요. 받는 쪽은 둘 다 도착한 뒤에 100바이트 버퍼로 read를 한 번 불렀어요. 받는 쪽이 이 read 한 번으로 받을 수 있는 것은 무엇일까요?"
+    code: |-
+      out.write("PAY:1000".getBytes());
+      out.flush();
+      out.write("PAY:2000".getBytes());
+      out.flush();
+    choices:
+      - 언제나 PAY:1000만
+      - PAY:1000PAY:2000이 한꺼번에 올 수 있다
+      - 언제나 PAY:2000만
+      - 두 메시지가 섞여 순서가 바뀔 수 있다
+    answer: "2"
+    explanation: |-
+      **한꺼번에 올 수 있어요.** TCP는 바이트의 흐름이라 몇 번에 나눠 썼는지 전하지 않아요.
+
+      - 테스트에서 read 한 번이 16바이트를 모두 돌려줬어요
+      - 순서는 바뀌지 않아요. 순서 번호로 맞추기 때문이에요. 그래서 HTTP 같은 위 계층이 길이로 메시지의 끝을 정해요
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
+  - key: tu-flow-control
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "로그 수집 서버가 바빠서 한동안 소켓을 읽지 않아요. 로그를 보내는 앱 서버는 같은 TCP 연결로 계속 write해요. 시간이 지나면 앱 서버의 write는 어떻게 될까요?"
+    choices:
+      - 계속 성공하고, 읽지 않은 데이터는 네트워크 어딘가에 쌓인다
+      - 받는 쪽 버퍼가 차면 write가 그 자리에서 멈춘다
+      - 받는 쪽이 읽지 않은 데이터를 TCP가 버리고 계속 보낸다
+      - 바로 예외가 나며 연결이 끊긴다
+    answer: "2"
+    explanation: |-
+      **write가 멈춰요.** 받는 쪽이 받을 수 있는 양(윈도)이 0이 되면 보내는 쪽이 보내기를 멈춰요. 흐름 제어예요.
+
+      - 테스트에서 받는 쪽이 읽지 않자 몇 MB를 보낸 뒤 쓴 양이 더 늘지 않았어요
+      - TCP는 데이터를 버리지 않아요. 빠짐없이 전하는 것이 약속이에요
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
+  # ── 질문 3 ──
+  - key: tu-read-minus-one
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "결제 서버가 `OK` 두 바이트를 보내고 소켓을 닫았어요. 주문 서버가 아래처럼 두 번 읽으면 second의 값은 무엇일까요?"
+    code: |-
+      byte[] buf = new byte[10];
+      int first = in.read(buf);
+      int second = in.read(buf);
+    choices:
+      - "0"
+      - "2"
+      - "-1"
+      - 예외가 난다
+    answer: "3"
+    explanation: |-
+      **-1이에요.** 상대가 FIN을 보내 더 올 데이터가 없다는 뜻이에요.
+
+      - 첫 read는 남아 있던 OK 2바이트를 돌려줘요
+      - 그래서 끝까지 읽으려면 -1이 나올 때까지 읽어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/InputStream.html#read(byte%5B%5D)
+  - key: tu-time-wait
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "앱 서버가 외부 API를 부를 때마다 TCP 연결을 새로 맺고, 응답을 받으면 자기가 먼저 끊어요. 초당 수천 번 부르자 어느 순간 새 연결을 맺지 못했어요. 앱 서버 쪽에 쌓여서 이런 일을 만든 것은 무엇일까요?"
+    choices:
+      - SYN_SENT 상태의 연결
+      - TIME_WAIT 상태의 연결
+      - 받는 쪽의 수신 버퍼
+      - UDP 데이터그램
+    answer: "2"
+    explanation: |-
+      **TIME_WAIT 상태의 연결이에요.** 먼저 끊은 쪽은 한동안 그 연결의 네 값(IP와 포트 쌍)을 붙잡아 둬요.
+
+      - 늦게 도착한 옛 패킷이 같은 네 값의 새 연결에 섞이지 않게 하려는 것이에요
+      - 클라이언트 쪽 포트는 수만 개뿐이라 다 붙잡히면 새 연결을 못 맺어요. 연결을 다시 쓰면 피할 수 있어요
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
+  - key: tu-new-client
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "결제 API를 부르는 메서드가 아래처럼 생겼고, 초당 수백 번 불려요. 결제 API 서버가 보기에 이 앱 서버와의 TCP 연결은 어떻게 될까요? (자바 21)"
+    code: |-
+      String pay(HttpRequest req)
+          throws Exception {
+        HttpClient c =
+            HttpClient.newHttpClient();
+        return c.send(req, ofString())
+            .body();
+      }
+    choices:
+      - 연결 하나를 계속 다시 쓴다
+      - 부를 때마다 새 연결이 생긴다
+      - 연결 없이 UDP로 간다
+      - 서버가 두 번째 요청부터 거절한다
+    answer: "2"
+    explanation: |-
+      **부를 때마다 새 연결이 생겨요.** 연결 풀은 HttpClient마다 따로 있어서, 새 클라이언트는 매번 연결을 새로 맺어요.
+
+      - 테스트에서 요청 다섯에 서버가 본 클라이언트 포트가 다섯 가지였어요. 하나를 함께 쓰면 하나였어요
+      - 매번 handshake 왕복이 들고 TIME_WAIT가 쌓여요. 클라이언트를 빈 하나로 두고 함께 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpClient.html
+  # ── 질문 4 ──
+  - key: tu-udp-send
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"아무도 듣지 않는 포트로 UDP 데이터그램을 send하면 보내는 쪽에서 바로 예외가 난다\""
+    answer: X
+    explanation: |-
+      **아니에요.** UDP는 연결을 맺지 않아 상대가 있는지 묻지 않아요. send는 예외 없이 끝나요.
+
+      - 보낸 데이터는 사라지고 보낸 쪽은 몰라요
+      - TCP는 연결을 맺다가 RST를 받아 바로 Connection refused를 알아요
+    source: https://www.rfc-editor.org/rfc/rfc768.html
+  - key: tu-udp-use
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "주식 시세를 초마다 수천 명에게 보내는 서비스예요. 1초 전 시세는 늦게 도착하면 쓸모없고, 하나쯤 빠져도 다음 시세가 곧 와요. 전송 계층으로 더 알맞은 것과 이유는 무엇일까요?"
+    choices:
+      - TCP. 빠진 시세를 다시 받아야 하니까
+      - UDP. 빠진 것을 기다리지 않고 다음 시세를 바로 보여 줄 수 있으니까
+      - TCP. UDP는 포트가 없어서 프로그램을 구별하지 못하니까
+      - UDP. UDP는 순서를 꼭 지켜 주니까
+    answer: "2"
+    explanation: |-
+      **UDP가 더 알맞아요.** TCP는 빠진 것을 다시 보내느라 뒤의 데이터까지 기다리게 해요.
+
+      - 늦은 데이터가 쓸모없는 곳에서는 다시 보내기가 오히려 손해예요
+      - UDP도 포트로 프로그램을 구별해요. 순서는 약속하지 않아요
+    source: https://www.rfc-editor.org/rfc/rfc768.html
+  # ── 전체 ──
+  - key: tu-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "TCP와 UDP의 차이를 3-way handshake와 함께 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **TCP는 연결을 맺고 빠짐없이 순서대로 전하고, UDP는 연결 없이 데이터그램을 보내기만 해요.**
+
+      - **연결:** TCP는 SYN, SYN-ACK, ACK로 연결을 맺어 양쪽의 첫 순서 번호를 맞춘다
+      - **신뢰성:** 순서 번호와 ACK로 빠진 것을 다시 보내고 순서를 맞춘다. 받는 쪽이 못 받으면 윈도로 멈춘다
+      - **끊기:** FIN과 ACK를 양쪽으로 주고받고, 먼저 닫은 쪽에 TIME_WAIT가 남는다
+      - **UDP:** 연결과 재전송이 없고 보낸 단위가 그대로 온다. DNS, 실시간 영상, HTTP/3에 쓴다
+    checklist:
+      - TCP의 3-way handshake(SYN, SYN-ACK, ACK)를 말했다
+      - 순서 번호와 ACK, 재전송으로 빠짐없이 순서대로 전한다고 말했다
+      - 흐름 제어나 TCP에 메시지 경계가 없다는 것을 말했다
+      - UDP는 연결과 재전송이 없고 도착을 약속하지 않는다고 말했다
+      - UDP를 쓰는 곳(DNS, 실시간 영상과 음성, HTTP/3)을 말했다
+    source: https://www.rfc-editor.org/rfc/rfc9293.html
