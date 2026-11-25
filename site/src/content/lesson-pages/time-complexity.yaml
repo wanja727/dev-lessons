@@ -1,8 +1,9 @@
-# 시간 복잡도 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 시간 복잡도
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/time-complexity.yaml에 있다.
 title: 시간 복잡도
+description: 시간 복잡도가 무엇을 나타내는지, 코드를 보고 어떻게 알아보는지, 빅오가 어느 경우를 말하는지, 그 차이가 언제 문제가 되는지. 네 가지 질문에 스스로 답할 수 있게, 회원 목록에서 이메일을 찾는 반복문의 횟수를 직접 세어 보며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 20
 roadmap: K1
 type: 자바 실행
 prerequisites:
@@ -54,10 +55,20 @@ codes:
       }
       return false;
     }
+  predictLoop: |-
+    boolean exists(List<Member> members,
+                   String email) {
+      [[for (Member m : members)]] {
+        if (m.email().[[equals]](email)) {
+          return true;
+        }
+      }
+      return false;
+    }
   pairLoop: |-
     // 이메일이 같은 회원이 둘 있나
     for (int i = 0; i < n; i++) {
-      for (int j = i + 1; j < n; j++) {
+      for (int j = [[i + 1]]; j < n; j++) {
         if (emails[i].equals(emails[j])) {
           return true;
         }
@@ -65,12 +76,26 @@ codes:
     }
   halving: |-
     int steps = 0;
-    for (int k = n; k > 1; k /= 2) {
+    for (int k = n; k > 1; [[k /= 2]]) {
       steps++;
     }
+  hiddenLoop: |-
+    for (Long id : productIds) {
+      if ([[soldOutIds.contains(id)]]) {
+        hide(id);
+      }
+    }
+  setDup: |-
+    Set<String> seen = new HashSet<>();
+    for (String e : emails) {
+      if ([[!seen.add(e)]]) {
+        return true; // 이미 있었다
+      }
+    }
+    return false;
   matchSlow: |-
     for (Order o : orders) {
-      for (Member m : members) {
+      [[for (Member m : members)]] {
         if (m.id().equals(o.memberId())) {
           o.setMemberName(m.name());
         }
@@ -81,12 +106,42 @@ codes:
         .collect(Collectors.toMap(
             Member::id, m -> m));
     for (Order o : orders) {
-      Member m = byId.get(o.memberId());
+      Member m = [[byId.get(o.memberId())]];
       o.setMemberName(m.name());
     }
+  toMapMerge: |-
+    Map<String, Member> byEmail =
+        members.stream()
+            .collect(Collectors.toMap(
+                Member::email, m -> m,
+                [[(a, b) -> a]]));
+  matchRun: |-
+    // 주문 10,000건, 회원 1,000명으로
+    // matchSlow와 matchFast를 돌린다
+  timingRun: |-
+    // 같은 이메일 배열로 두 방법을 돌린다
+    hasDuplicatePair(emails); // pairLoop
+    hasDuplicateSet(emails);  // setDup
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/timecomplexity/TimeComplexityTest.java
+  arrayList: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayList.html
+  hashSet: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashSet.html
+  collectors: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Collectors.html
 predict:
-  text: '코드 predict는 회원 1천 명에서 이메일 하나를 찾는 데 1밀리초가 걸렸어요. 회원이 10만 명이 되면 찾는 이메일이 목록에 없을 때 얼마쯤 걸릴까요? 보기: 거의 그대로 1밀리초, 약 100밀리초, 약 1만 밀리초.'
-  answer: '약 100밀리초. 회원이 100배 늘면 비교하는 횟수도 100배 는다. 입력에 비례해 느는 O(n)이다. 질문 1에서 밝힌다.'
+  title: 회원이 100배 늘면?
+  text: '코드 predict는 회원 1천 명에서 이메일 하나를 찾는 데 1밀리초가 걸렸어요. 회원이 10만 명이 되면, 찾는 이메일이 목록에 없을 때 얼마쯤 걸릴까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: same
+      label: 거의 그대로 1밀리초
+    - value: hundred
+      label: 약 100밀리초
+    - value: tenthousand
+      label: 약 1만 밀리초
+  answer: hundred
+  storageKey: tc-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 시간 복잡도는 무엇을 나타내나요?
@@ -102,6 +157,42 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에서 회원이 2천 명이고 찾는 이메일이 목록에 없다. `equals`는 몇 번 불리나 (2천 번)'
       - '옮긴 상황: 어떤 코드의 단계 수가 2n + 100이다. n이 1만에서 2만이 되면 단계 수는 대략 몇 배가 되나 (약 2배. 100은 n이 클 때 거의 보이지 않는다)'
+    body:
+      - p: '같은 코드를 돌려도 걸리는 시간은 그때그때 달라요. 컴퓨터의 성능, JVM이 코드를 얼마나 데웠는지, 같은 서버에서 도는 다른 일에 따라 바뀌어요. 그래서 코드가 빠른지 말할 때는 초를 재지 않고 **몇 단계를 실행하는지**를 세요. 그리고 그 수를 입력의 크기 **n**의 식으로 써요. 이것이 **시간 복잡도**예요.'
+      - p: '코드 predict에서 n은 회원 수예요. 찾는 이메일이 목록에 없으면 회원을 한 명씩 모두 비교해요.'
+      - ci:
+          key: predict
+          label: equals를 부른 횟수 보기
+          source: TimeComplexityTest.linearSearchCountsEquals
+          code: predictLoop
+      - p: '회원이 1천 명이면 비교 1천 번, 10만 명이면 10만 번이에요. 비교 한 번에 걸리는 시간은 거의 같으니, 처음 예측의 답은 **약 100밀리초**예요. {{predict-result}} n이 100배면 단계도 100배예요. 이렇게 n에 비례해서 늘어나는 것을 **O(n)**이라고 써요. "빅오 n"이라고 읽어요.'
+      - h3: 가장 빨리 자라는 항만 남겨요
+      - p: '실제로 세면 깔끔한 n이 나오지 않아요. 비교 n번 앞에 변수를 준비하는 단계가 5개 있으면 n + 5예요. 반복 한 번에 비교를 세 번 하면 3n이에요. 그래도 둘 다 **O(n)**이라고 써요.'
+      - ul:
+          - '**더해진 수를 버려요.** n이 10만이면 n + 5에서 5는 보이지 않아요.'
+          - '**곱해진 수(상수)도 버려요.** 3n은 n이 두 배가 될 때 두 배가 돼요. 늘어나는 **모양**이 n과 같아요.'
+      - p: '상수를 버려도 되는 이유는 숫자로 보면 알아요. 반복 한 번이 100배 무거운 100n과, 가벼운 n²을 견줘 볼게요.'
+      - table:
+          head: [n, 100n, n²]
+          rows:
+            - ['10', '1,000', '100']
+            - ['100', '10,000', '10,000']
+            - ['10,000', '1,000,000', '100,000,000']
+      - p: 'n이 작을 때는 100n이 더 무거워요. n이 100을 넘으면 n²이 앞서고, 그 뒤로는 격차가 계속 벌어져요. 데이터가 늘면 **상수보다 모양이 이겨요.** 그래서 모양만 남겨요.'
+      - more:
+          summary: '더 알아보기: 메모리를 세는 공간 복잡도'
+          body:
+            - p: '같은 방식으로 메모리를 센 것이 **공간 복잡도**예요. 코드 predict는 회원이 몇 명이든 변수 몇 개만 쓰니 O(1)이에요. 입력을 모두 복사한 리스트를 새로 만들면 O(n)이에요.'
+      - quiz:
+          q: '어떤 코드의 단계 수가 2n + 100이에요. n이 1만에서 2만이 되면 단계 수는 대략 몇 배가 될까요?'
+          options:
+            - '약 2배'
+            - '약 4배'
+            - '거의 그대로'
+          answer: 1
+          explain: '2n + 100은 O(n)이에요. n이 1만일 때 100은 전체의 0.5%라 거의 보이지 않고, n이 두 배면 단계도 약 두 배예요.'
+      - next: '한 겹 반복은 O(n)이었어요. 다른 모양의 코드는 어떻게 알아볼까요?'
+    recall: '입력의 크기 n이 늘 때 실행하는 단계 수가 늘어나는 모양을 나타내요. 걸리는 초는 컴퓨터와 상황마다 달라서 단계 수를 세요. 가장 빨리 자라는 항만 남기고 상수를 버려서 3n + 5를 O(n)이라고 써요. n이 커지면 모양의 차이가 상수의 차이를 이기기 때문이에요.'
   - id: q2
     title: 코드를 보고 시간 복잡도를 어떻게 알아보나요?
     conclusion:
@@ -121,6 +212,105 @@ questions:
     asks:
       - '본문의 예시: 코드 pairLoop에서 n이 2배가 되면 비교 횟수는 대략 몇 배가 되나 (약 4배)'
       - '옮긴 상황: `for (int i = 1; i < n; i *= 2)` 안에서 출력을 한 번 한다. n이 1024면 몇 번 출력하나 (10번. O(log n))'
+    body:
+      - p: '단계를 매번 하나씩 세지 않아도, 반복문의 **모양**을 보면 알 수 있어요. 자주 나오는 모양은 네 가지예요.'
+      - h3: 'O(1): 반복이 없어요'
+      - p: '배열의 `i`번째 칸을 읽는 `arr[i]`는 배열이 10칸이든 10만 칸이든 한 단계예요. 칸이 어디 있는지 바로 계산하기 때문이에요(배열과 연결 리스트 레슨에서 봐요). n과 상관없는 것을 **O(1)**이라고 써요.'
+      - h3: 'O(n): 한 겹 반복'
+      - p: '코드 predict처럼 n개를 한 번씩 보는 반복이에요.'
+      - h3: 'O(n²): 겹친 반복'
+      - code: pairLoop
+        notes:
+          - mark: i + 1
+            as: code
+            text: '안쪽 반복은 바깥의 `i` 다음부터 돌아서 같은 짝을 두 번 비교하지 않아요. 그래도 바깥이 한 번 돌 때마다 안쪽이 남은 만큼 돌아요.'
+      - p: '바깥 반복이 n번 돌 때마다 안쪽 반복이 돌아요. 비교 횟수는 (n-1) + (n-2) + ... + 1 = **n(n-1)/2**예요. n이 1천이면 499,500번이에요. 가장 빨리 자라는 항은 n²/2이고 상수 1/2을 버리면 **O(n²)**이에요. n이 2배면 비교는 약 4배, 100배면 약 1만 배가 돼요.'
+      - h3: 'O(log n): 반복마다 절반으로'
+      - code: halving
+        notes:
+          - mark: k /= 2
+            as: code
+            text: '반복할 때마다 남은 양이 절반이 돼요. 1이 될 때까지 몇 번 나누는지가 반복 횟수예요.'
+      - p: '1024를 절반씩 나누면 512, 256, ... 2, 1로 **10번** 만에 끝나요. 2를 10번 곱하면 1024이기 때문이에요. 이 "2를 몇 번 곱하면 n이 되나"를 **log n**이라고 써요. n이 1천이면 9번, 100만이면 19번이에요. n이 1천 배가 돼도 10번 남짓 늘어요. 정렬된 데이터에서 절반씩 줄여 찾는 이진 탐색이 이 모양이에요.'
+      - p: 'n을 바꿔 가며 네 모양의 단계 수를 견줘 보세요. 막대의 끝은 10n이에요.'
+      - widget:
+          kind: toggle
+          layout: [selector, gantt, duo, verdict]
+          selector:
+            label: 입력의 크기 n
+            options:
+              - {value: n10, label: '10'}
+              - {value: n1k, label: '1,000'}
+              - {value: n100k, label: '100,000'}
+          scenes:
+            n10:
+              gantt:
+                total: 100
+                axis: ['0', '50', '100']
+                rows:
+                  - {label: 'O(1)', bars: [{kind: hold, from: 0, to: 1}]}
+                  - {label: 'log n', bars: [{kind: hold, from: 0, to: 3}]}
+                  - {label: 'O(n)', bars: [{kind: hold, from: 0, to: 10}]}
+                  - {label: 'O(n²)', bars: [{kind: hold, from: 0, to: 45}]}
+              duo:
+                - label: 'O(1)과 O(log n)'
+                  rows: [{k: 'O(1)', v: '1'}, {k: 'O(log n)', v: '3'}]
+                - label: 'O(n)과 O(n²)'
+                  rows: [{k: 'O(n)', v: '10'}, {k: 'O(n²)', v: '45'}]
+              verdict: 'n이 10이면 네 모양 모두 100단계도 안 돼요. 어느 코드를 써도 차이를 느낄 수 없어요.'
+            n1k:
+              gantt:
+                total: 10000
+                axis: ['0', '5,000', '10,000']
+                rows:
+                  - {label: 'O(1)', bars: [{kind: hold, from: 0, to: 1}]}
+                  - {label: 'log n', bars: [{kind: hold, from: 0, to: 9}]}
+                  - {label: 'O(n)', bars: [{kind: hold, from: 0, to: 1000}]}
+                  - {label: 'O(n²)', bars: [{kind: fail, from: 0, to: 10000}]}
+              duo:
+                - label: 'O(1)과 O(log n)'
+                  rows: [{k: 'O(1)', v: '1'}, {k: 'O(log n)', v: '9'}]
+                - label: 'O(n)과 O(n²)'
+                  rows: [{k: 'O(n)', v: '1,000'}, {k: 'O(n²)', v: '499,500', mark: bad}]
+              verdict: 'O(n²)이 막대를 넘었어요. O(n)의 500배예요. O(log n)은 여전히 9단계예요.'
+            n100k:
+              gantt:
+                total: 1000000
+                axis: ['0', '500,000', '1,000,000']
+                rows:
+                  - {label: 'O(1)', bars: [{kind: hold, from: 0, to: 1}]}
+                  - {label: 'log n', bars: [{kind: hold, from: 0, to: 16}]}
+                  - {label: 'O(n)', bars: [{kind: hold, from: 0, to: 100000}]}
+                  - {label: 'O(n²)', bars: [{kind: fail, from: 0, to: 1000000}]}
+              duo:
+                - label: 'O(1)과 O(log n)'
+                  rows: [{k: 'O(1)', v: '1'}, {k: 'O(log n)', v: '16'}]
+                - label: 'O(n)과 O(n²)'
+                  rows: [{k: 'O(n)', v: '100,000'}, {k: 'O(n²)', v: '4,999,950,000', mark: bad}]
+              verdict: 'O(n²)은 약 50억 단계예요. 막대 5천 개를 이어야 닿아요. O(log n)은 1천 배 늘어난 n에서도 16단계예요.'
+      - ci:
+          key: shapes
+          label: 테스트가 센 단계 수 보기
+          source: TimeComplexityTest.loopShapes
+      - p: '이 넷 사이에 **O(n log n)**이 하나 더 있어요. 잘 만든 정렬이 이 모양이에요. O(n)보다 조금 느리고 O(n²)보다 훨씬 빨라요. 왜 그런지는 [정렬](lesson:sorting)에서 봐요.'
+      - h3: 한 줄 안에 숨은 반복
+      - p: '반복문이 안 보인다고 O(1)이 아니에요. 품절 상품을 숨기는 코드예요. `soldOutIds`가 `List`예요.'
+      - code: hiddenLoop
+        notes:
+          - mark: soldOutIds.contains(id)
+            as: code
+            text: '`ArrayList.contains`는 안에서 코드 predict처럼 처음부터 하나씩 `equals`로 비교해요. 한 줄이지만 O(m)이에요(m은 품절 목록의 크기).'
+      - p: '바깥 반복이 n번, 안의 `contains`가 m번 돌아서 전체는 **O(n×m)**이에요. 겹친 반복과 같아요. `soldOutIds`를 `HashSet`으로 바꾸면 `contains`가 반복하지 않고 평균 한 번에 찾아서(평균 O(1)) 전체가 O(n)이 돼요. `HashSet`이 어떻게 한 번에 찾는지는 [해시 테이블](lesson:hash-table)에서 봐요.'
+      - quiz:
+          q: '`for (int i = 1; i < n; i *= 2)` 안에서 출력을 한 번 해요. n이 1024면 몇 번 출력할까요?'
+          options:
+            - '1024번'
+            - '512번'
+            - '10번'
+          answer: 3
+          explain: '`i`가 1, 2, 4, ... 512로 두 배씩 늘어서 10번 돌아요. 절반씩 줄이는 반복과 같은 O(log n)이에요.'
+      - next: '그런데 코드 predict는 찾는 이메일이 맨 앞에 있으면 한 번에 끝나요. 그러면 O(n)이 맞을까요?'
+    recall: '반복문의 모양으로 알아봐요. 반복이 없으면 O(1), 한 겹이면 O(n), 겹치면 O(n²), 반복마다 절반씩 줄이면 O(log n)이에요. 정렬은 O(n log n)이에요. 한 줄 안에 숨은 반복도 세요. 반복 안에서 `List.contains`를 부르면 겹친 반복이고, `HashSet.contains`는 평균 O(1)이에요.'
   - id: q3
     title: 같은 코드도 입력에 따라 빠르기가 다른데, 빅오는 어느 경우를 말하나요?
     conclusion:
@@ -134,6 +324,33 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에 회원 1천 명이 있고 찾는 이메일이 맨 앞에 있다. 비교는 몇 번이고, 이 함수의 시간 복잡도는 O(1)이라고 말할 수 있나 (1번. 아니다. 빅오는 최악을 말하고 최악은 O(n)이다)'
       - '옮긴 상황: 정수 배열에서 가장 큰 값을 찾는 반복문은 값이 어떻게 놓여 있든 끝까지 돈다. 최선과 최악의 비교 횟수는 각각 어떻게 되나 (둘 다 n-1번. 최선과 최악이 같은 O(n)이다)'
+    body:
+      - p: '코드 predict는 찾는 이메일이 어디 있느냐에 따라 비교 횟수가 달라요. 회원 1천 명에서 맨 앞의 이메일을 찾으면 한 번에 끝나는 것을 위의 실제 출력에서 봤어요.'
+      - table:
+          head: [경우, 언제, 비교 횟수]
+          rows:
+            - ['최선', '맨 앞에 있을 때', '1번']
+            - ['최악', '없거나 맨 뒤에 있을 때', 'n번']
+            - ['평균', '아무 데나 있을 때', '약 n/2번']
+      - p: '평균 n/2도 상수 1/2을 버리면 O(n)이에요. 그러면 이 코드의 시간 복잡도는 무엇이라고 말할까요? 따로 말이 없으면 **최악**인 O(n)이에요.'
+      - ul:
+          - '**최선은 약속이 되지 않아요.** "운이 좋으면 한 번에 끝나요"로는 서버가 버틸지 알 수 없어요.'
+          - '**최악은 약속이 돼요.** "아무리 늦어도 n번 비교하면 끝나요"라고 말할 수 있어요.'
+      - p: '평균을 말할 때도 있어요. `HashSet.contains`의 O(1)은 **평균**이에요. 운이 나쁘면 더 걸리는 경우가 있어서, 이렇게 평균을 말할 때는 "평균 O(1)"처럼 붙여 말해요. 그 나쁜 경우가 언제인지는 [해시 테이블](lesson:hash-table)에서 봐요.'
+      - more:
+          summary: '더 알아보기: 가끔만 비싼 연산, 분할 상환'
+          body:
+            - p: '`ArrayList.add`는 안의 배열이 꽉 차면 더 큰 배열을 만들고 지금까지 넣은 것을 모두 복사해요. 그 한 번은 O(n)이에요. 하지만 배열을 넉넉히 늘려서 복사는 가끔만 일어나요. n번 넣는 동안의 비용을 모두 더해 n으로 나누면 한 번에 O(1)이에요. 이것을 **분할 상환 O(1)**이라고 해요. 자바 API 문서도 `add`를 이렇게 설명해요. 배열을 얼마나 늘리는지는 [배열과 연결 리스트](lesson:array-and-linked-list)에서 봐요.'
+      - quiz:
+          q: '코드 predict에 회원 1천 명이 있고, 찾는 이메일이 맨 앞에 있어서 비교 한 번에 끝났어요. 이 함수의 시간 복잡도를 O(1)이라고 말할 수 있을까요?'
+          options:
+            - '있다. 한 번에 끝났다'
+            - '없다. 빅오는 보통 최악을 말하고, 최악은 n번 비교하는 O(n)이다'
+            - '없다. 평균이 n번이라 O(n)이다'
+          answer: 2
+          explain: '한 번은 최선의 경우예요. 따로 말이 없으면 빅오는 최악을 말하고, 없는 이메일을 찾으면 n번 비교해요. 평균은 n번이 아니라 약 n/2번이에요.'
+      - next: 'O(n)과 O(n²)의 차이는 알았어요. 그 차이가 실제로 문제가 되는 때는 언제일까요?'
+    recall: '보통은 가장 오래 걸리는 최악을 말해요. 코드 predict는 맨 앞에 있으면 1번이지만 없으면 n번 비교해서 O(n)이에요. 최선은 약속이 되지 않고, 최악은 "아무리 늦어도 이 정도"라고 말해 줘요. `HashSet.contains`의 O(1)처럼 평균을 말할 때는 "평균"을 붙여요.'
   - id: q4
     title: 시간 복잡도의 차이는 언제 문제가 되나요?
     conclusion:
@@ -149,25 +366,107 @@ questions:
       - '본문의 예시: 코드 pairLoop를 `HashSet`에 넣으며 이미 있는지 보는 코드로 바꿨다. 시간 복잡도는 무엇에서 무엇으로 바뀌나 (O(n²)에서 O(n))'
       - '옮긴 상황: 상품 n개의 리스트를 돌며 각 상품의 id가 `List<Long> soldOutIds`(크기 m)에 있는지 `contains`로 본다. 시간 복잡도는 무엇이고, `soldOutIds`를 `HashSet`으로 바꾸면 무엇이 되나 (O(n×m), O(n))'
       - '실무 구역: 코드 matchSlow에서 주문 1만 건, 회원 1천 명이면 안쪽 비교는 몇 번 일어나나 (1천만 번)'
+    body:
+      - p: '같은 일을 다르게 하는 코드가 있어요. 이메일을 `HashSet`에 하나씩 넣으며 이미 있었는지 봐요.'
+      - code: setDup
+        notes:
+          - mark: '!seen.add(e)'
+            as: code
+            text: '`add`는 이미 있으면 false를 돌려줘요. 반복은 한 겹이고, 안의 확인은 평균 O(1)이라 전체가 O(n)이에요.'
+      - p: '코드 pairLoop(O(n²))와 이 코드(O(n))를 같은 이메일 배열로 돌려 걸린 시간을 쟀어요. 중복이 없는 배열이라 둘 다 끝까지 돌아요. n이 100일 때와 10만일 때를 견줘 보세요.'
+      - ci:
+          key: timing
+          label: 실제로 걸린 시간 보기
+          source: TimeComplexityTest.duplicateCheckTiming
+          code: timingRun
+      - p: 'n이 100이면 둘 다 1밀리초도 안 걸려요. 사람이 차이를 느낄 수 없어요. n이 10만이 되면 겹친 반복은 **몇 초에서 수십 초**가 걸리고, `HashSet`은 몇 밀리초에 끝나요. 숫자는 컴퓨터마다 다르지만 벌어지는 모양은 같아요. 두 코드의 결과(중복이 있는가)는 같아요.'
+      - p: '그래서 **테스트 데이터가 작으면 이 문제를 찾지 못해요.** 도입부의 화면이 그랬어요. 코드를 볼 때 "운영에서 이 n이 얼마까지 늘 수 있나"를 함께 생각해요.'
+      - h3: 반복 안의 O(n)을 찾아요
+      - p: 'O(n²)은 반복문이 두 겹으로 보일 때만 생기지 않아요. 질문 2의 숨은 반복처럼 **반복 안에서 O(n) 연산을 부르면** 겹친 반복과 같아요. 반복 안에 있는 `List.contains`, `List.indexOf`, `List.remove(Object)`가 그런 곳이에요. 찾는 쪽을 미리 `HashSet`이나 `HashMap`으로 만들어 두면 O(n)이 돼요.'
+      - p: '공짜는 아니에요. `HashSet`을 만드느라 n개를 한 번 더 담으니 **메모리를 더 써요.** 시간과 메모리를 바꾸는 선택이에요. 서버에서는 대개 몇 MB를 더 쓰고 수십 초를 아끼는 편이 나아요.'
+      - quiz:
+          q: '상품 n개를 돌며 각 상품의 id가 `List<Long> soldOutIds`(크기 m)에 있는지 `contains`로 봐요. `soldOutIds`를 `HashSet`으로 바꾸면 시간 복잡도는 어떻게 바뀔까요?'
+          options:
+            - 'O(n×m)에서 O(n)'
+            - 'O(n)에서 O(1)'
+            - '바뀌지 않는다. 반복은 그대로 한 겹이다'
+          answer: 1
+          explain: '`List.contains`는 m개를 하나씩 비교해서 전체가 O(n×m)이에요. `HashSet.contains`는 평균 O(1)이라 상품 n개를 도는 O(n)만 남아요.'
+    recall: '데이터가 늘었을 때 문제가 돼요. n이 100이면 O(n²)도 1밀리초 안에 끝나서 차이가 안 보이지만, 10만이면 몇 초 이상과 몇 밀리초로 벌어져요. 반복 안에서 `List.contains` 같은 O(n) 연산을 부르면 O(n²)이 되고, 찾는 쪽을 미리 `HashSet`이나 `HashMap`으로 만들어 두면 메모리를 조금 더 쓰고 O(n)으로 줄어요.'
 practice:
+  title: 서비스 코드에서는 이렇게 만나요
   says:
     - '서비스 코드에서 n이 되는 것: 한 요청이 DB에서 읽은 행 수, 화면 하나에 보이는 목록의 크기, 배치가 처리하는 건수. 테스트 데이터보다 운영 데이터가 수천 배 많은 경우가 흔하다'
     - '흔한 실수: 주문 목록과 회원 목록을 따로 읽은 뒤 코드 matchSlow처럼 이중 반복으로 짝짓는다. 주문 1만 건과 회원 1천 명이면 비교가 1천만 번이다. 고친 코드: 코드 matchFast처럼 회원을 id로 찾는 `Map`을 한 번 만들고, 주문마다 `get`한다. 비교 대신 `get` 1만 번이다. 두 코드를 같은 데이터로 돌려 비교 횟수(또는 `get` 횟수)와 결과가 같은 것을 테스트로 보인다'
     - '`Collectors.toMap`은 키가 겹치면 `IllegalStateException`을 던진다. 회원 id는 겹치지 않으니 괜찮지만, 겹칠 수 있는 값으로 맵을 만들 때는 합치는 방법을 넘긴다 (자바 API 문서 근거)'
     - '애초에 DB에서 조인으로 한 번에 읽는 방법도 있다. 그것은 조인(D2)과 JPA N+1 문제(P5)에서 다룬다. 여기서는 이미 메모리에 올라온 두 목록을 짝지을 때의 선택만 본다'
+  body:
+    - p: '서비스 코드에서 n이 되는 것은 한 요청이 DB에서 읽은 행 수, 화면 하나에 보이는 목록의 크기, 배치가 한 번에 처리하는 건수예요. 개발 DB에는 수십 건이 있어도 운영 DB에는 수만 건이 있는 일이 흔해요.'
+    - h3: '흔한 실수: 두 목록을 이중 반복으로 짝짓기'
+    - p: '주문 목록과 회원 목록을 따로 읽은 뒤, 주문마다 회원 이름을 채우는 코드예요.'
+    - code: matchSlow
+      notes:
+        - mark: 'for (Member m : members)'
+          as: code
+          text: '주문 하나마다 회원 전체를 돌아요. 주문 n건, 회원 m명이면 비교가 n×m번이에요.'
+    - p: '고친 코드는 회원을 id로 찾는 `Map`을 한 번 만들고, 주문마다 `get`해요.'
+    - code: matchFast
+      notes:
+        - mark: byId.get(o.memberId())
+          as: code
+          text: '`HashMap.get`은 평균 O(1)이에요. 맵을 만드는 데 m번, 찾는 데 n번이라 전체가 O(n + m)이에요.'
+    - p: '두 코드를 주문 1만 건, 회원 1천 명으로 돌렸어요.'
+    - ci:
+        key: match
+        label: 비교 횟수와 걸린 시간 보기
+        source: TimeComplexityTest.matchOrdersToMembers
+        code: matchRun
+    - p: '결과는 같고, 비교 **1천만 번**이 `get` **1만 번**으로 줄었어요. 회원과 주문이 열 배씩 늘면 앞의 코드는 비교가 100배 늘고, 뒤의 코드는 10배 늘어요.'
+    - h3: 'toMap은 키가 겹치면 예외를 던져요'
+    - p: '회원 id는 겹치지 않으니 위 코드는 괜찮아요. 이메일이나 이름처럼 겹칠 수 있는 값으로 맵을 만들면 `Collectors.toMap`이 `IllegalStateException`을 던져요. 같은 id의 회원 둘로 돌려 봤어요.'
+    - ci:
+        key: tomap
+        label: 실제 예외 보기
+        source: TimeComplexityTest.toMapDuplicateKey
+    - p: '겹칠 수 있으면 셋째 인자로 무엇을 남길지 넘겨요.'
+    - code: toMapMerge
+      notes:
+        - mark: '(a, b) -> a'
+          as: code
+          text: '같은 키가 또 나오면 먼저 넣은 것을 남겨요. 어느 것을 남길지는 업무 규칙이에요.'
+    - muted: '애초에 DB에서 조인으로 한 번에 읽는 방법도 있어요. 그것은 조인과 JPA N+1 문제 레슨에서 다뤄요. 여기서는 이미 메모리에 올라온 두 목록을 짝지을 때의 선택만 봤어요. 근거: `toMap`의 키 중복은 [Collectors API 문서](link:collectors), 실제 예외는 테스트로 확인했어요.'
+interview:
+  question: 시간 복잡도가 무엇이고, 코드를 보고 어떻게 알아보나요?
+  model:
+    - label: 정의
+      text: 입력의 크기 n이 늘 때 실행하는 단계 수가 늘어나는 모양입니다. 걸리는 초는 환경마다 달라서 단계 수를 세고, 가장 빨리 자라는 항만 남긴 빅오로 씁니다. 따로 말이 없으면 최악의 경우를 말합니다.
+    - label: 원리
+      text: 반복이 없으면 O(1), 한 겹 반복은 O(n), 겹친 반복은 O(n²), 반복마다 절반씩 줄이면 O(log n)입니다. List.contains처럼 API 한 줄 안에 반복이 숨어 있기도 해서, 반복 안에서 부르면 O(n²)이 됩니다.
+    - label: 주의할 점
+      text: n이 작을 때는 차이가 보이지 않아서 테스트에서 놓치기 쉽습니다. 반복 안의 O(n) 탐색은 HashSet이나 HashMap을 미리 만들어 O(n)으로 줄이는데, 그만큼 메모리를 더 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문 목록과 회원 목록을 이중 반복으로 짝짓던 코드를 회원 id로 찾는 Map으로 바꿔 응답 시간을 줄였습니다.'
+verified: 이 레슨의 횟수와 시간은 짐작이 아니라 자바 21에서 반복문을 돌려 센 값이에요. 걸린 시간은 환경마다 달라서 숫자 대신 결과가 같은 것만 테스트로 확인해요. 코드가 바뀔 때마다 테스트([TimeComplexityTest](link:test))가 다시 돌아요.
+footer: '근거: `ArrayList`의 `contains`와 `add`의 비용은 API 문서([링크](link:arrayList)), `HashSet`의 상수 시간은 API 문서([링크](link:hashSet)), `toMap`의 키 중복은 API 문서([링크](link:collectors)). 횟수는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict는 찾는 값이 없을 때 회원 수만큼 `equals`를 부른다'
     how: '`equals`를 세는 이메일 래퍼나 카운터로 n이 1천, 10만일 때를 센다'
+    test: TimeComplexityTest.linearSearchCountsEquals
   - claim: '코드 pairLoop의 비교 횟수는 n(n-1)/2다'
     how: '카운터로 n이 1천일 때 499500을 확인한다'
+    test: TimeComplexityTest.loopShapes
   - claim: '코드 halving의 반복 횟수는 n이 1024면 10, 100만이면 19다'
     how: '`steps`를 센다'
+    test: TimeComplexityTest.loopShapes
   - claim: '중복 찾기를 `HashSet`으로 바꾸면 n이 10만일 때 겹친 반복보다 훨씬 빨리 끝난다'
     how: '두 방법의 걸린 시간을 `CiOutput`에 남긴다. 배수는 단정하지 않고, 결과(중복 여부)가 같은 것만 단정한다'
+    test: TimeComplexityTest.duplicateCheckTiming
   - claim: '코드 matchSlow와 matchFast는 같은 결과를 내고, 비교 횟수는 주문 수 곱하기 회원 수와 주문 수다'
     how: '주문 1만 건, 회원 1천 명으로 두 코드를 돌려 결과의 회원 이름과 센 횟수를 본다'
+    test: TimeComplexityTest.matchOrdersToMembers
   - claim: '`Collectors.toMap`은 키가 겹치면 `IllegalStateException`을 던진다'
     how: '같은 id의 회원 둘로 맵을 만든다'
+    test: TimeComplexityTest.toMapDuplicateKey
 sources:
   - '`List.contains`와 `HashSet.contains`의 비용: `ArrayList`, `HashSet` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashSet.html'
   - '`ArrayList.add`의 분할 상환 상수 시간: `ArrayList` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayList.html'
