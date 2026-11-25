@@ -32,6 +32,8 @@ dependencies {
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // 테스트와 운영 과정(T3, T4): 안쪽 테스트 클래스를 테스트 안에서 돌려 결과를 센다 (버전은 스프링 부트가 관리)
+    testImplementation 'org.junit.platform:junit-platform-testkit'
 
     // AOP와 감사 로그 레슨 (@Aspect)
     implementation 'org.springframework.boot:spring-boot-starter-aop'
