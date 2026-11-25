@@ -1,0 +1,150 @@
+# 가상 스레드 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 가상 스레드
+unit: 운영체제와 동시성
+roadmap: C12
+type: 자바 실행
+prerequisites:
+  - {slug: thread-pool, title: 스레드 풀}
+  - {slug: sync-async-blocking, title: 동기와 비동기, 블로킹과 논블로킹}
+assume: '자바 21(OpenJDK). 스레드 풀과 ExecutorService(스레드 풀 레슨). 블로킹된 스레드는 다른 일을 못 하고, 동시에 기다리는 수만큼 스레드가 필요하다는 것(동기와 비동기, 블로킹과 논블로킹 레슨).'
+example: '100ms 동안 외부 API를 기다리는 작업 1만 개. 플랫폼 스레드 풀과 가상 스레드로 각각 돌려 시간을 재고, 가상 스레드가 기다리는 동안 무엇이 일어나는지, synchronized 안에서 기다리면 무엇이 달라지는지 봐요. 실무 구역에서는 스프링 부트의 `spring.threads.virtual.enabled`로 옮겨요.'
+intro:
+  - '외부 API를 기다리는 시간이 긴 서비스예요. 톰캣 스레드 200개가 모두 기다리느라 묶여서 요청이 줄을 서요. 스레드를 2000개로 늘리자니 메모리가 걱정이고, 웹플럭스로 다시 짜자니 코드가 모두 바뀌어요.'
+  - '자바 21의 가상 스레드는 블로킹 코드를 그대로 두고도 기다림이 스레드를 붙잡지 않게 해요. 스프링 부트는 설정 한 줄로 톰캣의 요청 처리를 가상 스레드로 바꿔요. 대신 맞는 일과 맞지 않는 일이 있고, 자바 21에는 조심할 함정이 있어요.'
+  - '이 레슨에서는 기다리는 작업 1만 개를 두 방식으로 돌려 시간을 재고, 가상 스레드가 기다리는 동안 실제 스레드(캐리어)를 내려놓는 것과, synchronized 안에서는 내려놓지 못하는 것을 확인해요.'
+covers:
+  - topic: '플랫폼 스레드: 운영체제의 스레드 하나에 하나씩 붙는다. 만들기 비싸고 수천 개가 한계다'
+    where: '질문 1'
+  - topic: '가상 스레드: JVM이 관리하는 가벼운 스레드. 적은 수의 플랫폼 스레드(캐리어) 위에 올라탔다 내려온다. 수백만 개를 만들 수 있다'
+    where: '질문 1. J18에서 받은 항목'
+  - topic: 'Thread.ofVirtual(), Executors.newVirtualThreadPerTaskExecutor(), Thread.isVirtual()'
+    where: '질문 1'
+  - topic: '가상 스레드가 블로킹 호출(sleep, 소켓 읽기, 락 기다리기)을 만나면 캐리어에서 내려오고, 캐리어는 다른 가상 스레드를 실행한다. 블로킹 코드 그대로 논블로킹처럼 동작한다'
+    where: '질문 2'
+  - topic: '기다리는 작업 1만 개를 가상 스레드로 돌리면 기다림 한 번 시간에 가깝게 끝난다'
+    where: '질문 2'
+  - topic: '계산만 하는 일은 빨라지지 않는다. 코어 수가 그대로다'
+    where: '질문 3'
+  - topic: '자바 21에서 synchronized 안에서 블로킹하면 캐리어에 고정(pinning)되어 내려오지 못한다. ReentrantLock은 괜찮다. 자바 24(JEP 491)에서 고쳐졌다'
+    where: '질문 3'
+  - topic: '가상 스레드는 풀에 모으지 않는다. 작업마다 하나씩 만든다. 동시 수를 제한하려면 세마포어를 쓴다'
+    where: '질문 3. 세마포어는 뮤텍스와 세마포어(C4)'
+  - topic: '가상 스레드가 많으면 ThreadLocal에 큰 객체를 두는 비용이 커진다'
+    where: '질문 3의 더 알아보기. ThreadLocal은 스레드에 안전한 객체(C6)'
+  - topic: '스프링 부트 3.2+의 spring.threads.virtual.enabled=true: 톰캣과 @Async와 스케줄러가 가상 스레드를 쓴다'
+    where: '실무에서는'
+  - topic: '가상 스레드로 바꿔도 DB 커넥션 풀은 그대로라서 병목이 커넥션 풀로 옮겨 간다'
+    where: '실무에서는. 풀 크기는 스레드 풀과 커넥션 풀 크기(A11)'
+  - topic: '구조적 동시성, 스코프 값(미리 보기 기능)'
+    where: '다루지 않음: 자바 21에서는 미리 보기라 다루지 않는다'
+codes:
+  predict: |-
+    // 작업마다 100ms 기다린다
+    Runnable io = () -> sleep(100);
+
+    // 1. 플랫폼 스레드 100개 풀
+    var a = Executors.newFixedThreadPool(100);
+    // 2. 작업마다 가상 스레드
+    var b = Executors
+        .newVirtualThreadPerTaskExecutor();
+    // 각각 작업 1만 개를 넣고 끝나길 기다린다
+  create: |-
+    Thread vt = Thread.ofVirtual()
+        .start(() -> work());
+
+    try (var ex = Executors
+        .newVirtualThreadPerTaskExecutor()) {
+      ex.submit(() -> callApi());
+    }
+  carrier: |-
+    Thread.ofVirtual().start(() ->
+        System.out.println(Thread.currentThread()));
+    // VirtualThread[#31]/runnable@
+    //   ForkJoinPool-1-worker-1
+  pinned: |-
+    synchronized (lock) {
+      Thread.sleep(200);  // 캐리어를 붙잡는다
+    }
+  notPinned: |-
+    lock.lock();
+    try {
+      Thread.sleep(200);  // 캐리어를 내려놓는다
+    } finally {
+      lock.unlock();
+    }
+  springConfig: |-
+    # application.yml (스프링 부트 3.2+)
+    spring:
+      threads:
+        virtual:
+          enabled: true
+predict:
+  text: '100ms 기다리는 작업 1만 개를 플랫폼 스레드 100개 풀과, 작업마다 가상 스레드를 만드는 실행기로 각각 돌려요. 걸리는 시간은 대략 어떻게 될까요? 보기: 둘 다 10초쯤 / 풀은 10초쯤, 가상 스레드는 1초 안쪽 / 가상 스레드가 더 느리다'
+  answer: '풀은 10초쯤(100개씩 백 번), 가상 스레드는 1초 안쪽이다. 기다리는 동안 캐리어를 내려놓아 1만 개가 함께 기다린다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 가상 스레드는 플랫폼 스레드와 무엇이 다른가요?
+    conclusion:
+      lead: '플랫폼 스레드는 운영체제의 스레드에 하나씩 붙지만, 가상 스레드는 JVM이 관리하며 적은 수의 플랫폼 스레드(캐리어) 위에 번갈아 올라타요.'
+      sub: '운영체제의 스레드를 따로 갖지 않아 만들기 싸고, 수십만 개를 만들어도 돼요. 코드는 평범한 `Thread`와 같아요.'
+    says:
+      - '지금까지의 자바 스레드는 플랫폼 스레드다. 운영체제의 스레드 하나에 하나씩 붙고, 스택 메모리를 크게 잡고(J14), 만들 때 시스템 콜이 든다(C11). 수천 개가 현실적인 한계다'
+      - '가상 스레드는 JVM 안의 객체다. 실행할 때만 캐리어라는 플랫폼 스레드에 올라타고, 스택은 필요한 만큼 힙에 둔다. 캐리어는 코어 수만큼의 `ForkJoinPool`이다'
+      - '만드는 법: 코드 create. `Thread.ofVirtual().start(...)` 또는 `Executors.newVirtualThreadPerTaskExecutor()`. `Thread.currentThread().isVirtual()`이 true다. 코드 carrier처럼 출력하면 어느 캐리어에 올라타 있는지 보인다'
+      - '가상 스레드 10만 개를 만들어 모두 끝나는 것을 보인다. 같은 수의 플랫폼 스레드는 만들지 않는다(기계를 멈출 수 있다)'
+    asks:
+      - '본문의 예시: `Thread.ofVirtual().start(...)`로 만든 스레드 안에서 `Thread.currentThread().isVirtual()`은 (true)'
+      - '옮긴 상황: 코어 8개 기계에서 가상 스레드 1만 개가 동시에 계산 없이 기다리고 있다. 운영체제가 보는 이 JVM의 스레드는 대략 몇 개 늘었나 (1만 개가 아니라 캐리어 수 정도, 코어 수만큼이다)'
+  - id: q2
+    title: 가상 스레드가 블로킹 호출을 만나면 무슨 일이 생기나요?
+    conclusion:
+      lead: '캐리어에서 내려와 기다리고, 그동안 캐리어는 다른 가상 스레드를 실행해요. 답이 오면 다시 아무 캐리어에나 올라타 이어서 실행해요.'
+      sub: '그래서 블로킹 코드를 그대로 둬도 기다림이 실제 스레드를 붙잡지 않아요. 기다리는 일 1만 개가 기다림 한 번 시간에 가깝게 끝나요.'
+    says:
+      - '가상 스레드가 `sleep`, 소켓 읽기, 락 기다리기 같은 블로킹 호출을 만나면 JVM이 그 가상 스레드의 스택을 힙에 두고 캐리어에서 내린다. 캐리어는 다음 가상 스레드를 실행한다. C9의 "답이 오면 알려 달라"를 JVM이 대신 해 주는 셈이다'
+      - '예측의 답을 밝힌다. 100ms 작업 1만 개가 플랫폼 스레드 100개 풀에서는 10초 남짓, 가상 스레드로는 1초 안쪽에 끝난다. 실제 시간을 보인다'
+      - '같은 가상 스레드가 기다리기 전과 뒤에 다른 캐리어에서 돌 수 있다. 스레드 이름의 캐리어 부분이 바뀌는 것을 보인다'
+      - '코드는 동기 블로킹 그대로다(C9). 콜백이나 Mono를 쓰지 않고 순서대로 읽힌다'
+    widget:
+      kind: steps
+      note: '캐리어 2개와 가상 스레드 4개. duo 왼쪽은 캐리어가 실행 중인 가상 스레드, 오른쪽은 기다리는 가상 스레드. 단계: VT1, VT2가 캐리어에 올라탐, VT1이 API를 기다리며 내려옴, VT3이 올라탐, VT2가 내려옴, VT4가 올라탐, VT1의 답이 와서 빈 캐리어에 다시 올라탐. verdict: 캐리어 둘이 넷을 돌린다'
+    asks:
+      - '본문의 예시: 100ms 기다리는 작업 1만 개를 newVirtualThreadPerTaskExecutor로 돌렸다. 대략 얼마나 걸리나 (1초 안쪽. 1만 개가 함께 기다린다)'
+      - '옮긴 상황: 가상 스레드가 소켓에서 응답을 기다리는 동안 그 가상 스레드를 실행하던 캐리어는 무엇을 하나 (다른 가상 스레드를 실행한다)'
+  - id: q3
+    title: 가상 스레드에 맞는 일과 맞지 않는 일은 무엇인가요?
+    conclusion:
+      lead: '기다리는 시간이 긴 입출력 중심의 일에 맞고, 계산만 하는 일은 빨라지지 않아요. 자바 21에서는 synchronized 안에서 기다리면 캐리어에 붙잡혀 이점이 사라져요.'
+      sub: '가상 스레드는 풀에 모으지 않고 작업마다 하나씩 만들어요. 동시에 몇 개까지 할지는 세마포어로 정해요.'
+    says:
+      - '계산 중심: 코어 수가 그대로라 가상 스레드로 바꿔도 빨라지지 않는다(C2의 질문 4와 같다)'
+      - '고정(pinning): 자바 21에서 가상 스레드가 `synchronized` 블록 안에서 블로킹하면 캐리어에서 내려오지 못한다. 캐리어를 하나로 줄인 JVM에서 synchronized 안에서 200ms씩 자는 가상 스레드 둘은 400ms, ReentrantLock이면 200ms 남짓이다. 실제 시간을 보인다. 자바 24(JEP 491)부터는 synchronized도 내려온다'
+      - '풀에 모으지 않는다: 가상 스레드는 싸서 다시 쓸 이유가 없다. 고정 크기 풀에 넣으면 동시 수가 풀 크기로 묶여 이점이 사라진다. 외부 API의 동시 호출 수 같은 제한은 C4의 세마포어로 한다'
+      - '더 알아보기: 가상 스레드마다 ThreadLocal의 값이 따로 있다. 가상 스레드가 수십만 개면 ThreadLocal에 큰 객체를 캐시하던 습관이 메모리를 많이 쓴다'
+    asks:
+      - '본문의 예시: 자바 21에서 캐리어가 하나뿐일 때, 서로 다른 락의 synchronized 블록 안에서 200ms씩 자는 가상 스레드 둘은 모두 끝나는 데 얼마나 걸리나 (400ms쯤. 고정되어 하나씩 실행된다)'
+      - '옮긴 상황: 이미지 크기를 바꾸는 계산 작업 100개를 가상 스레드로 바꿨다. 코어는 8개다. 플랫폼 스레드 8개 풀보다 빨라지나 (빨라지지 않는다. 계산은 코어 수만큼만 동시에 한다)'
+      - '실무 구역: spring.threads.virtual.enabled=true로 바꾼 뒤 동시 요청이 2000개로 늘었는데 DB 커넥션 풀은 10개다. 요청은 어디서 기다리나 (커넥션 풀에서 커넥션을 기다린다)'
+practice:
+  says:
+    - '스프링 부트 3.2부터 코드 springConfig 한 줄로 톰캣의 요청 처리, `@Async`의 기본 실행기, 스케줄러가 가상 스레드를 쓴다(스프링 부트 문서 근거, 이 저장소의 테스트는 순수 자바로 원리를 보인다)'
+    - '병목이 옮겨 간다: 요청마다 스레드가 묶이던 한계는 사라지지만, DB 커넥션 풀(기본 10)은 그대로다. 2000개의 요청이 커넥션 10개를 기다린다. 커넥션을 기다리는 시간을 보고 풀 크기와 DB가 감당할 수를 함께 정한다(A11)'
+    - '흔한 실수: 가상 스레드로 바꾼 뒤에도 오래 기다리는 코드를 `synchronized`로 감싸 둔다(자바 21). 고친 코드: `ReentrantLock`으로 바꾸거나 자바 24 이상으로 올린다. 질문 3의 측정을 근거로 든다. 고정된 곳은 `-Djdk.tracePinnedThreads=full`로 찾는다(자바 21 문서 근거)'
+    - '또 하나의 실수: 가상 스레드를 `newFixedThreadPool`처럼 풀로 만들거나, 외부 API 보호를 풀 크기에 맡긴다. 세마포어로 바꾼다'
+claims:
+  - claim: '가상 스레드 안에서 isVirtual()은 true이고, 가상 스레드 10만 개를 만들어 모두 끝낼 수 있다'
+    how: 'newVirtualThreadPerTaskExecutor로 10만 개를 넣고 모두 끝나는지 본다'
+  - claim: '100ms 기다리는 작업 1만 개는 플랫폼 스레드 100개 풀에서 10초 가까이 걸리고, 가상 스레드로는 3초 안에 끝난다'
+    how: '두 실행기로 시간을 잰다. 풀 쪽은 9.9초 이상인지 본다. 시간이 길어 작업 수를 줄일 수 있다'
+  - claim: '같은 가상 스레드가 기다리기 전과 뒤에 다른 캐리어에서 돌 수 있다'
+    how: '여러 가상 스레드에서 sleep 전후의 캐리어 이름을 모아 한 번이라도 바뀌는지 본다'
+  - claim: '캐리어를 하나로 줄인 JVM에서 synchronized 안에서 200ms 자는 가상 스레드 둘은 400ms 가까이, ReentrantLock이면 200ms 남짓 걸린다(자바 21)'
+    how: '`ChildJvm`에 -Djdk.virtualThreadScheduler.parallelism=1과 maxPoolSize=1을 주고 두 경우의 시간을 잰다'
+sources:
+  - '가상 스레드: JEP 444 https://openjdk.org/jeps/444'
+  - '`Thread.ofVirtual`, `isVirtual`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html'
+  - '고정(pinning)과 tracePinnedThreads: 자바 21 문서 https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html'
+  - 'synchronized의 고정이 풀린 것: JEP 491 https://openjdk.org/jeps/491'
+  - '`spring.threads.virtual.enabled`: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.virtual-threads'
