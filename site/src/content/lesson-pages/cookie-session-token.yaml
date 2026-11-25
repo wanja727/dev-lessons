@@ -1,14 +1,36 @@
 # 쿠키, 세션, 토큰
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/cookie-session-token.yaml에 있다.
 title: 쿠키, 세션, 토큰
-description: 쿠키가 왜 필요한지, 세션 방식과 토큰(JWT) 방식이 로그인 상태를 어떻게 유지하는지, 둘이 무엇을 얻고 무엇을 잃는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
+description: 쿠키가 왜 필요한지, 세션 방식과 토큰(JWT) 방식이 로그인 상태를 어떻게 유지하는지, 둘이 무엇을 얻고 무엇을 잃는지, 스프링에서는 어떻게 쓰는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
-minutes: 15
+minutes: 20
 roadmap: N7
 type: 개념 설명
 prerequisites: []
 assume: HTTP 요청과 응답에 헤더가 있다는 것. JWT는 서명만 한 형태를 다뤄요. 쿠키의 보안 속성과 XSS, CSRF는 웹 보안 기초 레슨에서 다뤄요.
-example: 사용자 kim이 쇼핑몰에 로그인하고 내 정보(GET /me)를 봐요. 코드 대신 요청과 응답의 헤더를 보여 줘요.
+example: 사용자 kim이 쇼핑몰에 로그인하고 내 정보(GET /me)를 봐요. 질문에서는 요청과 응답의 헤더를 보여 주고, 실무 구역에서 같은 일을 스프링 컨트롤러로 옮겨요.
+intro:
+  - 로그인은 한 번 했는데, 서버는 그다음 요청이 같은 사람의 것인지 어떻게 알까요? 서버를 한 대에서 두 대로 늘린 날 사용자들의 로그인이 풀리는 일, 정지시킨 계정이 한동안 계속 들어오는 일은 이 질문의 답을 모를 때 생겨요.
+  - 스프링 개발자는 이 답 위에서 일해요. 컨트롤러가 받는 `HttpSession`, 스프링 시큐리티의 로그인, `Authorization` 헤더의 JWT가 모두 여기서 나와요. 세션을 쓸지 토큰을 쓸지, 세션을 어디에 저장할지, 토큰의 만료를 얼마로 잡을지는 개발자가 정해야 해요.
+  - 이 레슨에서는 실제 톰캣 서버에 요청을 보내 받은 응답으로 쿠키, 세션, JWT가 하는 일을 확인하고, 마지막에 스프링 코드로 옮겨 봐요.
+covers:
+  - {topic: HTTP는 무상태라서 누구인지 알려 주는 값이 요청마다 필요하다, where: 질문 1}
+  - {topic: 'Set-Cookie와 Cookie 헤더, 브라우저가 자동으로 보낸다는 것', where: 질문 1}
+  - {topic: 쿠키의 값은 사용자가 바꿀 수 있다, where: 질문 1}
+  - {topic: '쿠키가 지워지는 때(Max-Age)와 보내는 범위(Domain, Path)', where: 질문 1의 더 알아보기}
+  - {topic: '세션과 세션 ID, JSESSIONID', where: 질문 2}
+  - {topic: 로그아웃은 서버가 세션을 지우는 일이다, where: 질문 2}
+  - {topic: 서버가 여러 대이거나 다시 켜질 때의 세션과 함께 쓰는 세션 저장소, where: '질문 2, 실무에서는'}
+  - {topic: 'JWT의 세 부분, 서명, 만료 시간', where: 질문 3}
+  - {topic: JWT의 페이로드는 누구나 읽을 수 있다, where: 질문 3}
+  - {topic: '세션과 JWT가 얻는 것과 잃는 것, 만료 전의 토큰은 막기 어렵다', where: 질문 4}
+  - {topic: 리프레시 토큰, where: '질문 4의 더 알아보기. 자세한 것은 인증과 인가(S12)'}
+  - {topic: '스프링에서 세션 쓰기: HttpSession, @SessionAttribute, 세션 만료 시간', where: 실무에서는}
+  - {topic: '스프링에서 세션 저장소를 Redis로 옮기기: Spring Session', where: 실무에서는}
+  - {topic: '스프링에서 JWT 확인하기: 스프링 시큐리티의 리소스 서버', where: '실무에서는. 필터 체인은 인증과 인가(S12)'}
+  - {topic: '쿠키의 보안 속성(HttpOnly, Secure, SameSite), XSS, CSRF, 토큰을 브라우저 어디에 두나', where: '다루지 않음: 웹 보안 기초(N10)'}
+  - {topic: 로그인할 때 세션 ID를 바꾸는 것(세션 고정 공격), where: '다루지 않음: 인증과 인가(S12)'}
+  - {topic: OAuth 2.0과 소셜 로그인, where: '다루지 않음: OAuth 2.0과 소셜 로그인(N8)'}
 codes:
   setCookie: |-
     HTTP/1.1 200 OK
@@ -72,8 +94,102 @@ codes:
 
     GET /me HTTP/1.1
     Authorization: Bearer (받은 토큰)
+  springController: |-
+    @PostMapping("/login")
+    String login(@RequestParam String user,
+        HttpServletRequest request) {
+      HttpSession session =
+          [[request.getSession()]];
+      session.setAttribute("user", user);
+      return user + " 로그인";
+    }
+
+    @GetMapping("/me")
+    ResponseEntity<String> me(
+        [[@SessionAttribute]](name = "user",
+            required = false) String user) {
+      if (user == null) {
+        return ResponseEntity.status(401)
+            .body("로그인 필요");
+      }
+      return ResponseEntity.ok(user + "의 정보");
+    }
+
+    @PostMapping("/logout")
+    String logout(HttpSession session) {
+      [[session.invalidate()]];
+      return "로그아웃";
+    }
+  springRun: |-
+    POST /login?user=kim HTTP/1.1
+
+    GET /me HTTP/1.1
+    Cookie: JSESSIONID=(받은 값)
+
+    POST /logout HTTP/1.1
+    Cookie: JSESSIONID=(받은 값)
+
+    GET /me HTTP/1.1
+    Cookie: JSESSIONID=(받은 값)
+  springMistake: |-
+    // 로그인하지 않아도 부르는 주소
+    @GetMapping("/cart/count")
+    String cartCount([[HttpSession session]]) {
+      Object user =
+          session.getAttribute("user");
+      return user == null ? "0" : "3";
+    }
+  springFixed: |-
+    @GetMapping("/cart/count")
+    String cartCount(
+        [[@SessionAttribute]](name = "user",
+            required = false) String user) {
+      return user == null ? "0" : "3";
+    }
+  anonymousRun: |-
+    # 쿠키 없이, 로그인하지 않은 채로
+    GET /cart/count HTTP/1.1
+  redisGradle: |-
+    implementation 'org.springframework.boot:⤷
+    spring-boot-starter-data-redis'
+    implementation 'org.springframework.session:⤷
+    [[spring-session-data-redis]]'
+  sessionYml: |-
+    spring:
+      data:
+        redis:
+          host: redis.internal
+          port: 6379
+    server:
+      servlet:
+        session:
+          [[timeout: 30m]]
+  jwtSecurity: |-
+    @Bean
+    SecurityFilterChain api(HttpSecurity http)
+        throws Exception {
+      http
+        .sessionManagement(s -> s
+          .sessionCreationPolicy(
+            [[SessionCreationPolicy.STATELESS]]))
+        .oauth2ResourceServer(o -> o
+          .jwt(Customizer.withDefaults()));
+      return http.build();
+    }
+
+    @Bean
+    JwtDecoder jwtDecoder(SecretKey key) {
+      return [[NimbusJwtDecoder]]
+          .withSecretKey(key)
+          .build();
+    }
 links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cookiesessiontoken/CookieSessionTokenTest.java
+  springTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cookiesessiontoken/SpringSessionPracticeTest.java
+  mvcArguments: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/arguments.html
+  bootSession: https://docs.spring.io/spring-boot/reference/web/spring-session.html
+  sessionRedis: https://docs.spring.io/spring-session/reference/guides/boot-redis.html
+  resourceServer: https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html
 predict:
   title: 요청이 다른 서버로 가면 어떻게 될까요?
   text: 쇼핑몰에 서버 A와 B가 있어요. 두 서버는 로그인한 사용자의 정보(세션)를 각자 자기 메모리에만 저장해요. kim이 서버 A에서 로그인했고, 다음 요청은 서버 B로 갔어요. B는 이 요청을 어떻게 처리할까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.
@@ -127,6 +243,13 @@ questions:
           source: CookieSessionTokenTest.serverCannotTellEditedCookie
           code: roleRun
       - p: 관리자 화면이 열렸어요. 서버는 받은 값이 자기가 준 그대로인지, 사용자가 고친 것인지 구별하지 못해요. 그래서 권한이나 사용자 이름처럼 **서버가 믿어야 하는 값을 쿠키에 그대로 담으면 안 돼요**.
+      - more:
+          summary: '더 알아보기: 쿠키는 언제 지워지고, 어디로 보내지나요?'
+          body:
+            - ul:
+                - '**지워지는 때.** 서버가 `Set-Cookie`에 `Max-Age`(남은 초)나 `Expires`(날짜)를 적으면 브라우저는 그때까지 쿠키를 보관해요. 적지 않으면 브라우저를 닫을 때까지만 보관해요. "로그인 유지"는 이 값을 길게 잡는 거예요.'
+                - '**보내는 범위.** 브라우저는 쿠키를 준 사이트로 가는 요청에만 그 쿠키를 넣어요. `Domain`과 `Path` 속성으로 범위를 더 넓히거나 좁혀요.'
+            - muted: 브라우저에 따라 닫았다 열 때 탭을 되살리면서 쿠키도 남기기도 해요.
       - quiz:
           q: '브라우저가 응답에서 `Set-Cookie: lang=ko`를 받았어요. 같은 사이트로 가는 다음 요청에 이 값을 넣는 것은 누구일까요?'
           options:
@@ -423,6 +546,85 @@ questions:
           answer: 1
           explain: 어느 서버로 요청이 가도 같은 목록을 봐야 하니, 서버들이 함께 쓰는 저장소가 필요해요. 세션 방식이 치르던 값을 다시 치르는 셈이에요.
     recall: 세션은 서버가 세션을 지워 로그인을 바로 끊을 수 있지만, 서버가 여러 대면 세션 저장소를 함께 써야 해요. JWT는 서버가 저장하지 않아 같은 서명 키만 있으면 어느 서버든 확인하지만, 만료 전의 토큰은 막기 어려워요. 그래서 JWT는 만료 시간을 짧게 잡아요.
+practice:
+  title: 스프링에서는 이렇게 써요
+  says:
+    - '스프링 MVC 컨트롤러에서 세션 쓰기: 로그인할 때 request.getSession()으로 세션을 만들어 값을 넣고, 읽을 때는 @SessionAttribute(required = false)로 받고, 로그아웃은 session.invalidate()다. JSESSIONID 쿠키는 톰캣이 알아서 준다'
+    - '흔한 실수: 컨트롤러가 HttpSession을 파라미터로 받으면 로그인하지 않은 요청에도 세션이 만들어진다. 읽기만 할 때는 @SessionAttribute(required = false)나 request.getSession(false)를 쓴다'
+    - '세션 만료 시간은 server.servlet.session.timeout으로 정하고 기본값은 30분이다'
+    - '서버가 여러 대면 Spring Session으로 세션을 Redis에 둔다. 의존성과 접속 설정만 더하고 컨트롤러는 그대로다. 쿠키 이름이 SESSION으로 바뀐다 (공식 문서 근거)'
+    - 'JWT의 서명과 만료 시간 확인은 직접 짜지 않고 스프링 시큐리티의 리소스 서버(JwtDecoder)에 맡긴다. 세션을 만들지 않게 STATELESS로 둔다 (공식 문서 근거)'
+  body:
+    - p: 질문 넷에서 본 것은 스프링 없이도 성립하는 원리예요. 여기서는 같은 일을 스프링 부트 3.5의 코드와 설정으로 옮겨요. 세션을 쓰는 코드는 테스트로 확인했고, Redis와 JWT 설정은 프로젝트에 의존성을 더해야 해서 공식 문서를 근거로 적었어요.
+    - h3: 컨트롤러에서 세션 쓰기
+    - p: 세션 ID를 만들고 `Set-Cookie`로 주는 일은 톰캣이 해요. 컨트롤러는 세션에 값을 넣고 꺼내기만 해요.
+    - code: springController
+      notes:
+        - mark: request.getSession()
+          as: code
+          text: 세션이 없으면 새로 만들어요. 이때 톰캣이 응답에 `JSESSIONID` 쿠키를 넣어요.
+        - mark: '@SessionAttribute'
+          as: anno
+          text: 세션에서 `user`를 꺼내 줘요. `required = false`면 세션이 없을 때 `null`을 주고, 세션을 새로 만들지 않아요.
+        - mark: session.invalidate()
+          as: code
+          text: 서버의 세션을 지워요. 질문 2의 로그아웃이에요.
+    - muted: 실제 로그인은 비밀번호를 확인한 뒤에 세션에 넣어요. 이 일은 보통 스프링 시큐리티가 맡고, 인증과 인가 레슨에서 다뤄요.
+    - p: 이 컨트롤러를 스프링 부트로 띄워 요청을 보냈어요. 질문 2에서 본 응답과 같은지 열어 보세요.
+    - ci:
+        key: spring-session
+        label: 스프링 서버의 실제 응답 보기
+        source: SpringSessionPracticeTest.controllerSessionFlow
+        code: springRun
+    - h3: '흔한 실수: 읽기만 하는데 세션이 생겨요'
+    - p: 장바구니 개수는 로그인하지 않은 방문자의 화면에도 나와요. 로그인했는지 보려고 `HttpSession`을 파라미터로 받았어요. 쿠키 없이 처음 온 방문자가 이 주소를 부르면 응답에 무엇이 붙을까요? 예상해 보고 열어 보세요.
+    - code: springMistake
+      notes:
+        - mark: HttpSession session
+          as: code
+          text: 스프링은 이 파라미터에 넣을 세션이 없으면 **새로 만들어서** 줘요. 그래서 `null`이 오는 일이 없어요.
+    - ci:
+        key: spring-anonymous
+        label: 두 코드의 실제 응답 보기
+        source: SpringSessionPracticeTest.sessionParameterCreatesSessionForAnonymous
+        code: anonymousRun
+    - p: 로그인하지 않았는데도 `JSESSIONID`가 나갔어요. 서버의 세션 저장소에 빈 세션이 하나 생겼다는 뜻이에요. 방문자와 검색 로봇이 올 때마다 세션이 쌓이고, 만료 시간이 지나야 지워져요. 세션을 Redis에 두는 서비스라면 그만큼 Redis에 쌓여요.
+    - p: 읽기만 할 때는 세션을 만들지 않는 방법으로 받아요. 위 출력의 둘째 응답이 이 코드예요.
+    - code: springFixed
+      notes:
+        - mark: '@SessionAttribute'
+          as: anno
+          text: 세션이 있을 때만 값을 꺼내요. 서블릿 API를 직접 쓴다면 `request.getSession(false)`가 같은 일을 해요.
+    - h3: 세션 만료 시간과 Redis
+    - p: 세션은 마지막 요청 뒤로 일정 시간이 지나면 서버가 지워요. 스프링 부트의 기본값은 30분이고 `server.servlet.session.timeout`으로 바꿔요.
+    - p: 질문 2에서 서버가 여러 대면 세션 저장소를 함께 쓴다고 했어요. 스프링에서는 **Spring Session**이 그 일을 해요. 의존성 둘을 더하고 Redis의 주소를 적어요.
+    - code: redisGradle
+      notes:
+        - mark: spring-session-data-redis
+          as: str
+          text: 이 의존성이 있으면 스프링 부트가 `HttpSession`의 저장소를 Redis로 바꿔요.
+    - code: sessionYml
+      notes:
+        - mark: 'timeout: 30m'
+          as: code
+          text: 세션 만료 시간이에요. Redis에 저장한 세션에도 이 값이 쓰여요.
+    - ul:
+        - '**컨트롤러는 고치지 않아요.** 위의 `request.getSession()`과 `@SessionAttribute`가 그대로 Redis의 세션을 읽고 써요.'
+        - '**쿠키 이름이 바뀌어요.** Spring Session은 세션 ID 쿠키의 이름을 `JSESSIONID`가 아니라 `SESSION`으로 줘요.'
+        - '**서버를 다시 켜도 로그인이 유지돼요.** 세션이 서버의 메모리가 아니라 Redis에 있어서예요.'
+    - muted: '근거: [스프링 부트 문서의 Spring Session](link:bootSession), [Spring Session의 Redis 안내](link:sessionRedis).'
+    - h3: JWT는 직접 확인하지 않아요
+    - p: 질문 3에서 서버가 서명을 다시 계산하고 만료 시간을 본다고 했어요. 실무에서는 이 코드를 직접 짜지 않아요. 비교를 잘못 짜면 그대로 보안 구멍이 되기 때문이에요. 스프링 시큐리티의 **리소스 서버** 기능에 맡겨요(`spring-boot-starter-oauth2-resource-server`).
+    - code: jwtSecurity
+      notes:
+        - mark: SessionCreationPolicy.STATELESS
+          as: code
+          text: 스프링 시큐리티가 세션을 만들지 않게 해요. 토큰 방식이라 서버가 저장할 것이 없어요.
+        - mark: NimbusJwtDecoder
+          as: code
+          text: '요청의 `Authorization` 헤더에 든 토큰을 받아 서명과 만료 시간을 확인해요. 맞지 않으면 스프링 시큐리티가 401을 돌려줘요.'
+    - p: 질문 4의 한계는 그대로예요. 이 설정도 서명과 만료 시간만 보므로, 계정을 정지해도 만료 전의 토큰은 통과해요. 만료 시간을 짧게 잡는 일은 여전히 개발자의 몫이에요.
+    - muted: '근거: [스프링 시큐리티 문서의 리소스 서버 JWT](link:resourceServer). 필터가 요청을 어떻게 거르는지는 인증과 인가 레슨에서 다뤄요.'
 interview:
   question: 쿠키, 세션, 토큰(JWT)의 차이를 설명해 주세요
   model:
@@ -434,8 +636,8 @@ interview:
       text: 세션은 서버가 지우면 바로 끊을 수 있지만 서버가 여러 대면 세션 저장소를 함께 써야 합니다. JWT는 저장소가 필요 없지만 만료 전에는 막기 어려워서 만료 시간을 짧게 잡습니다. JWT의 페이로드는 누구나 읽을 수 있어 비밀을 넣지 않습니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 서버를 두 대로 늘리면서 로그인이 풀리는 문제를 겪고 세션을 Redis로 옮겼습니다.'
-verified: 이 레슨의 응답은 짐작이 아니라, 톰캣 서버를 띄우고 자바 21로 요청을 보내 받은 값이에요. 코드가 바뀔 때마다 테스트([CookieSessionTokenTest](link:test))가 다시 돌아요.
-footer: '근거: HTTP의 무상태는 RFC 9110, 쿠키는 RFC 6265, JSESSIONID는 자카르타 서블릿 명세 6.0, JWT는 RFC 7519, Bearer는 RFC 6750. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+verified: 이 레슨의 응답은 짐작이 아니라, 톰캣 서버와 스프링 부트 3.5 서버를 띄우고 자바 21로 요청을 보내 받은 값이에요. 코드가 바뀔 때마다 테스트([CookieSessionTokenTest](link:test), [SpringSessionPracticeTest](link:springTest))가 다시 돌아요.
+footer: '근거: HTTP의 무상태는 RFC 9110, 쿠키는 RFC 6265, JSESSIONID는 자카르타 서블릿 명세 6.0, JWT는 RFC 7519, Bearer는 RFC 6750. HttpSession 파라미터는 스프링 프레임워크 문서의 Method Arguments, Spring Session과 리소스 서버는 스프링 공식 문서. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 서버가 Set-Cookie로 준 값은 다음 요청의 Cookie 헤더로 돌아오고, 쿠키 없이 온 요청에서는 서버가 그 값을 읽지 못한다
     how: 내장 톰캣으로 작은 앱을 띄우고 자바 HttpClient로 요청해 응답 헤더와 다음 요청의 결과를 본다
@@ -455,9 +657,21 @@ claims:
     how: 앱을 둘 띄워 한쪽에서 받은 토큰을 다른 쪽에 보낸다
   - claim: 서명과 만료 시간만 확인하는 서버는 계정을 정지해도 만료 전의 토큰을 통과시키고, 만료 시간이 지난 토큰은 거부한다
     how: 계정 상태를 바꾼 뒤 같은 토큰으로 요청한다. 만료 시간이 지난 토큰으로도 요청한다
+  - claim: 스프링 컨트롤러가 request.getSession()으로 세션에 값을 넣으면 JSESSIONID 쿠키가 나가고, session.invalidate() 뒤에는 같은 쿠키가 401을 받는다
+    how: 컨트롤러 하나를 스프링 부트의 내장 톰캣으로 띄워 요청한다
+    test: SpringSessionPracticeTest.controllerSessionFlow
+  - claim: 컨트롤러가 HttpSession을 파라미터로 받으면 쿠키 없이 온 요청에도 세션이 만들어져 Set-Cookie가 나간다. @SessionAttribute(required = false)는 만들지 않는다
+    how: 두 방식의 메서드를 쿠키 없이 부르고 응답의 Set-Cookie를 본다
+    test: SpringSessionPracticeTest.sessionParameterCreatesSessionForAnonymous
+  - claim: 스프링 부트의 세션 만료 시간 기본값은 30분이다
+    how: 띄운 앱의 ServerProperties에서 값을 읽는다
+    test: SpringSessionPracticeTest.sessionTimeoutDefaultsTo30Minutes
 sources:
   - 'HTTP가 무상태라는 것: RFC 9110 3.3 https://www.rfc-editor.org/rfc/rfc9110.html#section-3.3'
   - 'Set-Cookie와 Cookie 헤더: RFC 6265 https://www.rfc-editor.org/rfc/rfc6265.html'
   - '세션 쿠키 이름 JSESSIONID: 자카르타 서블릿 명세 6.0의 7.1.1 https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0'
   - 'JWT의 구조와 만료 시간: RFC 7519 https://www.rfc-editor.org/rfc/rfc7519.html'
   - 'Authorization 헤더의 Bearer: RFC 6750 https://www.rfc-editor.org/rfc/rfc6750.html'
+  - 'HttpSession 파라미터는 세션이 있도록 강제한다: 스프링 프레임워크 문서 Method Arguments https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/arguments.html'
+  - 'Spring Session으로 HttpSession을 Redis에 두는 것, 쿠키 이름 SESSION: https://docs.spring.io/spring-session/reference/guides/boot-redis.html'
+  - '리소스 서버의 JWT 확인(서명, exp): https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html'

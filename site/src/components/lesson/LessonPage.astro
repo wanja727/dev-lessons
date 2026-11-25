@@ -2,7 +2,7 @@
 /**
  * 핵심 질문 구조 레슨의 페이지 틀 (docs/lesson-standard.md 1장).
  * 자료 파일(src/content/lesson-pages/<슬러그>.yaml)의 칸을 채우면 이 틀이 페이지를 만든다.
- * 구역의 순서와 모양은 여기서 정한다: 머리, 먼저 예측해 보기, 질문 1~N, 보지 않고 답하기, 검증, 근거.
+ * 구역의 순서와 모양은 여기서 정한다: 머리(도입부), 먼저 예측해 보기, 질문 1~N, 실무에서는, 보지 않고 답하기, 검증, 근거.
  */
 import Base from '../../layouts/Base.astro';
 import CoreQuestionKit from '../CoreQuestionKit.astro';
@@ -20,7 +20,7 @@ interface Props {
   data: Record<string, any>;
 }
 const { slug, data } = Astro.props;
-const { codes, links, predict, questions, interview, verified } = data;
+const { codes, links, predict, questions, practice, interview, verified } = data;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const md = (text: string) => inline(text, { links });
 const count = countWord(questions.length);
@@ -59,6 +59,7 @@ const page = {
   marks: [
     ['predict', '예측'],
     ...questions.map((q: Record<string, any>, i: number) => [q.id, `질문 ${i + 1} / ${questions.length}`]),
+    ...(practice ? [['practice', '실무에서는']] : []),
     ['recall', '마무리'],
   ],
 };
@@ -79,7 +80,14 @@ const order = interview.model.map((m: { label: string }) => (m.label === '경험
           : data.prerequisites.map((p, i) => <>{i > 0 && ', '}<a href={`${base}/lessons/${p.slug}/`}>{p.title}</a></>)}</span>
     </p>
     <h1>{data.title}</h1>
-    <p class="lede">이 레슨을 마치면 아래 {count} 질문에 자료를 보지 않고 답할 수 있어요. 장 하나가 질문 하나에 답해요.</p>
+    {data.intro
+      ? (
+        <>
+          {data.intro.map((t) => <p class="lede" set:html={md(t)} />)}
+          <p class="muted goals-lead">이 레슨을 마치면 아래 {count} 질문에 자료를 보지 않고 답할 수 있어요.{practice && <> 마지막에는 <a href="#practice">실무에서 쓰는 코드</a>를 봐요.</>}</p>
+        </>
+      )
+      : <p class="lede">이 레슨을 마치면 아래 {count} 질문에 자료를 보지 않고 답할 수 있어요. 장 하나가 질문 하나에 답해요.</p>}
     <ol class="goals">
       {questions.map((q) => <li><a href={`#${q.id}`}>{q.title}</a></li>)}
     </ol>
@@ -124,6 +132,24 @@ const order = interview.model.map((m: { label: string }) => (m.label === '경험
         ))}
     </section>
   ))}
+
+  {practice && (
+    <section id="practice">
+      {groups(practice.body).map((g, gi) => 'widget' in g
+        ? <Widget widget={g.widget} />
+        : (
+          <div class="read stack">
+            {gi === 0 && (
+              <>
+                <p class="eyebrow">실무에서는</p>
+                <h2>{practice.title ?? '스프링에서는 이렇게 써요'}</h2>
+              </>
+            )}
+            <Blocks blocks={g.blocks} lesson={slug} codes={codes} links={links} questionId="practice" />
+          </div>
+        ))}
+    </section>
+  )}
 
   <section id="recall" class="read">
     <p class="eyebrow">보지 않고 답하기</p>

@@ -67,9 +67,9 @@ test("핵심 질문마다 판정이 3개를 넘으면 경고한다", () => {
   assert.ok(warningsOf(four).some((w) => w.includes("'q1': 판정 문제가 4개")));
 });
 
-test("레슨 전체로 판정은 6개 이상이고, 10개를 넘으면 경고한다", () => {
-  const eleven = validFile({ perQuestion: 3, extra: [ox("q1-ox-4", "q1"), ox("q2-ox-4", "q2")] });
-  assert.ok(warningsOf(eleven).some((w) => w.includes("판정 문제가 모두 11개")));
+test("레슨 전체로 판정은 6개 이상이고, 12개를 넘으면 경고한다", () => {
+  const thirteen = validFile({ perQuestion: 3, extra: [ox("q1-ox-4", "q1"), ox("q2-ox-4", "q2"), ox("q3-ox-4", "q3"), ox("q1-ox-5", "q1")] });
+  assert.ok(warningsOf(thirteen).some((w) => w.includes("판정 문제가 모두 13개")));
 });
 
 test("숨긴 문제는 세지 않는다", () => {
@@ -91,7 +91,7 @@ test("핵심 질문 전체를 잇는 면접 질문이 없으면 경고한다", (
   assert.ok(warningsOf(noAll).some((w) => w.includes("coreQuestion: all")));
 });
 
-test("핵심 질문은 3~5개다", () => {
+test("핵심 질문은 3~6개다", () => {
   const two = validFile().replace("  - {key: q3, text: 셋째 질문}\n", "");
   assert.ok(errorsOf(two).some((e) => e.includes("핵심 질문이 2개다")));
 });

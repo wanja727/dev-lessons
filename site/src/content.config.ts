@@ -39,6 +39,10 @@ const widgetPlan = z.object({
 }).refine((w) => w.kind !== 'custom' || !!w.why, { message: 'kind: custom이면 why에 공통 위젯으로 안 되는 이유를 적는다' });
 // 테스트로 확인할 주장. how는 확인하는 방법, test는 이미 있는 테스트의 이름
 const claims = z.array(z.object({ claim: text, how: text, test: text.optional() }));
+// 도입부. 실무에서 이 주제를 만나는 장면, 스프링 개발자에게 무슨 의미인지, 이 레슨에서 확인할 것 (표준 1장 "도입부")
+const intro = z.array(text).min(1).max(4);
+// 이 주제에서 알아야 할 것과, 그것을 어디서 다루는지. 빠진 내용이 없는지 설계서에서 본다 (표준 1장 "알아야 할 것")
+const covers = z.array(z.object({ topic: text, where: text }));
 
 const designPage = z.object({
   stage: z.literal('design'),
@@ -49,6 +53,8 @@ const designPage = z.object({
   prerequisites,
   assume: text,
   example: text, // 레슨 전체에서 쓰는 예제 한 줄
+  intro,
+  covers: covers.min(3),
   codes: z.record(z.string()).default({}),
   links: z.record(z.string().url()).default({}),
   predict: z.object({ text: text, answer: text }),
@@ -59,7 +65,9 @@ const designPage = z.object({
     says: z.array(text).min(1),
     widget: widgetPlan.optional(), // 위젯을 두는 질문에만 적는다
     asks: z.array(text).min(2), // 문제 개요. 판정 문제 2개를 채우지 못하는 질문은 뺀다
-  })).min(3).max(5),
+  })).min(3).max(6),
+  // "실무에서는" 구역이 보여 줄 것: 스프링의 코드나 설정, 흔한 실수와 고친 코드
+  practice: z.object({ says: z.array(text).min(1) }),
   claims: claims.min(1),
   sources: z.array(text).default([]), // 테스트로 확인할 수 없는 것의 근거 (정의, 용어)
 });
@@ -72,6 +80,9 @@ const fullPage = z.object({
   minutes: z.number().int().positive(),
   prerequisites,
   assume: text,
+  // 도입부와 실무 구역은 2026-11-25부터 쓴다. 그 전에 쓴 레슨에는 없어서 선택으로 받는다
+  intro: intro.optional(),
+  covers: covers.optional(),
   codes: z.record(z.string()).default({}),
   links: z.record(z.string().url()).default({}),
   predict: z.object({
@@ -93,7 +104,12 @@ const fullPage = z.object({
     asks: z.array(text).optional(),
     body: z.array(block).min(1),
     recall: text,
-  })).min(3).max(5),
+  })).min(3).max(6),
+  practice: z.object({
+    title: text.optional(),
+    says: z.array(text).optional(),
+    body: z.array(block).min(1),
+  }).optional(),
   interview: z.object({
     question: text,
     model: z.array(z.object({ label: text, text: text })).min(3),

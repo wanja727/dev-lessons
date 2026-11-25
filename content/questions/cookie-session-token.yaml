@@ -116,6 +116,32 @@ questions:
       - 다시 켠 서버의 메모리에는 lee의 세션 ID가 없어요
       - 세션을 모든 서버가 함께 쓰는 저장소에 두면 서버를 다시 켜도, 요청이 다른 서버로 가도 찾을 수 있어요
     source: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  - key: cst-spring-session-param
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "스프링 MVC 컨트롤러에 아래 메서드가 있어요. 세션은 톰캣의 기본 설정 그대로예요. 로그인한 적이 없는 방문자가 쿠키 없이 GET /notice/count를 처음 불렀어요. 응답은 어떻게 될까요?"
+    code: |-
+      @GetMapping("/notice/count")
+      String count(HttpSession session) {
+        Object user = session.getAttribute("user");
+        return user == null ? "0" : "5";
+      }
+    choices:
+      - 0을 돌려주고, 세션은 만들어지지 않는다. 세션에 값을 넣지 않았다
+      - 0을 돌려주고, 새 세션이 만들어져 응답에 JSESSIONID 쿠키가 붙는다
+      - 401을 돌려준다. 세션이 없는 요청이다
+      - 예외가 난다. session에 null이 들어온다
+    answer: "2"
+    explanation: |-
+      **0을 돌려주고, 새 세션이 만들어져 JSESSIONID 쿠키가 붙어요.** 스프링은 HttpSession 파라미터에 넣을 세션이 없으면 새로 만들어서 주기 때문이에요.
+
+      - 그래서 session에 null이 오는 일이 없고, 값을 넣지 않아도 서버에 빈 세션이 생겨요
+      - 로그인하지 않은 방문자가 올 때마다 세션이 쌓여요
+      - 읽기만 할 때는 @SessionAttribute(required = false)나 request.getSession(false)로 받아요. 세션이 없으면 만들지 않아요
+    source: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/arguments.html
   # ── 질문 3. 토큰(JWT) 방식은 어떻게 다른가요? ──
   - key: cst-jwt-tamper
     concept: core

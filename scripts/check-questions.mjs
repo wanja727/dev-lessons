@@ -17,11 +17,11 @@ const MIDDLE_DOT = /[·ㆍ・‧]/;
 
 export const RULES = {
   coreQuestionsMin: 3,
-  coreQuestionsMax: 5,
+  coreQuestionsMax: 6,
   judgmentPerCoreQuestionMin: 2,
   judgmentPerCoreQuestionMax: 3,
   judgmentPerLessonMin: 6,
-  judgmentPerLessonMax: 10,
+  judgmentPerLessonMax: 12,
   descriptivePerLessonMin: 1,
   descriptivePerLessonMax: 2,
 };
