@@ -1,0 +1,225 @@
+# 정규화 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/normalization.yaml의 says).
+# 동작에 관한 정답은 verification의 NormalizationTest로 확인했다 (PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: normalization
+  title: 정규화
+  unit: DB
+  order: 604
+concepts:
+  - key: core
+    name: 정규화
+coreQuestions:
+  - key: q1
+    text: "같은 값을 여러 곳에 두면 무슨 일이 생기나요?"
+  - key: q2
+    text: "제1정규형은 무엇을 요구하나요?"
+  - key: q3
+    text: "제2정규형과 제3정규형은 무엇을 떼어 내나요?"
+  - key: q4
+    text: "일부러 정규화를 풀 때는 언제인가요?"
+questions:
+  # ── 질문 1 ──
+  - key: norm-delete-anomaly
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "주문 한 줄에 회원과 상품 정보를 다 담은 주문표 `order_sheet(order_id, member_name, product_name, product_price, ...)`가 있어요. 상품 ink를 산 주문은 주문 3 하나뿐이에요. 주문 3을 지우면 ink의 가격은 어떻게 되나요?"
+    choices:
+      - 다른 행에 남아 있다
+      - 함께 사라진다
+      - NULL로 남는다
+      - 지우기가 오류로 막힌다
+    answer: "2"
+    explanation: |-
+      **함께 사라져요.** 삭제 이상이에요.
+
+      - 상품의 가격이라는 사실이 주문 행 안에만 있었어요
+      - 상품 테이블로 나누면 주문을 지워도 상품은 남아요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  - key: norm-professor
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "수강 신청 테이블 `enroll(student_id, course_id, professor_name)`에 과목마다 교수 이름을 복사해 둬요. 담당 교수가 바뀌어 한 학생의 행만 고쳤어요. 어떤 일이 생기나요?"
+    choices:
+      - 같은 과목의 다른 행도 저절로 바뀐다
+      - 같은 과목에 교수 이름이 둘이 된다
+      - 고치는 UPDATE가 오류로 막힌다
+      - 아무 일도 없다
+    answer: "2"
+    explanation: |-
+      **같은 과목에 교수 이름이 둘이 돼요.** 갱신 이상이에요.
+
+      - 같은 사실(과목의 담당 교수)이 학생 수만큼 여러 행에 있어요
+      - 과목 테이블에 교수를 한 번만 두면 한 행만 고치면 돼요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  # ── 질문 2 ──
+  - key: norm-like-java
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "게시글의 `tags` 칸에 태그를 쉼표로 이어 담았어요(`java,spring`, `javascript,react`, `java`). `where tags like '%java%'`로 찾으면 몇 개의 글이 나오나요?"
+    choices:
+      - "1개"
+      - "2개"
+      - "3개"
+      - "0개"
+    answer: "3"
+    explanation: |-
+      **3개예요.** javascript 글까지 걸려요.
+
+      - like는 문자열의 일부를 찾을 뿐 "태그 하나"를 모르기 때문이에요
+      - 칸 하나에 값 하나(제1정규형)로 나누면 `tag = 'java'`가 정확해요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  - key: norm-phones
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "회원 테이블의 `phones` 칸에 전화번호 여러 개를 쉼표로 넣어요. 특정 번호의 회원을 정확히 찾고 번호가 회원끼리 겹치지 않게 하려면 어떻게 하나요?"
+    choices:
+      - "`phones`에 UNIQUE를 건다"
+      - 전화번호마다 한 행인 테이블로 나누고 번호에 UNIQUE를 건다
+      - "`like '%번호%'`로 찾고 앱에서 겹치는지 확인한다"
+      - 번호를 쉼표 대신 세미콜론으로 잇는다
+    answer: "2"
+    explanation: |-
+      **번호마다 한 행인 테이블로 나눠요.** 제1정규형이에요.
+
+      - 그래야 번호 하나에 UNIQUE를 걸고 `=`로 정확히 찾아요
+      - 문자열 전체에 건 UNIQUE는 번호 하나의 중복을 막지 못해요
+    source: https://www.postgresql.org/docs/16/ddl-constraints.html
+  # ── 질문 3 ──
+  - key: norm-third-form
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`orders(id, member_id, member_name)`의 키는 `id`예요. `member_name`은 어떤 규칙을 어기고, 어디로 옮겨야 하나요?"
+    choices:
+      - 제1정규형. 이름을 성과 이름으로 나눈다
+      - 제3정규형. 키가 아닌 member_id를 거쳐 정해지니 회원 테이블로 옮긴다
+      - 어기지 않는다. 주문마다 이름이 필요하다
+      - 제2정규형. 주문 항목 테이블로 옮긴다
+    answer: "2"
+    explanation: |-
+      **제3정규형을 어겨요.** 이름은 주문 id가 아니라 `member_id`를 거쳐 정해져요(이행 종속).
+
+      - 회원 테이블로 옮기면 이름은 한 곳에만 있어요
+      - 주문에는 `member_id`만 둬요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  - key: norm-second-form
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`enroll(student_id, course_id, course_title, grade)`의 키는 (`student_id`, `course_id`)예요. 정규화하려면 어느 열을 어디로 옮겨야 하나요?"
+    choices:
+      - "`grade`를 학생 테이블로"
+      - "`course_title`을 과목 테이블로"
+      - "`student_id`를 과목 테이블로"
+      - 옮길 열이 없다
+    answer: "2"
+    explanation: |-
+      **`course_title`을 과목 테이블로 옮겨요.** 키의 일부인 `course_id`만 알면 정해져서 제2정규형을 어겨요.
+
+      - `grade`는 학생과 과목을 둘 다 알아야 정해지니 그대로 둬요
+      - 열마다 "무엇을 알면 정해지나"를 물어 그 테이블에 둬요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  # ── 질문 4 ──
+  - key: norm-unit-price
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "상품 pen의 가격이 1000원에서 1200원으로 올랐어요. 지난주 주문의 주문 항목에 저장된 `unit_price`(주문 당시 단가)는 어떻게 되어야 하나요?"
+    choices:
+      - 1200원으로 함께 바뀌어야 한다. 중복이니까
+      - 1000원 그대로여야 한다. 주문한 때의 가격이다
+      - 지우고 상품의 가격을 쓰게 해야 한다
+      - NULL로 바꿔야 한다
+    answer: "2"
+    explanation: |-
+      **1000원 그대로예요.** 주문한 때의 가격은 상품의 현재 가격과 다른 사실이에요.
+
+      - 그래서 정규화된 설계에서도 주문 항목에 둬요
+      - 현재 가격으로 계산하면 지난 주문의 금액이 바뀌어 보여요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  - key: norm-avg-score
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "상품 목록에 리뷰 평균 점수를 빠르게 보이려고 `product.avg_score` 열을 두기로 했어요. 이 설계가 새로 떠안는 일은 무엇인가요?"
+    choices:
+      - 없다. 평균은 한 번 계산하면 된다
+      - 리뷰를 쓰고 고치고 지울 때마다 평균을 다시 맞추는 일
+      - 상품 테이블에 외래 키를 하나 더 거는 일
+      - 리뷰 테이블을 지우는 일
+    answer: "2"
+    explanation: |-
+      **리뷰가 바뀔 때마다 평균을 다시 맞춰야 해요.** 반정규화예요.
+
+      - 맞추는 코드를 빠뜨린 경로가 하나라도 있으면 값이 어긋나요
+      - 맞추는 길을 한 곳으로 모으고 가끔 다시 계산하는 작업을 둬요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  - key: norm-get-product-price
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "주문 내역 화면이 `item.getQty() * item.getProduct().getPrice()`로 지난 주문의 금액을 보여요. 관리자가 상품 가격을 올리면 무슨 일이 생기나요?"
+    choices:
+      - 아무 일도 없다
+      - 이미 끝난 주문의 금액이 올린 가격으로 바뀌어 보인다
+      - 가격을 올리는 것이 오류로 막힌다
+      - 새 주문만 비싸진다
+    answer: "2"
+    explanation: |-
+      **지난 주문의 금액까지 바뀌어 보여요.** 상품의 현재 가격으로 계산하기 때문이에요.
+
+      - 주문한 때의 가격을 주문 항목에 저장하고(`unitPrice`) 그것으로 계산해요
+      - 영수증과 정산이 어긋나는 흔한 실수예요
+    source: https://www.postgresql.org/docs/16/ddl.html
+  # ── 면접 질문 ──
+  - key: norm-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "정규화는 왜 하고, 반정규화는 언제 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **사실 하나를 한 곳에만 두려고 나누고, 읽기가 아주 비쌀 때만 맞추는 비용을 감수하고 일부러 합쳐요.**
+
+      - **이상 현상:** 같은 사실이 여러 행에 있으면 갱신, 삽입, 삭제 이상이 생긴다
+      - **정규형:** 칸 하나에 값 하나(1NF), 키의 일부 종속 제거(2NF), 키가 아닌 열을 거치는 종속 제거(3NF)
+      - **반정규화:** 조인이나 집계가 비쌀 때 같은 값을 한 번 더 둔다. 맞추는 일을 코드가 떠안는다
+      - **그때의 사실:** 주문 당시 가격과 배송지는 중복이 아니다
+    checklist:
+      - 같은 사실을 여러 곳에 두면 일부만 고쳐 어긋난다고 말했다
+      - 정규화는 사실 하나를 한 곳에만 두도록 나누는 것이라고 말했다
+      - 제1정규형부터 제3정규형이 무엇을 떼어 내는지 말했다
+      - 반정규화는 읽기 성능을 위해 중복을 두고 맞추는 비용을 진다고 말했다
+      - 주문 당시 가격처럼 그때의 사실은 중복이 아니라고 말했다
+    source: https://www.postgresql.org/docs/16/ddl.html

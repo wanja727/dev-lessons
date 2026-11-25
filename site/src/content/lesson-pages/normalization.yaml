@@ -1,7 +1,8 @@
-# 정규화 (설계서)
+# 정규화
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
 title: 정규화
+description: 같은 값을 여러 곳에 두면 무슨 일이 생기는지, 제1정규형은 무엇을 요구하는지, 제2정규형과 제3정규형은 무엇을 떼어 내는지, 일부러 정규화를 풀 때는 언제인지. 네 가지 질문에 스스로 답할 수 있게 한 테이블에 다 담은 주문표를 나눠 가며 배우는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D4
 type: 동작 확인
@@ -40,6 +41,10 @@ covers:
     where: '다루지 않음: 상속 매핑과 값 타입(P10)'
   - topic: 'NoSQL 문서 모델에서 일부러 함께 담는 것'
     where: '다루지 않음: 관계형 DB와 NoSQL(D12)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/normalization/NormalizationTest.java
+  ddl: https://www.postgresql.org/docs/16/ddl.html
+  arrays: https://www.postgresql.org/docs/16/arrays.html
 codes:
   predict: |-
     -- order_sheet: 주문마다 회원 이름을 복사
@@ -82,9 +87,60 @@ codes:
       int qty;
       int unitPrice;
     }
+  rows: |-
+    order | email     | name | product | price
+    1     | kim@a.com | kim  | pen     | 1000
+    1     | kim@a.com | kim  | note    | 3000
+    2     | kim@a.com | kim  | pen     | 1000
+    3     | kim@a.com | kim  | ink     | 5000
+    4     | lee@a.com | lee  | pen     | 1000
+  steps: |-
+    처음: order_sheet(order_id,
+      product_name, member_email,
+      member_name, product_price, qty)
+
+    제2정규형: 키의 일부에 종속된 것
+      product(name, price)
+      ← product_price는 product_name만
+        알면 정해진다
+
+    제3정규형: 키가 아닌 열을 거치는 것
+      member(email, name)
+      ← member_name은 member_email을
+        거쳐 정해진다
+  fixedTag: |-
+    create table post_tag (
+      post_id bigint
+        references post(id),
+      tag text,
+      primary key (post_id, tag)
+    );
+  denorm: |-
+    -- 댓글 달기: 둘 다 해야 맞아요
+    insert into comment(post_id, body)
+    values (1, '좋아요');
+    update post
+       set comment_count =
+           comment_count + 1
+     where id = 1;
+  totalBad: |-
+    int total = item.getQty()
+        * [[item.getProduct().getPrice()]];
+  totalFixed: |-
+    int total = item.getQty()
+        * [[item.getUnitPrice()]];
 predict:
-  text: '코드 predict는 회원 이름을 주문마다 복사해 둔 `order_sheet`에서 kim의 이름을 주문 1번 행만 고쳐요. kim의 주문은 3건이에요. 마지막 SELECT가 돌려주는 이름은 몇 가지일까요? 보기: 1가지, 2가지, 3가지.'
-  answer: '2가지. 고친 행은 새 이름, 나머지 두 행은 예전 이름이라 같은 회원에 이름이 둘이 된다. 질문 1에서 밝힌다.'
+  title: 이름을 한 줄만 고치면?
+  text: '회원 이름을 주문마다 복사해 둔 주문표에서 kim의 이름을 주문 1의 행만 고쳐요. kim의 주문은 3건이에요. 마지막 SELECT는 이름을 몇 가지 돌려줄까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '1', label: 1가지}
+    - {value: '2', label: 2가지}
+    - {value: '3', label: 3가지}
+  answer: '2'
+  storageKey: norm-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 같은 값을 여러 곳에 두면 무슨 일이 생기나요?
@@ -103,6 +159,68 @@ questions:
     asks:
       - '본문의 예시: `order_sheet`에서 상품 C를 산 유일한 주문을 지우면 상품 C의 가격은 어떻게 되나 (함께 사라진다. 삭제 이상)'
       - '옮긴 상황: 수강 신청 테이블 `enroll(student_id, course_id, professor_name)`에 과목마다 교수 이름을 복사해 둔다. 담당 교수가 바뀌어 한 행만 고쳤다. 생기는 일은 (같은 과목에 교수 이름이 둘이 된다. 갱신 이상)'
+    body:
+      - p: '엑셀 한 장처럼 주문 한 줄에 회원과 상품의 정보를 다 담은 테이블이에요.'
+      - code: sheet
+      - code: rows
+      - p: '읽기는 편해요. 한 행에 화면에 필요한 것이 다 있어요. 문제는 **같은 사실이 여러 행에 있다**는 거예요. "kim의 이름은 kim"이라는 사실이 네 행에, "pen은 1000원"이 세 행에 있어요. 이 테이블에 고치고, 넣고, 지워 볼게요.'
+      - h3: 고칠 때 (갱신 이상)
+      - p: '처음 예측의 답은 **2가지**예요. {{predict-result}}'
+      - ci:
+          key: update
+          label: 실제 결과 보기
+          source: NormalizationTest.updateAnomaly
+          code: predict
+      - p: '주문 1의 행만 고쳐서, 같은 회원에게 이름이 둘이 됐어요. 고치는 코드가 kim의 **모든 행**을 고쳐야 맞는데, 하나라도 빠뜨리면 어긋나요.'
+      - h3: 넣을 때 (삽입 이상), 지울 때 (삭제 이상)
+      - ci:
+          key: insert
+          label: 아직 주문이 없는 상품 넣기
+          source: NormalizationTest.insertAnomaly
+      - p: '아직 아무도 주문하지 않은 상품 stapler는 **넣을 곳이 없어요.** 기본 키 (`order_id`, `product_name`)의 `order_id`를 비울 수 없거든요.'
+      - ci:
+          key: delete
+          label: ink를 산 유일한 주문 지우기
+          source: NormalizationTest.deleteAnomaly
+      - p: 'ink를 산 주문은 주문 3 하나뿐이었어요. 그 주문을 지우자 **"ink는 5000원"이라는 사실까지 사라졌어요.**'
+      - h3: 나누면
+      - p: '사실 하나를 한 곳에만 두도록 테이블을 나눠요. 이것이 **정규화**예요.'
+      - code: split
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 해 볼 일
+            options:
+              - {value: update, label: kim 이름 바꾸기}
+              - {value: insert, label: 주문 없는 상품 넣기}
+              - {value: delete, label: ink의 유일한 주문 지우기}
+          scenes:
+            update:
+              duo:
+                - {label: 한 테이블 (주문표), rows: [{k: 주문 1의 두 행, v: 김철수, mark: changed}, {k: 주문 2, v: kim, mark: bad}, {k: 주문 3, v: kim, mark: bad}]}
+                - {label: 나눈 테이블, rows: [{k: member 1행, v: 김철수, mark: changed}]}
+              verdict: '한 테이블은 빠뜨린 행에 예전 이름이 남아요. 나눈 테이블은 한 행만 고치면 끝이에요.'
+            insert:
+              duo:
+                - {label: 한 테이블 (주문표), rows: [{k: stapler, v: 'order_id가 없어 23502', mark: bad}]}
+                - {label: 나눈 테이블, rows: [{k: product, v: 'stapler 4000 들어감', mark: changed}]}
+              verdict: '한 테이블은 다른 사실(주문)이 있어야만 상품을 넣을 수 있어요.'
+            delete:
+              duo:
+                - {label: 한 테이블 (주문표), rows: [{k: ink의 가격, v: 사라짐, mark: bad}]}
+                - {label: 나눈 테이블, rows: [{k: ink의 가격, v: '5000 남음'}]}
+              verdict: '한 테이블은 주문과 함께 상품 정보까지 지워져요.'
+      - quiz:
+          q: '수강 신청 테이블 `enroll(student_id, course_id, professor_name)`에 과목마다 교수 이름을 복사해 둬요. 담당 교수가 바뀌어 한 학생의 행만 고쳤어요. 무슨 일이 생기나요?'
+          options:
+            - '모든 행이 함께 바뀐다'
+            - '같은 과목에 교수 이름이 둘이 된다'
+            - '고치는 것이 오류로 막힌다'
+          answer: 2
+          explain: '같은 사실(과목의 교수)이 여러 행에 있어 일부만 고친 갱신 이상이에요. 과목 테이블로 떼어 내면 한 곳만 고쳐요.'
+      - next: '나누는 기준이 필요해요. 가장 먼저 지킬 규칙은 무엇일까요?'
+    recall: '같은 사실을 여러 행에 두면, 일부만 고쳐 값이 어긋나는 갱신 이상, 다른 사실 없이는 넣을 수 없는 삽입 이상, 지우면 다른 사실까지 사라지는 삭제 이상이 생겨요. 정규화는 사실 하나를 한 곳에만 두도록 테이블을 나눠 이 셋을 없애요.'
   - id: q2
     title: 제1정규형은 무엇을 요구하나요?
     conclusion:
@@ -117,6 +235,31 @@ questions:
     asks:
       - '본문의 예시: `tags like ''%java%''`로 찾을 때 함께 나오는 잘못된 결과의 예는 (javascript 태그가 붙은 글)'
       - '옮긴 상황: 회원 테이블의 `phones` 칸에 전화번호 여러 개를 쉼표로 넣는다. 특정 번호를 가진 회원을 정확히 찾고 번호가 겹치지 않게 하려면 (전화번호마다 한 행인 `member_phone` 테이블로 나누고 번호에 UNIQUE를 건다)'
+    body:
+      - p: '정규형을 말하기 전에 낱말 하나만 정해요. A의 값을 알면 B의 값이 하나로 정해질 때 **"B는 A에 종속된다"**(함수 종속)고 해요. 이메일을 알면 이름이 정해지고, 상품 이름을 알면 가격이 정해져요. 정규형은 이 종속으로 정의해요.'
+      - p: '**제1정규형은 칸 하나에 값 하나**예요. 게시글의 태그를 `java,spring`처럼 쉼표로 이어 한 칸에 담으면 이 규칙을 어겨요. java 태그 글을 찾아볼게요.'
+      - code: tags
+      - ci:
+          key: tags
+          label: 두 설계로 찾은 결과 보기
+          source: NormalizationTest.firstNormalForm
+      - p: '`like ''%java%''`는 **javascript 글도 찾아요.** 문자열 안의 일부를 찾을 뿐 "태그 하나"를 모르기 때문이에요. 태그 이름을 바꾸거나 태그별 글 수를 세려면 문자열을 잘라야 하고, 태그 하나에 UNIQUE나 외래 키도 걸 수 없어요.'
+      - p: '고친 설계는 태그마다 한 행이에요. `where tag = ''java''`가 정확하고, 이 열에 인덱스도 쓸 수 있어요.'
+      - code: fixedTag
+      - more:
+          summary: '더 알아보기: 배열과 JSON 열은요?'
+          body:
+            - p: 'PostgreSQL은 배열 열과 JSON 열을 지원해서 한 칸에 여러 값을 담을 수 있어요([배열 문서](link:arrays)). 정확히 찾는 연산자도 있어요. 그래도 안의 값마다 외래 키를 걸 수 없다는 점은 같아요. 언제 쓰는지는 [관계형 DB와 NoSQL](lesson:rdb-vs-nosql)에서 다뤄요.'
+      - quiz:
+          q: '회원 테이블의 `phones` 칸에 전화번호 여러 개를 쉼표로 넣어요. 특정 번호의 회원을 정확히 찾고, 번호가 회원끼리 겹치지 않게 하려면?'
+          options:
+            - '`like ''%번호%''`로 찾고 앱에서 겹치는지 확인한다'
+            - '전화번호마다 한 행인 테이블로 나누고 번호에 UNIQUE를 건다'
+            - '`phones` 칸에 UNIQUE를 건다'
+          answer: 2
+          explain: '칸 하나에 값 하나(제1정규형)로 나눠야 번호 하나를 정확히 찾고 UNIQUE를 걸 수 있어요. 쉼표로 이은 문자열 전체에 건 UNIQUE는 번호 하나의 중복을 막지 못해요.'
+      - next: '칸마다 값이 하나가 됐어요. 그래도 주문표에는 아직 중복이 남아 있어요.'
+    recall: '제1정규형은 칸 하나에 값 하나만 두라는 것이에요. 태그를 쉼표로 이어 한 칸에 두면 like로 찾을 때 javascript까지 걸리고, 태그 하나에 제약이나 인덱스를 걸 수 없어요. 값마다 행을 따로 둬요.'
   - id: q3
     title: 제2정규형과 제3정규형은 무엇을 떼어 내나요?
     conclusion:
@@ -131,6 +274,28 @@ questions:
     asks:
       - '본문의 예시: `orders(id, member_id, member_name)`에서 `member_name`은 어느 정규형을 어기나 (제3정규형. 키가 아닌 `member_id`를 거쳐 정해진다)'
       - '옮긴 상황: `enroll(student_id, course_id, course_title, grade)`의 키는 (`student_id`, `course_id`)다. 어느 열을 어디로 옮기나 (`course_title`을 과목 테이블로. 키의 일부인 `course_id`에만 종속된다)'
+    body:
+      - p: '주문표의 칸마다 값은 하나예요(제1정규형). 그래도 이름과 가격이 반복돼요. 두 단계로 떼어 내요.'
+      - code: steps
+      - ul:
+          - '**제2정규형: 키의 일부에만 종속된 열을 떼어 내요.** 주문표의 키는 (`order_id`, `product_name`)인데, `product_price`는 상품 이름만 알면 정해져요. 키의 일부에 종속돼서, 주문마다 가격이 반복됐어요. 상품 테이블로 옮겨요.'
+          - '**제3정규형: 키가 아닌 열을 거쳐 정해지는 열을 떼어 내요.** 주문에 `member_email`과 `member_name`이 함께 있으면, 이름은 주문 id가 아니라 이메일을 거쳐 정해져요(이행 종속). 회원 테이블로 옮겨요.'
+      - p: '두 단계 모두 한 질문이에요. **"이 열은 이 테이블의 키 전체에, 키에만 종속되는가?"** 아니면 그 열이 진짜로 종속된 키의 테이블로 옮겨요. 그렇게 나온 것이 질문 1의 코드 split이에요.'
+      - p: '실무에서는 정규형 번호를 하나씩 따지기보다 "이 열은 무엇을 알면 정해지나"를 묻고 그 테이블에 둬요. 결과는 대개 제3정규형이에요.'
+      - more:
+          summary: '더 알아보기: BCNF와 그 위'
+          body:
+            - p: 'BCNF(보이스 코드 정규형)는 제3정규형을 조금 더 엄격하게 한 것이에요. 키가 여러 후보일 때 생기는 드문 중복까지 없애요. 그 위의 정규형은 실무에서 만날 일이 드물어요.'
+      - quiz:
+          q: '`enroll(student_id, course_id, course_title, grade)`의 키는 (`student_id`, `course_id`)예요. 어느 열을 어디로 옮겨야 하나요?'
+          options:
+            - '`grade`를 학생 테이블로'
+            - '`course_title`을 과목 테이블로'
+            - '옮길 열이 없다'
+          answer: 2
+          explain: '과목 이름은 키의 일부인 `course_id`만 알면 정해져요. 제2정규형을 어겨요. 성적은 학생과 과목 둘 다 알아야 정해지니 그대로 둬요.'
+      - next: '나누면 중복은 사라지지만 읽을 때 다시 붙여야 해요. 일부러 합쳐 두는 때도 있을까요?'
+    recall: '제2정규형은 키의 일부에만 종속된 열을, 제3정규형은 키가 아닌 다른 열을 거쳐 정해지는 열을 떼어 내요. 둘 다 "이 열은 키 전체에, 키에만 종속되는가"를 묻는 것이에요. 아니면 그 열이 종속된 키의 테이블로 옮겨요.'
   - id: q4
     title: 일부러 정규화를 풀 때는 언제인가요?
     conclusion:
@@ -148,11 +313,98 @@ questions:
     asks:
       - '본문의 예시: 상품 가격이 1만 원에서 1만 2천 원으로 올랐다. 지난주 주문의 `order_item.unit_price`는 어떻게 되어야 하나 (1만 원 그대로. 주문한 때의 가격이다)'
       - '옮긴 상황: 상품 목록에 리뷰 평균 점수를 보이려고 `product.avg_score`를 둔다. 이 설계가 새로 떠안는 일은 (리뷰를 쓰고 고치고 지울 때마다 평균을 다시 맞추는 코드. 빠뜨리면 어긋난다)'
+    body:
+      - p: '나눈 테이블은 읽을 때 [조인](lesson:sql-join)으로 다시 붙여요. 대부분은 이것으로 충분해요. 그런데 아주 자주 읽는 값을 매번 계산하기 비쌀 때가 있어요.'
+      - p: '게시글 목록에 댓글 수를 보여요. 목록을 열 때마다 글마다 댓글을 세면 비싸요. 그래서 `post.comment_count` 열을 두고 댓글을 달 때 1씩 올려요. 같은 사실(댓글 수)을 일부러 한 번 더 두는 것, 이것이 **반정규화**예요.'
+      - code: denorm
+      - p: '대가가 있어요. 서비스의 댓글 달기는 둘 다 했지만, 관리자 기능이 공지 댓글을 INSERT만 해서 넣었어요.'
+      - ci:
+          key: count-drift
+          label: 실제 결과 보기
+          source: NormalizationTest.denormalizedCountDrifts
+      - p: '저장된 수는 3, 실제 댓글은 5개예요. **질문 1의 갱신 이상이 그대로 돌아왔어요.** 반정규화는 원본이 바뀔 때 복사본을 맞추는 일을 코드가 떠안는 것이에요. 두 문장을 한 [트랜잭션](lesson:tx-basics)으로 묶는 것은 기본이고, 맞추는 길이 여럿이면 가끔 다시 세는 작업도 둬요.'
+      - h3: 중복처럼 보이지만 다른 사실
+      - p: '주문 항목의 `unit_price`는 상품의 `price`를 복사한 것처럼 보여요. 하지만 상품 가격을 1000원에서 1200원으로 올려 볼게요.'
+      - ci:
+          key: unit-price
+          label: 가격을 바꾼 뒤 지난 주문의 금액
+          source: NormalizationTest.unitPriceIsDifferentFact
+      - p: '현재 가격으로 계산하면 **이미 끝난 주문의 금액이 바뀌어요.** "주문한 때의 가격"은 상품의 현재 가격과 다른 사실이에요. 그래서 정규화된 설계에서도 주문 항목에 둬요. 배송지 주소도 같아요. 회원이 주소를 바꿔도 이미 보낸 주문의 주소는 그대로여야 해요.'
+      - widget:
+          kind: classify
+          categories:
+            - 같은 사실의 복사 (반정규화)
+            - 다른 사실 (정규화된 설계에도 둔다)
+          items:
+            - text: 주문 항목의 주문 당시 단가
+              answer: 2
+              explain: 상품 가격이 바뀌어도 지난 주문의 가격은 그대로여야 하는 "그때의 사실"이에요.
+            - text: 게시글 테이블의 댓글 수
+              answer: 1
+              explain: 댓글 테이블을 세면 나오는 값을 한 번 더 둔 거예요. 댓글이 바뀔 때마다 맞춰야 해요.
+            - text: 주문의 배송지 주소
+              answer: 2
+              explain: 주문한 때 보낼 곳이에요. 회원이 나중에 주소를 바꿔도 이 주문의 주소는 그대로여야 해요.
+            - text: 상품 목록에 보이려고 상품 테이블에 둔 리뷰 평균 점수
+              answer: 1
+              explain: 리뷰로 계산되는 값의 복사예요. 리뷰를 쓰고 고치고 지울 때마다 다시 맞춰야 해요.
+            - text: 주문 테이블에 복사해 둔 회원의 현재 등급 이름
+              answer: 1
+              explain: 회원 등급이 바뀌면 함께 바뀌어야 하는 값을 복사한 거예요. 주문 때의 등급이 필요한 것이라면 이름을 달리 붙여 그때의 사실로 둬요.
+      - callout: '**먼저 정규화하고, 느린 것이 측정으로 확인된 곳만 풀어요.** 그 전에 [인덱스](lesson:index-explain)로 풀리는지 먼저 봐요.'
+      - quiz:
+          q: '상품 가격이 1만 원에서 1만 2천 원으로 올랐어요. 지난주 주문의 `order_item.unit_price`는 어떻게 되어야 하나요?'
+          options:
+            - '1만 2천 원으로 함께 바뀌어야 한다'
+            - '1만 원 그대로여야 한다'
+            - '지워야 한다'
+          answer: 2
+          explain: '주문한 때의 가격은 상품의 현재 가격과 다른 사실이에요. 지난 주문의 금액이 바뀌면 안 돼요.'
+    recall: '읽는 일이 아주 많고 조인이나 집계가 비쌀 때 같은 값을 일부러 한 번 더 둬요(반정규화). 대신 원본이 바뀔 때 복사본을 맞추는 일이 코드로 넘어오고, 놓치면 갱신 이상이 돌아와요. 주문 당시 가격이나 배송지처럼 "그때의 사실"은 중복이 아니라서 정규화된 설계에도 둬요.'
 practice:
   says:
     - 'JPA로는 나눈 테이블마다 엔티티를 두고 연관관계로 잇는다. 코드 entity의 `OrderItem`은 주문과 상품을 가리키고, 주문 때의 단가 `unitPrice`를 따로 가진다. 연관관계 매핑은 P3에서 다룬다(코드는 하이버네이트 문서 근거, 테스트는 같은 테이블을 SQL로 만든다)'
     - '흔한 실수: 주문 항목에 `unitPrice`를 두지 않고 화면에서 `item.getProduct().getPrice()`로 금액을 보인다. 상품 가격을 바꾸면 지난 주문의 금액까지 바뀌어 보인다. 테스트로 가격을 바꾼 뒤 두 방법의 지난 주문 금액을 비교한다'
     - '흔한 실수 둘: 반정규화한 `comment_count`를 올리는 코드를 서비스 한 곳에만 두고, 관리자 기능이 댓글을 SQL로 지운다. 수가 어긋난다. 맞추는 길이 여럿이면 주기적으로 다시 세는 작업을 함께 둔다'
+  title: 스프링과 JPA에서는 이렇게 써요
+  body:
+    - p: 'JPA로는 나눈 테이블마다 엔티티를 두고 연관관계로 이어요. 주문 항목은 주문과 상품을 가리키고, 주문 때의 단가를 따로 가져요.'
+    - code: entity
+      notes:
+        - mark: '@ManyToOne Product product;'
+          as: code
+          text: '상품 테이블을 가리키는 외래 키예요. 상품 이름과 현재 가격은 상품에만 있어요.'
+        - mark: int unitPrice;
+          as: code
+          text: '주문한 때의 가격이에요. 상품 가격과 다른 사실이라 항목에 둬요.'
+    - h3: '흔한 실수: 지난 주문 금액을 현재 가격으로 계산'
+    - code: totalBad
+      notes:
+        - mark: item.getProduct().getPrice()
+          as: code
+          text: '상품의 지금 가격이에요. 가격을 바꾸는 순간 지난 주문의 금액이 함께 바뀌어 보여요. 영수증과 정산이 어긋나요.'
+    - code: totalFixed
+      notes:
+        - mark: item.getUnitPrice()
+          as: code
+          text: '주문할 때 저장한 가격이에요. 상품 가격이 바뀌어도 그대로예요.'
+    - p: '두 계산이 가격을 바꾼 뒤 어떻게 달라지는지는 질문 4의 실제 결과(5000 → 5400과 5000 → 5000)예요.'
+    - h3: '흔한 실수 2: 반정규화한 값을 한 곳에서만 맞추기'
+    - p: '`comment_count`를 올리는 코드를 서비스 한 곳에만 두고, 관리자 기능이나 배치가 SQL로 댓글을 넣고 지워요. 수가 어긋나요(질문 4). 맞추는 길을 한 곳으로 모으고, 가끔 실제 수로 다시 맞추는 작업을 함께 둬요.'
+    - muted: '연관관계를 엔티티로 잇는 방법은 [연관관계 매핑](lesson:association-owner)(P3)에서 다뤄요. 이 레슨의 테스트는 같은 테이블을 SQL로 만들어 확인했어요.'
+interview:
+  question: 정규화는 왜 하고, 반정규화는 언제 하나요?
+  model:
+    - label: 정의
+      text: 정규화는 한 테이블이 한 가지 사실만 담도록 나누는 것입니다. 같은 사실을 여러 행에 두면 일부만 고쳐 어긋나는 갱신 이상, 다른 사실 없이 넣을 수 없는 삽입 이상, 지우면 다른 사실까지 사라지는 삭제 이상이 생깁니다.
+    - label: 원리
+      text: 제1정규형은 칸 하나에 값 하나, 제2정규형은 키의 일부에만 종속된 열을 떼어 내고, 제3정규형은 키가 아닌 열을 거쳐 정해지는 열을 떼어 냅니다. 모든 열이 키 전체에, 키에만 종속되게 합니다.
+    - label: 주의할 점
+      text: 반정규화는 조인이나 집계가 비싸고 읽기가 아주 많을 때 같은 값을 한 번 더 두는 것이고, 복사본을 맞추는 일을 코드가 떠안습니다. 주문 당시 가격처럼 그때의 사실은 중복이 아니라 정규화된 설계에도 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 게시글의 댓글 수 열이 관리자 기능에서 어긋나는 것을 발견해, 맞추는 코드를 한 곳으로 모으고 하루 한 번 다시 세는 작업을 두었습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에 두 설계를 만들고 같은 수정, 삽입, 삭제를 해서 받은 값이에요. 코드가 바뀔 때마다 테스트([NormalizationTest](link:test))가 다시 돌아요.
+footer: '근거: 정규형과 함수 종속은 관계형 모델의 일반적인 정의를 따랐고, 테이블과 제약은 [PostgreSQL 16 문서](link:ddl). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '`order_sheet`에서 한 행만 고치면 같은 회원의 이름이 2가지가 된다. 나눈 테이블은 1가지다'
     how: 'PostgreSQL 컨테이너에서 두 설계에 같은 수정을 하고 `distinct`로 센다'
