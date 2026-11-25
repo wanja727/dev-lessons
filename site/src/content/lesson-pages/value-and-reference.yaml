@@ -1,8 +1,9 @@
-# 값과 참조 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 값과 참조
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/value-and-reference.yaml에 있다.
 title: 값과 참조
+description: 변수에 실제로 무엇이 들어 있는지, 메서드에 넘길 때 무엇이 복사되는지, ==가 무엇을 비교하는지, null에 점을 찍으면 왜 예외가 나는지. 네 가지 질문에 스스로 답할 수 있게, 주문 객체 하나를 메서드에 넘기며 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 20
 roadmap: J2
 type: 자바 실행
 prerequisites:
@@ -64,17 +65,133 @@ codes:
     discount(order, rate);
     System.out.println(order.price);
     System.out.println(rate);
+  predictField: |-
+    static void discount(Order o, int rate) {
+      [[o.price]] = o.price * (100 - rate) / 100;
+      [[rate = 0]];
+    }
+
+    Order order = new Order(10000);
+    int rate = 10;
+    discount(order, rate);
+    System.out.println(order.price);
+    System.out.println(rate);
   reassign: |-
     static void replace(Order o) {
-      o = new Order(1);
+      [[o = new Order(1)]];
     }
 
     Order order = new Order(10000);
     replace(order);
     System.out.println(order.price);
+  assign: |-
+    int a = 10;
+    int b = a;
+    b = 20;
+
+    Order x = new Order(10000);
+    Order y = [[x]];
+    y.price = 5000;
+
+    int[] arr = {1, 2};
+    int[] alias = arr;
+    alias[0] = 9;
+
+    print("a = " + a);
+    print("x.price = " + x.price);
+    print("arr[0] = " + arr[0]);
+  equality: |-
+    int i = 10000, j = 10000;
+    Order a = new Order(10000);
+    Order b = new Order(10000);
+    Order c = a;
+    String s = new String("PAID");
+    String t = new String("PAID");
+  member: |-
+    class Member {
+      String name;
+      int age;
+      boolean active;
+    }
+
+    Member m = new Member();
+    print(m.age);
+    print(m.active);
+    print(m.name);
+    [[m.name.length()]];
+  nullCompare: |-
+    String status = null;
+
+    status == null
+    "PAID".equals(status)
+    status.equals("PAID")
+  applyCoupon: |-
+    // 컨트롤러
+    Order order = orderService.find(id);
+    orderService.[[applyCoupon(order, coupon)]];
+    return OrderResponse.from(order);
+
+    // 서비스
+    void applyCoupon(Order order,
+        Coupon coupon) {
+      order.setPrice(
+          order.getPrice() - coupon.amount());
+    }
+  clearBad: |-
+    void reset(List<Item> items) {
+      [[items = new ArrayList<>()]];
+    }
+  clearFixed: |-
+    void reset(List<Item> items) {
+      [[items.clear()]];
+    }
+
+    List<Item> emptied(List<Item> items) {
+      return [[new ArrayList<>()]];
+    }
+  beanBad: |-
+    @Service
+    class CategoryService {
+      private final List<String> categories =
+          new ArrayList<>(List.of("도서", "음반"));
+
+      List<String> categories() {
+        return [[categories]];
+      }
+    }
+
+    // 컨트롤러가 화면용으로 하나 더한다
+    List<String> list = service.categories();
+    list.add("전체");
+  beanFixed: |-
+    List<String> categories() {
+      return [[List.copyOf(categories)]];
+    }
+  beanRun: |-
+    # 요청 1: 받은 리스트에 "전체"를 더한다
+    # 요청 2: 같은 빈에 다시 묻는다
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/valuereference/ValueReferenceTest.java
+  jls4: https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html
+  jlsArgs: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.1
+  jep358: https://openjdk.org/jeps/358
 predict:
-  text: '코드 predict를 실행하면 두 줄에 무엇이 출력될까요? 보기: 10000과 10, 9000과 10, 9000과 0, 10000과 0.'
-  answer: '9000과 10. 메서드가 받은 `o`는 같은 주문 객체를 가리켜서 필드를 바꾼 것이 보이고, `rate`는 값이 복사된 것이라 메서드 안에서 0으로 바꿔도 바깥은 그대로다. 질문 2에서 밝힌다.'
+  title: 메서드가 끝난 뒤 무엇이 바뀌어 있을까요?
+  text: '`discount`는 주문의 금액을 할인하고, 받은 할인율 `rate`를 0으로 바꿔요. 메서드가 끝난 뒤 두 줄에는 무엇이 출력될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: '10000-10'
+      label: 10000과 10
+    - value: '9000-10'
+      label: 9000과 10
+    - value: '9000-0'
+      label: 9000과 0
+    - value: '10000-0'
+      label: 10000과 0
+  answer: '9000-10'
+  storageKey: var-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 변수에는 무엇이 들어 있나요?
@@ -91,6 +208,36 @@ questions:
     asks:
       - '본문의 예시: `Order a = new Order(10000); Order b = a; b.price = 5000;`을 실행한 뒤 `a.price`는 얼마인가 (5000)'
       - '옮긴 상황: `int[] x = {1, 2}; int[] y = x; y = new int[]{7, 8}; y[0] = 9;`를 실행한 뒤 `x[0]`은 얼마인가 (1. `y`에 새 배열을 대입한 뒤로는 `x`와 다른 배열을 가리킨다)'
+    body:
+      - p: '자바의 타입은 두 갈래예요. 숫자와 참거짓처럼 값 하나를 담는 **기본형** 여덟 가지가 있고, 나머지는 모두 **참조형**이에요.'
+      - table:
+          head: [갈래, 타입, 변수에 들어 있는 것]
+          rows:
+            - [기본형, '`byte`, `short`, `int`, `long`, `float`, `double`, `char`, `boolean`', 값 자체]
+            - [참조형, '클래스(`Order`, `String`), 배열, 인터페이스, enum', 객체를 가리키는 값(참조)]
+      - p: '참조는 객체를 찾아가는 값이에요. 자바는 그 값이 메모리 주소인지 무엇인지 보여 주지 않아요. 개발자는 점(`.`)을 찍어 가리키는 객체에 닿을 수만 있어요.'
+      - h3: 대입은 변수에 든 것을 복사해요
+      - p: '이 구분이 대입에서 차이를 만들어요. 아래 코드는 세 경우에 대입한 뒤 한쪽만 바꿔요. 다른 쪽이 바뀔지 예상해 보고 열어 보세요.'
+      - ci:
+          key: assign
+          label: 실제 출력 보기
+          source: ValueReferenceTest.assignmentCopiesReference
+          code: assign
+      - ul:
+          - '**`int`는 값이 복사돼요.** `b = 20`은 `b`만 바꿔요. `a`는 10이에요.'
+          - '**`Order`는 참조가 복사돼요.** `new`는 한 번만 불렸으니 주문 객체는 하나예요. `y`와 `x`가 그 하나를 함께 가리켜서, `y`로 바꾼 금액이 `x`로도 보여요.'
+          - '**배열도 참조형이에요.** 안에 든 것이 `int`여도 배열 자체는 객체라서 `alias`와 `arr`가 같은 배열을 가리켜요.'
+      - p: '두 번째 주문을 갖고 싶으면 `new Order(...)`로 새로 만들어야 해요. 대입으로는 객체가 생기지 않아요.'
+      - quiz:
+          q: '`Order a = new Order(10000); Order b = a; b.price = 5000;`을 실행했어요. `a.price`는 얼마일까요?'
+          options:
+            - '10000'
+            - '5000'
+            - 컴파일 오류
+          answer: 2
+          explain: '`b = a`는 참조를 복사해요. 두 변수가 같은 주문 객체를 가리켜서 `b`로 바꾼 금액이 `a`로도 보여요.'
+      - next: '대입이 이렇다면, 메서드에 인자로 넘길 때는 무엇이 복사될까요?'
+    recall: '기본형 변수에는 값이, 참조형 변수에는 객체를 가리키는 참조가 들어 있어요. 대입은 변수에 든 것을 복사해요. 그래서 참조형을 대입하면 객체는 하나인 채로 두 변수가 그 객체를 함께 가리키고, 한쪽으로 바꾼 것이 다른 쪽에서도 보여요. 배열도 참조형이에요.'
   - id: q2
     title: 메서드에 넘기면 무엇이 복사되나요?
     conclusion:
@@ -110,6 +257,121 @@ questions:
       - '본문의 예시: 코드 reassign을 실행하면 무엇이 출력되나 (10000)'
       - '옮긴 상황: `static void add(List<String> names) { names.add("lee"); names = new ArrayList<>(); names.add("park"); }`에 `kim` 하나가 든 `ArrayList`를 넘겼다. 메서드가 끝난 뒤 호출한 쪽 리스트에 든 것은 무엇인가 (kim, lee)'
       - '실무 구역: 서비스 메서드 `void clear(List<Item> items) { items = new ArrayList<>(); }`를 부른 뒤 호출한 쪽 리스트의 크기는 어떻게 되나. 조건: 넘기기 전의 크기는 3이다 (3 그대로다)'
+    body:
+      - p: '메서드의 매개변수는 그 메서드가 새로 가지는 변수예요. 호출할 때 인자에 든 것이 그 변수로 **복사**돼요. 질문 1의 대입과 똑같은 일이에요.'
+      - p: '처음 예측한 코드를 다시 볼게요.'
+      - code: predictField
+        notes:
+          - mark: o.price
+            as: code
+            text: '`o`에는 바깥 `order`의 참조가 복사됐어요. 둘이 같은 주문 객체를 가리켜요. 그 객체의 금액을 바꿔요.'
+          - mark: rate = 0
+            as: code
+            text: '`rate`에는 10이라는 값이 복사됐어요. 메서드의 변수만 0이 되고 바깥의 `rate`와는 상관없어요.'
+      - p: '답은 **9000과 10**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: ValueReferenceTest.predict
+          code: predict
+      - p: '아래에서 시나리오를 고르고 한 줄씩 넘겨 보세요. 왼쪽은 변수, 오른쪽은 객체예요.'
+      - widget:
+          kind: steps
+          layout: [selector, duo, log, buttons, verdict]
+          selector:
+            label: 실행할 코드
+            options:
+              - {value: predict, label: 'discount(order, rate)'}
+              - {value: reassign, label: 'replace(order)'}
+          initial:
+            duo:
+              - {label: 변수, state: dim, text: 아직 없음}
+              - {label: 객체, state: dim, text: 아직 없음}
+          scenarios:
+            predict:
+              - log: 'Order order = new Order(10000); int rate = 10;'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체', mark: changed}, {k: rate, v: '10', mark: changed}]
+                  - label: 객체
+                    rows: [{k: 주문 객체 price, v: '10000', mark: changed}]
+              - log: 'discount(order, rate) 호출: o에 참조가, rate에 10이 복사됨'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체'}, {k: rate, v: '10'}, {k: '(메서드) o', v: '→ 주문 객체', mark: changed}, {k: '(메서드) rate', v: '10', mark: changed}]
+                  - label: 객체
+                    rows: [{k: 주문 객체 price, v: '10000'}]
+              - log: 'o.price = 9000'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체'}, {k: rate, v: '10'}, {k: '(메서드) o', v: '→ 주문 객체'}, {k: '(메서드) rate', v: '10'}]
+                  - label: 객체
+                    rows: [{k: 주문 객체 price, v: '9000', mark: changed}]
+              - log: 'rate = 0 (메서드의 rate만)'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체'}, {k: rate, v: '10'}, {k: '(메서드) o', v: '→ 주문 객체'}, {k: '(메서드) rate', v: '0', mark: changed}]
+                  - label: 객체
+                    rows: [{k: 주문 객체 price, v: '9000'}]
+              - log: '메서드가 끝남: o와 메서드의 rate가 사라짐'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체'}, {k: rate, v: '10'}]
+                  - label: 객체
+                    rows: [{k: 주문 객체 price, v: '9000'}]
+                verdict: '객체는 하나라서 메서드가 바꾼 금액이 남아요. rate는 값이 복사됐을 뿐이라 바깥은 10 그대로예요.'
+            reassign:
+              - log: 'Order order = new Order(10000);'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ 주문 객체 A', mark: changed}]
+                  - label: 객체
+                    rows: [{k: A의 price, v: '10000', mark: changed}]
+              - log: 'replace(order) 호출: o에 참조가 복사됨'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ A'}, {k: '(메서드) o', v: '→ A', mark: changed}]
+                  - label: 객체
+                    rows: [{k: A의 price, v: '10000'}]
+              - log: 'o = new Order(1): o가 새 객체 B를 가리킴'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ A'}, {k: '(메서드) o', v: '→ B', mark: changed}]
+                  - label: 객체
+                    rows: [{k: A의 price, v: '10000'}, {k: B의 price, v: '1', mark: changed}]
+              - log: '메서드가 끝남: o가 사라짐'
+                duo:
+                  - label: 변수
+                    rows: [{k: order, v: '→ A'}]
+                  - label: 객체
+                    rows: [{k: A의 price, v: '10000'}, {k: B의 price, v: '1 (아무도 안 가리킴)', mark: bad}]
+                verdict: 'o에 새 객체를 대입한 것은 메서드의 변수만 바꿨어요. 바깥의 order는 처음부터 끝까지 A를 가리켜요.'
+      - h3: 매개변수에 새 객체를 대입하면
+      - p: '두 번째 시나리오가 이 코드예요. 메서드 안에서 `o`에 새 주문을 넣었어요.'
+      - ci:
+          key: reassign
+          label: 실제 출력 보기
+          source: ValueReferenceTest.reassign
+          code: reassign
+      - p: '10000 그대로예요. `o = new Order(1)`은 **메서드의 변수** `o`가 다른 객체를 가리키게 했을 뿐이에요. 바깥의 `order`에 든 참조는 건드리지 못해요.'
+      - p: '그래서 "자바는 객체를 참조로 넘긴다"는 말은 틀려요. 참조로 넘겼다면 바깥의 `order`가 새 주문으로 바뀌었을 거예요. 자바는 **언제나 값으로 넘기고**, 참조형일 때는 그 값이 참조일 뿐이에요.'
+      - table:
+          head: [메서드 안에서 한 일, 호출한 쪽에 보이나]
+          rows:
+            - ['기본형 매개변수를 바꿈 (`rate = 0`)', 보이지 않음]
+            - ['객체의 필드를 바꿈 (`o.price = ...`)', 보임. 같은 객체다]
+            - ['매개변수에 새 객체를 대입 (`o = new ...`)', 보이지 않음]
+            - ['리스트에 원소를 더함 (`list.add(...)`)', 보임. 같은 리스트다]
+      - quiz:
+          q: '`static void add(List<String> names) { names.add("lee"); names = new ArrayList<>(); names.add("park"); }`에 "kim" 하나가 든 리스트를 넘겼어요. 메서드가 끝난 뒤 호출한 쪽 리스트에 든 것은?'
+          options:
+            - kim
+            - kim, lee
+            - kim, lee, park
+          answer: 2
+          explain: '"lee"는 같은 리스트에 더했어요. 그다음 `names`가 새 리스트를 가리켜서 "park"은 새 리스트에 들어갔고, 호출한 쪽은 모르는 리스트예요.'
+      - next: '"같은 객체를 가리킨다"는 말이 계속 나왔어요. 두 변수가 같은 객체를 가리키는지는 어떻게 확인하나요?'
+    recall: '언제나 변수에 든 것이 매개변수로 복사돼요. 기본형은 값이, 참조형은 참조가 복사돼요. 그래서 메서드 안에서 객체의 필드를 바꾸면 같은 객체라 호출한 쪽에 보이고, 매개변수에 새 객체를 대입하면 메서드의 변수만 바뀌어 보이지 않아요. 자바는 참조를 값으로 넘겨요.'
   - id: q3
     title: '==는 무엇을 비교하나요?'
     conclusion:
@@ -125,6 +387,32 @@ questions:
     asks:
       - '본문의 예시: `equals`를 재정의하지 않은 `Order`로 `Order a = new Order(10000); Order b = new Order(10000); Order c = a;`를 만들었다. `a == b`, `a == c`, `a.equals(b)`의 결과는 차례로 무엇인가 (false, true, false)'
       - '옮긴 상황: `String s = new String("PAID"); String t = new String("PAID");`에서 `s == t`와 `s.equals(t)`의 결과는 무엇인가 (false와 true)'
+    body:
+      - p: '`==`도 대입과 같은 눈으로 보면 돼요. **변수에 든 것을 비교해요.** 기본형이면 값을 비교하고, 참조형이면 참조, 곧 같은 객체를 가리키는지를 비교해요.'
+      - code: equality
+      - p: '여섯 가지 비교의 결과를 예상해 보고 열어 보세요.'
+      - ci:
+          key: equality
+          label: 실제 출력 보기
+          source: ValueReferenceTest.equalityOperator
+          code: equality
+      - ul:
+          - '**`a == b`는 false예요.** 금액이 같아도 `new`를 두 번 불러서 주문 객체가 둘이에요. 참조가 달라요.'
+          - '**`a == c`는 true예요.** `c = a`로 참조를 복사했으니 같은 객체를 가리켜요.'
+          - '**`a.equals(b)`도 false예요.** 모든 클래스가 물려받는 `Object`의 `equals`는 `==`와 같은 일을 해요. `Order`는 `equals`를 다시 정의하지 않았어요.'
+          - '**`s.equals(t)`는 true예요.** `String`은 `equals`를 "글자가 같으면 같다"로 다시 정의해 뒀어요. 그래도 `s == t`는 false예요. 객체가 둘이니까요.'
+      - p: '정리하면 이래요. `==`는 같은 객체인지를, `equals`는 그 클래스가 정한 "같다"를 봐요. 클래스가 정하지 않았으면 `equals`도 같은 객체인지를 봐요.'
+      - muted: '예제는 일부러 `new String("PAID")`로 문자열을 만들었어요. `"PAID" == "PAID"`처럼 코드에 직접 쓴 문자열끼리는 `==`가 true로 나오는데, 그 까닭은 String 레슨에서 다뤄요. `Order`에 "금액이 같으면 같은 주문"을 만드는 방법은 equals와 hashCode 레슨에서 다뤄요.'
+      - quiz:
+          q: '`equals`를 재정의하지 않은 `Order`로 `a = new Order(10000)`, `b = new Order(10000)`, `c = a`를 만들었어요. `a == b`, `a == c`, `a.equals(b)`의 결과는?'
+          options:
+            - true, true, true
+            - false, true, false
+            - false, true, true
+          answer: 2
+          explain: '`a`와 `b`는 다른 객체예요. `c`는 `a`와 같은 객체예요. 재정의하지 않은 `equals`는 `==`와 같아요.'
+      - next: '참조형 변수가 아무 객체도 가리키지 않을 수도 있을까요?'
+    recall: '`==`는 변수에 든 것을 비교해요. 기본형은 값이 같은지, 참조형은 같은 객체를 가리키는지를 봐요. 내용이 같은지는 `equals`로 보는데, `Object`의 `equals`는 `==`와 같아서 클래스가 재정의하지 않았으면 같은 객체일 때만 true예요. `String`은 글자를 비교하게 재정의했어요.'
   - id: q4
     title: null은 무엇이고 왜 NullPointerException이 나나요?
     conclusion:
@@ -140,28 +428,136 @@ questions:
     asks:
       - '본문의 예시: `class Member { String name; int age; }`를 `new Member()`로 만들고 아무것도 넣지 않았다. `m.age`와 `m.name.length()`를 차례로 실행하면 각각 어떻게 되나 (0이 나오고, 다음 줄에서 `NullPointerException`)'
       - '옮긴 상황: `String status = null;`일 때 `status == null`, `"PAID".equals(status)`, `status.equals("PAID")`를 각각 실행한 결과는 무엇인가 (true, false, `NullPointerException`)'
+    body:
+      - p: '참조형 변수에는 객체를 가리키는 참조가 들어 있다고 했어요. **아무것도 가리키지 않는 참조**도 있어요. 그것이 `null`이에요. 기본형 변수는 값을 담으니 null이 될 수 없어요.'
+      - p: 'null을 들고 있는 것, 메서드에 넘기는 것, `==`로 비교하는 것은 아무 문제가 없어요. 문제는 **점을 찍는 순간**이에요. `o.price`는 "o가 가리키는 객체의 price"인데, 가리키는 객체가 없으니 JVM이 `NullPointerException`을 던져요.'
+      - h3: 값을 넣지 않은 필드는 기본값으로 시작해요
+      - p: '`Member`를 만들고 아무것도 넣지 않았어요. 세 필드에는 무엇이 들어 있을까요? 마지막 줄은 어떻게 될까요?'
+      - ci:
+          key: 'null'
+          label: 실제 출력 보기
+          source: ValueReferenceTest.nullAndDefaults
+          code: member
+      - ul:
+          - '**필드는 기본값으로 시작해요.** 숫자는 0, `boolean`은 false, 참조형은 null이에요. 배열의 칸도 같아서 `new Order[3]`의 세 칸은 모두 null이에요.'
+          - '**`m.name`이 null이라 `.length()`에서 예외가 났어요.** 넣은 적 없는 필드를 쓰는 곳이 NPE가 가장 흔하게 나는 자리예요.'
+          - '**지역 변수는 기본값이 없어요.** 메서드 안에서 `String s;`만 쓰고 읽으면 실행 전에 컴파일 오류가 나요.'
+      - p: '예외 메시지에 `"m.name" is null`이라고 무엇이 null이었는지 나와요. 자바 14부터 이렇게 알려 줘요. `order.getMember().getName().length()`처럼 한 줄에 점이 여러 개여도 어느 것이 null이었는지 바로 보여요.'
+      - h3: null일 수 있는 값을 비교할 때
+      - ci:
+          key: null-compare
+          label: 실제 출력 보기
+          source: ValueReferenceTest.nullSafeComparison
+          code: nullCompare
+      - ul:
+          - '**`== null`은 안전해요.** 참조를 비교할 뿐 점을 찍지 않아요.'
+          - '**`status.equals(...)`는 위험해요.** `status`가 null이면 점을 찍는 순간 예외예요.'
+          - '**null이 아닌 쪽에서 부르면 안전해요.** `"PAID".equals(status)`는 리터럴이 null일 수 없으니 예외가 나지 않고 false를 줘요. 둘 다 null일 수 있으면 `Objects.equals(a, b)`를 써요.'
+      - muted: 'null을 돌려주지 않고 "없을 수 있음"을 타입으로 알리는 `Optional`은 스트림과 Optional 레슨에서 다뤄요.'
+      - quiz:
+          q: '`String status = null;`일 때 예외가 나는 것은 무엇일까요?'
+          options:
+            - '`status == null`'
+            - '`"PAID".equals(status)`'
+            - '`status.equals("PAID")`'
+          answer: 3
+          explain: 'null인 `status`에 점을 찍어 메서드를 부르면 `NullPointerException`이에요. 앞의 둘은 null에 점을 찍지 않아요.'
+    recall: 'null은 아무 객체도 가리키지 않는 참조예요. null을 들고 있거나 `==`로 비교하는 것은 괜찮지만, 점을 찍어 필드나 메서드에 닿으려 하면 닿을 객체가 없어 `NullPointerException`이 나요. 값을 넣지 않은 참조형 필드는 null로 시작해서 그런 필드를 쓰는 곳에서 자주 만나요. null일 수 있는 값은 `"PAID".equals(status)`나 `Objects.equals`로 비교해요.'
 practice:
+  title: 스프링에서는 이렇게 만나요
   says:
     - '서비스 메서드에 넘긴 객체를 고치면 호출한 쪽에도 보인다. 질문 2의 규칙 그대로다. 예: `orderService.applyCoupon(order, coupon)`이 `order.price`를 바꾸면 컨트롤러가 든 `order`도 바뀌어 있다. 반환값이 없어도 결과가 전해지는 코드와, 그래서 "이 메서드가 내 객체를 고치는지"를 이름과 시그니처로 드러내야 하는 이유를 보여 준다 (순수 자바 테스트)'
     - 'JPA의 변경 감지가 같은 원리다. `findById`로 받은 엔티티는 영속성 컨텍스트가 들고 있는 것과 같은 객체다. 그래서 필드만 바꾸고 `save`를 부르지 않아도 JPA가 바뀐 것을 안다. 이 레슨은 "같은 객체를 가리킨다"까지만 말하고 동작은 P2에 넘긴다 (설명만, 테스트 없음)'
     - '흔한 실수 1: 넘겨받은 매개변수에 새 객체를 대입하고 호출한 쪽이 바뀌길 기대한다(`items = new ArrayList<>()`). 고친 코드: 새 리스트를 반환하고 호출한 쪽이 받아 쓰거나, 받은 리스트에 `clear()`를 부른다 (순수 자바 테스트)'
     - '흔한 실수 2: 싱글톤 빈이 필드로 가진 리스트를 getter로 그대로 돌려준다. 한 요청이 그 리스트에 `add`하면 다음 요청에서도 보인다. 빈은 하나이고 모든 요청이 같은 객체의 참조를 받기 때문이다. 고친 코드: `List.copyOf(...)`로 복사본을 주거나 처음부터 `List.of(...)`로 만든다. 왜 그것으로 막히는지는 J9에서 다룬다 (스프링 컨텍스트를 작게 띄워 빈을 두 번 받아 확인하는 테스트)'
     - 'DTO와 엔티티의 `id`를 `Long`으로 두는 것과 그 비교는 J3에서 다룬다는 한 줄'
+  body:
+    - p: '스프링 코드에서 객체는 컨트롤러, 서비스, 리포지토리 사이를 계속 넘나들어요. 넘길 때마다 질문 2의 규칙이 적용돼요. 서비스 예제는 순수 자바 테스트로, 싱글톤 빈의 실수는 스프링 컨텍스트를 작게 띄워 확인했어요.'
+    - h3: 서비스에 넘긴 객체는 호출한 쪽의 것이기도 해요
+    - code: applyCoupon
+      notes:
+        - mark: 'applyCoupon(order, coupon)'
+          as: code
+          text: '돌려주는 값이 없어요. 그래도 서비스가 바꾼 금액이 컨트롤러의 `order`에 보여요. 같은 주문 객체를 가리키니까요.'
+    - p: '이 코드는 동작해요. 문제는 읽는 사람이 `applyCoupon`이 넘긴 객체를 고친다는 것을 시그니처만 보고는 모른다는 거예요. 넘긴 객체를 고치는 메서드는 `applyCouponTo(order)`처럼 이름에 드러내거나, 고치지 않고 새 값을 돌려주게 만들어요.'
+    - p: 'JPA도 이 성질을 써요. `findById`로 받은 엔티티는 JPA가 안에 들고 있는 것과 **같은 객체**예요. 그래서 서비스가 필드만 바꾸고 `save`를 부르지 않아도 JPA가 바뀐 것을 알고 UPDATE를 보내요. 어떻게 알아채는지는 영속성 컨텍스트 레슨에서 다뤄요.'
+    - h3: '흔한 실수 1: 매개변수에 새 리스트를 대입'
+    - p: '주문 상품 목록을 비우려고 이렇게 썼어요. 호출한 쪽의 리스트는 비워질까요?'
+    - code: clearBad
+      notes:
+        - mark: items = new ArrayList<>()
+          as: code
+          text: '메서드의 변수 `items`가 새 리스트를 가리키게 될 뿐이에요. 질문 2의 `replace`와 같아요.'
+    - ci:
+        key: list-param
+        label: 실제 출력 보기
+        source: ValueReferenceTest.listParameter
+    - p: '위 출력의 둘째 줄이 이 메서드를 부른 뒤 호출한 쪽 리스트의 크기예요. 3 그대로예요. 받은 리스트를 비우려면 그 리스트에 `clear()`를 부르고, 새 리스트가 필요하면 돌려줘서 호출한 쪽이 받게 해요.'
+    - code: clearFixed
+      notes:
+        - mark: items.clear()
+          as: code
+          text: '받은 리스트 객체 자체를 비워요. 같은 리스트라 호출한 쪽에도 보여요.'
+        - mark: new ArrayList<>()
+          as: code
+          text: '새 리스트는 돌려줘요. 호출한 쪽이 `items = emptied(items)`처럼 받아요.'
+    - h3: '흔한 실수 2: 싱글톤 빈이 리스트를 그대로 돌려줌'
+    - p: '스프링의 빈은 기본으로 애플리케이션에 하나만 만들어져요(싱글톤). 모든 요청이 같은 빈 객체를 써요. 그 빈이 필드의 리스트를 그대로 돌려주면 어떻게 될까요?'
+    - code: beanBad
+      notes:
+        - mark: categories
+          as: code
+          text: '필드가 가리키는 리스트의 참조를 그대로 돌려줘요. 받는 쪽은 빈의 리스트 그 자체를 받아요.'
+    - ci:
+        key: singleton-list
+        label: 두 요청의 실제 결과 보기
+        source: ValueReferenceTest.singletonBeanSharesList
+        code: beanRun
+    - p: '요청 1이 화면에 쓰려고 더한 "전체"가 요청 2에도 보여요. 빈은 하나이고 리스트도 하나라서, 그 뒤의 모든 요청에 "전체"가 쌓여요. 고치는 방법은 복사본을 주는 거예요.'
+    - code: beanFixed
+      notes:
+        - mark: List.copyOf(categories)
+          as: code
+          text: '받는 쪽이 고칠 수 없는 복사본을 줘요. 고치려 하면 `UnsupportedOperationException`이 나서 실수가 바로 드러나요.'
+    - muted: '`List.copyOf`가 왜 막아 주는지는 불변 객체 레슨에서, 여러 요청이 동시에 같은 리스트를 고칠 때 생기는 문제는 경쟁 상태와 동기화 레슨에서 다뤄요. 엔티티의 `Long id`를 `==`로 비교하는 실수는 바로 다음 레슨인 래퍼 클래스와 오토박싱에서 다뤄요.'
+interview:
+  question: 자바는 값으로 넘기나요, 참조로 넘기나요?
+  model:
+    - label: 정의
+      text: 자바는 언제나 값으로 넘깁니다. 기본형 변수에는 값이, 참조형 변수에는 객체를 가리키는 참조가 들어 있고, 메서드를 부를 때 변수에 든 것이 매개변수로 복사됩니다.
+    - label: 원리
+      text: 참조형을 넘기면 참조가 복사되어 메서드와 호출한 쪽이 같은 객체를 가리킵니다. 그래서 메서드 안에서 필드를 바꾸면 호출한 쪽에 보이지만, 매개변수에 새 객체를 대입하면 메서드의 변수만 바뀌어 보이지 않습니다. ==도 변수에 든 것을 비교해서 참조형은 같은 객체인지를 봅니다.
+    - label: 주의할 점
+      text: 내용이 같은지는 equals로 보는데 재정의하지 않으면 ==와 같습니다. null은 아무것도 가리키지 않는 참조라 점을 찍으면 NullPointerException이 납니다. 싱글톤 빈이 가진 컬렉션을 그대로 돌려주면 모든 요청이 같은 객체를 고치게 됩니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 서비스가 넘겨받은 리스트에 새 리스트를 대입해서 비우려다 호출한 쪽에 반영되지 않는 버그를 겪고, clear를 쓰거나 새 리스트를 반환하도록 고쳤습니다.'
+verified: 이 레슨의 출력은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 싱글톤 빈의 결과는 스프링 컨텍스트를 띄워 확인했어요. 코드가 바뀔 때마다 테스트([ValueReferenceTest](link:test))가 다시 돌아요.
+footer: '근거: 기본형과 참조형, 필드의 기본값은 자바 언어 명세 4장([링크](link:jls4)), 인자로 매개변수를 초기화하는 것은 8.4.1([링크](link:jlsArgs)), 무엇이 null이었는지 알려 주는 메시지는 JEP 358([링크](link:jep358)). 출력은 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict의 출력은 9000과 10이다'
     how: '코드를 그대로 돌려 출력을 `CiOutput`에 남긴다'
+    test: ValueReferenceTest.predict
   - claim: '코드 reassign의 출력은 10000이다'
     how: '코드를 그대로 돌린다'
+    test: ValueReferenceTest.reassign
   - claim: '참조형 변수를 대입한 뒤 한쪽으로 필드를 바꾸면 다른 쪽에서도 바뀐 값이 보인다. 배열도 같다'
     how: '`Order`와 `int[]`로 대입 뒤 값을 바꾸고 읽는다'
+    test: ValueReferenceTest.assignmentCopiesReference
+  - claim: '리스트를 넘기면 `add`는 호출한 쪽에 보이고, 매개변수에 새 리스트를 대입한 뒤의 일은 보이지 않는다'
+    how: '`add`와 `clear` 예제를 돌린다'
+    test: ValueReferenceTest.listParameter
   - claim: '`equals`를 재정의하지 않은 클래스는 값이 같은 두 객체의 `==`와 `equals`가 모두 false다. `new String`으로 만든 두 문자열은 `==`가 false이고 `equals`가 true다'
     how: '두 경우를 돌려 결과를 본다'
+    test: ValueReferenceTest.equalityOperator
   - claim: '값을 주지 않은 필드는 0, false, null이고, null에 점을 찍으면 `NullPointerException`이 난다. 메시지에 무엇이 null이었는지 들어 있다'
-    how: '필드를 읽고, 예외를 잡아 메시지를 `CiOutput`에 남긴다. 메시지의 문구는 그대로 붙이고 단정은 타입과 필드 이름이 들어 있는지만 한다'
+    how: '필드를 읽고, 예외를 잡아 메시지를 `CiOutput`에 남긴다'
+    test: ValueReferenceTest.nullAndDefaults
   - claim: '`"PAID".equals(null)`은 false이고 `Objects.equals(null, null)`은 true다'
     how: '그대로 돌린다'
+    test: ValueReferenceTest.nullSafeComparison
   - claim: '싱글톤 빈이 필드의 리스트를 그대로 돌려주면 한 호출이 더한 원소가 다음 호출에서 보이고, `List.copyOf`로 돌려주면 보이지 않는다'
-    how: '`AnnotationConfigApplicationContext`에 빈 하나를 등록하고, 받은 리스트에 더한 뒤 다시 받아 크기를 본다'
+    how: '`AnnotationConfigApplicationContext`에 빈 둘을 등록하고, 받은 리스트에 더한 뒤 다시 받아 본다'
+    test: ValueReferenceTest.singletonBeanSharesList
 sources:
   - '기본형과 참조형: 자바 언어 명세 4장 https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html'
   - '메서드 호출에서 인자의 값으로 매개변수를 초기화한다: 자바 언어 명세 8.4.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.1'
