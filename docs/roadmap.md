@@ -331,3 +331,4 @@ flowchart LR
 - 2026-11-25: 운영체제와 동시성 과정의 핵심 레슨 9개(C1~C9)의 설계서와 본문을 쓰고 문제 90개를 검수해 reviewed로 바꿨다. 예전 레슨 넷(process-and-thread, synchronization, thread-pool, completable-future)을 같은 슬러그로 다시 쓰고, future-and-callable은 C8에 합쳐 지웠다. 순서 번호는 과정 번호 방식 401~409를 쓴다
 - 2026-11-25: 네트워크와 웹 과정의 심화 레슨 N11 HTTP 캐시(`http-cache`), N12 웹소켓과 SSE(`websocket-sse`)를 쓰고 문제를 검수했다. 네트워크와 웹 과정 12개가 모두 본문을 갖췄다
 - 2026-11-25: 객체지향 설계와 패턴 과정의 레슨 14개(핵심 13, 심화 O14)가 모두 본문을 갖는다. O3을 뺀 13개의 본문, 검증 테스트, 문제를 쓰고 검수했다. O8을 쓰며 OncePerRequestFilter의 doFilter가 final이 아니라는 것을 테스트로 알고 설계서를 고쳤다
+- 2026-11-25: 시스템 설계와 아키텍처 과정의 핵심 9개(A1~A9)와 재료가 있는 심화 5개(A10, A11, A18, A19, A20)를 핵심 질문 구조로 썼다. 예전 .astro 7개를 지웠다

@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 요청 스레드가 10개인 서버에 3초 늦게 답하는 PG를 부르는 결제 요청 10건이 먼저 들어오고, 바로 뒤에 PG를 부르지 않는 상품 조회 1건이 들어왔어요. PG 호출에는 타임아웃이 없어요. 상품 조회는 대략 얼마나 기다리나요?
     choices:
@@ -51,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 문자 발송 API를 읽기 타임아웃 1초로 불렀는데 타임아웃 예외가 났어요. 문자에 대해 맞는 것은?
     choices:
@@ -71,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: PG가 500ms 걸리는데 타임아웃 200ms, 최대 2번 시도로 결제를 불렀고 두 번 모두 타임아웃이 났어요. 멱등 키는 보내지 않았어요. PG가 결제를 처리한 횟수는?
     choices:
@@ -90,7 +90,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 배송 API가 주소 형식이 틀렸다며 400을 줬어요. 모든 예외를 3번까지 재시도하도록 설정돼 있어요. 어떻게 될까요?
     choices:
@@ -110,7 +110,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: PG 호출에 서킷 브레이커를 뒀고, 실패율이 기준을 넘어 서킷이 열렸어요. 열린 동안 결제 요청이 오면 어떻게 되나요?
     choices:
@@ -129,7 +129,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서킷이 열리고 정한 시간이 지나 반열림이 됐어요. 반열림에서 허용한 시험 호출 2번이 모두 실패했어요. 서킷은 어떻게 되나요?
     choices:
@@ -148,7 +148,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서킷이 열려 결제 호출이 바로 거절됐어요. 결제의 대체 응답으로 가장 알맞은 것은?
     choices:
@@ -166,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 상품 페이지가 추천 상품 API를 불러 추천 칸을 채워요. 추천 API가 장애일 때 알맞은 대체 응답은?
     choices:
@@ -184,7 +184,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 결제 호출에 아래 재시도 설정을 뒀어요. 멱등 키는 보내지 않아요. 가장 큰 문제는 무엇인가요?
     code: |-
@@ -211,7 +211,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "외부 API의 장애가 내 서버로 번지지 않게 어떻게 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

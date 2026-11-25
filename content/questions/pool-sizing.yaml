@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 커넥션 2개짜리 풀에서 스레드 6개가 동시에 200ms 걸리는 쿼리를 한 번씩 보내요. 모두 끝나는 데 대략 얼마나 걸리나요?
     choices:
@@ -51,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 기본 설정(톰캣 스레드 200, HikariCP 커넥션 10)인 서버에 DB 쿼리가 1초 걸리는 요청 30개가 동시에 왔어요. 마지막 요청은 대략 언제 끝나나요?
     choices:
@@ -70,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: HikariCP 커넥션 10개가 모두 쓰이는 중에 11번째 요청이 커넥션을 빌리려 해요. 설정은 기본값이에요. 어떻게 되나요?
     choices:
@@ -88,7 +88,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커넥션 10개짜리 풀에서 아래 메서드를 처리해요. PG 호출은 2초, 저장은 아주 짧아요. 1초에 처리할 수 있는 주문은 대략 몇 건인가요?
     code: |-
@@ -114,7 +114,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 커넥션 2개짜리 풀이에요. 요청마다 주문 트랜잭션으로 커넥션 1개를 쥔 채 REQUIRES_NEW로 감사 로그를 써서 1개를 더 빌려요. 이런 요청 2개가 동시에 오면 어떻게 되나요?
     choices:
@@ -132,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 요청 하나가 커넥션을 동시에 2개까지 써요. 이런 요청이 동시에 최대 4개 와요. HikariCP 문서의 식으로 풀 고갈 데드락을 피하려면 풀을 최소 몇 개로 두나요?
     choices:
@@ -152,7 +152,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서버 10대가 각자 HikariCP 풀 크기 20으로 기본 설정의 PostgreSQL에 붙어요. 무엇이 문제인가요?
     choices:
@@ -171,7 +171,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 코어 4개짜리 DB를 쓰는 서버에서 응답이 느려, 누군가 HikariCP 커넥션을 10개에서 200개로 늘리자고 했어요. 가장 알맞은 판단은?
     choices:
@@ -191,7 +191,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스레드 풀과 커넥션 풀의 크기는 어떻게 정하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

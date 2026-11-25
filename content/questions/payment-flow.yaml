@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 승인만 하고 아직 매입하지 않은 카드 결제가 있어요. 고객의 카드는 어떤 상태인가요?
     choices:
@@ -50,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 10,000원이 승인된 결제를 12,000원으로 매입하려 해요. 어떻게 되나요?
     choices:
@@ -69,7 +69,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: PG 승인이 500ms 걸리고 우리 타임아웃은 200ms예요. 아래 코드가 끝난 뒤 우리 DB와 PG의 결제 상태는?
     code: |-
@@ -95,7 +95,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 승인 응답이 타임아웃이라 결과를 모르는 승인을 바로 취소하는 망 취소를 보냈고 성공했어요. 그날 대사에서 이 주문은 어떻게 나오나요?
     choices:
@@ -114,7 +114,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 10,000원 결제에서 3,000원, 7,000원을 차례로 부분 취소했어요. 1원을 더 취소하면 어떻게 되나요?
     choices:
@@ -132,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 10,000원 결제에 6,000원 부분 취소 두 건이 동시에 왔어요. 각 요청이 아래 UPDATE를 보내고, 바뀐 행이 0이면 거절해요. 결과는?
     code: |-
@@ -157,7 +157,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 결제 금액을 만 원 단위 double로 저장해 0.1을 열 번 더했어요. 이 방식의 문제는?
     choices:
@@ -176,7 +176,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 대사에서 PG에는 APPROVED로 있는데 우리 기록에는 없는 주문이 나왔어요. 가장 흔한 원인은?
     choices:
@@ -194,7 +194,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 대사에서 같은 주문의 금액이 PG 4,500원, 우리 5,000원으로 나왔어요. 먼저 의심할 것은?
     choices:
@@ -213,7 +213,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "결제 시스템의 흐름과 주의할 점을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
