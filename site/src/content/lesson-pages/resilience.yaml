@@ -1,0 +1,398 @@
+# 타임아웃, 재시도, 서킷 브레이커
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/resilience.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 타임아웃, 재시도, 서킷 브레이커
+description: 다른 서버가 느릴 때 타임아웃이 필요한 이유와 타임아웃이 알려 주지 않는 것, 재시도를 해도 되는 때와 간격, 서킷 브레이커가 장애를 끊는 방식, 셋을 함께 쓰는 법. 느린 결제 서버를 흉내 내 스레드가 묶이는 것을 재 보는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 25
+roadmap: A10
+type: 동작 확인
+prerequisites:
+  - {slug: idempotency, title: 멱등성과 중복 요청 방지}
+  - {slug: thread-pool, title: 스레드 풀}
+assume: '자바 21, Resilience4j 2.2, JDK HttpClient. 같은 요청이 두 번 와도 멱등 키로 한 번만 처리하는 법(멱등성과 중복 요청 방지 레슨). 요청마다 스레드 하나를 쓰고 스레드 풀의 크기가 정해져 있다는 것(스레드 풀 레슨). 다른 서버를 HTTP로 부르면 느리고 실패할 수 있다는 것(모놀리스와 마이크로서비스 레슨).'
+example: '주문 서버가 외부 결제 서버(PG)를 HTTP로 불러 결제를 승인한다. PG가 3초씩 늦거나 오류를 낼 때, 주문 서버의 다른 요청까지 어떻게 되는지 본다.'
+intro:
+  - '결제 대행사(PG)가 점검 중이라 응답이 3초씩 늦어졌어요. 그런데 결제와 상관없는 상품 조회 페이지까지 느려졌어요. 주문 서버의 요청 스레드가 모두 PG 응답을 기다리느라 묶였기 때문이에요.'
+  - '스프링 서버는 결제사, 문자 발송, 다른 팀의 서비스처럼 바깥을 자주 불러요. 바깥은 언젠가 느려지고 실패해요. 그때 내 서버까지 멈추지 않게 하는 장치가 타임아웃, 재시도, 서킷 브레이커예요. 경력 면접에서 "외부 API 장애가 번지지 않게 어떻게 하나요"로 자주 물어요.'
+  - '이 레슨에서는 늦게 답하는 가짜 PG를 띄우고 요청 스레드 10개짜리 서버로 불러요. 타임아웃이 없을 때 상관없는 요청이 얼마나 기다리는지, 재시도가 결제를 두 번 만드는지, 서킷 브레이커가 언제 열리고 닫히는지 재 봐요.'
+covers:
+  - topic: '타임아웃이 없으면 느린 상대를 기다리는 요청이 스레드를 붙잡아, 상관없는 요청까지 기다린다'
+    where: '질문 1'
+  - topic: '연결 타임아웃과 읽기 타임아웃'
+    where: '질문 1'
+  - topic: '타임아웃은 실패가 아니라 모름이다. 상대는 이미 처리했을 수 있다'
+    where: '질문 1'
+  - topic: '재시도는 일시적인 실패(연결 끊김, 503)에만 하고, 400처럼 다시 해도 같은 실패에는 하지 않는다'
+    where: '질문 2'
+  - topic: '멱등하지 않은 요청을 재시도하면 두 번 처리된다. 멱등 키와 함께 재시도한다'
+    where: '질문 2. 멱등 키는 멱등성과 중복 요청 방지(A6)'
+  - topic: '재시도 간격: 지수 백오프로 늘리고, 무작위 값(지터)을 더해 한꺼번에 몰리지 않게 한다'
+    where: '질문 2'
+  - topic: '재시도는 부하를 늘린다. 장애 중인 상대에게 재시도가 몰리면 회복을 늦춘다'
+    where: '질문 3'
+  - topic: '서킷 브레이커의 세 상태: 닫힘(통과), 열림(바로 거절), 반열림(시험 호출)'
+    where: '질문 3'
+  - topic: '실패율 기준과 창, 열린 상태를 유지하는 시간'
+    where: '질문 3'
+  - topic: '대체 응답(fallback): 실패할 때 무엇을 돌려줄지'
+    where: '질문 4'
+  - topic: '셋을 함께 쓰는 순서: 호출마다 타임아웃, 그 바깥에 재시도와 서킷 브레이커'
+    where: '질문 4'
+  - topic: 'Resilience4j를 스프링 부트에서 쓰는 설정과 애너테이션'
+    where: '실무에서는'
+  - topic: '스레드를 기능별로 나눠 한 기능이 다 쓰지 못하게 하는 벌크헤드'
+    where: '질문 4의 더 알아보기'
+  - topic: '요청 수 제한'
+    where: '다루지 않음: 요청 수 제한(A13)'
+  - topic: '스레드 풀과 커넥션 풀의 크기'
+    where: '다루지 않음: 스레드 풀과 커넥션 풀 크기(A11)'
+codes:
+  predict: |-
+    // 요청 스레드 10개인 주문 서버
+    // PG는 3초 늦게 응답, 타임아웃 없음
+    for (int i = 0; i < 10; i++) {
+      submit(() -> pg.approve(order));
+    }
+    submit(() -> products.find(1L));
+    // 상품 조회는 얼마나 기다릴까?
+  timeout: |-
+    HttpClient http = HttpClient.newBuilder()
+        .[[connectTimeout]](Duration.ofSeconds(1))
+        .build();
+    HttpRequest req = HttpRequest
+        .newBuilder(uri)
+        .[[timeout]](Duration.ofMillis(300))
+        .POST(body).build();
+  retryNoKey: |-
+    Retry retry = Retry.of("pg",
+        RetryConfig.custom()
+            .maxAttempts(2).build());
+    retry.executeSupplier(
+        () -> pay(timeout200ms, [[null]]));
+  retryKey: |-
+    String key = UUID.randomUUID()
+        .toString();
+    retry.executeSupplier(
+        () -> pay(timeout200ms, [[key]]));
+  backoff: |-
+    RetryConfig.custom()
+        .maxAttempts(4)
+        .intervalFunction(IntervalFunction
+            .[[ofExponentialBackoff]](
+                Duration.ofMillis(100), 2))
+        .build();
+  jitter: |-
+    IntervalFunction
+        .[[ofExponentialRandomBackoff]](
+            Duration.ofMillis(100), 2, 0.5)
+  circuit: |-
+    CircuitBreakerConfig.custom()
+        .slidingWindowSize(10)
+        .failureRateThreshold(50)
+        .waitDurationInOpenState(
+            Duration.ofMillis(500))
+        .permittedNumberOfCalls⤷
+    InHalfOpenState(2)
+        .build();
+  fallback: |-
+    @CircuitBreaker(name = "pg",
+        fallbackMethod = "pending")
+    @Retry(name = "pg")
+    public PayResult approve(Order o) {
+      return pgClient.approve(o);
+    }
+
+    PayResult pending(Order o, Throwable t) {
+      return PayResult.pending(o.getId());
+    }
+  config: |-
+    resilience4j:
+      circuitbreaker:
+        instances:
+          pg:
+            sliding-window-size: 10
+            failure-rate-threshold: 50
+            wait-duration-in-open-state: 30s
+      retry:
+        instances:
+          pg:
+            max-attempts: 3
+            wait-duration: 200ms
+            retry-exceptions:
+              - java.io.IOException
+  badRetry: |-
+    resilience4j:
+      retry:
+        instances:
+          pg:
+            max-attempts: 5
+            [[retry-exceptions:]]
+              [[- java.lang.Exception]]
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/resilience/ResilienceTest.java
+  r4jCircuit: https://resilience4j.readme.io/docs/circuitbreaker
+  r4jRetry: https://resilience4j.readme.io/docs/retry
+  r4jSpring: https://resilience4j.readme.io/docs/getting-started-3
+  httpClient: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
+predict:
+  title: 상관없는 요청은 얼마나 기다릴까요?
+  text: '요청 스레드가 10개인 주문 서버에서, 3초 늦게 답하는 PG를 부르는 결제 요청 10건이 먼저 들어오고 바로 뒤에 상품 조회 1건이 들어와요. PG 호출에는 타임아웃이 없어요. 상품 조회는 PG를 부르지 않는데, 얼마나 기다릴까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: none
+      label: 거의 기다리지 않는다
+    - value: three
+      label: 3초 가까이 기다린다
+    - value: thirty
+      label: 30초쯤 기다린다
+  answer: three
+  storageKey: resilience-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 다른 서버를 부를 때 왜 타임아웃이 꼭 필요한가요?
+    conclusion:
+      lead: '느린 상대를 기다리는 요청이 스레드를 붙잡아, 상대와 상관없는 요청까지 줄을 서게 되기 때문이에요.'
+      sub: '타임아웃은 그 기다림에 끝을 정해요. 다만 타임아웃은 "실패"가 아니라 "모름"이라, 상대는 이미 처리했을 수 있어요.'
+    says:
+      - '요청 스레드 10개, PG 3초. 결제 10건이 스레드를 모두 잡고 상품 조회가 3초 가까이 기다린다. 타임아웃 300ms면 짧게 기다린다. 예측의 답을 밝힌다'
+      - '연결 타임아웃은 연결을 맺기까지, 읽기(응답) 타임아웃은 응답을 받기까지의 한도다'
+      - '타임아웃 200ms로 500ms 걸리는 PG를 부르면 클라이언트는 실패로 보지만 PG는 결제를 처리했다. 타임아웃은 모름이다'
+    asks:
+      - '본문의 예시: 요청 스레드 10개, PG 3초, 타임아웃 없음. 결제 10건 뒤의 상품 조회는 (3초 가까이 기다린다)'
+      - '옮긴 상황: 타임아웃 1초로 문자 발송 API를 불렀는데 타임아웃이 났다. 문자는 나갔나 (알 수 없다. 나갔을 수도 있다)'
+    body:
+      - p: '요청 스레드 10개짜리 서버에서 결제 10건이 먼저 PG를 부르고, 바로 뒤에 PG와 상관없는 상품 조회가 들어왔어요.'
+      - ci:
+          key: thread-exhaustion
+          label: 실제 결과 보기
+          source: ResilienceTest.noTimeoutExhaustsThreads
+          code: predict
+      - p: '답은 **3초 가까이 기다린다**예요. {{predict-result}} 상품 조회는 PG를 부르지 않는데도 기다렸어요. 결제 10건이 스레드 10개를 모두 붙잡고 PG 응답을 기다리는 동안, 상품 조회는 빈 스레드가 생길 때까지 줄을 섰기 때문이에요([스레드 풀](lesson:thread-pool)). 바깥 하나가 느려지면 **내 서버 전체**가 느려져요.'
+      - p: '타임아웃을 300ms로 두니 결제 요청들이 300ms에 포기하고 스레드를 돌려줘서, 상품 조회는 짧게 기다렸어요. 타임아웃은 기다림에 끝을 정해 스레드를 지켜요.'
+      - code: timeout
+        notes:
+          - mark: connectTimeout
+            as: code
+            text: '**연결 타임아웃**: 상대와 연결을 맺기까지의 한도예요. 상대 서버가 꺼져 있거나 네트워크가 막혔을 때 걸려요.'
+          - mark: timeout
+            as: code
+            text: '**읽기(응답) 타임아웃**: 요청을 보낸 뒤 응답을 받기까지의 한도예요. 상대가 느릴 때 걸려요([HttpClient 문서](link:httpClient)).'
+      - h3: 타임아웃은 "모름"이에요
+      - p: 'PG가 500ms 걸리는데 타임아웃을 200ms로 두고 불렀어요. 주문 서버는 200ms에 타임아웃 예외를 받았지만, PG를 열어 보니 **결제를 처리했어요.** PG는 요청을 받아 일을 했고, 응답만 주문 서버가 기다리지 않았을 뿐이에요.'
+      - p: '그래서 타임아웃이 났을 때 "결제 실패"라고 단정하면 안 돼요. 결과를 **모르는** 거예요. [멱등성과 중복 요청 방지](lesson:idempotency)의 "응답을 잃은 요청"과 같은 상황이에요. 결제 상태를 PG에 다시 물어보거나, 같은 멱등 키로 다시 보내 확인해요.'
+      - quiz:
+          q: '문자 발송 API를 타임아웃 1초로 불렀는데 타임아웃 예외가 났어요. 문자는 어떻게 됐을까요?'
+          options:
+            - '나가지 않았다'
+            - '알 수 없다. 나갔을 수도 있다'
+            - '반드시 나갔다'
+          answer: 2
+          explain: '타임아웃은 응답을 기다리지 않았다는 뜻일 뿐이에요. 상대는 요청을 받아 처리했을 수 있어요.'
+      - next: '실패했거나 모르면 다시 보내면 될까요? 재시도는 언제 해도 될까요?'
+    recall: '타임아웃이 없으면 느린 상대를 기다리는 요청이 스레드를 붙잡아, 상대와 상관없는 요청까지 빈 스레드를 기다려요. 스레드 10개에 3초 걸리는 PG 호출 10건이 오면 상품 조회도 3초 가까이 기다렸어요. 연결 타임아웃과 읽기 타임아웃으로 기다림에 끝을 정해요. 타임아웃은 실패가 아니라 모름이라, 상대는 이미 처리했을 수 있어요.'
+  - id: q2
+    title: 재시도는 언제 해도 되고, 어떻게 하나요?
+    conclusion:
+      lead: '연결 끊김이나 503처럼 다시 하면 될 수도 있는 실패에만, 같은 요청을 두 번 처리하지 않게 멱등 키와 함께 재시도해요.'
+      sub: '간격은 지수 백오프로 늘리고 무작위 값을 더해, 여러 서버의 재시도가 한꺼번에 몰리지 않게 해요.'
+    says:
+      - '재시도할 실패: 연결 끊김, 타임아웃, 503. 하지 않을 실패: 400, 401처럼 다시 해도 같은 결과'
+      - '멱등 키 없이 타임아웃 후 재시도하면 PG가 두 번 처리한다. 같은 키로 재시도하면 한 번'
+      - '지수 백오프: 100ms, 200ms, 400ms. 지터를 더하면 여러 서버의 재시도가 흩어진다'
+    asks:
+      - '본문의 예시: PG 500ms, 타임아웃 200ms, 최대 2번 시도, 멱등 키 없음. PG가 처리한 횟수는 (2번)'
+      - '옮긴 상황: 주소 형식이 틀려 400이 온 배송 API를 3번 재시도하면 (3번 모두 400이다. 다시 해도 같은 실패는 재시도하지 않는다)'
+    body:
+      - p: '재시도가 도움이 되는 것은 **다시 하면 될 수도 있는** 실패예요. 연결이 잠깐 끊겼거나, 타임아웃이 났거나, 상대가 503(잠시 처리 불가)을 줬을 때요. 400(요청이 잘못됨)이나 401(인증 실패)은 몇 번을 다시 보내도 같은 답이 와요. 이런 실패는 재시도하지 않아요.'
+      - h3: 멱등 키 없이 재시도하면
+      - p: 'PG 응답 500ms, 타임아웃 200ms, 최대 두 번 시도로 결제를 불렀어요. 두 시도 모두 타임아웃이었어요.'
+      - code: retryNoKey
+      - code: retryKey
+      - ci:
+          key: retry-duplicate
+          label: 실제 결과 보기
+          source: ResilienceTest.retryNeedsIdempotencyKey
+      - p: '멱등 키 없이 재시도하니 **PG가 결제를 두 번 처리했어요.** 첫 시도는 타임아웃(모름)이었지만 PG는 처리했고, 재시도가 또 처리했어요. 같은 멱등 키로 재시도하니 요청은 두 번 도착했지만 PG는 한 번만 처리했어요. 결제처럼 두 번 되면 안 되는 요청은 **멱등 키 없이 재시도하지 않아요.**'
+      - h3: 간격은 늘려 가며
+      - p: '실패하자마자 다시 보내면, 아직 회복하지 못한 상대를 또 두드려요. 그래서 간격을 두고, 실패할수록 간격을 두 배씩 늘려요. 이것을 **지수 백오프**라고 해요.'
+      - code: backoff
+      - ci:
+          key: backoff
+          label: 실제 결과 보기
+          source: ResilienceTest.exponentialBackoff
+      - p: '간격이 100ms, 200ms, 400ms쯤으로 늘었어요(스레드 일정 때문에 조금씩 더 걸려요). 서버 100대가 같은 순간 실패해 같은 간격으로 재시도하면 상대에게 100건이 다시 한꺼번에 몰려요. 그래서 간격에 **무작위 값(지터)**을 더해 흩어요([Resilience4j 문서](link:r4jRetry)).'
+      - code: jitter
+      - quiz:
+          q: '주소 형식이 틀려 배송 API가 400을 줬어요. 재시도를 3번 하도록 설정돼 있다면 어떻게 될까요?'
+          options:
+            - '세 번째쯤 성공한다'
+            - '3번 모두 400이 온다. 이런 실패는 재시도하지 않는다'
+            - '배송 API가 주소를 고쳐 준다'
+          answer: 2
+          explain: '요청이 잘못된 실패는 다시 보내도 같은 결과예요. 재시도는 일시적인 실패에만 해요.'
+      - next: '상대가 오래 장애 중이면 재시도는 오히려 부하만 늘려요. 아예 부르지 않는 방법이 있을까요?'
+    recall: '연결 끊김, 타임아웃, 503처럼 다시 하면 될 수도 있는 실패에만 재시도하고, 400이나 401처럼 다시 해도 같은 실패에는 하지 않아요. 결제처럼 두 번 되면 안 되는 요청을 멱등 키 없이 재시도하면 상대가 두 번 처리하니 같은 멱등 키로 재시도해요. 간격은 지수 백오프로 늘리고, 지터를 더해 여러 서버의 재시도가 한꺼번에 몰리지 않게 해요.'
+  - id: q3
+    title: 서킷 브레이커는 장애를 어떻게 끊나요?
+    conclusion:
+      lead: '최근 호출의 실패율이 기준을 넘으면 회로를 열어, 열린 동안은 상대를 부르지 않고 바로 실패로 돌려줘요.'
+      sub: '정한 시간이 지나면 반열림으로 몇 번만 시험 호출을 보내고, 성공하면 다시 닫아요. 장애 중인 상대를 쉬게 하고, 내 서버는 기다리지 않아요.'
+    says:
+      - '장애가 길면 타임아웃과 재시도가 매번 시간을 쓰고 상대에게 부하를 더한다'
+      - '세 상태: 닫힘(통과, 실패율을 셈), 열림(바로 거절), 반열림(시험 호출 몇 번)'
+      - '창 10번, 실패율 50%, 열림 500ms, 반열림 시험 2번. 실제 상태 변화를 보인다'
+    widget:
+      kind: steps
+      note: '닫힘 → 실패가 쌓여 열림 → 열린 동안 바로 거절 → 시간이 지나 반열림 → 시험 호출 성공 → 닫힘'
+    asks:
+      - '본문의 예시: 서킷이 열린 동안 결제를 부르면 (PG를 부르지 않고 바로 실패로 돌려준다)'
+      - '옮긴 상황: 반열림에서 시험 호출 2번이 모두 실패하면 (다시 열린다)'
+    body:
+      - p: 'PG가 10분 동안 장애라면, 타임아웃과 재시도는 그 10분 내내 요청마다 시간을 쓰고 장애 중인 PG에 요청을 더 얹어요. 어차피 실패할 텐데요. **서킷 브레이커**는 이럴 때 아예 부르지 않게 해요. 집의 차단기처럼 문제가 생기면 회로를 끊어요([Resilience4j 문서](link:r4jCircuit)).'
+      - table:
+          head: [상태, 하는 일]
+          rows:
+            - ['닫힘 (CLOSED)', '호출을 통과시키고, 최근 호출의 실패율을 센다']
+            - ['열림 (OPEN)', '상대를 부르지 않고 바로 실패로 돌려준다. 정한 시간 동안 유지']
+            - ['반열림 (HALF_OPEN)', '시험 호출을 몇 번만 보낸다. 성공하면 닫힘, 실패하면 다시 열림']
+      - code: circuit
+      - p: '최근 10번 가운데 실패가 50% 이상이면 열리고, 500ms 뒤 반열림에서 시험 호출 2번을 보내게 했어요. 한 단계씩 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 서킷 상태, rows: [{k: 상태, v: CLOSED}]}
+              - {label: PG, rows: [{k: 상태, v: 정상}]}
+          scenarios:
+            default:
+              - log: 'PG 장애. 호출 10번이 모두 실패 (실패율 100%)'
+                duo:
+                  - {label: 서킷 상태, rows: [{k: 상태, v: OPEN, mark: bad}]}
+                  - {label: PG, rows: [{k: 상태, v: 장애, mark: bad}]}
+              - log: '열린 동안 결제 요청 → PG를 부르지 않고 바로 거절'
+                duo:
+                  - {label: 서킷 상태, rows: [{k: 상태, v: OPEN}]}
+                  - {label: PG, rows: [{k: 받은 요청, v: 없음}]}
+              - log: '500ms가 지남 → 반열림'
+                duo:
+                  - {label: 서킷 상태, rows: [{k: 상태, v: HALF_OPEN, mark: changed}]}
+                  - {label: PG, rows: [{k: 상태, v: 복구됨}]}
+              - log: '시험 호출 2번 성공 → 닫힘'
+                duo:
+                  - {label: 서킷 상태, rows: [{k: 상태, v: CLOSED, mark: changed}]}
+                  - {label: PG, rows: [{k: 상태, v: 정상}]}
+                verdict: '장애 동안은 바로 거절해 기다리지 않고, 회복을 시험해 본 뒤 다시 열어 줘요.'
+      - ci:
+          key: circuit
+          label: 실제 결과 보기
+          source: ResilienceTest.circuitBreakerOpensAndCloses
+      - p: '열린 동안의 호출은 PG를 부르지 않고 몇 밀리초 만에 거절됐어요. 내 서버는 기다리지 않고, PG는 요청이 쏟아지지 않으니 회복할 틈을 얻어요. 반열림의 시험 호출이 실패하면 다시 열려서 또 기다려요.'
+      - quiz:
+          q: '반열림 상태에서 시험 호출 2번이 모두 실패했어요. 서킷은 어떻게 되나요?'
+          options:
+            - '닫힌다'
+            - '다시 열린다'
+            - '반열림에 머문다'
+          answer: 2
+          explain: '시험이 실패하면 아직 회복하지 않은 것이니 다시 열고, 정한 시간을 또 기다려요.'
+      - next: '바로 거절된 요청에는 무엇을 돌려줄까요? 그리고 셋을 함께 쓸 때 순서는요?'
+    recall: '최근 호출의 실패율이 기준을 넘으면 서킷을 열어, 열린 동안은 상대를 부르지 않고 바로 실패로 돌려줘요. 정한 시간이 지나면 반열림으로 시험 호출을 몇 번 보내 성공하면 닫고 실패하면 다시 열어요. 장애 중에 내 서버는 기다리지 않고, 상대는 요청이 쏟아지지 않아 회복할 틈을 얻어요.'
+  - id: q4
+    title: 셋을 함께 쓸 때 무엇을 정하나요?
+    conclusion:
+      lead: '호출마다 타임아웃을 두고, 그 바깥에서 재시도와 서킷 브레이커가 실패를 다루며, 실패했을 때 돌려줄 대체 응답을 정해요.'
+      sub: '대체 응답은 업무가 정해요. 결제라면 "처리 중"으로 받아 두고 나중에 확인하고, 추천 목록이라면 빈 목록을 보여 줘요.'
+    says:
+      - '타임아웃은 한 번의 호출에, 재시도는 여러 번의 호출에, 서킷 브레이커는 그 모두를 감싼다'
+      - 'Resilience4j의 스프링 애너테이션은 기본으로 Retry가 가장 바깥, 그 안에 CircuitBreaker다'
+      - '대체 응답은 업무로 정한다'
+    asks:
+      - '본문의 예시: 서킷이 열려 결제 호출이 바로 거절됐다. 결제의 대체 응답으로 알맞은 것은 ("처리 중"으로 받아 두고 나중에 PG에 확인한다)'
+      - '옮긴 상황: 상품 페이지의 추천 상품 API가 장애다. 대체 응답은 (빈 목록이나 인기 상품을 보여 준다)'
+    body:
+      - p: '세 장치는 다루는 범위가 달라요.'
+      - table:
+          head: [장치, 다루는 것]
+          rows:
+            - ['타임아웃', '한 번의 호출이 얼마나 기다리나']
+            - ['재시도', '실패한 호출을 몇 번, 어떤 간격으로 다시 하나']
+            - ['서킷 브레이커', '실패가 쌓이면 아예 부르지 않기']
+      - p: '그래서 호출마다 타임아웃을 두고, 그 바깥에서 재시도와 서킷 브레이커가 실패를 세고 다뤄요. Resilience4j의 스프링 애너테이션은 기본으로 재시도가 가장 바깥, 그 안쪽에 서킷 브레이커가 놓여요([Resilience4j 문서](link:r4jSpring)). 서킷이 열려 거절된 것도 재시도가 다시 시도할 수 있으니, 서킷이 열렸다는 예외는 재시도하지 않게 설정해요.'
+      - h3: 실패하면 무엇을 돌려주나
+      - p: '타임아웃, 재시도 끝의 실패, 서킷의 거절 모두 결국 "실패"예요. 그때 돌려줄 **대체 응답**(fallback)은 기술이 아니라 업무가 정해요.'
+      - ul:
+          - '**결제:** 실패로 단정하지 않고 "처리 중"으로 받아 두고, 나중에 PG에 결제 상태를 물어 맞춰요(질문 1의 "모름").'
+          - '**추천 상품:** 빈 목록이나 미리 캐시한 인기 상품을 보여 줘요. 페이지의 나머지는 정상으로 떠요.'
+          - '**재고 확인:** 틀리면 안 되는 값이라 대체할 수 없어요. 실패를 그대로 알려요.'
+      - more:
+          summary: 스레드를 나눠 두는 벌크헤드
+          body:
+            - p: '질문 1의 문제는 PG 호출이 요청 스레드를 **모두** 가져갈 수 있다는 것이었어요. 벌크헤드는 PG 호출에 쓸 수 있는 스레드(또는 동시 호출 수)를 따로 정해, 그 기능이 다 써도 다른 기능은 남은 스레드로 돌게 해요. 배의 격벽처럼 한 칸이 잠겨도 배 전체가 가라앉지 않게 해요.'
+      - quiz:
+          q: '상품 페이지의 추천 상품 API가 장애예요. 서킷이 열려 바로 거절될 때 돌려줄 대체 응답으로 알맞은 것은?'
+          options:
+            - '상품 페이지 전체를 오류로 보여 준다'
+            - '추천 칸만 빈 목록이나 미리 캐시한 인기 상품으로 채운다'
+            - '추천 API가 복구될 때까지 페이지를 띄우지 않는다'
+          answer: 2
+          explain: '추천은 없어도 되는 부분이라 대체해서 페이지의 나머지를 살려요. 대체 응답은 업무가 정해요.'
+      - next: '원리는 여기까지예요. 이제 스프링 부트에서 Resilience4j를 붙이는 설정과 흔한 실수를 볼게요.'
+    recall: '호출마다 타임아웃을 두고, 그 바깥에서 재시도가 일시적인 실패를 다시 하고, 서킷 브레이커가 실패가 쌓이면 아예 부르지 않아요. Resilience4j 애너테이션은 기본으로 재시도가 가장 바깥이에요. 실패했을 때 돌려줄 대체 응답은 업무가 정해요. 결제는 처리 중으로 받아 두고 나중에 확인하고, 추천처럼 없어도 되는 부분은 빈 목록으로 채워요.'
+practice:
+  title: 스프링 부트에서 Resilience4j를 쓸 때
+  says:
+    - 'resilience4j-spring-boot3의 @CircuitBreaker, @Retry와 fallbackMethod, application.yml 설정. 문서가 근거'
+    - '흔한 실수: 모든 예외를 재시도한다. 400과 서킷 열림까지 재시도한다. 고친 설정: 재시도할 예외를 정한다'
+  body:
+    - p: '`resilience4j-spring-boot3` 의존성을 넣으면 메서드에 애너테이션을 붙여 쓸 수 있어요. 설정은 `application.yml`에 인스턴스 이름(`pg`)별로 둬요([Resilience4j 문서](link:r4jSpring)). 이 레슨의 테스트는 Resilience4j를 코드로 직접 썼고, 애너테이션과 설정은 문서가 근거예요.'
+    - code: fallback
+      notes:
+        - mark: '@CircuitBreaker(name = "pg",'
+          as: anno
+          text: '`fallbackMethod`는 실패했을 때 부를 메서드예요. 같은 인자에 예외를 하나 더 받아요. 여기서는 결제를 "처리 중"으로 돌려줘요.'
+    - code: config
+    - p: '애너테이션은 스프링 AOP 프록시로 동작해요. 같은 클래스 안에서 `this.approve()`로 부르면 걸리지 않아요([캐시 전략과 무효화](lesson:cache-strategy)의 `@Cacheable`과 같은 이유).'
+    - h3: 흔한 실수 하나
+    - code: badRetry
+      notes:
+        - mark: 'retry-exceptions:'
+          as: code
+          text: '모든 예외를 재시도해요. 400(요청 오류)도, 서킷이 열려 난 예외도, 결제의 타임아웃도 다섯 번씩 다시 보내요.'
+    - p: '400은 다섯 번 모두 실패하고, 서킷이 열렸다는 예외를 재시도하면 서킷을 연 의미가 줄어요. 멱등 키 없는 결제를 타임아웃마다 재시도하면 질문 2처럼 결제가 여러 번 처리돼요. 고친 설정은 위의 `config`처럼 **재시도할 예외를 정해 두는** 거예요(연결 오류 같은 `IOException`). 결제 호출은 멱등 키를 함께 보내요.'
+interview:
+  question: 외부 API의 장애가 내 서버로 번지지 않게 어떻게 하나요?
+  model:
+    - label: 정의
+      text: 타임아웃, 재시도, 서킷 브레이커를 씁니다. 타임아웃은 한 번의 호출이 기다리는 시간을, 재시도는 일시적인 실패를 다시 하는 것을, 서킷 브레이커는 실패율이 높으면 아예 부르지 않는 것을 맡습니다.
+    - label: 원리
+      text: 타임아웃이 없으면 느린 상대를 기다리는 요청이 스레드를 붙잡아 상관없는 요청까지 줄을 섭니다. 서킷 브레이커는 닫힘, 열림, 반열림 세 상태로, 열린 동안은 바로 거절해 기다리지 않고 상대에게 회복할 틈을 줍니다.
+    - label: 주의할 점
+      text: 타임아웃은 실패가 아니라 모름이라 상대가 이미 처리했을 수 있습니다. 그래서 결제 같은 요청은 멱등 키와 함께 재시도하고, 400처럼 다시 해도 같은 실패는 재시도하지 않습니다. 간격은 지수 백오프와 지터로 흩고, 대체 응답은 업무로 정합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: PG 지연으로 상품 조회까지 느려진 일을 계기로 PG 호출에 읽기 타임아웃과 서킷 브레이커를 두고, 실패하면 결제를 처리 중으로 받아 두게 했습니다.'
+verified: 스레드가 묶이는 시간, 재시도의 중복 처리, 백오프 간격, 서킷의 상태 변화는 자바 21과 Resilience4j 2.2로 가짜 PG를 불러 받은 값이에요. 코드가 바뀔 때마다 테스트([ResilienceTest](link:test))가 다시 돌아요.
+footer: '근거: 서킷 브레이커와 재시도는 [Resilience4j 문서](link:r4jCircuit), [재시도 문서](link:r4jRetry), 스프링 부트 연동은 [Resilience4j 문서](link:r4jSpring), 타임아웃은 [HttpClient 문서](link:httpClient). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '타임아웃이 없으면 PG 3초 응답이 스레드 10개를 붙잡아 상관없는 요청도 3초 가까이 기다리고, 300ms 타임아웃이면 짧게 기다린다'
+    how: '스레드 10개 풀과 가짜 PG'
+    test: ResilienceTest.noTimeoutExhaustsThreads
+  - claim: '타임아웃이 나도 PG는 결제를 처리했다'
+    how: '같은 구성'
+    test: ResilienceTest.timeoutDoesNotMeanFailure
+  - claim: '멱등 키 없이 재시도하면 두 번 처리되고, 같은 키면 한 번'
+    how: 'Resilience4j Retry'
+    test: ResilienceTest.retryNeedsIdempotencyKey
+  - claim: '지수 백오프로 간격이 100ms, 200ms, 400ms쯤으로 는다'
+    how: 'IntervalFunction.ofExponentialBackoff'
+    test: ResilienceTest.exponentialBackoff
+  - claim: '서킷이 실패율 기준을 넘으면 열리고, 시간이 지나 시험 호출이 성공하면 닫힌다'
+    how: 'Resilience4j CircuitBreaker'
+    test: ResilienceTest.circuitBreakerOpensAndCloses
+sources:
+  - 'Resilience4j 서킷 브레이커: https://resilience4j.readme.io/docs/circuitbreaker'
+  - 'Resilience4j 재시도: https://resilience4j.readme.io/docs/retry'
+  - 'Resilience4j 스프링 부트 3: https://resilience4j.readme.io/docs/getting-started-3'

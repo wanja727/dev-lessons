@@ -1,117 +1,230 @@
-# 외부 API 타임아웃, 재시도, 서킷 브레이커 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 타임아웃, 재시도, 서킷 브레이커 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/resilience.yaml의 says).
+# 동작에 관한 정답은 verification의 ResilienceTest로 확인했다 (자바 21, Resilience4j 2.2).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 쓰면서 예전 문제를 지우고 새로 썼다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: resilience
-  title: 외부 API 타임아웃, 재시도, 서킷 브레이커
-  unit: Spring
-  order: 28
+  title: 타임아웃, 재시도, 서킷 브레이커
+  unit: 시스템 설계와 아키텍처
+  order: 910
 concepts:
   - key: core
-    name: 외부 API 타임아웃, 재시도, 서킷 브레이커
+    name: 타임아웃, 재시도, 서킷 브레이커
+coreQuestions:
+  - key: q1
+    text: "다른 서버를 부를 때 왜 타임아웃이 꼭 필요한가요?"
+  - key: q2
+    text: "재시도는 언제 해도 되고, 어떻게 하나요?"
+  - key: q3
+    text: "서킷 브레이커는 장애를 어떻게 끊나요?"
+  - key: q4
+    text: "셋을 함께 쓸 때 무엇을 정하나요?"
 questions:
-  - key: q-deea404f
+  # ── 질문 1 ──
+  - key: rs-thread-wait
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 외부 API에 타임아웃을 걸지 않으면 우리 서버 전체가 멈출 수 있는 이유를 설명해 보세요
-    explanation: |-
-      - CI 실측: 요청 스레드 10개, PG 3초 → 상품 조회 2999ms 대기. 타임아웃 300ms면 296ms
-      - 검증: ResilienceTest (noTimeoutExhaustsThreads)
-    checklist:
-      - 호출한 스레드가 응답을 기다리며 멈춘다고 말했다
-      - 요청 스레드 풀이 정해져 있다고 말했다
-      - 상관없는 요청도 빈 스레드를 기다린다고 말했다
-      - 장애 전파라는 말을 썼다
-      - 연결·응답 타임아웃(또는 벼크헤드)으로 막는다고 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
-  - key: q-a758a384
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 서킷 브레이커의 세 상태(CLOSED, OPEN, HALF_OPEN)와 상태가 바뀌는 조건을 설명해 보세요
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: ResilienceTest (circuitBreakerOpensAndCloses)
-    checklist:
-      - "CLOSED: 평소처럼 호출하며 실패율을 본다고 말했다"
-      - 실패율이 기준을 넘으면 OPEN이라고 말했다
-      - OPEN에서는 호출하지 않고 바로 실패(대체 응답)라고 말했다
-      - 대기 시간 뒤 HALF_OPEN에서 시험 호출을 한다고 말했다
-      - 시험 호출 성공이면 CLOSED, 실패면 다시 OPEN이라고 말했다
-    source: https://resilience4j.readme.io/docs/circuitbreaker
-  - key: q-68a805c1
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: PG 결제 요청이 타임아웃 났습니다. 고객에게 뭐라고 응답하고, 서버는 무엇을 해야 하나요?
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: ResilienceTest (timeoutDoesNotMeanFailure)
-    checklist:
-      - 타임아웃은 실패가 아니라 "모름"이라고 말했다
-      - 고객에게 "처리 중/확인 중"으로 응답한다고 말했다
-      - 거래 상태 조회로 처리 여부를 확인한다고 말했다
-      - 재시도한다면 같은 멱등 키로 한다고 말했다
-      - 확인이 안 되면 망 취소 또는 나중에 대사로 맞춘다고 말했다
-    source: https://resilience4j.readme.io/docs/retry
-  - key: q-3e767bef
-    concept: core
-    type: ox
-    status: reviewed
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
     difficulty: 1
-    body: 결제 API 호출이 타임아웃 났다면 결제는 실패한 것이다
-    answer: X
-    explanation: |-
-      - 기다리기를 그만둔 것뿐, PG는 이미 처리했을 수 있다
-      - 검증: ResilienceTest (timeoutDoesNotMeanFailure)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
-  - key: q-65952420
-    concept: core
-    type: code_predict
-    status: reviewed
-    difficulty: 2
-    body: PG 응답 500ms, 타임아웃 200ms, 멱등 키 없이 최대 2번 시도하면 PG가 결제를 처리한 횟수는?
+    body: 요청 스레드가 10개인 서버에 3초 늦게 답하는 PG를 부르는 결제 요청 10건이 먼저 들어오고, 바로 뒤에 PG를 부르지 않는 상품 조회 1건이 들어왔어요. PG 호출에는 타임아웃이 없어요. 상품 조회는 대략 얼마나 기다리나요?
     choices:
-      - "0"
-      - "1"
-      - "2"
+      - 3초 가까이
+      - 거의 기다리지 않는다
+      - 30초쯤
+      - 영원히
+    answer: "1"
+    explanation: |-
+      **3초 가까이 기다려요.** 결제 10건이 스레드 10개를 모두 붙잡고 PG를 기다려서, 상품 조회는 빈 스레드를 기다려요.
+
+      - 테스트에서 약 3.1초 기다렸고, 타임아웃 300ms를 두니 약 0.3초였어요
+      - 바깥 하나가 느려지면 내 서버 전체가 느려져요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
+  - key: rs-sms-timeout
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 문자 발송 API를 읽기 타임아웃 1초로 불렀는데 타임아웃 예외가 났어요. 문자에 대해 맞는 것은?
+    choices:
+      - 나가지 않았다. 다시 보내면 된다
+      - 반드시 나갔다
+      - 알 수 없다. 상대는 요청을 받아 처리했을 수 있다
+      - 문자 서버가 꺼져 있다
     answer: "3"
     explanation: |-
-      - 두 요청 모두 PG에서는 처리됐다. 같은 멱등 키로 재시도하면 1
-      - 검증: ResilienceTest (retryNeedsIdempotencyKey)
-    source: https://resilience4j.readme.io/docs/retry
-  - key: q-b770f7e1
+      **알 수 없어요.** 타임아웃은 응답을 기다리지 않았다는 뜻일 뿐, 실패가 아니라 모름이에요.
+
+      - 테스트에서 타임아웃이 난 결제를 PG는 이미 처리했어요
+      - 상태를 다시 묻거나 같은 멱등 키로 다시 보내 확인해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html
+  # ── 질문 2 ──
+  - key: rs-retry-no-key
     concept: core
+    coreQuestion: q2
     type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: 서킷 브레이커가 OPEN일 때 호출하면?
+    body: PG가 500ms 걸리는데 타임아웃 200ms, 최대 2번 시도로 결제를 불렀고 두 번 모두 타임아웃이 났어요. 멱등 키는 보내지 않았어요. PG가 결제를 처리한 횟수는?
     choices:
-      - PG를 부르고 기다린다
-      - PG를 부르지 않고 바로 실패한다
-      - 자동으로 3번 재시도한다
+      - 0번
+      - 1번
+      - 4번
+      - 2번
+    answer: "4"
+    explanation: |-
+      **2번이에요.** 타임아웃이 나도 PG는 처리했고, 재시도가 또 처리했어요.
+
+      - 같은 멱등 키로 재시도하니 요청은 2번 와도 처리는 1번이었어요
+      - 두 번 되면 안 되는 요청은 멱등 키 없이 재시도하지 않아요
+    source: https://resilience4j.readme.io/docs/retry
+  - key: rs-retry-400
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 배송 API가 주소 형식이 틀렸다며 400을 줬어요. 모든 예외를 3번까지 재시도하도록 설정돼 있어요. 어떻게 될까요?
+    choices:
+      - 두 번째쯤 성공한다
+      - 3번 모두 400이 온다. 다시 해도 같은 실패는 재시도하지 않게 설정한다
+      - 배송 API가 주소를 고쳐 준다
+      - 서킷 브레이커가 400을 성공으로 바꾼다
     answer: "2"
     explanation: |-
-      - CallNotPermittedException. PG에 요청이 가지 않는다 (CI 실측 351μs)
-      - 검증: ResilienceTest (circuitBreakerOpensAndCloses)
-    source: https://resilience4j.readme.io/docs/circuitbreaker
-  - key: q-8b4b4788
-    concept: core
-    type: multiple_choice
-    status: reviewed
-    difficulty: 1
-    body: 재시도하면 안 되는 것은?
-    choices:
-      - 503 응답
-      - 연결 타임아웃(멱등 키 있음)
-      - 400 Bad Request
-    answer: "3"
-    explanation: "- 4xx는 요청이 틀린 것이라 다시 보내도 같다"
+      **3번 모두 400이에요.** 요청이 잘못된 실패는 다시 보내도 같은 답이 와요.
+
+      - 재시도는 연결 끊김, 타임아웃, 503처럼 일시적인 실패에만 해요
+      - 재시도할 예외를 설정으로 정해 둬요
     source: https://resilience4j.readme.io/docs/retry
+  # ── 질문 3 ──
+  - key: rs-open-call
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: PG 호출에 서킷 브레이커를 뒀고, 실패율이 기준을 넘어 서킷이 열렸어요. 열린 동안 결제 요청이 오면 어떻게 되나요?
+    choices:
+      - PG를 부르지 않고 바로 실패로 돌려준다
+      - PG를 부르고 타임아웃까지 기다린다
+      - 요청을 큐에 쌓아 두었다가 닫히면 보낸다
+      - PG를 두 번 부른다
+    answer: "1"
+    explanation: |-
+      **PG를 부르지 않고 바로 거절해요.** 내 서버는 기다리지 않고, PG는 회복할 틈을 얻어요.
+
+      - 테스트에서 열린 동안의 호출은 몇 밀리초 만에 거절됐어요
+      - 정한 시간이 지나면 반열림으로 시험 호출을 보내요
+    source: https://resilience4j.readme.io/docs/circuitbreaker
+  - key: rs-half-open-fail
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서킷이 열리고 정한 시간이 지나 반열림이 됐어요. 반열림에서 허용한 시험 호출 2번이 모두 실패했어요. 서킷은 어떻게 되나요?
+    choices:
+      - 닫힌다
+      - 반열림에 머문다
+      - 서킷이 없어진다
+      - 다시 열린다
+    answer: "4"
+    explanation: |-
+      **다시 열려요.** 시험이 실패하면 아직 회복하지 않은 것이니 다시 열고 정한 시간을 기다려요.
+
+      - 시험이 성공하면 닫혀요. 테스트에서 PG가 복구된 뒤 시험 2번이 성공하자 닫혔어요
+    source: https://resilience4j.readme.io/docs/circuitbreaker
+  # ── 질문 4 ──
+  - key: rs-payment-fallback
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서킷이 열려 결제 호출이 바로 거절됐어요. 결제의 대체 응답으로 가장 알맞은 것은?
+    choices:
+      - 결제 성공으로 돌려준다
+      - '"처리 중"으로 받아 두고 나중에 PG에 결제 상태를 확인한다'
+      - 주문을 지운다
+      - 같은 요청을 무한히 다시 보낸다
+    answer: "2"
+    explanation: |-
+      **처리 중으로 받아 두고 나중에 확인해요.** 결제의 실패는 단정할 수 없는 경우가 있어서 상태를 맞추는 과정이 필요해요.
+
+      - 대체 응답은 기술이 아니라 업무가 정해요
+    source: https://resilience4j.readme.io/docs/getting-started-3
+  - key: rs-recommend-fallback
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 상품 페이지가 추천 상품 API를 불러 추천 칸을 채워요. 추천 API가 장애일 때 알맞은 대체 응답은?
+    choices:
+      - 상품 페이지 전체를 오류로 보여 준다
+      - 추천 API가 복구될 때까지 페이지를 띄우지 않는다
+      - 추천 칸만 빈 목록이나 미리 캐시한 인기 상품으로 채운다
+      - 추천 API를 더 자주 재시도한다
+    answer: "3"
+    explanation: |-
+      **추천 칸만 대체해요.** 없어도 되는 부분이라 페이지의 나머지를 살려요.
+
+      - 재고처럼 틀리면 안 되는 값은 대체하지 않고 실패를 알려요
+    source: https://resilience4j.readme.io/docs/getting-started-3
+  - key: rs-retry-all-exceptions
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 결제 호출에 아래 재시도 설정을 뒀어요. 멱등 키는 보내지 않아요. 가장 큰 문제는 무엇인가요?
+    code: |-
+      resilience4j:
+        retry:
+          instances:
+            pg:
+              max-attempts: 5
+              retry-exceptions:
+                - java.lang.Exception
+    choices:
+      - 재시도 간격이 없다
+      - 문제없다
+      - 400과 서킷 열림까지 재시도하고, 타임아웃난 결제를 다시 보내 여러 번 처리될 수 있다
+      - 재시도가 한 번도 일어나지 않는다
+    answer: "3"
+    explanation: |-
+      **모든 예외를 재시도해서 생기는 문제예요.** 다시 해도 같은 실패, 서킷의 거절, 이미 처리됐을 수 있는 결제까지 다시 보내요.
+
+      - 재시도할 예외를 연결 오류처럼 정해 두고, 결제는 멱등 키와 함께 보내요
+    source: https://resilience4j.readme.io/docs/retry
+  # ── 네 질문을 하나로 ──
+  - key: rs-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "외부 API의 장애가 내 서버로 번지지 않게 어떻게 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **타임아웃으로 기다림을 끊고, 일시적인 실패만 멱등하게 재시도하고, 서킷 브레이커로 장애 중엔 부르지 않아요.**
+
+      - **타임아웃:** 없으면 스레드가 묶여 상관없는 요청까지 기다린다. 타임아웃은 모름이다
+      - **재시도:** 일시적인 실패에만, 멱등 키와 함께, 지수 백오프와 지터로
+      - **서킷 브레이커:** 닫힘, 열림, 반열림. 열린 동안 바로 거절한다
+      - **대체 응답:** 업무로 정한다. 결제는 처리 중, 추천은 빈 목록
+    checklist:
+      - 타임아웃이 없으면 스레드가 묶인다고 말했다
+      - 타임아웃은 실패가 아니라 모름이라고 말했다
+      - 재시도에는 멱등성이 필요하다고 말했다
+      - 서킷 브레이커의 상태를 말했다
+      - 대체 응답을 말했다
+    source: https://resilience4j.readme.io/docs/circuitbreaker
