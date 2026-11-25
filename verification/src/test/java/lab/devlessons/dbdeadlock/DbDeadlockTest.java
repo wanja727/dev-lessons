@@ -51,6 +51,7 @@ class DbDeadlockTest {
 
     private Connection tx() throws SQLException {
         Connection c = ds.getConnection();
+        exec(c, "set lock_timeout = 0");
         c.setAutoCommit(false);
         return c;
     }
@@ -77,9 +78,13 @@ class DbDeadlockTest {
                 firstDone.await(5, TimeUnit.SECONDS);
                 exec(c, "update dl_account set balance = balance + 100 where id = " + to);
                 c.commit();
+                c.setAutoCommit(true);
+                exec(c, "reset deadlock_timeout");
                 log.add(name + ": 성공, commit (" + (System.nanoTime() - t) / 1_000_000 + "ms)");
             } catch (SQLException e) {
                 c.rollback();
+                c.setAutoCommit(true);
+                exec(c, "reset deadlock_timeout");
                 log.add(name + ": " + e.getSQLState() + " " + e.getMessage().lines().findFirst().orElse("")
                         + " (" + (System.nanoTime() - t) / 1_000_000 + "ms)");
             }
@@ -161,6 +166,8 @@ class DbDeadlockTest {
                     throw e;
                 }
             }
+            c.setAutoCommit(true);
+            exec(c, "reset deadlock_timeout");
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

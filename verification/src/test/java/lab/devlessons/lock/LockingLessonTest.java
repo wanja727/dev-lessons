@@ -60,6 +60,7 @@ class LockingLessonTest {
 
     private Connection tx() throws SQLException {
         Connection c = ds.getConnection();
+        exec(c, "set lock_timeout = 0");
         c.setAutoCommit(false);
         return c;
     }

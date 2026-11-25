@@ -189,6 +189,7 @@ class BulkDmlLessonTest {
                 result = e.getSQLState() + " " + e.getMessage().lines().findFirst().orElse("") + " (" + (System.nanoTime() - t) / 1_000_000 + "ms)";
             }
             bulk.rollback();
+            exec(request, "reset lock_timeout");
         }
         assertThat(result).startsWith("55P03");
         CiOutput.record(LESSON, "lock", "대량 UPDATE(커밋 전)가 PENDING 5,000건을 잡은 동안\n결제 요청의 update ... where id = 7 →\n" + result);

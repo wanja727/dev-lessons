@@ -106,6 +106,7 @@ class SchemaMigrationTest {
             long alterMs = (System.nanoTime() - t) / 1_000_000;
             long selectMs = select.get(5, TimeUnit.SECONDS);
             c1.commit();
+            exec(c2, "reset lock_timeout");
             log.add("연결 1: begin; select count(*) (커밋 전)");
             log.add("연결 2: set lock_timeout = '1s'; alter table ... → " + alterResult + " (" + alterMs + "ms)");
             log.add("연결 3: select → ALTER가 물러난 뒤 결과 받음 (" + selectMs + "ms)");

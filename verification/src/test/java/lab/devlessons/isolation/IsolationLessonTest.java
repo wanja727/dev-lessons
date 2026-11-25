@@ -57,6 +57,7 @@ class IsolationLessonTest {
 
     private Connection tx(int level) throws SQLException {
         Connection c = ds.getConnection();
+        exec(c, "set lock_timeout = 0");
         c.setAutoCommit(false);
         c.setTransactionIsolation(level);
         return c;

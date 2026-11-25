@@ -51,6 +51,7 @@ class SlowQueryTest {
             exec(c, "set log_min_duration_statement = '200ms'");
             exec(c, "select pg_sleep(0.3), 'slow-query-lesson-a'");
             exec(c, "select pg_sleep(0.05), 'slow-query-lesson-b'");
+            exec(c, "reset log_min_duration_statement");
         }
         String logs = postgres.getLogs();
         String line = logs.lines().filter(l -> l.contains("slow-query-lesson-a") && l.contains("duration")).findFirst().orElse("");
