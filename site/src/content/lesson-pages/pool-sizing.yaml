@@ -1,0 +1,325 @@
+# 스레드 풀과 커넥션 풀 크기
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/pool-sizing.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 스레드 풀과 커넥션 풀 크기
+description: 톰캣의 요청 스레드와 HikariCP의 커넥션이 맞물리는 방식, 커넥션 풀이 고갈될 때 생기는 일, 커넥션을 쥔 채 하나 더 빌리는 풀 고갈 데드락, 두 풀의 크기를 정하는 법. 스레드와 커넥션 수를 바꿔 가며 쿼리 시간을 재는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 20
+roadmap: A11
+type: 동작 확인
+prerequisites:
+  - {slug: connection-pool, title: DB 커넥션과 커넥션 풀}
+  - {slug: thread-pool, title: 스레드 풀}
+assume: '스프링 부트 3.5(내장 톰캣, HikariCP), PostgreSQL 16. 커넥션 풀에서 연결을 빌리고 반납한다는 것(DB 커넥션과 커넥션 풀 레슨). 요청마다 스레드 하나가 일한다는 것(스레드 풀 레슨). `REQUIRES_NEW`가 새 트랜잭션을 연다는 것(트랜잭션 전파와 롤백 규칙 레슨).'
+example: '주문 API 서버. 톰캣 요청 스레드가 HikariCP에서 커넥션을 빌려 200ms 걸리는 쿼리를 보낸다. 스레드와 커넥션의 수를 바꿔 가며 끝나는 시간을 잰다.'
+intro:
+  - '이벤트 날 주문 API가 느려져서 톰캣 스레드를 200개에서 400개로 늘렸는데 더 느려졌어요. 로그에는 "Connection is not available, request timed out after 30000ms"가 가득해요. 늘린 스레드가 모두 커넥션 10개를 기다리고 있었어요.'
+  - '스프링 부트 서버에는 풀이 둘 있어요. 요청을 받는 톰캣 스레드 풀과 DB 연결을 빌려주는 HikariCP 커넥션 풀이에요. 둘의 크기는 `application.yml` 한 줄로 바꿀 수 있지만, 하나만 바꾸면 다른 하나가 병목이 돼요. 경력 면접에서 "커넥션 풀 크기는 어떻게 정하나요"를 물어요.'
+  - '이 레슨에서는 스레드 6개가 동시에 200ms 쿼리를 보낼 때 커넥션이 2개면 얼마나 걸리는지 재고, 커넥션을 쥔 채 하나 더 빌리는 코드가 풀 전체를 멈추는 것을 재현해요.'
+covers:
+  - topic: '요청 스레드는 DB가 필요할 때 커넥션 풀에서 커넥션을 빌린다. 스레드가 커넥션보다 많으면 남는 스레드는 기다린다'
+    where: '질문 1'
+  - topic: '스프링 부트의 기본값: 톰캣 최대 스레드 200, HikariCP 최대 커넥션 10'
+    where: '질문 1'
+  - topic: '풀이 고갈되면 커넥션을 기다리다 connection-timeout(기본 30초) 뒤 예외가 난다'
+    where: '질문 2'
+  - topic: '커넥션을 오래 쥐는 원인: 긴 트랜잭션, 트랜잭션 안의 외부 호출, 반납하지 않는 코드'
+    where: '질문 2. 원리는 DB 커넥션과 커넥션 풀(D6)'
+  - topic: '풀 고갈 데드락: 커넥션을 쥔 채 REQUIRES_NEW로 하나 더 빌리면, 동시 요청 수만큼만 커넥션이 있을 때 모두 서로를 기다린다'
+    where: '질문 3'
+  - topic: '커넥션을 늘린다고 빨라지지 않는다. DB가 동시에 처리할 수 있는 양(코어 수, 디스크)이 한계다'
+    where: '질문 4'
+  - topic: '서버 대수 × 풀 크기가 DB의 최대 연결 수를 넘지 않게 한다'
+    where: '질문 4'
+  - topic: '크기는 공식에서 시작해 부하 테스트로 재서 정한다'
+    where: '질문 4. 부하 테스트는 부하 테스트(T9)'
+  - topic: 'application.yml의 server.tomcat.threads.max, spring.datasource.hikari.maximum-pool-size, connection-timeout, leak-detection-threshold'
+    where: '실무에서는'
+  - topic: '스레드 풀의 작업 큐와 거절 정책'
+    where: '다루지 않음: 스레드 풀(C7)'
+codes:
+  predict: |-
+    // 커넥션 2개짜리 풀
+    // 스레드 6개가 동시에 한 번씩
+    jdbc.queryForObject(
+        "select pg_sleep(0.2)", ...);
+    // 모두 끝나는 데 얼마나 걸릴까?
+  borrow: |-
+    @Transactional
+    public Order find(Long id) {
+      // 트랜잭션이 시작될 때 커넥션을 빌린다
+      return orders.findById(id)
+          .orElseThrow();
+      // 커밋하고 커넥션을 반납한다
+    }
+  nested: |-
+    @Transactional
+    public void order() {
+      // 커넥션 1개를 쥔 채
+      orders.save(...);
+      [[audit.write(...)]];
+    }
+
+    @Transactional(propagation =
+        [[REQUIRES_NEW]])
+    public void write(...) {
+      // 커넥션을 1개 더 빌린다
+    }
+  config: |-
+    server:
+      tomcat:
+        threads:
+          max: 200
+    spring:
+      datasource:
+        hikari:
+          maximum-pool-size: 10
+          connection-timeout: 3000
+          leak-detection-threshold: 20000
+  bigPool: |-
+    spring:
+      datasource:
+        hikari:
+          [[maximum-pool-size: 200]]
+  formula: |-
+    커넥션 수 = (DB 코어 수 × 2)
+             + 디스크 수
+    예: 코어 4개, SSD 1개 → 9개
+  servers: |-
+    서버 1대 × 풀 10 = DB 연결 10
+    서버 10대 × 풀 10 = DB 연결 100
+    서버 10대 × 풀 50 = DB 연결 500
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/poolsizing/PoolSizingTest.java
+  hikari: https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby
+  hikariSizing: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing
+  bootProps: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
+  pgConn: https://www.postgresql.org/docs/16/runtime-config-connection.html
+predict:
+  title: 스레드 6개, 커넥션 2개
+  text: '커넥션 2개짜리 풀에서 스레드 6개가 동시에 200ms 걸리는 쿼리를 한 번씩 보내요. 모두 끝나는 데 얼마나 걸릴까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: '200'
+      label: 200ms쯤
+    - value: '600'
+      label: 600ms쯤
+    - value: '1200'
+      label: 1200ms쯤
+  answer: '600'
+  storageKey: pool-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 요청 스레드와 커넥션 풀은 어떻게 맞물리나요?
+    conclusion:
+      lead: '요청 스레드가 DB를 쓸 때 커넥션 풀에서 커넥션을 빌려요. 스레드가 커넥션보다 많으면 남는 스레드는 커넥션이 반납될 때까지 기다려요.'
+      sub: '스프링 부트의 기본값은 톰캣 스레드 200개, 커넥션 10개예요. DB를 쓰는 요청이 몰리면 스레드가 아니라 커넥션 10개가 병목이에요.'
+    says:
+      - '스레드 6, 커넥션 2, 200ms 쿼리: 2개씩 세 번에 나눠 610ms. 커넥션 6이면 205ms. 예측의 답을 밝힌다'
+      - '기본값 200과 10을 실제로 읽은 출력을 보인다'
+    asks:
+      - '본문의 예시: 커넥션 2개, 스레드 6개, 200ms 쿼리 한 번씩이면 모두 끝나는 데 (600ms쯤)'
+      - '옮긴 상황: 기본 설정 서버에 DB 쿼리 1초짜리 요청 30개가 동시에 오면 마지막 요청은 대략 언제 끝나나 (3초쯤. 커넥션 10개로 세 번에 나눠)'
+    body:
+      - p: '스프링 부트 서버의 요청은 톰캣 스레드 하나가 맡아요. 그 스레드가 DB를 써야 하면 HikariCP 커넥션 풀에서 커넥션을 **빌리고**, 다 쓰면 **반납**해요([DB 커넥션과 커넥션 풀](lesson:connection-pool)). `@Transactional` 메서드라면 트랜잭션이 시작될 때 빌려서 끝날 때 반납해요.'
+      - code: borrow
+      - p: '두 풀의 기본 크기를 실제로 읽어 봤어요.'
+      - ci:
+          key: defaults
+          label: 실제 결과 보기
+          source: PoolSizingTest.defaults
+      - p: '스레드는 200개인데 커넥션은 10개예요. DB를 쓰는 요청이 11개 이상 동시에 오면, 11번째부터는 스레드는 있어도 커넥션이 없어 **기다려요.** 스레드 6개, 커넥션 2개로 줄여 재 봤어요.'
+      - ci:
+          key: waves
+          label: 실제 결과 보기
+          source: PoolSizingTest.moreThreadsThanConnectionsWait
+          code: predict
+      - p: '답은 **600ms쯤**이에요. {{predict-result}} 커넥션 2개로 2개씩 세 번에 나눠 실행했어요. 커넥션을 6개로 늘리니 한 번에 끝났어요. 스레드가 많아도 커넥션이 모자라면 **커넥션 수만큼만** 동시에 DB를 써요.'
+      - quiz:
+          q: '기본 설정(톰캣 200, 커넥션 10)인 서버에 DB 쿼리가 1초 걸리는 요청 30개가 동시에 왔어요. 마지막 요청은 대략 언제 끝나나요?'
+          options:
+            - '1초쯤'
+            - '3초쯤'
+            - '30초쯤'
+          answer: 2
+          explain: '커넥션 10개로 10개씩 세 번에 나눠 실행해요. 스레드 200개는 충분하지만 커넥션이 병목이에요.'
+      - next: '기다리는 스레드가 커넥션을 영영 못 받으면 어떻게 될까요?'
+    recall: '톰캣의 요청 스레드가 DB를 쓸 때 HikariCP 커넥션 풀에서 커넥션을 빌리고 다 쓰면 반납해요. 스레드가 커넥션보다 많으면 남는 스레드는 반납을 기다려서, 동시에 DB를 쓰는 수는 커넥션 수만큼이에요. 스프링 부트 기본값은 스레드 200개, 커넥션 10개라 DB를 쓰는 요청이 몰리면 커넥션이 병목이에요. 커넥션 2개에 스레드 6개면 200ms 쿼리가 세 번에 나눠 600ms쯤 걸렸어요.'
+  - id: q2
+    title: 커넥션 풀이 고갈되면 무슨 일이 생기나요?
+    conclusion:
+      lead: '커넥션을 기다리는 스레드가 쌓이고, connection-timeout(기본 30초)이 지나면 예외로 실패해요. 그동안 그 스레드들은 다른 일을 못 해요.'
+      sub: '원인은 대개 커넥션을 오래 쥐는 코드예요. 긴 트랜잭션, 트랜잭션 안의 외부 API 호출, 반납하지 않는 코드가 그래요.'
+    says:
+      - 'HikariCP는 커넥션을 connection-timeout까지 기다리고, 못 받으면 SQLTransientConnectionException을 던진다. 기본 30초'
+      - '커넥션을 오래 쥐는 원인 세 가지'
+    asks:
+      - '본문의 예시: 커넥션 10개가 모두 쓰이는 동안 11번째 요청은 (connection-timeout까지 기다리고, 그때까지 못 받으면 예외로 실패한다)'
+      - '옮긴 상황: @Transactional 메서드 안에서 2초 걸리는 PG를 부른다. 커넥션 10개면 1초에 처리할 수 있는 주문은 대략 (5건. 한 요청이 커넥션을 2초 넘게 쥔다)'
+    body:
+      - p: '모든 커넥션이 쓰이는 중이면 새로 빌리려는 스레드는 기다려요. 얼마나 기다릴지는 HikariCP의 `connection-timeout`이 정하고, 기본값은 30초예요. 그때까지 못 받으면 `SQLTransientConnectionException`("Connection is not available, request timed out after 30000ms")이 나요([HikariCP 문서](link:hikari)).'
+      - p: '문제는 그 30초 동안 기다리는 스레드도 **톰캣 스레드를 쥐고 있다**는 거예요. 기다리는 요청이 쌓이면 톰캣 스레드도 바닥나서, DB를 쓰지 않는 요청까지 받지 못해요. 도입부의 "스레드를 400개로 늘렸더니 더 느려졌다"가 이것이에요. 늘린 스레드가 모두 커넥션 10개 앞에 줄을 섰어요.'
+      - h3: 커넥션을 오래 쥐는 원인
+      - ul:
+          - '**긴 트랜잭션:** 트랜잭션이 끝나야 반납해요. 큰 목록을 읽고 하나씩 처리하는 일을 한 트랜잭션에 넣으면 그동안 커넥션을 쥐어요.'
+          - '**트랜잭션 안의 외부 호출:** 결제 API가 2초 걸리면 그 2초 동안 SQL은 보내지 않는데도 커넥션을 쥐어요. 커넥션 10개면 1초에 5건밖에 못 받아요([DB 커넥션과 커넥션 풀](lesson:connection-pool)에서 재 봤어요).'
+          - '**반납하지 않는 코드:** 직접 꺼낸 커넥션을 `close()`하지 않으면 풀로 돌아가지 않아요. 실무 구역의 `leak-detection-threshold`가 이것을 찾아 줘요.'
+      - quiz:
+          q: '`@Transactional` 메서드 안에서 2초 걸리는 PG를 불러요. 커넥션 10개면 1초에 처리할 수 있는 주문은 대략 몇 건인가요?'
+          options:
+            - '5건'
+            - '10건'
+            - '200건'
+          answer: 1
+          explain: '한 요청이 커넥션을 2초 넘게 쥐어서 10개로 1초에 5건쯤이에요. 외부 호출은 트랜잭션 밖으로 빼요.'
+      - next: '커넥션을 오래 쥐는 것보다 더 나쁜 경우가 있어요. 커넥션을 쥔 채 하나를 더 빌리면 어떻게 될까요?'
+    recall: '모든 커넥션이 쓰이는 중이면 새로 빌리려는 스레드는 connection-timeout(기본 30초)까지 기다리고, 못 받으면 SQLTransientConnectionException으로 실패해요. 기다리는 동안 톰캣 스레드도 쥐고 있어서 쌓이면 DB와 상관없는 요청까지 못 받아요. 원인은 대개 커넥션을 오래 쥐는 코드예요. 긴 트랜잭션, 트랜잭션 안의 외부 호출, 반납하지 않는 코드가 그래요.'
+  - id: q3
+    title: 커넥션을 쥔 채 하나 더 빌리면 왜 멈추나요?
+    conclusion:
+      lead: '동시 요청이 각자 커넥션 하나를 쥐고 하나 더 기다리면, 풀이 비어 누구도 두 번째를 받지 못하고 모두 서로를 기다려요. 풀 고갈 데드락이에요.'
+      sub: '커넥션을 쥔 채 `REQUIRES_NEW`로 새 트랜잭션을 여는 코드가 흔한 원인이에요. 풀 크기를 "동시 요청 수 × (한 요청이 동시에 쥐는 수 - 1) + 1" 이상으로 두거나, 한 요청이 커넥션 하나만 쓰게 고쳐요.'
+    says:
+      - '동시 요청 2, 커넥션 2, 각자 1개를 쥔 채 REQUIRES_NEW로 1개 더: 모두 타임아웃. 커넥션 3이면 성공'
+    widget:
+      kind: steps
+      note: '커넥션 2개, 요청 A와 B. A가 1개, B가 1개를 빌림 → 둘 다 1개 더 요청 → 풀이 비어 둘 다 기다림 → 타임아웃'
+    asks:
+      - '본문의 예시: 커넥션 2개, 동시 요청 2개가 각자 1개를 쥔 채 REQUIRES_NEW로 1개 더 빌린다. 결과는 (둘 다 타임아웃으로 실패한다)'
+      - '옮긴 상황: 같은 코드를 커넥션 3개로 돌리면 (한 요청이 1개 더 얻어 끝내고 반납해서 둘 다 성공한다)'
+    body:
+      - p: '주문을 저장하면서 감사 로그는 주문이 실패해도 남기려고 `REQUIRES_NEW`로 새 트랜잭션을 여는 코드예요([트랜잭션 전파와 롤백 규칙](lesson:tx-propagation)).'
+      - code: nested
+        notes:
+          - mark: audit.write(...)
+            as: code
+            text: '바깥 트랜잭션의 커넥션 1개를 **쥔 채로** 부르는 거예요.'
+          - mark: REQUIRES_NEW
+            as: code
+            text: '새 트랜잭션은 새 커넥션이 필요해요. 한 요청이 커넥션 2개를 동시에 써요.'
+      - p: '커넥션이 2개인데 이런 요청이 동시에 2개 오면 어떻게 될까요?'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 커넥션 풀, rows: [{k: 남은 커넥션, v: '2'}]}
+              - {label: 요청, rows: [{k: A, v: 시작 전}, {k: B, v: 시작 전}]}
+          scenarios:
+            default:
+              - log: 'A가 주문 트랜잭션을 열며 커넥션 1개를 빌림'
+                duo:
+                  - {label: 커넥션 풀, rows: [{k: 남은 커넥션, v: '1', mark: changed}]}
+                  - {label: 요청, rows: [{k: A, v: 1개 쥠}, {k: B, v: 시작 전}]}
+              - log: 'B도 주문 트랜잭션을 열며 커넥션 1개를 빌림'
+                duo:
+                  - {label: 커넥션 풀, rows: [{k: 남은 커넥션, v: '0', mark: bad}]}
+                  - {label: 요청, rows: [{k: A, v: 1개 쥠}, {k: B, v: 1개 쥠}]}
+              - log: 'A와 B가 REQUIRES_NEW로 1개씩 더 요청'
+                duo:
+                  - {label: 커넥션 풀, rows: [{k: 남은 커넥션, v: '0'}]}
+                  - {label: 요청, rows: [{k: A, v: 1개 쥐고 기다림, mark: bad}, {k: B, v: 1개 쥐고 기다림, mark: bad}]}
+              - log: 'connection-timeout이 지남 → 둘 다 예외'
+                duo:
+                  - {label: 커넥션 풀, rows: [{k: 남은 커넥션, v: '2'}]}
+                  - {label: 요청, rows: [{k: A, v: 실패, mark: bad}, {k: B, v: 실패, mark: bad}]}
+                verdict: '각자 하나씩 쥐고 남이 놓기를 기다려서, 누구도 끝나지 못했어요.'
+      - p: '실제로 돌려 봤어요. 커넥션 대기는 최대 1초로 줄였어요.'
+      - ci:
+          key: pool-locking
+          label: 실제 결과 보기
+          source: PoolSizingTest.poolLockingDeadlock
+      - p: '커넥션 2개에서는 둘 다 실패했어요. 각자 하나씩 쥐고 남이 반납하기를 기다렸기 때문이에요. [데드락](lesson:deadlock)의 "쥔 채 기다리기"와 같은 모양이고, 커넥션 풀에서 생겨서 **풀 고갈 데드락**이라고 해요. 커넥션을 3개로 늘리니 한 요청이 남은 1개를 얻어 끝내고 반납해서, 다른 요청도 끝났어요.'
+      - p: 'HikariCP 문서는 이런 경우 풀 크기를 "동시 요청 수 × (한 요청이 동시에 쥐는 커넥션 수 - 1) + 1" 이상으로 두라고 해요([HikariCP 문서](link:hikariSizing)). 위 예라면 2 × (2 - 1) + 1 = 3이에요. 더 좋은 고침은 한 요청이 커넥션 하나만 쓰게 하는 거예요. 감사 로그를 바깥 트랜잭션이 끝난 뒤에 쓰거나, 비동기로 넘겨요.'
+      - quiz:
+          q: '커넥션 3개짜리 풀에서, 커넥션 1개를 쥔 채 `REQUIRES_NEW`로 1개를 더 빌리는 요청이 동시에 2개 왔어요. 어떻게 되나요?'
+          options:
+            - '둘 다 타임아웃으로 실패한다'
+            - '한 요청이 남은 1개를 얻어 끝내고 반납해서 둘 다 성공한다'
+            - '둘 다 커넥션 2개씩 받는다'
+          answer: 2
+          explain: '세 번째 커넥션으로 한 요청이 먼저 끝나 반납하니, 다른 요청도 이어서 끝나요. 테스트에서도 둘 다 성공했어요.'
+      - next: '그럼 커넥션은 넉넉할수록 좋을까요? 크기는 어떻게 정할까요?'
+    recall: '동시 요청이 각자 커넥션 하나를 쥔 채 하나를 더 빌리려 하면, 풀이 비어 누구도 두 번째를 받지 못하고 서로의 반납을 기다리다 모두 타임아웃으로 실패해요. 풀 고갈 데드락이에요. 커넥션을 쥔 채 REQUIRES_NEW로 새 트랜잭션을 여는 코드가 흔한 원인이에요. 풀을 "동시 요청 수 × (동시에 쥐는 수 - 1) + 1" 이상으로 두거나, 한 요청이 커넥션 하나만 쓰게 고쳐요.'
+  - id: q4
+    title: 두 풀의 크기는 어떻게 정하나요?
+    conclusion:
+      lead: '커넥션은 DB가 동시에 처리할 수 있는 만큼만 두고, 스레드는 그보다 넉넉하게 두되 커넥션을 기다리다 쌓이지 않게 해요. 공식에서 시작해 부하 테스트로 재서 정해요.'
+      sub: '커넥션을 늘린다고 빨라지지 않아요. DB의 코어와 디스크가 한계라 넘으면 DB 안에서 서로를 기다려요. 서버 대수 × 풀 크기가 DB의 최대 연결 수를 넘지 않게 해요.'
+    says:
+      - 'HikariCP 문서의 출발 공식: (코어 수 × 2) + 디스크 수'
+      - '서버 대수 × 풀 크기 ≤ DB max_connections (PostgreSQL 기본 100)'
+      - '흔한 실수: 커넥션을 200으로 늘린다'
+    asks:
+      - '본문의 예시: 서버 10대가 각자 풀 크기 20이면 DB가 받아야 하는 연결은 (200개. PostgreSQL 기본 최대 100을 넘는다)'
+      - '옮긴 상황: DB 코어 4개, SSD 1개. HikariCP 문서의 공식으로 시작할 커넥션 수는 (9개쯤)'
+    body:
+      - p: '커넥션이 모자라 기다린다면 늘리면 될 것 같아요. 그런데 DB는 코어 수만큼만 동시에 일해요. 코어 4개짜리 DB에 쿼리 100개를 동시에 보내면 100개가 한꺼번에 빨라지는 게 아니라, DB 안에서 CPU와 디스크를 나눠 쓰느라 서로를 기다리고 문맥 전환 비용까지 더해져요. HikariCP 문서는 그래서 **작은 풀이 더 빠른** 경우가 많다고 해요([HikariCP 문서](link:hikariSizing)).'
+      - p: '출발점으로 이 공식을 제시해요.'
+      - code: formula
+      - p: '공식은 출발점일 뿐이에요. 쿼리가 얼마나 걸리는지, 트랜잭션이 얼마나 긴지에 따라 달라서, 부하 테스트로 재서 정해요(심화 레슨 "부하 테스트").'
+      - h3: 서버를 늘리면 연결도 늘어요
+      - p: '[서버를 늘리는 방법](lesson:scale-out)에서 본 것처럼 서버마다 풀이 따로예요. 서버 대수 × 풀 크기가 DB가 받는 연결 수예요.'
+      - code: servers
+      - p: 'PostgreSQL의 최대 연결 수(`max_connections`)는 기본 100이에요([PostgreSQL 문서](link:pgConn)). 넘으면 새 연결이 거절돼요. 서버를 늘릴 계획이면 풀 크기를 그만큼 작게 잡아요.'
+      - h3: 스레드는
+      - p: '톰캣 스레드는 DB를 쓰지 않는 요청도 받으니 커넥션보다 넉넉해요(기본 200). 다만 커넥션을 기다리는 스레드가 쌓이면 소용없으니, `connection-timeout`을 30초보다 짧게 둬서 빨리 실패하게 하는 편이 나아요. 기다리는 동안 다른 요청까지 막히는 것보다, 빨리 실패하고 다시 시도하게 하는 편이 전체를 지켜요.'
+      - quiz:
+          q: '서버 10대가 각자 HikariCP 풀 크기 20으로 PostgreSQL(기본 설정)에 붙어요. 무엇이 문제인가요?'
+          options:
+            - '문제없다'
+            - '연결이 200개가 되어 기본 최대 연결 수 100을 넘는다'
+            - '연결이 20개뿐이라 모자라다'
+          answer: 2
+          explain: '서버마다 풀이 따로라 10 × 20 = 200개예요. PostgreSQL 기본 max_connections는 100이에요.'
+      - next: '원리는 여기까지예요. 이제 application.yml에서 두 풀을 정하는 설정과 흔한 실수를 볼게요.'
+    recall: '커넥션은 DB가 동시에 처리할 수 있는 만큼만 둬요. DB는 코어 수만큼 동시에 일해서 커넥션을 늘려도 빨라지지 않고 서로를 기다려요. HikariCP 문서의 (코어 수 × 2) + 디스크 수에서 시작해 부하 테스트로 재서 정하고, 서버 대수 × 풀 크기가 DB의 최대 연결 수를 넘지 않게 해요. 스레드는 커넥션보다 넉넉하게 두고 connection-timeout을 짧게 해 쌓이지 않게 해요.'
+practice:
+  title: application.yml에서 두 풀을 정할 때
+  says:
+    - 'server.tomcat.threads.max, spring.datasource.hikari.maximum-pool-size, connection-timeout, leak-detection-threshold. 스프링 부트와 HikariCP 문서가 근거'
+    - '흔한 실수: 느리다고 maximum-pool-size를 200으로 늘린다'
+  body:
+    - code: config
+    - ul:
+        - '`server.tomcat.threads.max`: 톰캣 요청 스레드의 최대 수. 기본 200'
+        - '`maximum-pool-size`: HikariCP 커넥션의 최대 수. 기본 10'
+        - '`connection-timeout`: 커넥션을 기다리는 최대 시간(ms). 기본 30000. 짧게 두면 고갈될 때 빨리 실패해요'
+        - '`leak-detection-threshold`: 커넥션을 이 시간 넘게 쥐면 어디서 빌렸는지 경고 로그를 남겨요. 반납하지 않는 코드를 찾을 때 켜요'
+    - p: '설정 이름과 기본값은 [스프링 부트 문서](link:bootProps)와 [HikariCP 문서](link:hikari)가 근거예요. 기본값 두 개는 질문 1에서 테스트로 읽었어요.'
+    - h3: 흔한 실수 하나
+    - code: bigPool
+      notes:
+        - mark: 'maximum-pool-size: 200'
+          as: code
+          text: '"커넥션이 모자라서 느리다"고 크게 늘린 설정이에요.'
+    - p: '느린 원인이 커넥션을 오래 쥐는 코드(질문 2)라면 늘려도 금방 다시 고갈돼요. 서버가 여러 대면 DB의 최대 연결 수도 넘어요. DB는 코어 수만큼만 동시에 일하니 쿼리가 오히려 느려지기도 해요. 고친 순서는 이래요. 먼저 커넥션을 오래 쥐는 코드를 찾아 고치고(`leak-detection-threshold`, 트랜잭션 안의 외부 호출 빼기), 그다음 공식과 부하 테스트로 크기를 정해요.'
+interview:
+  question: 스레드 풀과 커넥션 풀의 크기는 어떻게 정하나요?
+  model:
+    - label: 원리
+      text: 톰캣 요청 스레드가 DB를 쓸 때 HikariCP에서 커넥션을 빌립니다. 스레드가 커넥션보다 많으면 남는 스레드는 기다리고, connection-timeout이 지나면 실패합니다. 스프링 부트 기본값은 스레드 200, 커넥션 10입니다.
+    - label: 주의할 점
+      text: 커넥션을 오래 쥐는 코드가 고갈의 흔한 원인입니다. 긴 트랜잭션, 트랜잭션 안의 외부 호출이 그렇습니다. 커넥션을 쥔 채 REQUIRES_NEW로 하나 더 빌리면 동시 요청 수만큼의 풀에서 모두 서로를 기다리는 풀 고갈 데드락이 납니다.
+    - label: 크기 정하기
+      text: 커넥션을 늘린다고 빨라지지 않습니다. DB의 코어와 디스크가 한계이니 (코어 수 × 2) + 디스크 수에서 시작해 부하 테스트로 정하고, 서버 대수 × 풀 크기가 DB의 최대 연결 수를 넘지 않게 합니다. connection-timeout은 짧게 둬 빨리 실패하게 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 커넥션 고갈로 느려진 원인이 트랜잭션 안의 결제 API 호출이어서 밖으로 빼고, 풀 크기는 그대로 두고도 처리량을 되찾았습니다.'
+verified: 기본값, 커넥션 수에 따른 시간, 풀 고갈 데드락은 스프링 부트 3.5와 PostgreSQL 16에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([PoolSizingTest](link:test))가 다시 돌아요.
+footer: '근거: HikariCP 설정과 풀 크기는 [HikariCP 문서](link:hikari), [풀 크기 문서](link:hikariSizing), 스프링 부트 설정은 [스프링 부트 문서](link:bootProps), 최대 연결 수는 [PostgreSQL 문서](link:pgConn). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '스프링 부트의 기본값은 톰캣 최대 스레드 200, HikariCP 최대 커넥션 10'
+    how: '컨텍스트에서 읽는다'
+    test: PoolSizingTest.defaults
+  - claim: '스레드 6, 커넥션 2면 200ms 쿼리가 세 번에 나눠 600ms쯤, 커넥션 6이면 한 번에 끝난다'
+    how: 'pg_sleep(0.2)'
+    test: PoolSizingTest.moreThreadsThanConnectionsWait
+  - claim: '커넥션을 쥔 채 REQUIRES_NEW로 하나 더 빌리면 커넥션 2개에서 동시 요청 2개가 모두 실패하고, 3개면 성공한다'
+    how: '커넥션 대기 1초'
+    test: PoolSizingTest.poolLockingDeadlock
+sources:
+  - 'HikariCP 설정: https://github.com/brettwooldridge/HikariCP'
+  - 'HikariCP 풀 크기: https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing'
+  - 'PostgreSQL max_connections: https://www.postgresql.org/docs/16/runtime-config-connection.html'
