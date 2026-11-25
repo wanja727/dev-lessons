@@ -1,0 +1,218 @@
+# 스키마 변경과 마이그레이션 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/schema-migration.yaml의 says).
+# 동작에 관한 정답은 verification의 SchemaMigrationTest로 확인했다 (PostgreSQL 16). Flyway의 동작은 문서가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: schema-migration
+  title: 스키마 변경과 마이그레이션
+  unit: DB
+  order: 616
+concepts:
+  - key: core
+    name: 스키마 변경과 마이그레이션
+coreQuestions:
+  - key: q1
+    text: "마이그레이션 도구는 무엇을 해 주나요?"
+  - key: q2
+    text: "테이블을 고치면 왜 서비스가 멈추나요?"
+  - key: q3
+    text: "큰 테이블에 제약과 인덱스는 어떻게 더하나요?"
+  - key: q4
+    text: "열 이름을 바꾸거나 지울 때는 어떻게 하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: mig-checksum
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "운영 DB에 이미 적용된 Flyway 마이그레이션 `V2__add_member_phone.sql`의 열 타입을 고쳐서 다시 배포했어요. Flyway는 어떻게 하나요?"
+    choices:
+      - 고친 V2를 다시 적용한다
+      - 체크섬이 기록과 달라 검증에서 실패한다
+      - 아무 일도 하지 않고 넘어간다
+      - V2를 지우고 V1부터 다시 적용한다
+    answer: "2"
+    explanation: |-
+      **체크섬이 달라 실패해요.** Flyway는 적용한 파일의 체크섬을 기록 테이블에 남겨요.
+
+      - 바꿀 것은 새 번호(V3)의 파일로 더해요
+      - 이미 들어간 변경을 몰래 바꾸지 못하게 하는 장치예요
+    source: https://documentation.red-gate.com/flyway/flyway-concepts/migrations
+  - key: mig-manual-alter
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "개발자 셋이 각자 PC의 DB와 테스트 DB에 필요한 ALTER를 손으로 돌려 왔어요. 생기는 문제와 고침으로 맞는 것은?"
+    choices:
+      - 문제없다. 결과가 같으면 된다
+      - 환경마다 스키마가 달라지고 무엇이 적용됐는지 모른다. 변경을 번호 붙은 마이그레이션 파일로만 한다
+      - 운영 DB만 맞으면 된다
+      - ddl-auto=update로 바꾼다
+    answer: "2"
+    explanation: |-
+      **환경마다 스키마가 어긋나요.** 마이그레이션 도구는 같은 변경을 같은 순서로 모든 환경에 적용하고 기록해요.
+
+      - ddl-auto=update는 지우거나 이름을 바꾸지 못하고 기록도 남지 않아요
+    source: https://documentation.red-gate.com/flyway/flyway-concepts/migrations
+  # ── 질문 2 ──
+  - key: mig-lock-queue
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "회원 테이블을 읽는 트랜잭션이 커밋 전인 채로 열려 있어요. 이때 `alter table member add column phone text`를 보냈고, 그 뒤에 `select * from member where id = 1`이 들어왔어요. 뒤의 SELECT는 어떻게 되나요? (PostgreSQL 16)"
+    choices:
+      - 바로 결과가 나온다. 읽기끼리는 함께 할 수 있다
+      - ALTER 뒤에 줄을 서서, 앞의 트랜잭션이 끝나고 ALTER가 끝날 때까지 기다린다
+      - 오류가 난다
+      - ALTER를 취소시킨다
+    answer: "2"
+    explanation: |-
+      **ALTER 뒤에서 기다려요.** ALTER는 가장 강한 락을 기다리며 줄 맨 앞에 서고, 뒤의 요청은 앞지르지 못해요.
+
+      - 열 추가 자체는 빨라도 이 줄서기 때문에 서비스가 멈춰요
+      - DDL에 lock_timeout을 걸면 ALTER가 물러나고 줄이 풀려요
+    source: https://www.postgresql.org/docs/16/explicit-locking.html
+  - key: mig-lock-timeout
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "마이그레이션 SQL 맨 위에 `set lock_timeout = '3s'`를 두었어요. 배치가 그 테이블을 10분째 읽고 있을 때 마이그레이션이 돌면?"
+    choices:
+      - ALTER가 10분 기다린 뒤 성공한다
+      - ALTER가 3초 뒤 55P03으로 실패하고, 서비스는 멈추지 않는다
+      - 배치가 3초 뒤 취소된다
+      - ALTER가 배치를 앞질러 바로 끝난다
+    answer: "2"
+    explanation: |-
+      **ALTER가 3초 뒤 물러나요.** 뒤에 쌓였던 요청도 풀려요.
+
+      - 마이그레이션은 조용할 때 다시 돌리면 돼요
+      - 서비스 전체가 멈추는 것보다 낫다는 판단이에요
+    source: https://www.postgresql.org/docs/16/runtime-config-client.html
+  # ── 질문 3 ──
+  - key: mig-concurrently-tx
+    concept: core
+    coreQuestion: q3
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "`create index concurrently`는 `begin`과 `commit` 사이의 트랜잭션 블록 안에서도 실행할 수 있다."
+    answer: X
+    explanation: |-
+      **X. 트랜잭션 블록 안에서는 25001 오류예요.**
+
+      - CONCURRENTLY는 쓰기를 막지 않는 대신 여러 단계로 나눠 만들어요
+      - Flyway에서는 이 마이그레이션만 트랜잭션 없이 돌리게 설정해요
+    source: https://www.postgresql.org/docs/16/sql-createindex.html
+  - key: mig-not-valid
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "주문 5천만 건 테이블에 `check (amount >= 0)`을 걸어야 해요. 서비스를 멈추지 않는 순서는?"
+    choices:
+      - "`add constraint ... check (amount >= 0)`를 그대로 실행한다"
+      - "`add constraint ... not valid`로 걸고, 나중에 `validate constraint`로 기존 행을 확인한다"
+      - 제약 없이 앱에서만 검사한다
+      - 테이블을 새로 만들어 옮긴다
+    answer: "2"
+    explanation: |-
+      **NOT VALID로 걸고 나중에 VALIDATE해요.**
+
+      - NOT VALID는 기존 행을 검사하지 않아 바로 끝나고, 새 행부터 막아요
+      - VALIDATE는 쓰기를 막지 않는 약한 락으로 기존 행을 검사해요
+    source: https://www.postgresql.org/docs/16/sql-altertable.html
+  # ── 질문 4 ──
+  - key: mig-rename-rolling
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "서버 4대를 하나씩 바꾸는 배포의 첫 마이그레이션에 `alter table member rename column phone to phone_number`를 넣었어요. 아직 옛 버전인 서버 3대의 회원 조회는 어떻게 되나요?"
+    choices:
+      - 문제없다. DB가 옛 이름도 받아 준다
+      - 없는 열 phone을 읽어 42703 오류가 난다
+      - 새 열을 자동으로 읽는다
+      - 배포가 끝날 때까지 기다린다
+    answer: "2"
+    explanation: |-
+      **42703(없는 열) 오류가 나요.** 배포 중에는 옛 앱과 새 앱이 함께 돌아요.
+
+      - 새 열 더하기, 함께 쓰기, 옮기기, 새 열만 읽기, 옛 열 지우기로 나눠요
+    source: https://www.postgresql.org/docs/16/sql-altertable.html
+  - key: mig-drop-column
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "더는 쓰지 않는 `nickname` 열을 지우려 해요. 서버 여러 대를 하나씩 바꾸는 배포예요. 안전한 순서는?"
+    choices:
+      - 이번 배포에서 엔티티 필드와 열을 함께 지운다
+      - 먼저 앱이 nickname을 쓰지 않게 배포하고, 모든 서버가 바뀐 뒤 다음 배포에서 열을 지운다
+      - 먼저 열을 지우고 다음 배포에서 엔티티 필드를 지운다
+      - 열은 지우지 않는다
+    answer: "2"
+    explanation: |-
+      **앱이 먼저 떠나고, 열은 나중에 지워요.**
+
+      - 열을 먼저 지우면 옛 버전 서버의 INSERT와 SELECT가 그 열 때문에 실패해요
+      - 지운 데이터는 되돌릴 수 없으니 지우는 단계는 가장 늦게 해요
+    source: https://www.postgresql.org/docs/16/sql-altertable.html
+  - key: mig-ddl-auto
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "운영 서버에 `spring.jpa.hibernate.ddl-auto=update`를 켜 두었어요. 엔티티의 `phone` 필드 이름을 `phoneNumber`로 바꿔 배포하면 테이블은 어떻게 되나요?"
+    choices:
+      - phone 열의 이름이 phone_number로 바뀐다
+      - phone_number 열이 새로 생기고 phone 열과 그 데이터는 그대로 남는다. 새 열은 비어 있다
+      - 오류로 앱이 뜨지 않는다
+      - 테이블이 새로 만들어진다
+    answer: "2"
+    explanation: |-
+      **새 열이 생기고 옛 열은 남아요.** update는 더하기만 하고 이름 바꾸기나 지우기를 모르기 때문이에요.
+
+      - 새 열이 비어 있어 기존 회원의 전화번호가 사라진 것처럼 보여요
+      - 운영은 Flyway 마이그레이션과 `ddl-auto: validate`로 해요
+    source: https://docs.spring.io/spring-boot/how-to/data-initialization.html
+  # ── 면접 질문 ──
+  - key: mig-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 면접에서 "운영 중인 서비스의 테이블 구조는 어떻게 바꾸나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **마이그레이션 도구로 변경을 관리하고, 락을 짧게 하고, 옛 앱과 새 앱이 함께 도는 동안 깨지지 않게 나눠서 바꿔요.**
+
+      - **도구:** Flyway의 번호 붙은 파일, 기록 테이블과 체크섬. ddl-auto는 validate
+      - **락:** ALTER는 가장 강한 락을 기다리며 뒤의 요청을 막는다. lock_timeout으로 물러나게
+      - **큰 테이블:** NOT VALID와 VALIDATE, CREATE INDEX CONCURRENTLY, 값 채우기는 나눠서
+      - **이름 바꾸기와 지우기:** 늘리고, 옮기고, 줄이는 여러 번의 배포
+    checklist:
+      - 마이그레이션 도구가 변경을 순서대로 한 번씩 적용하고 기록한다고 말했다
+      - ALTER가 강한 락으로 뒤의 요청을 막을 수 있다고 말했다
+      - lock_timeout이나 CONCURRENTLY, NOT VALID 같은 방법을 하나 이상 말했다
+      - 배포 중 옛 앱과 새 앱이 함께 돈다고 말했다
+      - 이름 바꾸기와 지우기를 여러 단계로 나눈다고 말했다
+    source: https://www.postgresql.org/docs/16/sql-altertable.html
