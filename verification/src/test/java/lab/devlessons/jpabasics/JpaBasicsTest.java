@@ -54,6 +54,7 @@ class JpaBasicsTest {
 
         assertThat(columns).anyMatch(c -> c.startsWith("menu_name"));
         assertThat(columns).noneMatch(c -> c.startsWith("name "));
+        assertThat(columns).anyMatch(c -> c.startsWith("sold_out"));
         CiOutput.record("jpa-basics", "table", "테이블 cafe_menu의 컬럼\n" + String.join("\n", columns));
     }
 
@@ -109,6 +110,35 @@ class JpaBasicsTest {
     void repositoryIsGenerated() {
         assertThat(CafeMenuRepository.class.isInterface()).isTrue();
         assertThat(AopUtils.isAopProxy(menus)).isTrue();
+        CiOutput.record("jpa-basics", "proxy", String.join("\n",
+                "CafeMenuRepository는 인터페이스인가: " + CafeMenuRepository.class.isInterface(),
+                "주입받은 객체의 클래스: " + menus.getClass().getName(),
+                "그 클래스가 구현한 것: " + java.util.Arrays.stream(menus.getClass().getInterfaces())
+                        .map(Class::getSimpleName).filter(n -> n.equals("CafeMenuRepository")).findFirst().orElse("없음")));
+    }
+
+    /** 필드 이름이 틀린 메서드 이름 쿼리. 스프링이 스캔하지 않게 테스트 안에 중첩해 둔다 */
+    interface TypoMenuRepository extends org.springframework.data.repository.Repository<CafeMenu, Long> {
+        List<CafeMenu> findByNmae(String name);
+    }
+
+    @Autowired jakarta.persistence.EntityManager em;
+
+    @Test
+    @DisplayName("필드에 없는 이름의 메서드 이름 쿼리는 리포지토리를 만들 때 실패하고, 메시지에 그 이름이 나온다 (출력 공개)")
+    void typoInMethodNameFailsAtCreation() {
+        var factory = new org.springframework.data.jpa.repository.support.JpaRepositoryFactory(em);
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> factory.getRepository(TypoMenuRepository.class));
+
+        Throwable root = thrown;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        assertThat(thrown).isNotNull();
+        assertThat(root.getMessage()).contains("nmae");
+        CiOutput.record("jpa-basics", "typo", "List<CafeMenu> findByNmae(String name);\n→ "
+                + root.getClass().getSimpleName() + ": " + root.getMessage());
     }
 
     @Test

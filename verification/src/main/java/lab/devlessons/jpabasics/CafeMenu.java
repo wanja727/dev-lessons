@@ -19,6 +19,8 @@ public class CafeMenu {
 
     private int price;
 
+    private boolean soldOut;        // 카멜 케이스 필드는 sold_out 컬럼이 된다
+
     protected CafeMenu() {          // JPA가 조회 결과로 객체를 만들 때 쓰는 기본 생성자
     }
 
