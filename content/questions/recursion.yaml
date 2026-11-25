@@ -1,0 +1,263 @@
+# 재귀 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/recursion.yaml의 says).
+# 동작에 관한 정답은 verification의 RecursionTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: recursion
+  title: 재귀
+  unit: 자료구조와 알고리즘
+  order: 59
+concepts:
+  - key: core
+    name: 재귀
+coreQuestions:
+  - key: q1
+    text: "재귀 함수는 어떻게 끝나나요?"
+  - key: q2
+    text: "재귀 호출이 쌓일 때 스택에서는 무슨 일이 일어나나요?"
+  - key: q3
+    text: "재귀는 언제 쓰고, 반복문으로 바꿀 수 있나요?"
+  - key: q4
+    text: "재귀가 아주 느려지는 경우는 언제인가요?"
+questions:
+  # ── 질문 1 ──
+  - key: rec-leaf-count
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 하위 카테고리가 없는 카테고리 하나(TV)로 count를 불러요. 무엇을 돌려주고, count는 자기 자신을 몇 번 부를까요?
+    code: |-
+      static int count(Category c) {
+        int total = 1;
+        for (Category child : c.children()) {
+          total += count(child);
+        }
+        return total;
+      }
+    choices:
+      - 0을 돌려주고, 부르지 않는다
+      - 1을 돌려주고, 부르지 않는다
+      - 1을 돌려주고, 한 번 부른다
+      - StackOverflowError가 난다
+    answer: "2"
+    explanation: |-
+      **1을 돌려주고, 자기를 부르지 않아요.** 하위 카테고리가 없으면 for가 한 번도 돌지 않아요.
+
+      - 이것이 count의 끝나는 조건이에요. if로 적혀 있지 않아도 바로 답하는 경우예요
+      - 부를 때마다 트리의 한 겹 아래로 내려가니 결국 이 경우에 닿아요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  - key: rec-pow-no-base
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 거듭제곱을 재귀로 구하려고 해요. pow(2, 3)은 어떻게 될까요?
+    code: |-
+      static int pow(int b, int e) {
+        return b * pow(b, e - 1);
+      }
+    choices:
+      - 8을 돌려준다
+      - 0을 돌려준다
+      - StackOverflowError가 난다. if (e == 0) return 1;을 더해야 한다
+      - 컴파일 오류가 난다
+    answer: "3"
+    explanation: |-
+      **StackOverflowError가 나요.** 끝나는 조건이 없어서 e가 0, -1, -2로 계속 내려가며 자기를 불러요.
+
+      - 재귀에는 바로 답하는 끝나는 조건이 있어야 해요
+      - e가 0일 때 1을 돌려주면 부를 때마다 e가 작아져 그 조건에 닿아요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  # ── 질문 2 ──
+  - key: rec-frames-sum3
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: sum(3)을 불렀어요. sum(0)이 실행되는 순간 스택에 쌓인 sum의 프레임은 몇 개이고, 가장 먼저 끝나는 호출은 무엇일까요?
+    code: |-
+      static int sum(int n) {
+        if (n == 0) return 0;
+        return n + sum(n - 1);
+      }
+    choices:
+      - 1개, sum(3)
+      - 3개, sum(1)
+      - 4개, sum(0)
+      - 4개, sum(3)
+    answer: "3"
+    explanation: |-
+      **4개이고, sum(0)이 가장 먼저 끝나요.** sum(3), sum(2), sum(1), sum(0)의 프레임이 쌓이고 각자 자기 n을 가져요.
+
+      - sum(0)이 0을 돌려주면 sum(1), sum(2), sum(3) 순서로 돌아오며 1, 3, 6을 계산해요
+      - 늦게 부른 것이 먼저 끝나는 스택 순서예요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  - key: rec-depth-by-levels
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 카테고리 2,000개가 세 겹(최상위, 그 아래, 그 아래)으로 이루어진 트리에서, 하위 카테고리마다 자기를 부르는 count(root)를 불러요. 가장 깊을 때 스택에 쌓인 count의 프레임은 몇 개일까요?
+    choices:
+      - 1개
+      - 3개
+      - 1,000개
+      - 2,000개
+    answer: "2"
+    explanation: |-
+      **3개예요.** 재귀의 깊이는 카테고리 수가 아니라 트리의 겹 수를 따라가요.
+
+      - count는 하위 카테고리 하나를 다 세고 돌아온 뒤에 다음 것을 불러요
+      - 그래서 스택에는 지금 내려간 길의 겹 수만큼만 쌓여요
+      - 깊이가 입력만큼 자라는 sum(n)과 달라요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  # ── 질문 3 ──
+  - key: rec-deque-role
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 재귀로 쓴 카테고리 세기를 반복문으로 바꿨어요. 여기서 st가 하는 일은 재귀 버전의 무엇을 대신할까요?
+    code: |-
+      Deque<Category> st = new ArrayDeque<>();
+      st.push(root);
+      int total = 0;
+      while (!st.isEmpty()) {
+        Category c = st.pop();
+        total++;
+        c.children().forEach(st::push);
+      }
+    choices:
+      - JVM의 호출 스택에 쌓이던 프레임. 아직 셀 카테고리를 기억한다
+      - 끝나는 조건
+      - 계산한 결과를 저장하는 메모
+      - 힙의 가비지 컬렉션
+    answer: "1"
+    explanation: |-
+      **호출 스택에 쌓이던 "아직 끝나지 않은 일"을 대신해요.** 재귀에서는 JVM이 쌓아 주던 것을 직접 쌓아요.
+
+      - 이 ArrayDeque는 힙에 있어서 스레드의 스택 크기와 상관없어요
+      - 그래서 깊이 10만의 트리도 StackOverflowError 없이 셀 수 있어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html
+  - key: rec-endless-replies
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 사용자가 답글에 답글을 끝없이 달 수 있는 게시판에서 한 글의 답글 수를 세요. 무엇으로 쓰는 것이 안전할까요?
+    choices:
+      - 재귀. 트리 모양이니까 늘 맞다
+      - 반복문과 직접 만든 스택. 깊이에 한도가 없어서 재귀는 StackOverflowError가 날 수 있다
+      - 재귀를 쓰고 -Xss로 스택을 크게 잡는다
+      - 메모이제이션을 한 재귀
+    answer: "2"
+    explanation: |-
+      **반복문과 직접 만든 스택이 안전해요.** 답글의 깊이를 사용자가 정해서 끝없이 깊어질 수 있어요.
+
+      - 직접 만든 스택은 힙에 있어 호출 스택의 한도를 받지 않아요
+      - -Xss를 키워도 더 깊은 답글이 오면 다시 넘쳐요
+      - 깊이가 작게 정해진 데이터라면 읽기 쉬운 재귀를 써도 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html
+  # ── 질문 4 ──
+  - key: rec-fib-repeat
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 fib로 fib(5)를 부르면 fib(3)은 몇 번 불릴까요?
+    code: |-
+      static long fib(int n) {
+        if (n < 2) return n;
+        return fib(n - 1) + fib(n - 2);
+      }
+    choices:
+      - 1번
+      - 2번
+      - 3번
+      - 5번
+    answer: "2"
+    explanation: |-
+      **2번이에요.** fib(5)가 fib(3)을 한 번, fib(5)가 부른 fib(4)가 또 한 번 불러요.
+
+      - 같은 계산이 겹쳐서 fib(2)는 3번 불려요
+      - 아래로 갈수록 겹치는 호출이 불어나 n이 10 늘 때 호출 수가 100배 넘게 늘어요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  - key: rec-grid-paths
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 격자의 왼쪽 위에서 오른쪽 아래까지 오른쪽과 아래로만 가는 길의 수를 paths(r, c) = paths(r - 1, c) + paths(r, c - 1)로 구해요(r이나 c가 0이면 1). 격자가 커지면 아주 느려지는 이유와 고치는 방법은 무엇일까요?
+    choices:
+      - 같은 (r, c)를 여러 번 계산한다. 계산한 값을 저장해 다시 쓴다
+      - 끝나는 조건이 없다. if를 더한다
+      - 스택이 넘친다. -Xss를 키운다
+      - 덧셈이 느리다. long 대신 int를 쓴다
+    answer: "1"
+    explanation: |-
+      **같은 호출이 겹치기 때문이에요.** paths(r - 1, c)와 paths(r, c - 1)이 둘 다 paths(r - 1, c - 1)을 불러요.
+
+      - 피보나치와 같은 모양이에요
+      - 계산한 값을 저장해 다시 쓰는 메모이제이션을 하면 (r, c)마다 한 번만 계산해요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  - key: rec-cyclic-parent
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 데이터가 잘못 들어가 카테고리 A의 부모가 B, B의 부모가 A가 됐어요. depth(A)를 부르면 어떻게 될까요?
+    code: |-
+      int depth(Category c) {
+        if (c.getParent() == null) return 0;
+        return 1 + depth(c.getParent());
+      }
+    choices:
+      - 0을 돌려준다
+      - 2를 돌려준다
+      - StackOverflowError가 난다
+      - NullPointerException이 난다
+    answer: "3"
+    explanation: |-
+      **StackOverflowError가 나요.** 끝나는 조건(부모가 null)이 데이터에 달려 있는데, 순환이 생겨 영원히 닿지 않아요.
+
+      - 지나온 id를 Set에 담아 같은 id를 다시 만나면 예외를 던지게 고쳐요
+      - 저장할 때 새 부모의 조상에 자기가 없는지도 확인해요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  # ── 네 질문을 하나로 ──
+  - key: rec-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "재귀란 무엇이고, 쓸 때 무엇을 조심하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **자기 자신을 불러 같은 모양의 작은 문제로 나눠 푸는 방식이고, 끝나는 조건과 깊이와 겹치는 호출을 조심해요.**
+
+      - **끝나는 조건:** 바로 답하는 경우가 있고, 부를 때마다 그 조건에 가까워져야 한다
+      - **스택:** 호출마다 프레임이 쌓이고 늦게 부른 것부터 돌아온다. 깊이가 입력만큼 자라면 StackOverflowError
+      - **바꾸기:** 반복문과 직접 만든 스택으로 바꿀 수 있고, 그 스택은 힙에 있어 깊이 제한이 없다
+      - **느려질 때:** 같은 인자로 다시 부르면 호출이 폭발한다. 메모이제이션으로 줄인다
+    checklist:
+      - 메서드가 자기 자신을 불러 작은 문제로 나눠 푼다고 말했다
+      - 끝나는 조건이 있어야 하고 부를 때마다 가까워져야 한다고 말했다
+      - 호출마다 스택에 프레임이 쌓여 깊으면 StackOverflowError가 난다고 말했다
+      - 반복문과 직접 만든 스택으로 바꿀 수 있다고 말했다
+      - 같은 호출을 되풀이하면 느려지고 메모이제이션으로 줄인다고 말했다
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2

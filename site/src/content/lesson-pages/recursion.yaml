@@ -1,8 +1,9 @@
-# 재귀 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 재귀
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/recursion.yaml에 있다.
 title: 재귀
+description: 재귀 함수가 어떻게 끝나는지, 호출이 쌓일 때 스택에서 무슨 일이 일어나는지, 언제 쓰고 반복문으로 바꿀 수 있는지, 아주 느려지는 경우는 언제인지. 네 가지 질문에 스스로 답할 수 있게, 쇼핑몰의 카테고리 트리를 재귀로 세며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 20
 roadmap: K5
 type: 자바 실행
 prerequisites:
@@ -49,6 +50,11 @@ codes:
     }
 
     sum(100_000);
+  sumParts: |-
+    static int sum(int n) {
+      [[if (n == 0) return 0;]]
+      return n + [[sum(n - 1)]];
+    }
   category: |-
     record Category(String name,
                     List<Category> children) {}
@@ -56,55 +62,118 @@ codes:
     static int count(Category c) {
       int total = 1;
       for (Category child : c.children()) {
-        total += count(child);
+        total += [[count(child)]];
       }
       return total;
     }
+  countRun: |-
+    // 전자제품
+    //   컴퓨터 (노트북, 데스크톱)
+    //   휴대폰 (스마트폰)
+    //   TV
+    count(electronics);
+    countIter(electronics);
+    count(tv);
   noBase: |-
     static int sumWrong(int n) {
-      return n + sumWrong(n - 1);
+      return n + [[sumWrong(n - 1)]];
     }
   iterative: |-
     static int countIter(Category root) {
       Deque<Category> st = new ArrayDeque<>();
-      st.push(root);
+      [[st.push(root)]];
       int total = 0;
       while (!st.isEmpty()) {
         Category c = st.pop();
         total++;
-        c.children().forEach(st::push);
+        c.children().forEach([[st::push]]);
       }
       return total;
     }
+  deepRun: |-
+    // c1 > c2 > c3 > ... > c100000
+    count(c1);
+    countIter(c1);
   fib: |-
     static long fib(int n) {
       if (n < 2) return n;
-      return fib(n - 1) + fib(n - 2);
+      return [[fib(n - 1) + fib(n - 2)]];
     }
+  fibTree: |-
+    fib(5)
+    ├ fib(4)
+    │ ├ fib(3)
+    │ │ ├ [[fib(2)]]
+    │ │ └ fib(1)
+    │ └ [[fib(2)]]
+    └ fib(3)
+      ├ [[fib(2)]]
+      └ fib(1)
+  fibRun: |-
+    // 호출마다 calls++ 하며 센다
+    fib(20); fib(30); fib(40);
   fibMemo: |-
     static long fib(int n, long[] memo) {
       if (n < 2) return n;
-      if (memo[n] != 0) return memo[n];
+      [[if (memo[n] != 0) return memo[n];]]
       memo[n] = fib(n - 1, memo)
           + fib(n - 2, memo);
       return memo[n];
     }
+  memoRun: |-
+    fib(40, new long[41]);
   entity: |-
     @Entity
     class Category {
       @Id Long id;
       String name;
       @ManyToOne
-      Category parent;
+      [[Category parent]];
     }
   depthOf: |-
     int depth(Category c) {
-      if (c.getParent() == null) return 0;
+      [[if (c.getParent() == null) return 0;]]
       return 1 + depth(c.getParent());
     }
+  depthSafe: |-
+    int depth(Category c) {
+      Set<Long> seen = new HashSet<>();
+      int d = 0;
+      for (Category p = c;
+           p.getParent() != null;
+           p = p.getParent()) {
+        if ([[!seen.add(p.getId())]]) {
+          throw new IllegalStateException(
+              "카테고리 순환: id " + p.getId());
+        }
+        d++;
+      }
+      return d;
+    }
+  cycleRun: |-
+    // 노트북 > 컴퓨터 > 전자제품
+    depth(laptop);
+    // 잘못 들어간 데이터
+    a.setParent(b);
+    b.setParent(a);
+    depth(a);
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/recursion/RecursionTest.java
+  jvms: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  javaCmd: https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html
+  withRecursive: https://www.postgresql.org/docs/current/queries-with.html
 predict:
-  text: '코드 predict의 `sum`은 끝나는 조건(`n == 0`)을 가진 재귀예요. 기본 설정의 JVM에서 `sum(100_000)`을 부르면 어떻게 될까요? 보기: 5000050000이 나온다, 끝나지 않고 영원히 돈다, `StackOverflowError`가 난다.'
-  answer: '`StackOverflowError`가 날 가능성이 크다. 끝나는 조건이 있어도 10만 겹의 호출을 쌓아야 닿는다. 기본 스택이 견디는 깊이는 환경에 따라 수천에서 수만이다. 질문 2에서 밝힌다. 테스트에서 실제로 나는지 확인하고, 나지 않는 환경이면 문제의 숫자를 바꾼다.'
+  title: 끝나는 조건이 있는데도?
+  text: '코드 predict의 `sum`은 끝나는 조건(`n == 0`)을 가진 재귀예요. 기본 설정의 JVM에서 `sum(100_000)`을 부르면 어떻게 될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: ok, label: 5000050000에 가까운 값이 나온다}
+    - {value: forever, label: 끝나지 않고 영원히 돈다}
+    - {value: soe, label: StackOverflowError가 난다}
+  answer: soe
+  storageKey: rec-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 재귀 함수는 어떻게 끝나나요?
@@ -120,6 +189,52 @@ questions:
     asks:
       - '본문의 예시: 하위 카테고리가 없는 카테고리 하나로 코드 category의 `count`를 부르면 무엇을 돌려주고, 자기 자신을 몇 번 부르나 (1을 돌려주고, 부르지 않는다)'
       - '옮긴 상황: `int pow(int b, int e) { return b * pow(b, e - 1); }`로 거듭제곱을 구하려 했다. `pow(2, 3)`은 어떻게 되고, 무엇을 더해야 하나 (`StackOverflowError`. `if (e == 0) return 1;`)'
+    body:
+      - p: '카테고리의 수를 세는 일을 말로 쓰면 이래요. "나 하나를 세고, 하위 카테고리마다 그 아래를 센 수를 더한다." 하위 카테고리 아래를 세는 일도 똑같은 모양이에요. 그래서 같은 메서드에 맡겨요.'
+      - code: category
+        notes:
+          - mark: count(child)
+            as: code
+            text: '메서드가 자기 자신을 불러요. 이것이 **재귀**예요. 하위 카테고리 하나를 통째로 같은 메서드에 맡겨요.'
+      - p: '깊이가 몇 겹이든 이 메서드 하나로 세요. 예제 트리로 돌려 봤어요.'
+      - ci:
+          key: count
+          label: 실제 결과 보기
+          source: RecursionTest.countCategories
+          code: countRun
+      - h3: 재귀의 두 부분
+      - p: '재귀 메서드에는 늘 두 부분이 있어요. 코드 predict의 `sum`으로 보면 또렷해요.'
+      - code: sumParts
+        notes:
+          - mark: 'if (n == 0) return 0;'
+            as: code
+            text: '**끝나는 조건**(기저 조건)이에요. 더 나누지 않고 바로 답해요.'
+          - mark: sum(n - 1)
+            as: code
+            text: '**더 작은 문제로 자기를 불러요.** `sum(n - 1)`은 `sum(n)`보다 한 칸 작아서, 부를 때마다 끝나는 조건에 한 칸 가까워져요.'
+      - p: '`count`의 끝나는 조건은 눈에 띄지 않아요. 하위 카테고리가 없으면 `for`가 한 번도 돌지 않고 1을 돌려줘요. 위의 `count(TV)`가 그래요. 그것이 끝나는 조건이에요. 그리고 부를 때마다 트리의 한 겹 아래로 내려가니 결국 하위가 없는 카테고리에 닿아요.'
+      - h3: 끝나는 조건에 닿지 못하면
+      - code: noBase
+        notes:
+          - mark: sumWrong(n - 1)
+            as: code
+            text: '끝나는 조건이 없어요. n이 0을 지나 음수가 돼도 계속 불러요.'
+      - p: '호출이 끝없이 쌓이다 스택이 넘쳐 `StackOverflowError`가 나요([JVM 메모리 구조](lesson:jvm-memory)에서 본 에러예요). 끝나는 조건이 있어도 **가까워지지 않으면** 같아요. `sum(-1)`은 `n == 0`을 지나쳐 -2, -3으로 계속 내려가요.'
+      - ci:
+          key: nobase
+          label: 실제 결과 보기
+          source: RecursionTest.noBaseCase
+      - callout: '**재귀를 쓰기 전에 두 가지를 먼저 적어요.** 언제 바로 답하나(끝나는 조건), 부를 때마다 무엇이 작아지나.'
+      - quiz:
+          q: '`int pow(int b, int e) { return b * pow(b, e - 1); }`로 거듭제곱을 구하려 해요. `pow(2, 3)`은 어떻게 될까요?'
+          options:
+            - '8을 돌려준다'
+            - '`StackOverflowError`가 난다. `if (e == 0) return 1;`을 더해야 한다'
+            - '0을 돌려준다'
+          answer: 2
+          explain: '끝나는 조건이 없어서 `e`가 0, -1, -2로 계속 내려가며 자기를 불러요. `e`가 0일 때 1을 돌려주는 조건을 더하면 8이 나와요.'
+      - next: '끝나는 조건이 있는 `sum`도 처음 예측에서는 `sum(100_000)`이었어요. 호출이 쌓인다는 게 정확히 무슨 일일까요?'
+    recall: '더 나누지 않고 바로 답하는 끝나는 조건에 닿아서 끝나요. 재귀 메서드는 끝나는 조건과, 더 작은 문제로 자기를 부르는 부분으로 이루어져요. `sum`은 `n == 0`에서 0을 돌려주고, `count`는 하위가 없으면 1을 돌려줘요. 끝나는 조건이 없거나 부를 때마다 가까워지지 않으면 호출이 끝없이 쌓여 `StackOverflowError`가 나요.'
   - id: q2
     title: 재귀 호출이 쌓일 때 스택에서는 무슨 일이 일어나나요?
     conclusion:
@@ -137,6 +252,95 @@ questions:
     asks:
       - '본문의 예시: `sum(3)`에서 `sum(0)`이 실행되는 순간 스택에 쌓인 `sum`의 프레임은 몇 개이고, 가장 먼저 끝나는 호출은 무엇인가 (4개, `sum(0)`)'
       - '옮긴 상황: 카테고리 2천 개가 세 겹으로 이루어진 트리에서 `count(root)`를 부른다. 가장 깊을 때 스택에 쌓인 `count`의 프레임은 몇 개인가 (3개. 깊이는 카테고리 수가 아니라 겹 수를 따른다)'
+    body:
+      - p: '메서드를 부르면 스레드의 스택에 **프레임**이 하나 쌓여요. 프레임에는 그 호출의 매개변수와 지역 변수가 들어 있어요. 재귀도 똑같아요. `sum(3)`, `sum(2)`는 같은 메서드지만 프레임이 따로라서 **`n`도 각자** 가져요. `sum(3)`을 한 단계씩 실행해 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 스택 (위가 가장 최근), state: dim, text: 비어 있음}
+              - {label: 지금 실행 중, state: dim, text: 'sum(3)을 부르기 전'}
+          scenarios:
+            default:
+              - log: 'sum(3) 시작 → n이 0이 아니라 sum(2)를 불러요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(3)', v: 'n = 3, 기다리는 중', mark: changed}]
+                  - label: 지금 실행 중
+                    rows: [{k: 줄, v: 'return 3 + sum(2)'}]
+              - log: 'sum(2) 시작 → sum(1)을 불러요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(2)', v: 'n = 2, 기다리는 중', mark: changed}, {k: 'sum(3)', v: 'n = 3, 기다리는 중'}]
+                  - label: 지금 실행 중
+                    rows: [{k: 줄, v: 'return 2 + sum(1)'}]
+              - log: 'sum(1) 시작 → sum(0)을 불러요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(1)', v: 'n = 1, 기다리는 중', mark: changed}, {k: 'sum(2)', v: 'n = 2, 기다리는 중'}, {k: 'sum(3)', v: 'n = 3, 기다리는 중'}]
+                  - label: 지금 실행 중
+                    rows: [{k: 줄, v: 'return 1 + sum(0)'}]
+              - log: 'sum(0) 시작 → 끝나는 조건이에요. 바로 0을 돌려줘요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(0)', v: 'n = 0', mark: changed}, {k: 'sum(1)', v: 'n = 1, 기다리는 중'}, {k: 'sum(2)', v: 'n = 2, 기다리는 중'}, {k: 'sum(3)', v: 'n = 3, 기다리는 중'}]
+                  - label: 지금 실행 중
+                    rows: [{k: 줄, v: 'if (n == 0) return 0;'}]
+                verdict: '스택에 sum의 프레임이 4개 쌓였어요. 이제부터 돌아와요.'
+              - log: 'sum(0)이 0을 돌려주고 끝나요 → sum(1)이 1 + 0을 계산해요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(1)', v: 'n = 1, 1 + 0 = 1', mark: changed}, {k: 'sum(2)', v: 'n = 2, 기다리는 중'}, {k: 'sum(3)', v: 'n = 3, 기다리는 중'}]
+                  - label: 지금 실행 중
+                    rows: [{k: 돌려받은 값, v: '0'}]
+              - log: 'sum(1)이 1을 돌려주고 끝나요 → sum(2)가 2 + 1을 계산해요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(2)', v: 'n = 2, 2 + 1 = 3', mark: changed}, {k: 'sum(3)', v: 'n = 3, 기다리는 중'}]
+                  - label: 지금 실행 중
+                    rows: [{k: 돌려받은 값, v: '1'}]
+              - log: 'sum(2)가 3을 돌려주고 끝나요 → sum(3)이 3 + 3을 계산해요'
+                duo:
+                  - label: 스택 (위가 가장 최근)
+                    rows: [{k: 'sum(3)', v: 'n = 3, 3 + 3 = 6', mark: changed}]
+                  - label: 지금 실행 중
+                    rows: [{k: 돌려받은 값, v: '3'}]
+              - log: 'sum(3)이 6을 돌려주고 끝나요'
+                duo:
+                  - {label: 스택 (위가 가장 최근), text: 비어 있음}
+                  - label: 지금 실행 중
+                    rows: [{k: 결과, v: '6', mark: changed}]
+                verdict: '늦게 부른 sum(0)이 가장 먼저 끝나고, 처음 부른 sum(3)이 가장 늦게 끝났어요. 스택과 큐 레슨의 스택 순서예요.'
+      - p: '`sum(0)`이 실행되는 순간 스택에 `sum`의 프레임이 4개라는 것은 테스트에서 `Thread.currentThread().getStackTrace()`로 세어 확인했어요. 끝나는 조건에 닿기 전까지는 아무 덧셈도 끝나지 않아요. 모든 호출이 **아래의 답을 기다리며** 프레임을 쥐고 있어요.'
+      - h3: 그래서 sum(100_000)은
+      - p: '처음 예측의 답은 **`StackOverflowError`가 난다**예요. {{predict-result}} 끝나는 조건이 있어도, 거기 닿으려면 프레임 10만 개를 한꺼번에 쌓아야 해요. 스레드의 스택은 크기가 정해져 있어서 그만큼 견디지 못했어요.'
+      - ci:
+          key: predict
+          label: 실제 결과 보기
+          source: RecursionTest.deepSumOverflows
+          code: predict
+      - p: '몇 겹에서 넘치는지는 스택 크기와 프레임 크기, JIT가 코드를 어떻게 바꿨는지에 따라 달라서 환경마다 달라요. 기본 설정에서는 대개 수천에서 수만 겹이에요.'
+      - h3: 깊이는 무엇을 따라가나요
+      - p: '`sum(n)`의 깊이는 n이에요. 입력이 커지면 깊이도 커져요. 카테고리의 `count`는 다르게 봐야 해요. 깊이는 카테고리의 **수가 아니라 겹 수**를 따라가요. 카테고리 2천 개가 세 겹이면 가장 깊을 때 프레임은 3개예요. 하나의 하위 카테고리를 다 세고 돌아온 뒤에 다음 하위 카테고리를 부르기 때문이에요.'
+      - ul:
+          - '**겹 수가 작게 정해진 데이터**(카테고리 다섯 겹, 조직도)는 재귀가 안전해요.'
+          - '**깊이가 입력만큼 자랄 수 있는 데이터**(사용자가 끝없이 다는 답글, 긴 연결 리스트)는 재귀로 돌지 않거나 깊이를 제한해요.'
+      - p: '`-Xss` 옵션으로 스레드의 스택을 키울 수 있지만([java 명령 문서](link:javaCmd)), 더 깊은 입력이 오면 다시 넘쳐요. 근본 해결은 질문 3의 반복문이에요.'
+      - more:
+          summary: '더 알아보기: 꼬리 재귀'
+          body:
+            - p: '자기를 부르는 것이 메서드의 **마지막 일**인 재귀를 꼬리 재귀라고 해요. 어떤 언어는 이것을 반복문으로 바꿔 스택을 쌓지 않아요. 자바 컴파일러와 HotSpot은 이 최적화를 하지 않아요. 꼬리 재귀로 써도 깊이만큼 프레임이 쌓여요.'
+      - quiz:
+          q: '카테고리 2천 개가 세 겹으로 이루어진 트리에서 `count(root)`를 불러요. 가장 깊을 때 스택에 쌓인 `count`의 프레임은 몇 개일까요?'
+          options:
+            - '3개'
+            - '2,000개'
+            - '1개'
+          answer: 1
+          explain: '`count`는 하위 카테고리 하나를 다 세고 돌아온 뒤에 다음 것을 불러요. 그래서 스택에는 지금 내려간 길의 겹 수만큼만 쌓여요. 테스트에서 3개였어요.'
+      - next: '깊이가 깊을 수 있으면 재귀가 위험했어요. 그러면 재귀 없이도 같은 일을 할 수 있을까요?'
+    recall: '호출마다 그 호출의 매개변수와 지역 변수를 담은 프레임이 스택에 쌓여요. `sum(3)`은 `sum(0)`까지 프레임 4개를 쌓은 뒤, 늦게 부른 것부터 돌아오며 0, 1, 3, 6을 합쳐요. 스택의 크기에는 한도가 있어서 `sum(100_000)`처럼 깊이가 입력만큼 자라는 재귀는 `StackOverflowError`가 나요. 트리의 `count`는 카테고리 수가 아니라 겹 수만큼 쌓여요.'
   - id: q3
     title: 재귀는 언제 쓰고, 반복문으로 바꿀 수 있나요?
     conclusion:
@@ -152,6 +356,41 @@ questions:
     asks:
       - '본문의 예시: 코드 iterative에서 `Deque`가 하는 일은 재귀 버전의 무엇을 대신하나 (JVM의 호출 스택에 쌓이던 프레임. 아직 셀 카테고리를 기억한다)'
       - '옮긴 상황: 사용자가 답글에 답글을 끝없이 달 수 있는 게시판에서 한 글의 답글 수를 센다. 재귀와 반복문 가운데 무엇이 안전하고 왜 그런가 (반복문과 직접 만든 스택. 깊이에 한도가 없어 재귀는 `StackOverflowError`가 날 수 있다)'
+    body:
+      - p: '재귀가 잘 맞는 곳은 **부분이 전체와 같은 모양**인 데이터예요. 카테고리 아래에는 카테고리가, 댓글 아래에는 댓글이, 폴더 안에는 폴더가 있어요. 조직도, JSON 문서도 그래요. 재귀로 쓰면 데이터의 모양과 코드의 모양이 같아져서 읽기 쉬워요.'
+      - p: '나눠서 푸는 알고리즘도 재귀로 써요. 병합 정렬은 절반씩 나눠 정렬한 뒤 합쳐요([정렬](lesson:sorting)에서 봐요). 깊이 우선 탐색은 이웃마다 같은 탐색을 시켜요.'
+      - h3: 반복문과 직접 만든 스택으로
+      - p: '질문 2에서 본 대로, 재귀는 JVM이 호출 스택에 "아직 끝나지 않은 일"을 쌓아 주는 거예요. 그 스택을 **직접** 만들면 재귀 없이 같은 일을 해요.'
+      - code: iterative
+        notes:
+          - mark: st.push(root)
+            as: code
+            text: '아직 셀 카테고리를 담는 스택이에요. 재귀 버전에서 JVM이 프레임으로 기억하던 것을 직접 기억해요. 스택과 큐 레슨의 `ArrayDeque`예요.'
+          - mark: 'st::push'
+            as: code
+            text: '하위 카테고리를 자기를 부르는 대신 스택에 넣어요. 다음 반복에서 꺼내 세요.'
+      - p: '같은 예제 트리에서 `countIter`도 7을 돌려줬어요(질문 1의 실제 출력). 다른 점은 스택이 있는 곳이에요. 이 `ArrayDeque`는 **힙**에 있어서 스레드의 호출 스택 크기와 상관없어요. 한 줄로 이어진 카테고리 10만 개로 둘을 돌려 봤어요.'
+      - ci:
+          key: deep
+          label: 실제 결과 보기
+          source: RecursionTest.deepTree
+          code: deepRun
+      - p: '재귀 버전은 넘쳤고 반복문 버전은 10만을 셌어요. `sum`처럼 자기를 한 번만 부르는 재귀는 스택도 필요 없이 `for` 한 겹으로 바꿔요.'
+      - table:
+          head: [데이터의 깊이, 고를 것, 왜]
+          rows:
+            - ['작게 정해져 있어요 (카테고리 다섯 겹)', '재귀', '짧고 데이터의 모양과 같아서 읽기 쉬워요']
+            - ['알 수 없거나 매우 깊을 수 있어요', '반복문과 직접 만든 스택', '호출 스택의 한도를 받지 않아요']
+      - quiz:
+          q: '사용자가 답글에 답글을 끝없이 달 수 있는 게시판에서 한 글의 답글 수를 세요. 무엇으로 쓰는 것이 안전할까요?'
+          options:
+            - '재귀. 트리 모양이니까'
+            - '반복문과 직접 만든 스택. 깊이에 한도가 없어서 재귀는 넘칠 수 있다'
+            - '`-Xss`를 키우고 재귀'
+          answer: 2
+          explain: '답글의 깊이를 사용자가 정해서 끝없이 깊어질 수 있어요. 직접 만든 스택은 힙에 있어 호출 스택의 한도를 받지 않아요. `-Xss`를 키워도 더 깊은 답글이 오면 다시 넘쳐요.'
+      - next: '재귀가 터지는 경우는 봤어요. 터지지 않고 그냥 아주 느려지는 재귀도 있어요. 언제일까요?'
+    recall: '카테고리, 댓글, 폴더처럼 부분이 전체와 같은 모양인 데이터와, 병합 정렬처럼 나눠서 푸는 알고리즘에 써요. 모든 재귀는 반복문과 직접 만든 스택으로 바꿀 수 있어요. JVM이 쌓던 "아직 끝나지 않은 일"을 `ArrayDeque`에 직접 쌓는 거예요. 그 스택은 힙에 있어서 깊이 10만의 트리도 셀 수 있어요. 깊이가 작게 정해져 있으면 재귀, 알 수 없으면 반복문을 골라요.'
   - id: q4
     title: 재귀가 아주 느려지는 경우는 언제인가요?
     conclusion:
@@ -168,29 +407,127 @@ questions:
       - '본문의 예시: 코드 fib로 `fib(5)`를 부르면 `fib(3)`은 몇 번 불리나 (2번)'
       - '옮긴 상황: 격자의 왼쪽 위에서 오른쪽 아래까지 오른쪽과 아래로만 가는 길의 수를 `paths(r, c) = paths(r - 1, c) + paths(r, c - 1)`로 구한다. 이 재귀가 느린 이유와 고치는 방법은 무엇인가 (같은 `(r, c)`를 여러 번 계산한다. 계산한 값을 저장해 다시 쓴다)'
       - '실무 구역: 코드 depthOf에서 데이터가 잘못 들어가 카테고리 A의 부모가 B, B의 부모가 A다. A의 `depth`를 구하면 어떻게 되나 (`StackOverflowError`. 부모를 따라가는 호출이 끝나지 않는다)'
+    body:
+      - p: '재귀의 시간 복잡도는 **호출 횟수 × 호출 하나가 하는 일**로 세요. `sum(n)`은 n번 부르고 호출마다 덧셈 하나라 O(n)이에요. `count`는 카테고리마다 한 번 불러서 O(카테고리 수)예요. 그런데 호출 횟수가 폭발하는 재귀가 있어요. 피보나치 수(앞의 두 수를 더해 다음 수를 만드는 0, 1, 1, 2, 3, 5, 8, ...)예요.'
+      - code: fib
+        notes:
+          - mark: fib(n - 1) + fib(n - 2)
+            as: code
+            text: '자기를 **두 번** 불러요. 그리고 두 호출이 같은 일을 겹쳐서 해요.'
+      - p: '`fib(5)`의 호출을 나무 모양으로 그려 보면 겹치는 곳이 보여요.'
+      - code: fibTree
+        notes:
+          - mark: fib(2)
+            text: '같은 `fib(2)`를 세 번, `fib(3)`을 두 번 계산해요. 아래로 갈수록 겹치는 호출이 불어나요.'
+      - p: '`fib(5)`의 호출은 모두 15번이에요. n을 늘리며 호출 수를 세어 봤어요.'
+      - ci:
+          key: fib
+          label: 호출 수와 걸린 시간 보기
+          source: RecursionTest.fibonacciCalls
+          code: fibRun
+      - p: 'n이 10 늘 때마다 호출 수가 **100배 넘게** 늘어요. n이 하나 늘면 약 1.6배씩 곱해지는 셈이에요. `fib(40)`은 3억 번 넘게 불러서 초 단위가 걸렸어요. `fib(50)`이면 다시 100배가 넘어요.'
+      - h3: 한 번 계산한 것은 저장해 둬요
+      - code: fibMemo
+        notes:
+          - mark: 'if (memo[n] != 0) return memo[n];'
+            as: code
+            text: '이미 계산한 n이면 다시 부르지 않고 꺼내요. 인자마다 한 번만 계산해요.'
+      - ci:
+          key: memo
+          label: 호출 수 보기
+          source: RecursionTest.fibonacciCalls
+          code: memoRun
+      - p: '같은 `fib(40)`인데 호출이 **79번**이에요. 3억 번이 79번이 됐어요. 이렇게 계산한 결과를 저장해 다시 쓰는 것을 **메모이제이션**이라고 해요. "같은 부분 문제를 다시 풀지 않는다"는 이 생각을, 재귀 없이 작은 답부터 표를 채우는 방식까지 넓힌 것이 동적 계획법이에요. 그리디와 동적 계획법 레슨에서 다뤄요.'
+      - p: '카테고리의 `count`는 느려지지 않아요. 카테고리마다 한 번씩만 부르기 때문이에요. **같은 인자로 다시 부르는가**가 갈림길이에요.'
+      - quiz:
+          q: '격자의 왼쪽 위에서 오른쪽 아래까지 오른쪽과 아래로만 가는 길의 수를 `paths(r, c) = paths(r - 1, c) + paths(r, c - 1)`로 구해요. 격자가 커지면 이 재귀가 아주 느려지는 이유는 무엇일까요?'
+          options:
+            - '같은 `(r, c)`를 여러 번 계산한다. 계산한 값을 저장해 다시 쓰면 된다'
+            - '끝나는 조건이 없다'
+            - '스택이 넘친다'
+          answer: 1
+          explain: '`paths(r - 1, c)`와 `paths(r, c - 1)`은 둘 다 `paths(r - 1, c - 1)`을 불러요. 피보나치처럼 같은 호출이 겹쳐요. 테스트에서 5×5 격자의 `paths(1, 1)`도 여러 번 불렸어요.'
+    recall: '같은 인자로 같은 호출을 되풀이할 때예요. 재귀의 시간 복잡도는 호출 횟수 × 호출 하나의 일인데, 피보나치를 그대로 쓰면 `fib(n - 1)`과 `fib(n - 2)`가 같은 호출을 겹쳐 해서 n이 10 늘 때 호출이 100배 넘게 늘어요. 계산한 결과를 저장해 다시 쓰는 메모이제이션을 하면 `fib(40)`의 호출이 3억 번에서 79번으로 줄어요.'
 practice:
+  title: 스프링 서버에서는 이렇게 만나요
   says:
     - '부모를 가리키는 엔티티(코드 entity)로 카테고리 트리를 담는 것이 흔하다. 화면에 "전자제품 > 컴퓨터 > 노트북"을 그리려고 코드 depthOf처럼 부모를 따라 올라간다. 끝나는 조건은 부모가 null인 최상위다'
     - '흔한 실수: 관리 화면에서 카테고리를 옮기다 A의 부모를 B로, B의 부모를 A로 만든다. 데이터에 순환이 생기면 끝나는 조건(부모가 null)에 영원히 닿지 않아 그 카테고리를 그리는 요청마다 `StackOverflowError`가 난다. 고친 코드: 방문한 id를 `Set`에 담으며 올라가고, 이미 본 id를 다시 만나면 예외를 던진다. 저장할 때도 새 부모의 조상에 자기가 없는지 확인한다. 순수 자바의 카테고리 객체로 두 코드를 돌려 에러와 고친 뒤의 예외 메시지를 테스트로 남긴다'
     - '같은 순환이 양방향 연관의 `toString`과 JSON 변환에서도 생긴다. 부모가 자식 목록을, 자식이 부모를 출력하면 서로를 끝없이 부른다. `toString`의 경우는 JVM 메모리 구조(J14)에서 보았다'
     - '트리를 통째로 읽어야 하면 부모를 따라 쿼리를 여러 번 보내는 대신, 표준 SQL의 재귀 쿼리(`WITH RECURSIVE`)로 한 번에 읽는 방법도 있다. 이 레슨에서는 이름만 소개한다 (PostgreSQL 공식 문서 근거)'
+  body:
+    - p: '카테고리 트리는 보통 **부모를 가리키는 엔티티**로 DB에 담아요. 카테고리마다 부모 카테고리의 id를 열 하나로 가져요.'
+    - code: entity
+      notes:
+        - mark: Category parent
+          as: code
+          text: '자기와 같은 타입을 가리켜요. 최상위 카테고리는 부모가 null이에요.'
+    - p: '화면에 "전자제품 > 컴퓨터 > 노트북"을 그리려면 부모를 따라 올라가요. 끝나는 조건은 부모가 null인 최상위예요.'
+    - code: depthOf
+      notes:
+        - mark: 'if (c.getParent() == null) return 0;'
+          as: code
+          text: '끝나는 조건이에요. 데이터가 올바르면 언젠가 최상위에 닿아요.'
+    - h3: '흔한 실수: 데이터에 순환이 생기면'
+    - p: '관리 화면에서 카테고리를 옮기다 A의 부모를 B로, B의 부모를 A로 만들었어요. 그러면 부모를 따라 올라가도 **최상위에 영원히 닿지 않아요.** 끝나는 조건이 데이터에 달려 있었기 때문이에요. 그 카테고리를 그리는 요청마다 `StackOverflowError`로 실패해요.'
+    - p: '고친 코드는 지나온 카테고리의 id를 `Set`에 담으며 올라가고, 이미 본 id를 다시 만나면 순환이라고 알려요. 재귀 대신 반복문으로 써서 깊이 걱정도 없앴어요.'
+    - code: depthSafe
+      notes:
+        - mark: '!seen.add(p.getId())'
+          as: code
+          text: '`Set.add`는 이미 있으면 false예요. 같은 카테고리를 두 번 지나면 순환이에요.'
+    - p: '엔티티 대신 같은 모양의 자바 객체로 두 코드를 돌렸어요.'
+    - ci:
+        key: cycle
+        label: 두 코드의 실제 결과 보기
+        source: RecursionTest.cyclicParent
+        code: cycleRun
+    - p: '읽을 때 막는 것과 함께, **저장할 때** 새 부모의 조상에 자기가 없는지 확인해서 순환이 처음부터 들어가지 않게 해요.'
+    - h3: 같은 순환이 숨는 곳
+    - ul:
+        - '**양방향 연관의 `toString`과 JSON 변환.** 부모가 자식 목록을, 자식이 부모를 출력하면 서로를 끝없이 불러요. `toString`의 경우는 JVM 메모리 구조 레슨에서 봤어요.'
+        - '**트리를 통째로 읽기.** 부모를 따라 쿼리를 여러 번 보내는 대신, SQL의 재귀 쿼리 `WITH RECURSIVE`로 한 번에 읽는 방법도 있어요. 이 레슨에서는 이름만 소개해요([PostgreSQL 문서](link:withRecursive)).'
+interview:
+  question: 재귀란 무엇이고, 쓸 때 무엇을 조심하나요?
+  model:
+    - label: 정의
+      text: 메서드가 자기 자신을 불러 큰 문제를 같은 모양의 작은 문제로 나눠 푸는 방식입니다. 바로 답하는 끝나는 조건이 있고, 부를 때마다 그 조건에 가까워져야 합니다.
+    - label: 원리
+      text: 호출마다 지역 변수를 담은 프레임이 스택에 쌓이고, 끝나는 조건에 닿은 뒤 쌓인 반대 순서로 돌아오며 결과를 합칩니다. 시간 복잡도는 호출 횟수 곱하기 호출 하나의 일입니다.
+    - label: 주의할 점
+      text: 깊이가 입력만큼 자라면 StackOverflowError가 나고 자바는 꼬리 재귀를 최적화하지 않아서, 깊이를 알 수 없으면 반복문과 직접 만든 스택으로 바꿉니다. 같은 인자로 다시 부르는 재귀는 호출이 폭발하니 메모이제이션을 씁니다. 순환 데이터는 끝나는 조건을 무력하게 만듭니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 카테고리 경로를 그리는 재귀가 잘못 들어간 순환 데이터로 StackOverflowError를 내서, 방문한 id를 확인하는 반복문으로 바꾸고 저장할 때 순환을 막았습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 호출 횟수와 스택에 쌓인 프레임은 테스트가 세었고, `StackOverflowError`가 나는 깊이는 환경마다 달라서 나는지만 확인해요. 코드가 바뀔 때마다 테스트([RecursionTest](link:test))가 다시 돌아요.
+footer: '근거: 프레임과 `StackOverflowError`가 나는 조건은 JVM 명세 2.5.2([링크](link:jvms)), `-Xss`는 `java` 명령 문서([링크](link:javaCmd)), 재귀 쿼리는 PostgreSQL 문서([링크](link:withRecursive)). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 category의 `count`는 예제 트리의 카테고리 수를 돌려주고, 코드 iterative도 같은 값을 돌려준다'
     how: '예제 트리를 만들어 두 메서드의 결과를 비교한다'
+    test: RecursionTest.countCategories
   - claim: '코드 noBase와 `sum(-1)`은 `StackOverflowError`를 던진다'
-    how: '에러를 잡아 확인한다'
+    how: '에러를 잡아 확인한다. 끝나는 조건이 없는 `pow`도 같다'
+    test: RecursionTest.noBaseCase
   - claim: '기본 설정에서 `sum(100_000)`은 `StackOverflowError`를 던진다'
-    how: '에러를 잡고, 나지 않으면 테스트가 실패하게 해서 레슨의 숫자를 고친다. 에러가 난 깊이를 `CiOutput`에 남긴다'
+    how: '에러를 잡고, 나지 않으면 테스트가 실패하게 해서 레슨의 숫자를 고친다. 에러가 난 깊이를 `CiOutput`에 남긴다(로컬에서 1만 5천 겹쯤)'
+    test: RecursionTest.deepSumOverflows
   - claim: '`sum(0)`이 실행되는 순간 스택에 `sum` 프레임이 4개다'
     how: '`sum(0)`에서 `Thread.currentThread().getStackTrace()`를 읽어 센다'
-  - claim: '깊이 10만의 트리에서 재귀 버전은 `StackOverflowError`, 반복문 버전은 정상 결과를 낸다'
-    how: '한 줄로 이어진 카테고리 10만 개를 만들어 두 메서드를 부른다'
+    test: RecursionTest.framesOnStack
+  - claim: '깊이 10만의 트리에서 재귀 버전은 `StackOverflowError`, 반복문 버전은 정상 결과를 낸다. 카테고리 2천 개, 세 겹 트리에서 `count` 프레임은 가장 깊을 때 3개다'
+    how: '한 줄로 이어진 카테고리 10만 개를 만들어 두 메서드를 부른다. 세 겹 트리는 프레임을 세는 버전으로 돈다'
+    test: RecursionTest.deepTree
   - claim: '`fib(5)`에서 `fib(3)`은 2번 불리고, `fib(20)`, `fib(30)`의 호출 수는 n이 10 늘 때 100배 넘게 는다'
     how: '호출 카운터로 센다. 정확한 호출 수를 `CiOutput`에 남긴다'
+    test: RecursionTest.fibonacciCalls
   - claim: '코드 fibMemo로 `fib(40)`을 구하면 호출 수가 79번이고 값은 102334155다'
     how: '호출 카운터로 세고 값을 비교한다'
+    test: RecursionTest.fibonacciCalls
+  - claim: '격자 길 찾기 재귀는 같은 `(r, c)`를 여러 번 계산한다'
+    how: '인자마다 호출 수를 센다'
+    test: RecursionTest.gridPathsRepeat
   - claim: '부모가 서로를 가리키는 카테고리에서 `depth`는 `StackOverflowError`를 던지고, 방문한 id를 담는 버전은 순환을 알리는 예외를 던진다'
     how: '순수 자바 객체로 순환을 만들어 두 메서드를 부른다'
+    test: RecursionTest.cyclicParent
 sources:
   - '프레임과 `StackOverflowError`가 나는 조건: JVM 명세 2.5.2 https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2'
   - '`-Xss`: `java` 명령 문서 https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html'
