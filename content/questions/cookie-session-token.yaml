@@ -7,6 +7,7 @@
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
 # JWT는 서명만 한 형태를 다룬다.
 # 2026-11-24에 문제 9개의 정답을 본문(says)과 테스트 결과에 하나씩 맞춰 보고 reviewed로 바꿨다. 고친 문제는 없다.
+# 2026-11-25에 "실무에서는" 구역의 문제 하나(cst-spring-session-param)를 더했다. SpringSessionPracticeTest의 결과와 맞춰 보고 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -120,7 +121,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "스프링 MVC 컨트롤러에 아래 메서드가 있어요. 세션은 톰캣의 기본 설정 그대로예요. 로그인한 적이 없는 방문자가 쿠키 없이 GET /notice/count를 처음 불렀어요. 응답은 어떻게 될까요?"
     code: |-
