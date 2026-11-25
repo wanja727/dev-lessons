@@ -25,6 +25,19 @@ public class OsivController {
         return player.getTeam().getName();
     }
 
+    /** 서비스가 DTO를 돌려주면 컨트롤러는 엔티티를 만지지 않는다 */
+    @GetMapping("/team-name-dto")
+    public String teamNameFromDto(@PathVariable Long id) {
+        return service.findView(id).teamName();
+    }
+
+    /** 컨트롤러에서 엔티티를 바꾸기만 하고 쓰기 트랜잭션은 부르지 않는다 */
+    @PostMapping("/rename-only")
+    public String renameOnly(@PathVariable Long id, @RequestParam String name) {
+        service.findPlayer(id).rename(name);
+        return "ok";
+    }
+
     /** 서비스 트랜잭션이 끝난 뒤, 이 요청이 아직 쥐고 있는 DB 커넥션 수 */
     @GetMapping("/connections-after-service")
     public int connectionsAfterService(@PathVariable Long id) throws SQLException {

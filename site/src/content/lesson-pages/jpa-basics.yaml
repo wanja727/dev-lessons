@@ -133,7 +133,8 @@ codes:
     public interface CafeMenuRepository
         extends JpaRepository<CafeMenu, Long> {
 
-      Optional<CafeMenu> findByName(String name);
+      Optional<CafeMenu> findByName(
+          String name);
 
       List<CafeMenu> findByPriceLessThan(
           int price);

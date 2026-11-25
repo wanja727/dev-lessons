@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import org.hibernate.LazyInitializationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,14 @@ class OsivOffTest {
     void lazyLoadingInControllerFails() {
         assertThatThrownBy(() -> mvc.perform(get("/osiv/players/{id}/team-name", playerId)))
                 .hasRootCauseInstanceOf(LazyInitializationException.class);
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                () -> mvc.perform(get("/osiv/players/{id}/team-name", playerId)));
+        Throwable root = thrown;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        CiOutput.record("osiv", "off-team-name", "OSIV 꺼짐: GET /players/{id}/team-name → "
+                + root.getClass().getSimpleName() + "\n   " + root.getMessage());
     }
 
     @Test
@@ -47,6 +56,7 @@ class OsivOffTest {
         mvc.perform(get("/osiv/players/{id}/connections-after-service", playerId))
                 .andExpect(status().isOk())
                 .andExpect(content().string("0"));
+        CiOutput.record("osiv", "off-connections", "OSIV 꺼짐: 서비스가 끝난 직후 이 요청이 쥔 커넥션 0개");
     }
 
     @Test
@@ -56,5 +66,15 @@ class OsivOffTest {
                 .andExpect(status().isOk());
 
         assertThat(players.findById(playerId).orElseThrow().getName()).isEqualTo("kim");
+        CiOutput.record("osiv", "off-rename", "OSIV 꺼짐: 요청 뒤 DB의 선수 이름 = kim");
+    }
+
+    @Test
+    @DisplayName("OSIV 꺼짐: 서비스가 트랜잭션 안에서 DTO로 바꿔 돌려주면 예외 없이 팀 이름을 돌려준다")
+    void dtoFromServiceWorks() throws Exception {
+        mvc.perform(get("/osiv/players/{id}/team-name-dto", playerId))
+                .andExpect(status().isOk())
+                .andExpect(content().string("레드"));
+        CiOutput.record("osiv", "off-dto", "OSIV 꺼짐: GET /players/{id}/team-name-dto → 200 \"레드\"");
     }
 }
