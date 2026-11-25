@@ -1,0 +1,301 @@
+# 유일한 ID 만들기
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/unique-id.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+# 로드맵의 선수는 A15(DB 복제와 샤딩)이지만 아직 없는 레슨이라 서버를 늘리는 방법(A3)을 선수로 걸었다
+title: 유일한 ID 만들기
+description: DB의 자동 증가 번호가 편한 이유와 한계, 무작위 UUID가 인덱스를 키우는 이유, 시간 순서가 있는 ID(UUIDv7, 스노플레이크)가 둘의 장점을 함께 갖는 방식, 상황마다 고르는 기준. PostgreSQL과 자바 코드로 세 방식을 만들어 비교하는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 20
+roadmap: A17
+type: 동작 확인
+prerequisites:
+  - {slug: scale-out, title: 서버를 늘리는 방법}
+assume: '자바 21, PostgreSQL 16. 기본 키와 인덱스(B-tree)가 정렬된 구조라는 것(인덱스와 실행계획 레슨). 서버를 여러 대로 늘리는 것(서버를 늘리는 방법 레슨). 데이터를 여러 DB에 나눠 담는 샤딩은 심화 레슨 "DB 복제와 샤딩"에서 다뤄요.'
+example: '주문 번호. 주문 테이블의 기본 키를 DB 자동 증가, 무작위 UUID, 시간 순서 ID 세 가지로 만들어 보고, 롤백, 인덱스 크기, 서버 두 대에서 동시에 만들 때를 비교한다.'
+intro:
+  - '주문 번호가 1, 2, 3으로 늘다 보니 경쟁사가 매일 주문 하나씩 넣어 번호 차이로 우리 하루 주문 수를 알아냈어요. 그래서 UUID로 바꿨더니 이번엔 주문 테이블에 넣는 속도가 느려지고 인덱스가 커졌어요.'
+  - 'ID는 한 번 정하면 바꾸기 어려운 결정이에요. URL에 드러나고, 다른 서비스와 메시지에 실려 다니고, 기본 키 인덱스의 모양을 정해요. 서비스를 나누거나 DB를 여러 대로 나누면 "DB 하나가 번호를 매긴다"는 전제도 깨져요. 시스템 설계 면접에서 "분산 환경에서 유일한 ID를 어떻게 만드나요"로 물어요.'
+  - '이 레슨에서는 PostgreSQL의 자동 증가 번호가 롤백 뒤 비는 것, 무작위 UUID와 시간 순서 UUID의 인덱스 크기, 서버 두 대가 스노플레이크 모양 ID를 동시에 만들 때 겹치는지를 확인해요.'
+covers:
+  - topic: '자동 증가(identity, sequence): DB가 1, 2, 3을 매긴다. 짧고 정렬되며 인덱스에 좋다'
+    where: '질문 1'
+  - topic: '자동 증가의 한계: 롤백된 번호는 돌아오지 않아 빈 번호가 생긴다, 저장해야 번호를 안다, DB 여러 대면 겹친다, 번호로 규모가 드러나고 다음 번호를 짐작할 수 있다'
+    where: '질문 1'
+  - topic: '무작위 UUID(v4): 어디서나 DB 없이 만들고 사실상 겹치지 않는다. 128비트로 크다'
+    where: '질문 2'
+  - topic: '무작위 UUID를 기본 키로 넣으면 B-tree의 아무 곳에나 들어가 페이지가 쪼개지고 인덱스가 커진다'
+    where: '질문 2'
+  - topic: '시간 순서 ID: UUIDv7(앞에 밀리초 시각), 스노플레이크(시각 + 서버 번호 + 순번). DB 없이 만들고 대체로 정렬된다'
+    where: '질문 3'
+  - topic: '스노플레이크는 서버 번호를 겹치지 않게 나눠 줘야 하고, 서버 시계가 뒤로 가면 겹칠 수 있다'
+    where: '질문 3'
+  - topic: '고르는 기준: DB 하나면 자동 증가, 밖에 드러나면 내부 키와 외부 키를 나눈다, 여러 DB나 서비스면 시간 순서 ID'
+    where: '질문 4'
+  - topic: 'JPA에서 UUID 기본 키와 @GeneratedValue'
+    where: '실무에서는. 식별자 생성 전략은 식별자 생성 전략(P9)'
+  - topic: 'DB를 여러 대로 나누는 샤딩'
+    where: '다루지 않음: DB 복제와 샤딩(A15)'
+codes:
+  predict: |-
+    insert into orders(item)
+        values ('a');        -- 커밋
+    begin;
+    insert into orders(item)
+        values ('b');
+    rollback;
+    insert into orders(item)
+        values ('c');        -- 커밋
+    -- c의 id는?
+  identity: |-
+    create table orders (
+      id bigint generated always
+          as identity primary key,
+      item text
+    );
+  v7: |-
+    long ms = System.currentTimeMillis();
+    // 같은 밀리초면 카운터를 올린다
+    counter = (ms == lastMs) ? counter + 1 : 0;
+    long msb = (ms << 16)
+        | (0x7L << 12)
+        | [[counter]];
+  snowflake: |-
+    // 41비트 시각 | 10비트 서버 | 12비트 순번
+    long id = ((ms - EPOCH) << 22)
+        | (node << 12)
+        | seq;
+  jpaUuid: |-
+    @Entity
+    public class Order {
+      @Id
+      @GeneratedValue(strategy =
+          GenerationType.[[UUID]])
+      private UUID id;
+    }
+  twoKeys: |-
+    @Entity
+    public class Order {
+      @Id
+      @GeneratedValue(strategy =
+          GenerationType.IDENTITY)
+      private Long id;          // 내부용
+      @Column(unique = true)
+      private String orderNo;   // 밖에 보임
+    }
+  exposed: |-
+    GET /orders/[[1042]]
+    GET /orders/1043
+    GET /orders/1044
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/uniqueid/UniqueIdTest.java
+  pgIdentity: https://www.postgresql.org/docs/16/sql-createtable.html
+  pgSequence: https://www.postgresql.org/docs/16/functions-sequence.html
+  rfc9562: https://www.rfc-editor.org/rfc/rfc9562
+  hibernateUuid: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#identifiers-generators-uuid
+predict:
+  title: 롤백된 번호는?
+  text: '자동 증가 기본 키가 있는 주문 테이블에 a를 저장하고, b를 저장하다 롤백하고, c를 저장해요. c의 id는 무엇일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: '2'
+      label: '2'
+    - value: '3'
+      label: '3'
+    - value: '1'
+      label: '1'
+  answer: '3'
+  storageKey: uniqueid-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: DB의 자동 증가 번호는 언제 좋고 어디서 한계가 오나요?
+    conclusion:
+      lead: 'DB 하나가 1, 2, 3을 매겨 짧고 정렬되며 인덱스에 좋아요. 하지만 DB가 여러 대면 겹치고, 번호로 규모가 드러나요.'
+      sub: '롤백된 번호는 돌아오지 않아 빈 번호도 생겨요. 번호는 유일할 뿐 빠짐없이 이어진다는 약속이 아니에요.'
+    says:
+      - 'a, 롤백된 b, c: id 1, 3. 예측의 답'
+      - '다른 DB는 1부터: 겹친다'
+      - '번호가 드러나면 규모와 다음 번호가 보인다'
+    asks:
+      - '본문의 예시: a 저장, b 저장 뒤 롤백, c 저장. c의 id는 (3)'
+      - '옮긴 상황: 주문 DB를 두 대로 나눠 각자 identity로 번호를 매긴다. 두 DB의 첫 주문 번호는 (둘 다 1이라 겹친다)'
+    body:
+      - p: '가장 흔한 ID는 DB가 매기는 자동 증가 번호예요. PostgreSQL에서는 identity 열(내부는 시퀀스)이에요([PostgreSQL 문서](link:pgIdentity)).'
+      - code: identity
+      - p: '8바이트 정수라 짧고, 새 행이 늘 인덱스의 맨 끝에 붙어 넣기가 빨라요. 정렬하면 만든 순서예요. DB가 하나일 때 가장 편한 선택이에요.'
+      - ci:
+          key: auto
+          label: 실제 결과 보기
+          source: UniqueIdTest.autoIncrement
+          code: predict
+      - p: '답은 **3**이에요. {{predict-result}} 시퀀스는 롤백돼도 **번호를 되돌리지 않아요**. 여러 트랜잭션이 동시에 번호를 받아 가도 서로 기다리지 않게 하려는 설계예요([PostgreSQL 문서](link:pgSequence)). 그래서 자동 증가 번호는 **유일할 뿐 빠짐없이 이어지지는 않아요.** "주문 번호에 빈 번호가 있으면 안 된다"는 요구라면 따로 만들어야 해요.'
+      - h3: 한계
+      - ul:
+          - '**DB가 여러 대면 겹쳐요.** 위 결과처럼 다른 DB는 자기 1부터 세요. 서비스나 DB를 나누면 쓸 수 없어요.'
+          - '**저장해야 번호를 알아요.** INSERT 전에는 id가 없어서, 저장 전에 다른 곳에 id를 넘길 수 없어요.'
+          - '**밖에 드러나면 정보가 새요.** 번호 차이로 하루 주문 수를 짐작하고, 다음 번호를 넣어 남의 주문을 열어 보려 해요.'
+      - code: exposed
+      - quiz:
+          q: '주문 DB를 두 대로 나눠 각자 identity 열로 번호를 매겨요. 두 DB의 첫 주문 번호는?'
+          options:
+            - '1과 2'
+            - '둘 다 1이라 겹친다'
+            - 'DB가 알아서 겹치지 않게 나눈다'
+          answer: 2
+          explain: 'identity는 그 DB 안에서만 유일해요. 다른 DB는 자기 1부터 세요.'
+      - next: 'DB 없이 어디서나 만들 수 있는 ID라면 겹침도 정보 노출도 없겠죠. UUID는 어떨까요?'
+    recall: 'DB가 매기는 자동 증가 번호는 8바이트로 짧고, 새 행이 인덱스 끝에 붙어 넣기가 빠르고, 만든 순서로 정렬돼요. 하지만 시퀀스는 롤백돼도 번호를 되돌리지 않아 빈 번호가 생기고, 저장해야 번호를 알고, DB가 여러 대면 각자 1부터 세어 겹치고, 밖에 드러나면 규모와 다음 번호가 보여요.'
+  - id: q2
+    title: 무작위 UUID는 무엇이 좋고 무엇이 나쁜가요?
+    conclusion:
+      lead: 'DB 없이 어디서나 만들고 사실상 겹치지 않으며 짐작할 수 없어요. 하지만 128비트로 크고, 무작위라 기본 키 인덱스의 아무 곳에나 들어가 인덱스가 커져요.'
+      sub: 'B-tree 인덱스는 정렬된 구조라, 무작위 값이 들어올 때마다 가득 찬 페이지를 쪼개야 해요. 시간 순서 ID는 끝에 붙어 그런 일이 적어요.'
+    says:
+      - 'v4 10만 개: 겹침 0. 인덱스 크기 v4 > v7 모양'
+    asks:
+      - '본문의 예시: 기본 키에 무작위 UUID와 시간 순서 UUID를 10만 개씩 넣었다. 인덱스가 더 큰 쪽은 (무작위 UUID)'
+      - '옮긴 상황: 앱이 오프라인에서 주문을 만들고 나중에 서버로 보낸다. 서버를 거치지 않고 앱에서 id를 정하려면 (UUID처럼 DB 없이 만드는 ID)'
+    body:
+      - p: 'UUID는 128비트 값이에요. 버전 4(v4)는 122비트가 무작위라 **DB 없이 어디서나** 만들고, 사실상 겹치지 않아요([RFC 9562](link:rfc9562)). 앱, 서버, 메시지 어디서든 저장 전에 id를 정할 수 있고, 짐작할 수도 없어요.'
+      - p: '대가는 크기와 순서예요. 기본 키 인덱스에 무작위 UUID와, 앞에 시각을 둔 시간 순서 UUID를 10만 개씩 넣고 인덱스 크기를 쟀어요.'
+      - ci:
+          key: uuid-index
+          label: 실제 결과 보기
+          source: UniqueIdTest.randomUuidIndex
+      - p: '같은 개수인데 무작위 UUID의 인덱스가 더 커요. B-tree 인덱스는 정렬된 페이지들로 이뤄져요. 시간 순서 값은 늘 맨 끝 페이지에 붙어서 페이지를 꽉 채워 가요. 무작위 값은 **아무 페이지에나** 끼어들어, 가득 찬 페이지를 반으로 쪼개고 빈 공간이 남아요. 넣을 때마다 다른 페이지를 건드리니 메모리에 올려 둘 페이지도 많아져요.'
+      - p: '그리고 128비트(16바이트)라 8바이트 정수의 두 배예요. 이 키를 가리키는 외래 키와 인덱스도 모두 커져요.'
+      - quiz:
+          q: '앱이 오프라인에서 주문을 만들어 두었다가 나중에 서버로 보내요. 서버에 저장하기 전에 앱에서 주문 id를 정해야 해요. 알맞은 것은?'
+          options:
+            - 'DB 자동 증가 번호'
+            - 'UUID처럼 DB 없이 만들 수 있는 ID'
+            - '앱에서 1부터 센 번호'
+          answer: 2
+          explain: '자동 증가는 저장해야 번호를 알아요. 앱마다 1부터 세면 겹쳐요. UUID는 어디서나 겹치지 않게 만들어요.'
+      - next: '어디서나 만들면서도 정렬되는 ID는 없을까요?'
+    recall: '무작위 UUID(v4)는 DB 없이 어디서나 만들 수 있고, 122비트가 무작위라 사실상 겹치지 않고 짐작할 수 없어요. 하지만 16바이트로 정수의 두 배이고, 무작위라 B-tree 기본 키 인덱스의 아무 페이지에나 끼어들어 가득 찬 페이지를 쪼개 인덱스가 커지고 넣기가 느려져요. 10만 개를 넣으니 시간 순서 UUID보다 인덱스가 컸어요.'
+  - id: q3
+    title: 시간 순서가 있는 ID는 어떻게 만드나요?
+    conclusion:
+      lead: 'ID의 앞부분에 시각을 두고 뒤에 서버 번호와 순번이나 무작위 값을 붙여요. 어디서나 만들면서도 대체로 만든 순서로 정렬돼요.'
+      sub: 'UUIDv7은 앞 48비트에 밀리초 시각을 둔 UUID이고, 스노플레이크는 시각, 서버 번호, 순번을 64비트 정수에 담아요. 스노플레이크는 서버 번호를 겹치지 않게 나눠 줘야 하고 시계가 뒤로 가면 겹칠 수 있어요.'
+    says:
+      - 'UUIDv7 모양'
+      - '스노플레이크: 서버 2대 동시 10만 개씩, 겹침 0, 서버마다 증가'
+      - '서버 번호 배정과 시계'
+    widget:
+      kind: classify
+      note: '상황마다 자동 증가, 무작위 UUID, 시간 순서 ID 가운데 고른다'
+    asks:
+      - '본문의 예시: 스노플레이크 모양 ID를 서버 1, 2가 동시에 10만 개씩 만들었다. 겹친 값은 (0개. 서버 번호가 다르다)'
+      - '옮긴 상황: 두 서버에 실수로 같은 서버 번호를 줬다. 같은 밀리초에 순번 0을 만들면 (같은 ID가 나와 겹친다)'
+    body:
+      - p: '자동 증가의 정렬과 UUID의 "어디서나"를 함께 가지려면, ID의 **앞부분에 시각**을 둬요. 시각이 앞에 있으니 늦게 만든 ID가 대체로 커서 인덱스 끝에 붙어요.'
+      - h3: UUIDv7
+      - p: '2024년에 표준이 된 UUID 버전 7은 앞 48비트에 밀리초 시각을, 나머지에 무작위 값을 둬요([RFC 9562](link:rfc9562)). UUID 칸을 그대로 쓰면서 인덱스는 시간 순서로 쌓여요. 질문 2의 "시간 순서 UUID"가 이 모양으로 만든 값이에요.'
+      - p: '같은 밀리초에 여러 개를 만들면 시각 부분이 같아요. 그 뒤를 무작위로 두면 같은 밀리초 안에서는 순서가 섞여요. 이 레슨의 테스트도 처음엔 그렇게 짰다가, 시간 순서 UUID의 인덱스가 오히려 무작위 UUID보다 커졌어요. 표준이 권하는 대로 시각 바로 뒤에 **카운터**를 두어 같은 밀리초 안에서도 커지게 고치자 질문 2의 결과가 나왔어요.'
+      - code: v7
+      - h3: 스노플레이크
+      - p: '64비트 정수 하나에 시각, 서버 번호, 같은 밀리초 안의 순번을 나눠 담아요. 8바이트라 UUID의 절반이에요.'
+      - code: snowflake
+      - ci:
+          key: snowflake
+          label: 실제 결과 보기
+          source: UniqueIdTest.snowflake
+      - p: '서버 두 대가 동시에 10만 개씩 만들어도 겹치지 않았어요. 같은 밀리초라도 **서버 번호**가 달라서예요. 서버마다 만든 순서대로 커졌고요.'
+      - p: '대신 두 가지를 챙겨야 해요.'
+      - ul:
+          - '**서버 번호를 겹치지 않게 나눠 줘요.** 두 서버가 같은 번호를 쓰면 같은 밀리초의 같은 순번에서 ID가 겹쳐요. 설정이나 ZooKeeper, DB로 번호를 배정해요.'
+          - '**시계가 뒤로 가면 겹칠 수 있어요.** 서버 시각을 맞추다 몇 밀리초 뒤로 가면 이미 쓴 시각을 다시 써요. 뒤로 간 것을 알아채면 따라잡을 때까지 기다리게 짜요.'
+      - p: '상황마다 골라 보세요.'
+      - widget:
+          kind: classify
+          categories: [자동 증가, 무작위 UUID, 시간 순서 ID]
+          items:
+            - {text: 'DB 한 대인 사내 관리 도구의 게시글 번호', answer: 1, explain: 'DB가 하나고 밖에 드러나도 상관없어요. 가장 단순해요.'}
+            - {text: '앱이 오프라인에서 만든 메모를 나중에 서버로 올림. 정렬은 필요 없음', answer: 2, explain: '어디서나 만들면 돼요. 정렬이 필요 없으면 무작위 UUID로 충분해요.'}
+            - {text: 'DB 여러 대로 나눈 주문 테이블의 기본 키. 넣기가 많음', answer: 3, explain: '여러 곳에서 겹치지 않게 만들고, 인덱스 끝에 붙어 넣기가 빨라요.'}
+            - {text: '서비스 사이를 오가는 이벤트의 id. 시간 순서로 보고 싶음', answer: 3, explain: '어디서나 만들고 시간 순서로 정렬돼요.'}
+      - quiz:
+          q: '스노플레이크 모양 ID를 쓰는데 두 서버에 실수로 같은 서버 번호를 줬어요. 두 서버가 같은 밀리초에 순번 0으로 ID를 만들면?'
+          options:
+            - '서버마다 다른 ID가 나온다'
+            - '같은 ID가 나와 겹친다'
+            - '두 번째 서버가 기다린다'
+          answer: 2
+          explain: '시각, 서버 번호, 순번이 모두 같으니 같은 값이에요. 서버 번호는 겹치지 않게 나눠 줘요.'
+      - next: '세 방식을 봤어요. 실제 서비스에서는 어떻게 골라 쓸까요?'
+    recall: 'ID의 앞부분에 시각을 두고, 뒤에 서버 번호와 순번이나 무작위 값을 붙여요. UUIDv7은 앞 48비트에 밀리초 시각을 둔 UUID이고, 스노플레이크는 64비트 정수에 시각, 서버 번호, 순번을 담아요. 어디서나 만들면서도 대체로 만든 순서로 정렬돼 인덱스 끝에 붙어요. 스노플레이크는 서버 번호를 겹치지 않게 나눠 줘야 하고, 시계가 뒤로 가면 겹칠 수 있어요.'
+  - id: q4
+    title: 상황마다 어떤 ID를 고르나요?
+    conclusion:
+      lead: 'DB 하나면 자동 증가로 시작하고, 밖에 드러나는 번호는 내부 키와 따로 두고, 여러 DB나 서비스에 걸치면 시간 순서 ID를 써요.'
+      sub: '내부 기본 키는 짧고 정렬된 값으로 두고, URL이나 영수증에 보이는 번호는 짐작할 수 없는 별도 칸으로 두면 두 가지를 다 얻어요.'
+    says:
+      - '세 상황과 내부 키, 외부 키 나누기'
+    asks:
+      - '본문의 예시: 주문 URL에 /orders/1042가 드러나 다음 번호를 넣어 남의 주문을 열어 보려는 시도가 있다. 기본 키를 바꾸지 않고 고치는 방법은 (밖에는 짐작할 수 없는 주문 번호 칸을 따로 둬 보여 준다)'
+      - '옮긴 상황: 주문 서비스와 결제 서비스가 각자 DB를 쓰는데 같은 주문을 하나의 id로 주고받아야 한다 (어느 DB에도 기대지 않는 UUID나 시간 순서 ID를 쓴다)'
+    body:
+      - table:
+          head: [상황, 알맞은 ID]
+          rows:
+            - ['DB 하나, 밖에 드러나도 됨', '자동 증가']
+            - ['밖에 드러나는 번호 (URL, 영수증)', '내부는 자동 증가, 밖에는 짐작할 수 없는 별도 번호']
+            - ['DB 여러 대, 서비스 사이를 오가는 id', '시간 순서 ID (UUIDv7, 스노플레이크)']
+            - ['저장 전에 정해야 함, 정렬 필요 없음', '무작위 UUID']
+      - p: '자주 쓰는 모양은 **두 키를 나누는 것**이에요. 기본 키는 짧고 정렬된 자동 증가로 두어 조인과 인덱스를 가볍게 하고, 밖에 보이는 주문 번호는 짐작할 수 없는 값으로 따로 두어요.'
+      - code: twoKeys
+      - p: '이렇게 하면 기본 키를 바꾸지 않고도 URL에 드러나는 번호를 숨길 수 있어요. 서비스를 나누거나 DB를 나눌 계획이 있으면 처음부터 시간 순서 ID를 기본 키로 쓰는 편이 나중에 바꾸는 것보다 쉬워요.'
+      - quiz:
+          q: '주문 URL에 `/orders/1042`가 드러나, 다음 번호를 넣어 남의 주문을 열어 보려는 시도가 있어요. 기본 키를 바꾸지 않고 고치려면?'
+          options:
+            - '기본 키를 무작위 UUID로 바꾼다'
+            - '밖에는 짐작할 수 없는 주문 번호 칸을 따로 두고 그것을 보여 준다'
+            - 'URL을 숨긴다'
+          answer: 2
+          explain: '내부 키와 외부 키를 나눠요. 물론 남의 주문을 열 때 권한을 확인하는 것도 함께 해요.'
+      - next: '원리는 여기까지예요. 이제 JPA에서 UUID 기본 키를 쓰는 코드와 흔한 실수를 볼게요.'
+    recall: 'DB가 하나고 밖에 드러나도 되면 자동 증가로 시작해요. URL이나 영수증처럼 밖에 보이는 번호는 내부 기본 키와 따로, 짐작할 수 없는 값으로 둬요. DB가 여러 대거나 서비스 사이를 오가는 id는 어디서나 만들면서 정렬되는 시간 순서 ID(UUIDv7, 스노플레이크)를 쓰고, 저장 전에 정해야 하고 정렬이 필요 없으면 무작위 UUID를 써요.'
+practice:
+  title: JPA에서 ID를 정할 때
+  says:
+    - '@GeneratedValue(strategy = UUID). Hibernate 6.6 문서 근거. 무작위 v4'
+    - '흔한 실수: 기본 키를 무작위 UUID로 두고 넣기가 느려진다'
+  body:
+    - p: 'Hibernate 6에서는 `GenerationType.UUID`로 UUID 기본 키를 자동으로 만들어요([Hibernate 문서](link:hibernateUuid)). 기본은 무작위 UUID(v4)예요. 이 설정은 이 레슨의 테스트에 넣지 않아서 문서가 근거예요.'
+    - code: jpaUuid
+      notes:
+        - mark: UUID
+          as: code
+          text: '저장 전에 id가 정해져요. IDENTITY와 달리 INSERT를 미뤄 모아 보낼 수도 있어요.'
+    - p: '자동 증가(`IDENTITY`)와 시퀀스(`SEQUENCE`)의 차이, 한꺼번에 넣을 때의 영향은 [식별자 생성 전략](lesson:id-generation) 레슨에서 다뤄요.'
+    - h3: 흔한 실수 하나
+    - p: '"번호가 드러나는 게 싫다"며 기본 키를 무작위 UUID로 바꾸는 거예요. 질문 2에서 본 것처럼 넣기가 많은 테이블에서는 인덱스가 커지고 느려져요. 외래 키까지 16바이트가 되고요. 고친 모양은 질문 4의 `twoKeys`처럼 내부 키와 외부 키를 나누거나, 기본 키를 시간 순서 UUID로 두는 거예요.'
+interview:
+  question: 분산 환경에서 유일한 ID를 어떻게 만드나요?
+  model:
+    - label: 자동 증가
+      text: DB 하나라면 자동 증가가 짧고 정렬돼 인덱스에 좋습니다. 하지만 롤백된 번호는 돌아오지 않아 빈 번호가 생기고, DB가 여러 대면 겹치며, 밖에 드러나면 규모와 다음 번호가 보입니다.
+    - label: UUID
+      text: 무작위 UUID는 어디서나 DB 없이 만들고 겹치지 않지만, 16바이트로 크고 무작위라 B-tree 인덱스의 아무 곳에나 들어가 페이지가 쪼개지고 인덱스가 커집니다.
+    - label: 시간 순서 ID
+      text: UUIDv7이나 스노플레이크처럼 앞에 시각을 두면 어디서나 만들면서 대체로 정렬돼 인덱스 끝에 붙습니다. 스노플레이크는 서버 번호를 겹치지 않게 나눠 주고 시계가 뒤로 가는 것을 다뤄야 합니다. 밖에 보이는 번호는 내부 키와 나눕니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: URL에 드러난 주문 번호로 다른 주문을 열어 보려는 시도가 있어, 기본 키는 그대로 두고 밖에는 별도 주문 번호를 보여 주게 했습니다.'
+verified: 롤백 뒤의 번호, 인덱스 크기, 스노플레이크의 겹침과 순서는 PostgreSQL 16과 자바 21에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([UniqueIdTest](link:test))가 다시 돌아요.
+footer: '근거: identity 열은 [PostgreSQL 문서](link:pgIdentity), 시퀀스가 롤백되지 않는 것은 [PostgreSQL 문서](link:pgSequence), UUID 버전은 [RFC 9562](link:rfc9562), JPA의 UUID 생성은 [Hibernate 문서](link:hibernateUuid). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '롤백된 INSERT의 번호는 돌아오지 않아 1, 3이 되고, 다른 DB는 1부터 센다'
+    how: 'identity 열과 TransactionTemplate'
+    test: UniqueIdTest.autoIncrement
+  - claim: '무작위 UUID 기본 키 인덱스는 시간 순서 UUID보다 크고, 10만 개 사이에 겹치는 값은 없다'
+    how: 'pg_relation_size. 처음엔 시간 순서 UUID의 같은 밀리초 부분을 무작위로 만들었더니 무작위 UUID보다 인덱스가 컸다(4,440KB 대 4,256KB). RFC 9562의 카운터 방식으로 고친 뒤 3,104KB 대 4,336KB'
+    test: UniqueIdTest.randomUuidIndex
+  - claim: '스노플레이크 모양 ID를 서버 2대가 동시에 10만 개씩 만들어도 겹치지 않고 서버마다 커진다'
+    how: '스레드 2개'
+    test: UniqueIdTest.snowflake
+sources:
+  - 'identity와 시퀀스: https://www.postgresql.org/docs/16/sql-createtable.html , https://www.postgresql.org/docs/16/functions-sequence.html'
+  - 'UUID 버전 4와 7: https://www.rfc-editor.org/rfc/rfc9562'
