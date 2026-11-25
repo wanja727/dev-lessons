@@ -278,13 +278,13 @@ class DockerContainerTest {
     }
 
     @Test
-    @DisplayName("메모리 한도를 넘는 프로세스는 커널이 죽여 종료 코드 137, OOMKilled true가 남는다")
+    @DisplayName("메모리 한도를 넘는 프로세스는 커널이 죽여 종료 코드 137이 남는다")
     void oomKilled() {
         new RemoteDockerImage(DockerImageName.parse(ALPINE)).get();
         DockerClient client = docker();
         long limit = 32L * 1024 * 1024;
         String id = client.createContainerCmd(ALPINE)
-                .withCmd("sh", "-c", "tail /dev/zero")
+                .withCmd("tail", "/dev/zero")
                 .withHostConfig(HostConfig.newHostConfig().withMemory(limit).withMemorySwap(limit))
                 .withLabels(java.util.Map.of("org.testcontainers", "true"))
                 .exec().getId();
@@ -293,10 +293,10 @@ class DockerContainerTest {
             int code = client.waitContainerCmd(id).start().awaitStatusCode(2, TimeUnit.MINUTES);
             InspectContainerResponse.ContainerState state = client.inspectContainerCmd(id).exec().getState();
 
+            // 137(SIGKILL)은 늘 남는다. OOMKilled 표시는 도커와 cgroup 버전에 따라 false로 나오기도 해서(CI에서 겪음) 값만 남긴다
             assertThat(code).isEqualTo(137);
-            assertThat(state.getOOMKilled()).isTrue();
             CiOutput.record(LESSON, "oom", """
-                    $ docker run -m 32m alpine sh -c "tail /dev/zero"
+                    $ docker run -m 32m alpine tail /dev/zero
                     (로그 없이 끝남)
                     $ docker inspect --format \\
                         '{{.State.ExitCode}} {{.State.OOMKilled}}'

@@ -411,7 +411,7 @@ questions:
           label: 실제 결과 보기
           source: DockerContainerTest.oomKilled
           code: oomRun
-      - p: '컨테이너는 로그 한 줄 없이 끝났고, 종료 코드 **137**과 **`OOMKilled: true`**만 남았어요. 137은 128 + 9, 곧 SIGKILL(9번 신호)로 죽었다는 뜻이에요. 커널이 한도를 넘은 프로세스를 그 자리에서 죽인 거예요. 자바의 `OutOfMemoryError`는 JVM이 "힙이 모자라다"며 던지는 예외라 로그에 남지만, 이것은 JVM이 무언가를 할 틈도 없이 바깥에서 죽인 것이라 아무것도 남지 않아요.'
+      - p: '컨테이너는 로그 한 줄 없이 끝났고, 종료 코드 **137**만 남았어요. `docker inspect`의 `OOMKilled`도 보통 true로 남지만, 도커와 리눅스 cgroup의 버전에 따라 false로 나오기도 해요(이 저장소의 CI에서 겪었어요). 137이 더 믿을 만한 단서예요. 137은 128 + 9, 곧 SIGKILL(9번 신호)로 죽었다는 뜻이에요. 커널이 한도를 넘은 프로세스를 그 자리에서 죽인 거예요. 자바의 `OutOfMemoryError`는 JVM이 "힙이 모자라다"며 던지는 예외라 로그에 남지만, 이것은 JVM이 무언가를 할 틈도 없이 바깥에서 죽인 것이라 아무것도 남지 않아요.'
       - h3: '-Xmx를 한도와 같게 주면 안 돼요'
       - p: 'JVM이 쓰는 메모리는 힙만이 아니에요. JVM 메모리 구조 레슨에서 본 메타스페이스(클래스 정보), 스레드마다의 스택, 다이렉트 버퍼, JIT가 만든 기계어 코드도 있어요. 한도 1GB에 `-Xmx1g`를 주면 힙이 다 차기 전에 **힙과 힙 밖을 더한 프로세스 전체**가 1GB를 넘어 커널이 죽여요. 힙은 한도의 75% 안팎으로 잡고 나머지를 힙 밖에 남겨 둬요.'
       - p: '한도와 비율을 골라 보세요. 숫자는 위 실제 출력의 값이에요.'
@@ -523,7 +523,7 @@ claims:
     how: '`eclipse-temurin:21-jre`에 메모리 한도를 주고 `java -XX:+PrintFlagsFinal -version`을 돌린다'
     test: DockerContainerTest.jvmReadsContainerLimit
   - claim: '한도를 넘는 프로세스는 종료 코드 137, `OOMKilled: true`로 죽는다'
-    how: '한도 32MB의 `alpine`에서 `tail /dev/zero`를 돌리고 컨테이너 상태를 읽는다'
+    how: '한도 32MB의 `alpine`에서 `tail /dev/zero`를 돌리고 컨테이너 상태를 읽는다. OOMKilled는 CI에서 false로 나온 적이 있어 단정하지 않는다'
     test: DockerContainerTest.oomKilled
 sources:
   - '컨테이너와 이미지, 층, 쓰기 층: 도커 문서 https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/ , https://docs.docker.com/get-started/docker-concepts/building-images/understanding-image-layers/'
