@@ -1,8 +1,9 @@
-# CORS (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# CORS
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/cors.yaml에 있다.
 title: CORS
+description: 브라우저가 다른 출처의 응답을 막는 이유, CORS가 무엇을 허락하는지, 사전 요청이 가는 때, 쿠키를 함께 보낼 때 달라지는 것. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 18
 roadmap: N9
 type: 개념 설명
 prerequisites:
@@ -47,42 +48,82 @@ codes:
     [[Access-Control-Allow-Origin:]]
       [[https://shop.com]]
     Vary: Origin
+  simplePost: |-
+    POST /orders HTTP/1.1
+    Origin: https://evil.com
+    Content-Type:
+      application/x-www-form-urlencoded
+
+    productId=7
   preflight: |-
     OPTIONS /products/7 HTTP/1.1
     Origin: https://shop.com
     Access-Control-Request-Method: [[PUT]]
     Access-Control-Request-Headers:
       [[content-type]]
-  preflightOk: |-
-    HTTP/1.1 200
-    Access-Control-Allow-Origin:
-      https://shop.com
-    Access-Control-Allow-Methods:
-      GET,PUT,DELETE
-    Access-Control-Allow-Headers:
-      content-type
-    Access-Control-Max-Age: 1800
+  fetchPut: |-
+    fetch("https://api.shop.com/products/7", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({name: "라떼"})
+    });
+  fetchCredentials: |-
+    fetch("https://api.shop.com/me", {
+      [[credentials: "include"]]
+    });
+  credentialsRun: |-
+    GET /products HTTP/1.1
+    Origin: https://admin.shop.com
   config: |-
     @Configuration
-    class CorsConfig implements WebMvcConfigurer {
+    class CorsConfig
+        implements WebMvcConfigurer {
       @Override
       public void addCorsMappings(
           CorsRegistry registry) {
-        registry.addMapping("/api/**")
-          .allowedOrigins("https://shop.com")
+        registry.addMapping("/**")
+          .[[allowedOrigins]]("https://shop.com")
           .allowedMethods("GET", "POST",
               "PUT", "DELETE")
-          .allowCredentials(true)
-          .maxAge(1800);
+          .[[allowCredentials]](true)
+          .[[maxAge]](1800);
       }
     }
   mistake: |-
     registry.addMapping("/**")
       .allowedOrigins([["*"]])
       .allowCredentials([[true]]);
+  fixed: |-
+    registry.addMapping("/**")
+      .[[allowedOriginPatterns]](
+          "https://*.shop.com")
+      .allowCredentials(true);
+  securityCors: |-
+    http.[[cors]](Customizer.withDefaults());
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cors/CorsTest.java
+  fetch: https://fetch.spec.whatwg.org/#http-cors-protocol
+  rfc6454: https://www.rfc-editor.org/rfc/rfc6454.html
+  mdnSop: https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy
+  springCors: https://docs.spring.io/spring-framework/reference/web/webmvc-cors.html
+  securityCors: https://docs.spring.io/spring-security/reference/servlet/integrations/cors.html
 predict:
-  text: 'CORS 설정이 없는 스프링 서버에 다른 출처(`Origin: https://evil.com`)에서 주문을 만드는 단순한 POST(폼 형식)를 보냈어요. 브라우저 콘솔에는 CORS 에러가 떴어요. 서버에 주문이 만들어졌을까요? 보기: 만들어졌다, 만들어지지 않았다, 서버가 403으로 막았다.'
-  answer: '만들어졌다. 단순 요청은 서버까지 가서 처리되고, 브라우저는 응답을 자바스크립트에 주지 않을 뿐이다. 질문 2에서 밝힌다.'
+  title: CORS 에러가 나면 요청은 처리됐을까요?
+  text: 'CORS 설정이 하나도 없는 스프링 서버에, 다른 출처(`https://evil.com`)의 페이지가 주문을 만드는 아래 POST(폼 형식)를 보냈어요. 브라우저 콘솔에는 CORS 에러가 떴어요. 서버에 주문이 만들어졌을까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: simplePost
+  label: 내 예측
+  options:
+    - value: created
+      label: 만들어졌다
+    - value: none
+      label: 만들어지지 않았다
+    - value: forbidden
+      label: 서버가 403으로 막았다
+  answer: created
+  storageKey: cors-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 브라우저는 왜 다른 출처의 응답을 막나요?
@@ -100,19 +141,85 @@ questions:
     asks:
       - '본문의 예시: `https://shop.com`의 페이지에서 `https://api.shop.com`으로 보내는 요청은 같은 출처인가 (다르다. 호스트가 다르다)'
       - '옮긴 상황: 스프링 서버가 RestClient로 다른 회사의 API를 부를 때 CORS 설정이 없어서 막히는가 (막히지 않는다. CORS는 브라우저의 규칙이다)'
+    body:
+      - p: '**출처**(origin)는 주소의 앞부분 세 가지, **스킴, 호스트, 포트**예요. 셋이 모두 같아야 같은 출처예요. 경로는 상관없어요.'
+      - p: '`https://shop.com/page`와 비교해 같은 출처인지 골라 보세요. 포트를 적지 않으면 스킴의 기본 포트(https는 443)예요.'
+      - widget:
+          kind: classify
+          categories: [같은 출처, 다른 출처]
+          items:
+            - {text: '`https://shop.com/api/products`', answer: 1, explain: '경로만 달라요. 스킴, 호스트, 포트가 같아요.'}
+            - {text: '`http://shop.com/page`', answer: 2, explain: '스킴이 달라요(https와 http).'}
+            - {text: '`https://api.shop.com/products`', answer: 2, explain: '호스트가 달라요. 하위 도메인도 다른 호스트예요.'}
+            - {text: '`https://shop.com:8443/page`', answer: 2, explain: '포트가 달라요(443과 8443).'}
+            - {text: '`https://shop.com:443/other`', answer: 1, explain: 'https의 기본 포트가 443이라 같아요.'}
+      - h3: 왜 막나요
+      - p: 'kim이 은행 사이트에 로그인해 둔 채 다른 탭에서 악성 사이트를 열었다고 해 볼게요. 악성 사이트의 자바스크립트가 `fetch("https://bank.com/my/accounts")`를 불러요. 브라우저는 bank.com으로 가는 요청에 **bank.com의 쿠키를 자동으로 실어요**(쿠키, 세션, 토큰 레슨). 은행 서버는 kim의 요청으로 알고 계좌 정보를 돌려줘요.'
+      - p: '이 응답을 악성 사이트의 자바스크립트가 읽을 수 있다면 kim의 계좌 정보가 그대로 넘어가요. 그래서 브라우저는 **다른 출처에서 받은 응답을 자바스크립트가 읽지 못하게** 막아요. 이것이 **같은 출처 정책**이에요.'
+      - h3: 막는 것은 브라우저예요
+      - p: '이 규칙은 브라우저가 지켜요. 서버가 막는 것이 아니에요. Postman, curl, 그리고 스프링 서버가 `RestClient`로 다른 서버를 부를 때는 브라우저가 아니니 이 규칙이 없어요. "Postman에서는 되는데 브라우저에서는 CORS 에러가 나요"의 답이 이거예요. Postman에는 지킬 사용자의 쿠키가 없어요.'
+      - muted: '이미지(`<img>`), 스크립트(`<script>`), 폼 전송은 웹 초기부터 다른 출처로 보낼 수 있었어요. 같은 출처 정책이 막는 것은 주로 자바스크립트가 다른 출처의 **응답을 읽는** 일이에요.'
+      - quiz:
+          q: '스프링 서버가 `RestClient`로 다른 회사의 API를 불러요. 그 API 서버에는 CORS 설정이 없어요. 어떻게 될까요?'
+          options:
+            - CORS 에러로 막힌다
+            - 막히지 않는다. CORS는 브라우저의 규칙이다
+            - 같은 출처일 때만 된다
+          answer: 2
+          explain: 같은 출처 정책은 브라우저가 사용자를 지키려고 하는 일이에요. 서버끼리의 요청에는 없어요.
+      - next: 그러면 shop.com의 프론트엔드가 api.shop.com의 응답을 읽어야 할 때는 어떻게 할까요?
+    recall: 다른 사이트의 자바스크립트가 내 쿠키가 실린 요청을 보내 그 응답을 읽어 가지 못하게 하려고요. 이것이 같은 출처 정책이에요. 출처는 스킴, 호스트, 포트이고 하나라도 다르면 다른 출처예요. 막는 것은 브라우저라서 서버끼리의 요청이나 Postman에는 이 규칙이 없어요.
   - id: q2
     title: CORS는 무엇을 어떻게 허락하나요?
     conclusion:
       lead: '서버가 응답에 `Access-Control-Allow-Origin` 헤더로 "이 출처는 읽어도 된다"고 적어 주면, 브라우저가 그 출처의 자바스크립트에 응답을 넘겨줘요.'
-      sub: '허락하지 않아도 단순 요청은 이미 서버에서 처리돼요. CORS는 응답을 읽는 것을 허락하는 규칙이지, 요청을 막는 장치가 아니에요.'
+      sub: 'CORS는 응답을 읽는 것을 허락하는 규칙이지, 요청을 막는 장치가 아니에요. 허락하지 않아도 단순 요청은 서버까지 가서 처리될 수 있어요.'
     says:
       - '브라우저는 다른 출처로 가는 요청에 `Origin` 헤더를 붙인다(코드 request). 서버는 그 출처를 허락하면 응답에 `Access-Control-Allow-Origin`을 적는다(코드 allowed). 브라우저는 이 헤더가 요청의 출처와 맞으면 응답을 넘기고, 없거나 다르면 CORS 에러를 낸다'
       - 'CORS 설정이 없는 스프링 서버에 Origin을 붙인 GET을 보내면 200과 본문이 오지만 Allow-Origin 헤더가 없다. 설정한 서버는 헤더가 있다. 두 응답을 실제 출력으로 보인다. 응답은 서버를 떠났고, 막는 일은 브라우저가 한다'
-      - '예측의 요청: 단순한 POST(폼 형식 Content-Type)는 사전 요청 없이 바로 간다. 서버는 처리하고 주문이 생긴다. 예측의 답을 밝힌다. 그래서 CORS는 "다른 사이트가 우리 서버에 상태를 바꾸는 요청을 보내는 것"을 막지 못한다. 그것은 CSRF이고 N10에서 막는다'
+      - '예측의 요청: 단순한 POST(폼 형식 Content-Type)는 사전 요청 없이 바로 간다. CORS 설정이 없는 서버는 처리하고 주문이 생긴다. 예측의 답을 밝힌다. 그래서 CORS는 "다른 사이트가 우리 서버에 상태를 바꾸는 요청을 보내는 것"을 막는 장치가 아니다. 그것은 CSRF이고 N10에서 막는다'
+      - '스프링은 CORS를 설정한 경로에서는 허락하지 않은 Origin이 붙은 요청을 403(Invalid CORS request)으로 거절한다. 같은 POST를 보내 확인한다. 그래도 Origin이 없는 요청이나 설정하지 않은 경로는 그대로 처리되므로 CSRF 방어를 대신하지 않는다'
       - '허락한 출처마다 응답이 다르므로 `Vary: Origin`을 함께 보내 캐시가 섞이지 않게 한다. 스프링이 알아서 붙인다'
     asks:
       - '본문의 예시: CORS 설정이 없는 서버에 `Origin: https://shop.com`을 붙인 GET을 보내면 서버의 응답은 (보기: 200과 본문, 하지만 Allow-Origin 헤더 없음 / 403 / 응답 없음)'
-      - '옮긴 상황: 회원 탈퇴를 `POST /withdraw`(폼 형식)로 받는 서버가 CORS를 아무 출처에도 허락하지 않았다. 악성 사이트가 이 주소로 폼을 보내면 탈퇴가 막히나 (막히지 않는다. 요청은 처리되고 브라우저는 응답만 막는다)'
+      - '옮긴 상황: 회원 탈퇴를 `POST /withdraw`(폼 형식)로 받는 서버에 CORS 설정이 하나도 없다. 악성 사이트가 이 주소로 폼을 보내면 탈퇴가 막히나 (막히지 않는다. 요청은 처리되고 브라우저는 응답만 막는다)'
+    body:
+      - p: 'shop.com의 프론트엔드가 api.shop.com의 상품 목록을 읽어야 해요. 같은 출처 정책을 풀어 주는 규칙이 **CORS**(Cross-Origin Resource Sharing)예요. 응답을 줄지 말지는 데이터를 가진 **서버가** 정하고, 서버가 허락하면 브라우저가 넘겨줘요.'
+      - code: fetch
+      - p: '브라우저는 다른 출처로 가는 요청에 **`Origin` 헤더**를 붙여 "이 요청은 shop.com의 페이지에서 왔다"고 알려요.'
+      - code: request
+      - p: '서버가 shop.com을 허락하면 응답에 **`Access-Control-Allow-Origin`**을 적어요. 브라우저는 이 값이 요청의 출처와 같으면 응답을 자바스크립트에 넘기고, 없거나 다르면 넘기지 않고 콘솔에 CORS 에러를 띄워요.'
+      - code: allowed
+        notes:
+          - mark: 'Access-Control-Allow-Origin:'
+            as: code
+            text: '"이 출처의 자바스크립트는 이 응답을 읽어도 된다"는 서버의 허락이에요.'
+      - p: 'CORS 설정이 없는 스프링 서버와 shop.com을 허락한 서버에 같은 요청을 보내 봤어요.'
+      - ci:
+          key: allow-origin
+          label: 두 서버의 응답 보기
+          source: CorsTest.allowOriginHeader
+          code: request
+      - p: '눈여겨볼 곳은 **설정이 없는 서버도 200과 본문을 돌려줬다**는 거예요. 응답은 이미 서버를 떠나 브라우저에 도착했어요. 브라우저가 Allow-Origin이 없는 것을 보고 자바스크립트에 넘기지 않을 뿐이에요. 허락한 서버의 응답에는 `Vary: Origin`도 붙어 있어요. 출처마다 응답 헤더가 다르니 캐시가 섞이지 않게 하라는 표시예요.'
+      - h3: CORS 에러가 나도 요청은 처리됐을 수 있어요
+      - p: '처음 예측한 요청이에요. evil.com의 페이지가 폼 형식으로 주문 POST를 보냈어요. 이런 요청은 질문 3에서 볼 사전 요청 없이 바로 가요. 예전부터 폼으로 보낼 수 있던 요청이라서예요.'
+      - ci:
+          key: simple-post
+          label: 두 서버에서의 결과 보기
+          source: CorsTest.simplePostIsProcessed
+          code: simplePost
+      - p: '**만들어졌다**가 정답이에요. {{predict-result}} CORS 설정이 없는 서버는 요청을 처리해 주문을 만들었어요. 브라우저는 응답을 evil.com에 넘기지 않았지만, 주문은 이미 생겼어요.'
+      - p: '스프링은 한 가지를 더 해요. CORS를 설정한 경로에서는 **허락하지 않은 Origin이 붙은 요청을 403으로 거절**해요(둘째 결과). 그래도 이것을 다른 사이트가 보내는 요청을 막는 장치로 믿으면 안 돼요. Origin 헤더가 없는 요청이나 설정하지 않은 경로는 그대로 처리되기 때문이에요. 다른 사이트가 사용자의 브라우저로 상태를 바꾸는 요청을 보내게 하는 공격을 **CSRF**라고 하고, 웹 보안 기초 레슨에서 제대로 막아요.'
+      - quiz:
+          q: 'CORS 설정이 하나도 없는 서버가 회원 탈퇴를 `POST /withdraw`(폼 형식)로 받아요. 악성 사이트가 로그인한 사용자의 브라우저로 이 주소에 폼을 보내면 어떻게 될까요?'
+          options:
+            - 브라우저가 CORS 에러로 요청을 보내지 않는다
+            - 요청은 서버에서 처리되고, 브라우저는 응답만 악성 사이트에 넘기지 않는다
+            - 서버가 Origin을 보고 자동으로 막는다
+          answer: 2
+          explain: 폼 POST는 사전 요청 없이 바로 가요. CORS는 응답 읽기를 허락하는 규칙이라, 설정이 없는 서버는 요청을 그대로 처리해요.
+      - next: 폼 POST는 바로 갔어요. 그러면 JSON을 보내는 PUT이나 DELETE도 바로 갈까요?
+    recall: 서버가 응답에 Access-Control-Allow-Origin으로 이 출처는 읽어도 된다고 적어 주면, 브라우저가 그 출처의 자바스크립트에 응답을 넘겨요. 브라우저는 다른 출처 요청에 Origin 헤더를 붙여요. CORS는 응답 읽기를 허락하는 규칙이라, 설정이 없는 서버는 다른 출처의 단순 POST도 처리해요. 그래서 CSRF를 막지 못해요.
   - id: q3
     title: 사전 요청(preflight)은 언제, 왜 보내나요?
     conclusion:
@@ -120,8 +227,8 @@ questions:
       sub: '서버가 허락하지 않으면 본 요청은 아예 가지 않아요. 예전부터 보낼 수 있던 단순 요청이 아닌 것은, 서버가 CORS를 아는지 먼저 확인하는 거예요.'
     says:
       - '단순 요청: GET, HEAD, POST이고 Content-Type이 폼이나 text/plain이고 특별한 헤더가 없는 것. 나머지는 사전 요청을 먼저 보낸다. JSON API는 Content-Type 때문에 대부분 사전 요청이 간다 (Fetch 명세 근거)'
-      - '사전 요청은 OPTIONS에 `Access-Control-Request-Method`, `Access-Control-Request-Headers`를 붙여 묻는다(코드 preflight). 서버는 허락하는 메서드와 헤더로 답한다(코드 preflightOk). 스프링에 보내 실제 응답을 보인다'
-      - '허락하지 않은 출처의 사전 요청에 스프링은 403과 `Invalid CORS request`로 답한다. 브라우저는 본 요청을 보내지 않는다. 그래서 PUT과 DELETE는 질문 2의 POST와 달리 서버에서 처리되지 않는다. 실제 응답을 보인다'
+      - '사전 요청은 OPTIONS에 `Access-Control-Request-Method`, `Access-Control-Request-Headers`를 붙여 묻는다(코드 preflight). 서버는 허락하는 메서드와 헤더로 답한다. 스프링에 보내 실제 응답을 보인다'
+      - '허락하지 않은 출처의 사전 요청에 스프링은 403과 `Invalid CORS request`로 답한다. CORS 설정이 없는 스프링 서버도 사전 요청에 403이다. 브라우저는 본 요청을 보내지 않는다. 그래서 PUT과 DELETE는 질문 2의 POST와 달리 서버에서 처리되지 않는다. 실제 응답을 보인다'
       - '사전 요청은 요청마다 왕복 하나를 더한다. `Access-Control-Max-Age`로 브라우저가 답을 정해진 초 동안 기억하게 한다'
     widget:
       kind: timeline
@@ -129,6 +236,96 @@ questions:
     asks:
       - '본문의 예시: `fetch`로 `PUT /products/7`을 JSON 본문과 함께 보낼 때, 브라우저가 먼저 보내는 요청의 메서드는 (OPTIONS)'
       - '옮긴 상황: 서버가 사전 요청에 403을 줬다. 그 뒤 본 요청(DELETE)은 서버에서 처리되나 (처리되지 않는다. 브라우저가 보내지 않는다)'
+    body:
+      - p: '질문 2의 폼 POST처럼 웹 초기부터 보낼 수 있던 요청을 **단순 요청**이라고 해요. GET, HEAD, POST이면서 Content-Type이 폼이나 `text/plain`이고 특별한 헤더가 없는 요청이에요. 이런 요청은 CORS를 모르는 옛 서버도 늘 받아 왔으니 브라우저가 바로 보내요.'
+      - p: '그 밖의 요청, 예를 들어 이런 요청은 달라요.'
+      - code: fetchPut
+      - p: 'PUT이고 Content-Type이 JSON이에요. CORS를 모르는 옛 서버라면 다른 출처에서 이런 요청이 오리라고 생각하지 못했을 거예요. 그래서 브라우저는 본 요청을 보내기 전에 **"이렇게 보내도 되나요"**를 먼저 물어요. 이것이 **사전 요청**(preflight)이에요. JSON API는 Content-Type 때문에 대부분 사전 요청이 가요. `Authorization` 헤더를 붙여도 그래요.'
+      - code: preflight
+        notes:
+          - mark: PUT
+            as: code
+            text: 본 요청에서 쓸 메서드예요.
+          - mark: content-type
+            as: code
+            text: 본 요청에 붙일 헤더 가운데 단순하지 않은 것이에요.
+      - p: 한 단계씩 넘겨 보세요. 시나리오를 바꿔 허락하지 않는 서버도 보세요.
+      - widget:
+          kind: timeline
+          layout: [selector, timeline, buttons, verdict]
+          lanes: [브라우저 (shop.com의 페이지), API 서버]
+          initial: {}
+          selector:
+            label: API 서버의 설정
+            options:
+              - {value: allow, label: shop.com을 허락함}
+              - {value: deny, label: shop.com을 허락하지 않음}
+          scenarios:
+            allow:
+              - event:
+                  dir: right
+                  title: 사전 요청
+                  text: |
+                    OPTIONS /products/7
+                    Origin: https://shop.com
+                    [[Access-Control-Request-Method: PUT]]
+                  note: 브라우저가 알아서 보내요. 페이지의 코드에는 보이지 않아요.
+              - event:
+                  dir: left
+                  title: 허락
+                  text: |
+                    HTTP/1.1 200
+                    Access-Control-Allow-Origin: https://shop.com
+                    [[Access-Control-Allow-Methods: GET,POST,PUT,DELETE]]
+                    Access-Control-Max-Age: 1800
+                  note: PUT을 허락해요. 브라우저는 이 답을 1800초 동안 기억해요.
+              - event:
+                  dir: right
+                  title: 본 요청
+                  text: |
+                    PUT /products/7
+                    Content-Type: application/json
+              - event:
+                  dir: left
+                  title: 응답
+                  text: |
+                    HTTP/1.1 200
+                    Access-Control-Allow-Origin: https://shop.com
+                verdict: 사전 요청이 통과해야 본 요청이 가요. 응답에도 Allow-Origin이 있어야 자바스크립트가 읽어요.
+            deny:
+              - event:
+                  dir: right
+                  title: 사전 요청
+                  text: |
+                    OPTIONS /products/7
+                    Origin: https://shop.com
+                    Access-Control-Request-Method: PUT
+              - event:
+                  dir: left
+                  title: 거절
+                  text: |
+                    [[HTTP/1.1 403]]
+                    Invalid CORS request
+                  note: Allow 헤더가 없어요.
+                verdict: 브라우저는 본 PUT을 보내지 않아요. 그래서 서버에서 아무것도 바뀌지 않아요. 질문 2의 폼 POST와 다른 점이에요.
+      - p: 스프링 서버에 실제로 사전 요청을 보내 봤어요. 허락한 출처, 허락하지 않은 출처, 그리고 CORS 설정이 없는 서버예요.
+      - ci:
+          key: preflight
+          label: 세 사전 요청의 응답 보기
+          source: CorsTest.preflight
+          code: preflight
+      - p: '허락한 출처에는 쓸 수 있는 메서드와 헤더, 기억할 시간이 왔어요. 허락하지 않은 출처에는 403이에요. **CORS 설정이 없는 스프링 서버도 사전 요청에 403**으로 답해요. 어느 쪽이든 브라우저는 본 PUT을 보내지 않아서, 서버의 데이터는 바뀌지 않아요.'
+      - p: '사전 요청은 요청마다 왕복 하나를 더해요. 그래서 `Access-Control-Max-Age`로 브라우저가 답을 기억하게 해요. 위 응답의 1800이면 30분 동안 같은 요청에 사전 요청을 다시 보내지 않아요. 브라우저마다 기억할 수 있는 최대 시간이 따로 있어요.'
+      - quiz:
+          q: '프론트엔드가 `fetch`로 JSON 본문을 담은 `DELETE /products/7`을 다른 출처의 API에 보내요. 서버가 사전 요청에 403으로 답했어요. 본 요청 DELETE는 어떻게 될까요?'
+          options:
+            - 서버에서 처리되고 응답만 막힌다
+            - 브라우저가 보내지 않아서 서버에서 처리되지 않는다
+            - 브라우저가 GET으로 바꿔 보낸다
+          answer: 2
+          explain: 사전 요청이 통과하지 못하면 브라우저는 본 요청을 보내지 않아요. 폼 POST 같은 단순 요청과 다른 점이에요.
+      - next: 지금까지는 쿠키 없이 보냈어요. 로그인 세션 쿠키를 함께 보내야 하는 API라면 무엇이 달라질까요?
+    recall: PUT, DELETE 같은 메서드나 JSON Content-Type, Authorization 같은 헤더를 쓰는 요청은, 브라우저가 본 요청 전에 OPTIONS에 Access-Control-Request-Method와 Request-Headers를 붙여 먼저 물어요. 서버가 Allow-Methods와 Allow-Headers로 허락해야 본 요청이 가고, 403이면 본 요청은 가지 않아요. Max-Age로 답을 기억해 왕복을 줄여요.
   - id: q4
     title: 쿠키를 함께 보내는 요청은 무엇이 다른가요?
     conclusion:
@@ -142,25 +339,96 @@ questions:
     asks:
       - '본문의 예시: 쿠키를 싣는 요청에 서버가 `Access-Control-Allow-Origin: *`와 `Allow-Credentials: true`로 답하면 브라우저는 응답을 넘기나 (넘기지 않는다)'
       - '옮긴 상황: 세션 쿠키로 로그인하는 API를 `https://admin.shop.com`에서 부른다. 서버의 CORS 설정에 꼭 있어야 하는 두 가지 (Allow-Origin에 `https://admin.shop.com`, Allow-Credentials true)'
+    body:
+      - p: '`fetch`는 다른 출처로 요청할 때 **쿠키를 기본으로 싣지 않아요**. 세션 쿠키로 로그인하는 API를 부르려면 직접 켜야 해요.'
+      - code: fetchCredentials
+      - p: '쿠키가 실린 요청의 응답은 질문 1에서 본 위험 그대로예요. 그래서 브라우저는 더 엄격하게 봐요. 응답에 둘이 다 있어야 넘겨요.'
+      - ul:
+          - '`Access-Control-Allow-Credentials: true`'
+          - '`Access-Control-Allow-Origin`이 `*`가 아니라 **요청한 출처와 정확히 같은 값**'
+      - p: '`*`(모든 출처)를 허락하면서 쿠키까지 받으면, 아무 사이트나 사용자의 쿠키로 응답을 읽게 돼요. 같은 출처 정책을 통째로 끄는 셈이라 브라우저가 받아 주지 않아요. 스프링은 이 설정을 아예 막아요. 둘을 함께 둔 서버와, 출처 패턴을 쓴 서버에 요청해 봤어요.'
+      - ci:
+          key: credentials
+          label: 두 설정의 응답 보기
+          source: CorsTest.credentialsNeedExactOrigin
+          code: credentialsRun
+      - p: '첫 설정은 요청을 처리하다 예외를 던져 500이에요. 메시지가 고치는 법까지 알려 줘요. 둘째 설정의 `allowedOriginPatterns`는 패턴에 맞는 출처를 받아, 응답에는 **요청한 출처를 그대로** 적어요. 그래서 여러 하위 도메인을 허락하면서도 쿠키를 받을 수 있어요.'
+      - more:
+          summary: '더 알아보기: 응답 헤더를 자바스크립트가 읽게 하려면'
+          body:
+            - p: '다른 출처의 응답에서 자바스크립트가 읽을 수 있는 헤더는 몇 가지(`Content-Type`, `Content-Length` 등)뿐이에요. REST API 설계 레슨에서 본 `Location`이나 직접 만든 헤더를 읽게 하려면 서버가 `Access-Control-Expose-Headers: Location`처럼 적어 줘요. 스프링은 `exposedHeaders("Location")`이에요.'
+      - quiz:
+          q: '세션 쿠키로 로그인하는 API를 `https://admin.shop.com`의 페이지가 `credentials: "include"`로 불러요. 서버 응답에 꼭 있어야 하는 것은 무엇일까요?'
+          options:
+            - 'Allow-Origin: * 하나'
+            - 'Allow-Origin: https://admin.shop.com 과 Allow-Credentials: true'
+            - 'Allow-Methods: GET 하나'
+          answer: 2
+          explain: 쿠키가 실린 응답은 정확한 출처와 Allow-Credentials가 함께 있어야 브라우저가 넘겨요. *는 쓸 수 없어요.
+    recall: 프론트엔드가 credentials include로 쿠키를 싣고, 서버가 Access-Control-Allow-Credentials true와 요청한 출처와 정확히 같은 Allow-Origin을 함께 답해야 브라우저가 응답을 넘겨요. 쿠키가 실린 응답에는 *를 쓸 수 없어서, 스프링은 allowedOrigins("*")와 allowCredentials(true)를 함께 두면 예외를 던져요. 여러 출처는 allowedOriginPatterns로 허락해요.
 practice:
+  title: 스프링에서 CORS 설정하기
   says:
     - '스프링 MVC에서는 `WebMvcConfigurer.addCorsMappings`로 경로마다 출처, 메서드, 쿠키 허락, 기억 시간을 정한다(코드 config). 컨트롤러 하나만이면 `@CrossOrigin`을 붙인다. 테스트로 사전 요청과 본 요청의 헤더를 확인한다'
     - '흔한 실수: 에러를 없애려고 코드 mistake처럼 모든 출처와 쿠키를 함께 허락한다. 질문 4대로 스프링이 거부한다. 고친 코드는 출처를 적거나 `allowedOriginPatterns("https://*.shop.com")`를 쓴다'
     - '스프링 시큐리티를 쓰면 사전 요청(인증 정보가 없다)이 시큐리티에서 401로 먼저 막힐 수 있다. `http.cors(Customizer.withDefaults())`로 시큐리티가 같은 설정을 쓰게 한다 (스프링 시큐리티 문서 근거)'
     - '개발할 때는 프론트엔드 개발 서버의 프록시로 API를 같은 출처처럼 부르면 CORS가 필요 없다. 운영에서 같은 도메인 아래 경로로 나누는 것도 방법이다'
+  body:
+    - p: '스프링 MVC에서는 설정 클래스 하나로 경로마다 CORS를 정해요. 이 레슨의 테스트가 띄운 서버의 설정이 이 코드예요.'
+    - code: config
+      notes:
+        - mark: allowedOrigins
+          as: code
+          text: '읽어도 되는 출처를 정확히 적어요(질문 2).'
+        - mark: allowCredentials
+          as: code
+          text: '쿠키를 실은 요청을 허락해요(질문 4). 이때는 출처에 `*`를 쓸 수 없어요.'
+        - mark: maxAge
+          as: code
+          text: '사전 요청의 답을 기억할 초예요(질문 3).'
+    - p: '컨트롤러 하나만 열면 될 때는 클래스나 메서드에 `@CrossOrigin(origins = "https://shop.com")`을 붙여요.'
+    - h3: '흔한 실수: 모든 출처와 쿠키를 함께 허락하기'
+    - p: '로컬에서 CORS 에러가 귀찮아 "다 열자"고 이렇게 쓰곤 해요.'
+    - code: mistake
+    - p: '질문 4에서 본 대로 스프링은 이 설정으로 오는 요청마다 예외를 던져요. 고친 코드는 출처를 정확히 적거나, 여러 하위 도메인이면 패턴을 써요.'
+    - code: fixed
+      notes:
+        - mark: allowedOriginPatterns
+          as: code
+          text: '패턴에 맞는 출처를 받아 응답에는 그 출처를 그대로 적어요.'
+    - h3: 스프링 시큐리티를 쓴다면
+    - p: '스프링 시큐리티는 요청이 컨트롤러에 닿기 전에 필터에서 인증을 확인해요. 사전 요청에는 쿠키도 `Authorization`도 없어서, 시큐리티가 401로 먼저 막으면 브라우저는 CORS 에러를 봐요. 시큐리티에도 같은 CORS 설정을 쓰라고 알려요.'
+    - code: securityCors
+    - muted: '이 설정은 스프링 시큐리티를 프로젝트에 더해야 해서 테스트가 아니라 [스프링 시큐리티 문서의 CORS](link:securityCors)를 근거로 적었어요.'
+    - h3: CORS를 아예 피하는 방법
+    - p: '개발할 때는 프론트엔드 개발 서버(Vite, webpack)의 **프록시**로 `/api`를 스프링 서버로 넘기면, 브라우저가 보기에는 같은 출처라 CORS가 필요 없어요. 운영에서도 `shop.com/api`처럼 같은 도메인의 경로로 API를 두면 같아요.'
+    - muted: '근거: [스프링 문서의 CORS](link:springCors), [Fetch 명세의 CORS 프로토콜](link:fetch). 응답 헤더는 테스트로 확인했어요.'
+interview:
+  question: CORS가 무엇이고 왜 필요한지, 사전 요청과 함께 설명해 주세요
+  model:
+    - label: 정의
+      text: 브라우저는 같은 출처 정책으로 다른 출처(스킴, 호스트, 포트가 다른 곳)의 응답을 자바스크립트가 읽지 못하게 막습니다. CORS는 서버가 Access-Control-Allow-Origin 헤더로 특정 출처에 응답 읽기를 허락하는 규칙입니다.
+    - label: 원리
+      text: 브라우저는 다른 출처 요청에 Origin을 붙이고, 응답의 Allow-Origin이 맞으면 자바스크립트에 넘깁니다. PUT, DELETE나 JSON Content-Type, Authorization 헤더처럼 단순하지 않은 요청은 OPTIONS 사전 요청으로 메서드와 헤더를 먼저 묻고, 허락받아야 본 요청을 보냅니다. 쿠키를 실으려면 Allow-Credentials true와 정확한 출처가 필요해 *를 쓸 수 없습니다.
+    - label: 주의할 점
+      text: CORS는 브라우저의 규칙이라 서버끼리의 요청에는 없고, 응답 읽기를 막을 뿐이라 단순 POST는 서버에서 처리될 수 있어 CSRF 방어가 되지 않습니다. 스프링에서는 addCorsMappings로 설정하고, 시큐리티를 쓰면 http.cors()로 함께 알려야 사전 요청이 막히지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 프론트엔드에서 CORS 에러가 나서 allowedOrigins("*")로 열었다가 쿠키 로그인에서 막혀, allowedOriginPatterns로 출처를 정확히 허락했습니다.'
+verified: 이 레슨의 응답 헤더는 짐작이 아니라, 스프링 부트 3.5 서버에 브라우저가 붙이는 헤더(Origin, 사전 요청의 헤더)를 자바 21 HttpClient로 붙여 보내 받은 값이에요. 브라우저가 그 헤더로 응답을 막고 넘기는 일은 Fetch 명세를 근거로 적었어요. 코드가 바뀔 때마다 테스트([CorsTest](link:test))가 다시 돌아요.
+footer: '근거: 출처는 RFC 6454, CORS 프로토콜과 단순 요청, 사전 요청, credentials는 Fetch 명세, 같은 출처 정책은 MDN, 스프링의 CORS는 스프링 프레임워크 문서, 시큐리티의 CORS는 스프링 시큐리티 문서. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 'CORS 설정이 없는 서버는 Origin이 붙은 GET에 200과 본문을 주고 Access-Control-Allow-Origin을 주지 않는다. 설정한 서버는 준다'
     how: 'MiniWeb에 컨트롤러를 띄우고 Origin 헤더를 붙여 요청한다'
-  - claim: '다른 출처의 단순 POST(폼 형식)는 CORS 설정이 없어도 서버에서 처리된다'
+    test: CorsTest.allowOriginHeader
+  - claim: '다른 출처의 단순 POST(폼 형식)는 CORS 설정이 없으면 서버에서 처리된다. 설정한 경로에서는 스프링이 허락하지 않은 출처를 403으로 거절한다'
     how: '주문 수를 세는 컨트롤러에 Origin: https://evil.com과 폼 본문으로 보낸다'
-  - claim: '허락한 출처의 사전 요청에 200과 Allow-Methods, Allow-Headers, Max-Age가 온다'
+    test: CorsTest.simplePostIsProcessed
+  - claim: '허락한 출처의 사전 요청에 200과 Allow-Methods, Allow-Headers, Max-Age가 오고, 허락하지 않은 출처와 CORS 설정이 없는 서버는 403이다'
     how: 'OPTIONS와 Access-Control-Request-Method를 보낸다'
-  - claim: '허락하지 않은 출처의 사전 요청에 403 Invalid CORS request가 온다'
-    how: '다른 Origin으로 OPTIONS를 보낸다'
-  - claim: 'allowCredentials(true)와 allowedOrigins("*")를 함께 두면 스프링이 요청을 처리하다 IllegalArgumentException을 던진다(500)'
-    how: '그 설정으로 Origin이 붙은 요청을 보낸다'
-  - claim: 'allowedOriginPatterns로 바꾸면 요청한 출처를 그대로 Allow-Origin에 적고 Allow-Credentials: true를 준다'
-    how: '같은 요청을 보낸다'
+    test: CorsTest.preflight
+  - claim: 'allowCredentials(true)와 allowedOrigins("*")를 함께 두면 스프링이 요청을 처리하다 IllegalArgumentException을 던지고(500), allowedOriginPatterns는 요청한 출처를 그대로 Allow-Origin에 적고 Allow-Credentials: true를 준다'
+    how: '두 설정으로 같은 요청을 보낸다'
+    test: CorsTest.credentialsNeedExactOrigin
 sources:
   - '출처: RFC 6454 https://www.rfc-editor.org/rfc/rfc6454.html'
   - 'CORS 프로토콜, 단순 요청, 사전 요청, credentials: Fetch 명세 https://fetch.spec.whatwg.org/#http-cors-protocol'

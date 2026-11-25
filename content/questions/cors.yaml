@@ -1,0 +1,225 @@
+# CORS 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/cors.yaml의 says).
+# 서버의 응답은 verification의 CorsTest로 확인했다 (스프링 부트 3.5, 자바 21).
+# 브라우저가 응답 헤더로 하는 일(넘기거나 막기, 사전 요청을 보내는 때)은 Fetch 명세가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: cors
+  title: CORS
+  unit: 네트워크와 웹
+  order: 63
+concepts:
+  - key: core
+    name: CORS
+coreQuestions:
+  - key: q1
+    text: "브라우저는 왜 다른 출처의 응답을 막나요?"
+  - key: q2
+    text: "CORS는 무엇을 어떻게 허락하나요?"
+  - key: q3
+    text: "사전 요청(preflight)은 언제, 왜 보내나요?"
+  - key: q4
+    text: "쿠키를 함께 보내는 요청은 무엇이 다른가요?"
+questions:
+  # ── 질문 1 ──
+  - key: cors-same-origin
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "`https://shop.com/page`와 같은 출처인 주소는 무엇일까요?"
+    choices:
+      - "https://api.shop.com/page"
+      - "http://shop.com/page"
+      - "https://shop.com:443/api/products"
+      - "https://shop.com:8443/page"
+    answer: "3"
+    explanation: |-
+      **https://shop.com:443/api/products예요.** 출처는 스킴, 호스트, 포트 세 가지이고 경로는 상관없어요.
+
+      - https의 기본 포트가 443이라 포트도 같아요
+      - api.shop.com은 호스트가, http는 스킴이, 8443은 포트가 달라요
+    source: https://www.rfc-editor.org/rfc/rfc6454.html
+  - key: cors-server-to-server
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "스프링 서버가 RestClient로 다른 회사의 날씨 API를 불러요. 그 API 서버에는 CORS 설정이 하나도 없어요. 어떻게 될까요?"
+    choices:
+      - CORS 에러로 응답을 읽지 못한다
+      - 사전 요청에서 막혀 요청이 가지 않는다
+      - 막히지 않는다. 같은 출처 정책은 브라우저가 지키는 규칙이다
+      - 같은 도메인일 때만 된다
+    answer: "3"
+    explanation: |-
+      **막히지 않아요.** 같은 출처 정책과 CORS는 브라우저가 사용자의 쿠키와 데이터를 지키려고 하는 일이에요.
+
+      - 서버끼리의 요청, Postman, curl에는 이 규칙이 없어요
+      - "Postman에서는 되는데 브라우저에서는 안 돼요"의 이유예요
+    source: https://developer.mozilla.org/en-US/docs/Web/Security/Same-origin_policy
+  # ── 질문 2 ──
+  - key: cors-no-config-get
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "CORS 설정이 없는 스프링 서버에 `Origin: https://shop.com`을 붙인 `GET /products`가 왔어요. 서버의 응답은 어떨까요? (스프링 부트 3.5)"
+    choices:
+      - 403으로 거절하고 본문이 없다
+      - 200과 본문을 주지만 Access-Control-Allow-Origin 헤더는 없다
+      - "200과 본문, Access-Control-Allow-Origin: *를 준다"
+      - 응답하지 않는다
+    answer: "2"
+    explanation: |-
+      **200과 본문을 주고 Allow-Origin은 없어요.** 응답은 서버를 떠나 브라우저에 도착해요.
+
+      - 브라우저가 Allow-Origin이 없는 것을 보고 자바스크립트에 넘기지 않을 뿐이에요
+      - 테스트에서 설정한 서버는 Access-Control-Allow-Origin: https://shop.com을 붙였어요
+    source: https://fetch.spec.whatwg.org/#http-cors-protocol
+  - key: cors-not-csrf
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "CORS 설정이 하나도 없는 서버가 회원 탈퇴를 `POST /withdraw`(폼 형식)로 받아요. 로그인한 사용자가 악성 사이트를 열자, 그 사이트가 이 주소로 폼을 보냈어요. 브라우저 콘솔에는 CORS 에러가 떴어요. 탈퇴는 어떻게 됐을까요?"
+    choices:
+      - 막혔다. CORS 에러가 났으니 요청이 가지 않았다
+      - 처리됐다. 폼 POST는 바로 가서 서버가 처리하고, 브라우저는 응답만 막았다
+      - 막혔다. 서버가 Origin을 보고 자동으로 거절했다
+      - 사전 요청에서 막혔다
+    answer: "2"
+    explanation: |-
+      **처리됐어요.** 폼 POST는 단순 요청이라 사전 요청 없이 바로 가요.
+
+      - CORS는 응답 읽기를 허락하는 규칙이라, 설정이 없는 서버는 요청을 그대로 처리해요
+      - 그래서 CORS는 CSRF를 막지 못해요. CSRF 토큰이나 SameSite 쿠키로 막아요
+    source: https://fetch.spec.whatwg.org/#cors-safelisted-method
+  # ── 질문 3 ──
+  - key: cors-preflight-method
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "`https://shop.com`의 자바스크립트가 `fetch`로 `https://api.shop.com/products/7`에 JSON 본문을 담은 PUT을 보내요. 브라우저가 본 요청보다 먼저 보내는 요청의 메서드는 무엇일까요?"
+    choices:
+      - GET
+      - HEAD
+      - OPTIONS
+      - 먼저 보내는 요청은 없다
+    answer: "3"
+    explanation: |-
+      **OPTIONS예요.** PUT이고 Content-Type이 JSON이라 단순 요청이 아니어서 사전 요청을 먼저 보내요.
+
+      - Access-Control-Request-Method: PUT과 Access-Control-Request-Headers: content-type을 붙여 물어요
+      - 서버가 Allow-Methods와 Allow-Headers로 허락해야 본 요청이 가요
+    source: https://fetch.spec.whatwg.org/#cors-preflight-fetch
+  - key: cors-preflight-denied
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "프론트엔드가 다른 출처의 API에 `DELETE /orders/3`을 `fetch`로 보냈어요. 서버는 사전 요청에 403으로 답했어요. 3번 주문은 어떻게 됐을까요?"
+    choices:
+      - 지워졌다. 브라우저가 응답만 막았다
+      - 지워지지 않았다. 브라우저가 본 DELETE를 보내지 않았다
+      - 지워졌다. 사전 요청과 상관없이 본 요청은 간다
+      - 브라우저가 GET으로 바꿔 보내 조회만 됐다
+    answer: "2"
+    explanation: |-
+      **지워지지 않았어요.** 사전 요청이 통과하지 못하면 브라우저는 본 요청을 보내지 않아요.
+
+      - 단순 요청(폼 POST)과 다른 점이에요. 단순 요청은 사전 요청 없이 바로 가서 처리될 수 있어요
+      - 테스트에서 스프링은 허락하지 않은 출처의 사전 요청에 403과 Invalid CORS request로 답했어요
+    source: https://fetch.spec.whatwg.org/#cors-preflight-fetch
+  # ── 질문 4 ──
+  - key: cors-credentials-wildcard
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"쿠키를 실은(credentials: include) 요청의 응답에 Access-Control-Allow-Origin: *와 Access-Control-Allow-Credentials: true가 있으면 브라우저는 응답을 자바스크립트에 넘긴다\""
+    answer: X
+    explanation: |-
+      **아니에요.** 쿠키가 실린 응답은 Allow-Origin이 요청한 출처와 정확히 같아야 해요. *는 받지 않아요.
+
+      - *와 쿠키를 함께 허락하면 아무 사이트나 사용자의 쿠키로 응답을 읽게 돼요
+      - 여러 출처가 필요하면 스프링의 allowedOriginPatterns로 요청한 출처를 그대로 돌려줘요
+    source: https://fetch.spec.whatwg.org/#cors-protocol-and-credentials
+  - key: cors-credentials-admin
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "세션 쿠키로 로그인하는 API를 `https://admin.shop.com`의 관리자 페이지가 `credentials: \"include\"`로 불러요. 브라우저가 응답을 넘기려면 서버 응답에 무엇이 있어야 할까요?"
+    choices:
+      - "Access-Control-Allow-Origin: * 하나"
+      - "Access-Control-Allow-Origin: https://admin.shop.com과 Access-Control-Allow-Credentials: true"
+      - "Access-Control-Allow-Methods: GET 하나"
+      - "Access-Control-Max-Age: 1800 하나"
+    answer: "2"
+    explanation: |-
+      **정확한 출처와 Allow-Credentials예요.** 쿠키가 실린 응답은 둘이 함께 있어야 넘겨요.
+
+      - *는 쓸 수 없어요
+      - 테스트에서 allowedOriginPatterns("https://*.shop.com")는 Allow-Origin에 https://admin.shop.com을 그대로 적었어요
+    source: https://fetch.spec.whatwg.org/#cors-protocol-and-credentials
+  - key: cors-wildcard-spring
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "CORS 에러를 없애려고 아래처럼 설정했어요. `Origin: https://admin.shop.com`이 붙은 GET 요청이 오면 스프링 부트 3.5 서버는 어떻게 답할까요?"
+    code: |-
+      registry.addMapping("/**")
+        .allowedOrigins("*")
+        .allowCredentials(true);
+    choices:
+      - "200과 Access-Control-Allow-Origin: *"
+      - "200과 Access-Control-Allow-Origin: https://admin.shop.com"
+      - IllegalArgumentException이 나서 500
+      - 403 Invalid CORS request
+    answer: "3"
+    explanation: |-
+      **500이에요.** 스프링은 allowCredentials(true)일 때 allowedOrigins에 *를 둘 수 없다며 요청을 처리하다 예외를 던져요.
+
+      - 메시지가 allowedOriginPatterns를 쓰라고 알려 줘요
+      - 고친 코드는 출처를 정확히 적거나 allowedOriginPatterns를 써요
+    source: https://docs.spring.io/spring-framework/reference/web/webmvc-cors.html
+  # ── 전체 ──
+  - key: cors-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "CORS가 무엇이고 왜 필요한지, 사전 요청과 함께 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **브라우저의 같은 출처 정책을 서버가 허락으로 풀어 주는 규칙이 CORS이고, 단순하지 않은 요청은 사전 요청으로 먼저 물어요.**
+
+      - **같은 출처 정책:** 다른 출처(스킴, 호스트, 포트)의 응답을 자바스크립트가 읽지 못하게 브라우저가 막는다. 쿠키가 실린 응답을 지키려는 것
+      - **CORS:** 서버가 Access-Control-Allow-Origin으로 출처를 허락하면 브라우저가 응답을 넘긴다
+      - **사전 요청:** PUT, DELETE, JSON, Authorization 같은 요청은 OPTIONS로 먼저 묻고 허락받아야 본 요청을 보낸다
+      - **주의:** 쿠키를 실으면 정확한 출처와 Allow-Credentials가 필요하다. CORS는 CSRF를 막지 않는다
+    checklist:
+      - 출처가 스킴, 호스트, 포트이고 같은 출처 정책이 브라우저의 규칙이라고 말했다
+      - 서버가 Access-Control-Allow-Origin으로 허락한다고 말했다
+      - 단순하지 않은 요청에 OPTIONS 사전 요청이 간다고 말했다
+      - 쿠키를 실을 때 정확한 출처와 Allow-Credentials가 필요하다고 말했다
+      - CORS가 요청을 막는 장치가 아니라 CSRF를 막지 못한다고 말했다
+    source: https://fetch.spec.whatwg.org/#http-cors-protocol
