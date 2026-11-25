@@ -1,130 +1,264 @@
 # 스프링 빈과 의존성 주입 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/spring-beans.yaml의 says).
+# 동작에 관한 정답은 verification의 SpringBeansLessonTest로 확인했다 (스프링 프레임워크 6.2).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: spring-beans
   title: 스프링 빈과 의존성 주입
-  unit: Spring
-  order: 3
+  unit: 스프링
+  order: 702
 concepts:
   - key: core
     name: 스프링 빈과 의존성 주입
+coreQuestions:
+  - key: q1
+    text: "스프링 컨테이너는 무엇을 하나요?"
+  - key: q2
+    text: "왜 생성자로 주입받나요?"
+  - key: q3
+    text: "같은 타입의 빈이 둘이면 무엇이 들어가나요?"
+  - key: q4
+    text: "빈은 몇 개 만들어지나요?"
 questions:
-  - key: q-70ef544a
+  # ── 질문 1 ──
+  - key: sb-creation-order
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: 스프링 빈과 의존성 주입이 무엇이고 왜 쓰는지 1분 안에 설명해 보세요
-    explanation: |-
-      - 빈: 스프링 컨테이너가 만들고 관리하는 객체. @Component 계열이 붙은 클래스를 찾아 만든다
-      - 의존성 주입: 필요한 객체를 직접 new 하지 않고 생성자로 받는다. 컨테이너가 필요한 것부터 만들어 넣는다
-      - 이점: 구현 교체, 테스트에서 가짜 주입, 생성 순서 신경 안 씀
-      - 기본은 싱글톤이라 요청별 상태를 필드에 두지 않는다
-    checklist:
-      - 빈과 컨테이너를 말했다
-      - 생성자 주입을 말했다
-      - 쓰는 이유(교체, 테스트)를 말했다
-      - 싱글톤을 말했다
-      - 싱글톤 상태 주의를 말했다
-    source: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
-  - key: q-d67eb814
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 생성자 주입과 필드 주입을 비교해 보세요
-    explanation: |-
-      - 생성자 주입: final로 둘 수 있고, 스프링 없이 new로 가짜를 넣어 테스트 가능, 필요한 의존성이 생성자에 드러남. 생성자가 하나면 @Autowired 생략
-      - 필드 주입: 짧지만 new로 만들면 null, 테스트에서 가짜를 넣기 어려움, final 불가
-      - 그래서 생성자 주입을 권장
-    checklist:
-      - 생성자 주입의 테스트 이점
-      - final
-      - 필드 주입은 new로 만들면 null
-      - 의존성이 드러난다
-      - 생성자 주입 권장
-    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
-  - key: q-2a1ec6f6
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 동시에 여러 사용자가 주문하면 주문 번호가 가끔 꼬인다. 서비스 클래스에 private int lastOrderNo 필드가 있다. 원인과 해결을 말해 보세요
-    explanation: |-
-      - 서비스 빈은 싱글톤이라 모든 요청 스레드가 같은 필드를 함께 씀 → 경쟁 상태
-      - 해결: 요청별 값은 지역 변수나 매개변수로, 번호 발급은 DB 시퀀스나 원자적 UPDATE로. 서버가 여러 대면 메모리 값은 공유되지 않음
-    checklist:
-      - 싱글톤을 원인으로 짚었다
-      - 여러 스레드가 같은 필드를 쓴다고 말했다
-      - 지역 변수/매개변수를 말했다
-      - DB 시퀀스 등 DB로 옮기기를 말했다
-      - 서버 여러 대의 문제를 말했다
-    source: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html
-  - key: q-a5403e89
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: "\"@Service가 붙은 클래스의 빈을 컨테이너에서 두 번 꺼내면 서로 다른 객체가 나온다\""
-    answer: X
-    explanation: |-
-      - 기본 스코프가 싱글톤이라 같은 객체다. prototype으로 지정하면 매번 새 객체
-      - 검증: SpringBeansTest (singletonByDefault, prototypeIsNewEachTime)
-    source: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html
-  - key: q-c707417d
-    concept: core
-    type: code_predict
-    status: reviewed
-    difficulty: 1
-    body: "@Autowired 필드가 있는 FieldInjectedService를 new FieldInjectedService()로 만들고 sender()를 부르면?"
-    choices:
-      - SmsNoticeSender
-      - "null"
-      - 컴파일 오류
-      - 컨테이너가 새로 만들어 넣는다
-    answer: "2"
-    explanation: |-
-      - 컨테이너가 만든 객체에만 주입이 일어난다. new로 만든 객체는 컨테이너가 모른다
-      - 검증: SpringBeansTest (newObjectIsNotInjected)
-    source: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
-  - key: q-6a187d5c
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: CoffeeController(CoffeeService 필요), CoffeeService(리포지토리와 NoticeSender 필요)가 있을 때 스프링이 가장 나중에 만드는 빈은?
+    body: CoffeeService가 생성자로 CoffeeMenuRepository와 NoticeSender를 받고, CoffeeController가 생성자로 CoffeeService를 받아요. 스프링 컨테이너는 이 넷 가운데 무엇을 가장 나중에 만들까요?
     choices:
       - CoffeeMenuRepository
-      - SmsNoticeSender
+      - NoticeSender의 구현
       - CoffeeService
       - CoffeeController
     answer: "4"
     explanation: |-
-      - 필요한 것부터 만들어 넣는다. 리포지토리·알림 → 서비스 → 컨트롤러
-      - 검증: SpringBeansTest (creationOrder)
+      **CoffeeController예요.** 컨테이너는 생성자에 넣을 빈을 먼저 만들고 그것을 넣어 다음 빈을 만들어요.
+
+      - 리포지토리와 알림 구현 → 서비스 → 컨트롤러 순서예요
     source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
-  - key: q-1cbc82bc
+  - key: sb-scan-range
     concept: core
-    type: line_pick
-    status: reviewed
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
     difficulty: 2
-    body: "[코드 21-A] 테스트에서 알림을 가짜로 바꾸려는데 방법이 없다. 원인이 되는 줄은?"
+    body: '@SpringBootApplication이 붙은 클래스가 com.shop 패키지에 있어요. @Service가 붙은 com.shop.order.OrderService와 @Component가 붙은 com.common.MailSender 가운데 빈이 되는 것은 무엇일까요? 다른 스캔 설정은 하지 않았어요.'
+    choices:
+      - 둘 다 빈이 된다
+      - OrderService만 빈이 된다
+      - MailSender만 빈이 된다
+      - 둘 다 빈이 되지 않는다
+    answer: "2"
+    explanation: |-
+      **OrderService만 빈이 돼요.** 컴포넌트 스캔은 @SpringBootApplication이 있는 패키지와 그 아래만 봐요.
+
+      - com.common은 com.shop의 아래가 아니라 범위 밖이에요
+      - @Service는 안에 @Component가 붙은 어노테이션이라 함께 찾혀요
+    source: https://docs.spring.io/spring-boot/reference/using/structuring-your-code.html
+  # ── 질문 2 ──
+  - key: sb-field-new
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 서비스를 단위 테스트에서 new로 만들고 notify("kim")을 불렀어요. 어떻게 될까요?
     code: |-
       @Service
-      public class CoffeeService {
-          private final CoffeeMenuRepository menu;
-          private final NoticeSender sender = new SmsNoticeSender();
+      public class FieldInjectedService {
+        @Autowired
+        private NoticeSender sender;
 
-          public CoffeeService(CoffeeMenuRepository menu) {
-              this.menu = menu;
-          }
+        public String notify(String user) {
+          return sender.send(user, "hi");
+        }
       }
-    answer: "4"
+
+      new FieldInjectedService().notify("kim");
+    choices:
+      - 컨테이너가 알아서 sender를 넣어 줘서 잘 된다
+      - NullPointerException이 난다
+      - 컴파일 오류가 난다
+      - '@Autowired 때문에 new를 쓸 수 없다는 예외가 난다'
+    answer: "2"
     explanation: |-
-      - 의존 객체를 직접 new 해서 바꿀 방법이 없다. NoticeSender를 생성자 매개변수로 받으면(생성자 주입) 테스트에서 가짜를 넣을 수 있다
-      - 검증: SpringBeansTest (constructorInjectionWithoutSpring)
+      **NullPointerException이 나요.** new로 만든 객체는 컨테이너가 몰라서 @Autowired 필드가 채워지지 않아요.
+
+      - 필드 주입은 컨테이너가 리플렉션으로 넣기 때문에 컨테이너 밖에서는 넣을 방법이 없어요
+      - 생성자 주입이면 new로 만들 때 가짜를 넣을 수 있어요
     source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  - key: sb-missing-bean
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: PaymentService가 생성자로 PgClient 인터페이스를 받는데, PgClient의 구현 클래스에 @Component를 붙이는 것을 잊었어요. 다른 곳에도 PgClient 빈은 없어요. 이 앱은 언제 실패할까요?
+    choices:
+      - 앱을 띄울 때 NoSuchBeanDefinitionException으로 실패한다
+      - 결제 요청이 처음 들어올 때 NullPointerException으로 실패한다
+      - 실패하지 않고 pgClient에 null이 들어간 채로 동작한다
+      - 컴파일할 때 실패한다
+    answer: "1"
+    explanation: |-
+      **앱을 띄울 때 실패해요.** 컨테이너는 PaymentService를 만들려면 생성자에 넣을 PgClient 빈이 있어야 하는데 없으니 바로 멈춰요.
+
+      - 빠진 의존성을 요청이 오기 전에 알 수 있는 것이 생성자 주입의 장점이에요
+      - 에러 메시지에 어느 타입의 빈이 없는지 나와요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  # ── 질문 3 ──
+  - key: sb-qualifier-wins
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래처럼 문자 쪽에 @Primary가 있고, 서비스는 @Qualifier로 받아요. CoffeeService의 sender에는 무엇이 들어갈까요?
+    code: |-
+      @Component
+      @Primary
+      class SmsNoticeSender
+          implements NoticeSender { ... }
+
+      @Component
+      class MailNoticeSender
+          implements NoticeSender { ... }
+
+      @Service
+      class CoffeeService {
+        CoffeeService(
+            @Qualifier("mailNoticeSender")
+            NoticeSender sender) { ... }
+      }
+    choices:
+      - SmsNoticeSender
+      - MailNoticeSender
+      - 앱이 뜨지 않는다
+      - 둘 다 들어간다
+    answer: "2"
+    explanation: |-
+      **MailNoticeSender예요.** 받는 쪽이 @Qualifier로 빈 이름을 적으면 그것이 @Primary보다 먼저예요.
+
+      - @Primary는 따로 고르지 않을 때의 기본값이에요
+      - 빈 이름은 클래스 이름의 첫 글자를 소문자로 바꾼 mailNoticeSender예요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired-qualifiers.html
+  - key: sb-list-injection
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 결제 대행사 클라이언트 PgClient의 구현이 TossPgClient와 KakaoPgClient 둘이고, 둘 다 @Component만 붙어 있어요(@Primary 없음). 정산 서비스가 생성자로 List<PgClient>를 받으면 어떻게 될까요?
+    choices:
+      - 앱이 뜨지 않는다. 같은 타입이 둘이다
+      - 앱이 뜨고 리스트에 둘 다 들어간다
+      - 앱이 뜨고 리스트에 먼저 만든 하나만 들어간다
+      - 앱이 뜨고 빈 리스트가 들어간다
+    answer: "2"
+    explanation: |-
+      **앱이 뜨고 둘 다 들어가요.** List로 받으면 하나를 고르지 않고 그 타입의 빈을 모두 담아 줘요.
+
+      - 하나만 받는 생성자였다면 NoUniqueBeanDefinitionException으로 뜨지 않았을 거예요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html
+  - key: sb-outside-package
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 메인 클래스가 com.shop.ShopApplication이에요. 팀원이 공통 알림 클래스 com.common.SlackNotifier에 @Component를 붙이고 OrderService의 생성자로 받게 했더니 앱이 뜨지 않아요. 가장 간단한 해결은 무엇일까요?
+    choices:
+      - SlackNotifier에 @Primary를 붙인다
+      - SlackNotifier를 com.shop 아래 패키지로 옮긴다
+      - OrderService의 생성자에 @Autowired를 붙인다
+      - OrderService를 필드 주입으로 바꾼다
+    answer: "2"
+    explanation: |-
+      **com.shop 아래로 옮겨요.** com.common은 @SpringBootApplication의 패키지 아래가 아니라 스캔 범위 밖이라 빈이 되지 않았어요.
+
+      - @Primary나 @Autowired는 빈이 있을 때 고르는 표시라서 소용없어요
+      - 스프링 부트 문서는 메인 클래스를 다른 클래스보다 위의 패키지에 두라고 권해요
+    source: https://docs.spring.io/spring-boot/reference/using/structuring-your-code.html
+  # ── 질문 4 ──
+  - key: sb-singleton-same
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: CoffeeController와 OrderReportService가 둘 다 생성자로 CoffeeService를 받아요. 스코프는 따로 정하지 않았어요. 두 곳에 들어간 CoffeeService는 어떤 관계일까요?
+    choices:
+      - 같은 객체다
+      - 받는 곳마다 새로 만든 다른 객체다
+      - 요청마다 새로 만들어진다
+      - 먼저 받은 쪽에만 들어가고 다른 쪽은 null이다
+    answer: "1"
+    explanation: |-
+      **같은 객체예요.** 빈은 따로 정하지 않으면 싱글톤이라 컨테이너에 하나만 만들어지고, 받는 모든 곳에 같은 객체가 들어가요.
+
+      - 그래서 빈의 필드에 요청마다 바뀌는 값을 두면 안 돼요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html
+  - key: sb-config-call
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 3
+    body: 아래 설정에서 daily와 weekly가 받은 Clock은 몇 개의 서로 다른 객체일까요?
+    code: |-
+      @Configuration
+      class ClockConfig {
+        @Bean Clock clock() {
+          return Clock.systemDefaultZone();
+        }
+
+        @Bean Report daily() {
+          return new Report(clock());
+        }
+
+        @Bean Report weekly() {
+          return new Report(clock());
+        }
+      }
+    choices:
+      - 1개. 둘이 같은 Clock 빈을 받는다
+      - 2개. clock()을 두 번 불렀다
+      - 3개. 빈 하나와 호출 두 번
+      - 0개. 앱이 뜨지 않는다
+    answer: "1"
+    explanation: |-
+      **1개예요.** 스프링이 @Configuration 클래스를 하위 클래스(CGLIB 프록시)로 감싸서 clock() 호출을 가로채고 이미 만든 빈을 돌려줘요.
+
+      - @Configuration(proxyBeanMethods = false)이면 감싸지 않아 2개가 돼요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/java/configuration-annotation.html
+  # ── 전체 ──
+  - key: sb-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스프링의 의존성 주입은 어떻게 동작하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **컨테이너가 스캔한 클래스를 빈으로 만들고, 받을 빈을 먼저 만들어 생성자에 넣어 줘요.**
+
+      - **컨테이너:** @SpringBootApplication 아래를 스캔해 @Component 클래스를 빈으로 만든다. 이것이 제어의 역전과 의존성 주입이다
+      - **생성자 주입:** final로 둘 수 있고 스프링 없이 가짜를 넣어 테스트할 수 있으며 빠진 의존성은 시작할 때 실패한다
+      - **고르는 규칙:** 타입으로 찾고, 둘이면 앱이 뜨지 않는다. @Qualifier, @Primary로 고르거나 List로 모두 받는다
+      - **싱글톤:** 빈은 기본으로 하나라서 모든 곳에 같은 객체가 들어간다
+    checklist:
+      - 컨테이너가 스캔으로 찾은 클래스를 빈으로 만들고 필요한 빈을 넣어 준다고 말했다
+      - 생성자 주입을 쓰는 이유를 하나 이상 말했다
+      - 같은 타입의 빈이 둘이면 @Primary나 @Qualifier로 골라야 한다고 말했다
+      - 빈이 기본으로 싱글톤이라고 말했다
+    source: https://docs.spring.io/spring-framework/reference/core/beans/introduction.html
