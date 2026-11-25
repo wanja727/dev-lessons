@@ -182,6 +182,6 @@ sources:
   - 'enum 타입, 생성자, 상수별 본문: 자바 언어 명세 8.9 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.9'
   - '`ordinal`은 직접 쓰지 말라는 것, `name`, `compareTo`: `Enum` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Enum.html'
   - 'switch 식이 모든 값을 다뤄야 하는 것: 자바 언어 명세 15.28.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.28.1'
-  - '`@Enumerated`의 기본값 ORDINAL: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/enumerated'
-  - '`AttributeConverter`: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/attributeconverter'
+  - '`@Enumerated`의 기본값 ORDINAL: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/Enumerated.html'
+  - '`AttributeConverter`: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/AttributeConverter.html'
   - '하이버네이트의 enum 매핑: 사용자 가이드 https://docs.hibernate.org/orm/6.6/userguide/html_single/#basic-enums'
