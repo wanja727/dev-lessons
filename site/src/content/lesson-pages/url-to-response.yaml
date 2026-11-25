@@ -1,8 +1,9 @@
-# 브라우저에 주소를 입력하면 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 브라우저에 주소를 입력하면
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/url-to-response.yaml에 있다.
 title: 브라우저에 주소를 입력하면
+description: 주소창에 URL을 입력한 뒤 화면이 뜨기까지, URL이 알려 주는 것, DNS로 서버를 찾는 법, TCP 연결 위로 HTTP 요청이 가는 순서, 브라우저가 화면을 그리는 일. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 18
 roadmap: N1
 type: 개념 설명
 prerequisites: []
@@ -36,28 +37,82 @@ codes:
   splitUrl: |-
     URI uri = URI.create(
         "https://shop.example.com"
-        + "/products/7?tab=review");
-    uri.getScheme(); // https
-    uri.getHost();   // shop.example.com
-    uri.getPort();   // -1 (적지 않음)
-    uri.getPath();   // /products/7
-    uri.getQuery();  // tab=review
+        + "/products/7?tab=review#top");
+    uri.getScheme();
+    uri.getHost();
+    uri.getPort();
+    uri.getPath();
+    uri.getQuery();
+    uri.getFragment();
   resolve: |-
-    InetAddress a =
-        InetAddress.getByName("localhost");
+    InetAddress.getByName("localhost");
+    InetAddress.getByName("127.0.0.1");
+    InetAddress.getByName("shop.invalid");
   rawRequest: |-
-    GET /products/7 HTTP/1.1
-    Host: localhost:8080
-    Connection: close
-
+    Socket s = new Socket("localhost", port);
+    s.getOutputStream().write((
+        "GET /products/7 HTTP/1.1\r\n"
+      + "[[Host: localhost:8080]]\r\n"
+      + "Connection: close\r\n"
+      + "\r\n").getBytes(UTF_8));
+    s.getInputStream().readAllBytes();
+  html: |-
+    <html>
+      <head>
+        <link rel="stylesheet"
+              href="[[/app.css]]">
+        <script src="[[/app.js]]"></script>
+      </head>
+      <body>
+        <img src="[[/coffee.png]]">
+      </body>
+    </html>
+  reuseRun: |-
+    HttpClient client =
+        HttpClient.newHttpClient();
+    // 서버는 요청을 보낸 쪽의
+    // 포트 번호를 돌려준다
+    client.send(get("/port"), ofString());
+    client.send(get("/port"), ofString());
   restClient: |-
+    var factory =
+        new JdkClientHttpRequestFactory(
+            HttpClient.newBuilder()
+                .[[connectTimeout]](ofSeconds(1))
+                .build());
+    factory.[[setReadTimeout]](ofSeconds(1));
+
     RestClient client = RestClient.builder()
         .baseUrl("https://pay.example.com")
         .requestFactory(factory)
         .build();
+  timeoutRun: |-
+    // /slow는 3초 뒤에 답한다
+    // 읽기 시간 제한은 1초
+    client.get().uri("/slow")
+        .retrieve().body(String.class);
+  errorsRun: |-
+    new Socket("shop.invalid", 80);
+    new Socket("localhost", 닫힌포트);
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/urltoresponse/UrlToResponseTest.java
+  javaNet: https://docs.oracle.com/en/java/javase/21/core/java-networking.html
+  restClient: https://docs.spring.io/spring-framework/reference/integration/rest-clients.html
 predict:
-  text: '소켓으로 서버에 연결해 위의 요청 글(코드 rawRequest)을 글자 그대로 써서 보냈어요. 스프링 서버는 이 요청에 답할까요? 보기: 답한다, 브라우저가 아니라서 거절한다, 자바 HttpClient를 써야만 답한다.'
-  answer: '답한다. HTTP 요청은 연결 위로 보내는 글이라, 누가 썼든 형식만 맞으면 서버는 같은 응답을 준다. 질문 3에서 밝힌다.'
+  title: 브라우저가 아니어도 답할까요?
+  text: '자바 코드로 서버에 TCP 연결을 맺고, 브라우저가 보내는 것과 같은 HTTP 요청을 글자 그대로 써서 보냈어요. 스프링 서버는 이 요청에 답할까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: rawRequest
+  label: 내 예측
+  options:
+    - value: answer
+      label: 상품 정보를 답한다
+    - value: reject
+      label: 브라우저가 아니라서 거절한다
+    - value: client
+      label: 자바 HttpClient를 써야만 답한다
+  answer: answer
+  storageKey: utr-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 주소(URL)는 무엇을 알려 주나요?
@@ -72,6 +127,36 @@ questions:
     asks:
       - '본문의 예시: `https://shop.example.com/products/7`로 가는 요청은 몇 번 포트로 가나 (443)'
       - '옮긴 상황: `http://localhost:8080/orders?page=2#top`에서 서버가 받는 것과 받지 않는 것 (경로 `/orders`와 쿼리 `page=2`는 받고, `#top`은 받지 않는다)'
+    body:
+      - p: 주소창에 이 주소를 입력했다고 해 볼게요.
+      - code: url
+      - p: 이 한 줄에 브라우저가 할 일이 다 들어 있어요. 자바의 `URI`로 쪼개 보면 부분마다 이름이 있어요.
+      - ci:
+          key: split
+          label: 쪼갠 결과 보기
+          source: UrlToResponseTest.splitUrl
+          code: splitUrl
+      - table:
+          head: [부분, 예, 뜻]
+          rows:
+            - ['스킴', '`https`', '어떤 규칙으로 이야기할지. `https`면 암호화한 연결을 써요']
+            - ['호스트', '`shop.example.com`', '어느 컴퓨터(서버)인지. 사람이 읽는 이름이에요']
+            - ['포트', '(적지 않음)', '그 컴퓨터 안의 어느 프로그램인지. 번호예요']
+            - ['경로', '`/products/7`', '서버에게 달라는 것. 서버가 해석해요']
+            - ['쿼리', '`tab=review`', '경로에 덧붙이는 조건. `?` 뒤에 써요']
+            - ['프래그먼트', '`top`', '페이지 안의 위치. 서버로 보내지 않아요']
+      - p: 포트가 `-1`이에요. 주소에 적지 않았다는 뜻이에요. 이때는 **스킴이 포트를 정해요**. `https`는 443번, `http`는 80번이에요. 개발할 때 쓰는 `http://localhost:8080`처럼 다른 번호를 쓰려면 직접 적어요.
+      - p: 경로와 쿼리를 어떻게 읽을지는 **서버가 정해요**. 브라우저는 뜻을 모르고 그대로 실어 보내요. 스프링이라면 `@GetMapping("/products/{id}")`가 경로를, `@RequestParam`이 쿼리를 읽어요. 반대로 `#` 뒤의 프래그먼트는 브라우저가 페이지 안에서 그 위치로 스크롤하는 데만 쓰고 서버에는 보내지 않아요.
+      - quiz:
+          q: '`http://localhost:8080/orders?page=2#top`을 열었어요. 서버가 받지 못하는 부분은 무엇일까요?'
+          options:
+            - '`8080`'
+            - '`page=2`'
+            - '`top`'
+          answer: 3
+          explain: '`#` 뒤의 프래그먼트는 브라우저만 써요. 포트는 연결할 곳을 정하고, 경로와 쿼리는 요청에 실려 서버로 가요.'
+      - next: 그런데 `shop.example.com`은 사람이 읽는 이름이에요. 컴퓨터는 이 이름으로 상대를 어떻게 찾을까요?
+    recall: 어떤 방식(스킴)으로, 어느 서버(호스트와 포트)에게, 무엇(경로와 쿼리)을 달라고 할지 알려 줘요. 포트를 적지 않으면 스킴이 정해서 https는 443번, http는 80번이에요. 경로와 쿼리는 서버가 해석하고, # 뒤의 프래그먼트는 서버로 보내지 않아요.
   - id: q2
     title: 호스트 이름으로 어떻게 서버를 찾나요?
     conclusion:
@@ -85,6 +170,41 @@ questions:
     asks:
       - '본문의 예시: `InetAddress.getByName("127.0.0.1")`은 DNS 서버에 묻는가 (묻지 않는다. 숫자 주소는 그대로 쓴다)'
       - '옮긴 상황: 서비스의 서버를 새 IP로 옮기고 DNS 레코드를 바꿨는데, 일부 사용자는 한동안 옛 서버로 간다. 왜인가 (옛 주소가 TTL 동안 캐시에 남아 있다)'
+    body:
+      - p: 인터넷의 컴퓨터는 서로를 **IP 주소**로 찾아요. `93.184.215.14`처럼 점으로 나눈 숫자 넷(IPv4)이거나 더 긴 IPv6 주소예요. 연결을 맺을 때 필요한 것은 이름이 아니라 이 주소예요. 이름은 사람이 기억하기 쉽게 붙인 것이에요.
+      - p: 그래서 브라우저는 먼저 **DNS**(Domain Name System)에 "`shop.example.com`의 주소가 뭐야?"라고 물어요. DNS는 이름과 IP 주소를 이어 둔, 인터넷 전체에 나뉘어 있는 전화번호부예요.
+      - p: 자바에서는 `InetAddress.getByName`이 같은 일을 해요. 이름 셋을 넣어 봤어요. 마지막 `shop.invalid`는 결코 풀리지 않게 표준이 정해 둔 이름이에요. 어떻게 될지 예상해 보고 열어 보세요.
+      - ci:
+          key: dns
+          label: 실제로 찾은 주소 보기
+          source: UrlToResponseTest.resolveNames
+          code: resolve
+      - ul:
+          - '**`localhost`는 자기 자신이에요.** 언제나 `127.0.0.1`(루프백 주소)로 풀려요. DNS 서버에 묻지 않고 컴퓨터가 알아서 답해요.'
+          - '**숫자 주소는 묻지 않아요.** 이미 주소니까 그대로 써요.'
+          - '**없는 이름은 `UnknownHostException`이에요.** 주소를 못 찾았으니 연결은 시작도 못 해요.'
+      - h3: 한 번 찾은 주소는 기억해요
+      - p: 요청할 때마다 DNS에 물으면 느려요. 그래서 DNS의 답에는 **TTL**(Time To Live, 유효 시간)이 붙어 와요. 브라우저, OS, 그리고 대신 물어 주는 서버(리졸버, 보통 통신사나 회사의 DNS 서버)가 TTL 동안 답을 기억해요. 같은 사이트를 다시 열 때 DNS를 거의 거치지 않는 이유예요.
+      - p: 기억에는 대가가 있어요. 서버를 새 IP로 옮기고 DNS의 기록을 바꿔도, TTL이 지나기 전까지는 옛 주소를 기억한 사용자가 옛 서버로 가요. 이사를 앞두면 TTL을 미리 짧게 줄여 두는 이유예요.
+      - more:
+          summary: '더 알아보기: 리졸버는 어떻게 답을 찾나요?'
+          body:
+            - p: 리졸버가 처음 보는 이름이면 위에서부터 차례로 물어요.
+            - ol:
+                - '**루트 네임서버**에게 묻으면 "`.com`은 저 서버에 물어봐"라고 알려 줘요.'
+                - '**`.com`을 맡은 서버**(TLD 서버)는 "`example.com`은 저 서버가 알아"라고 알려 줘요.'
+                - '**`example.com`을 맡은 서버**(권한 있는 네임서버)가 `shop.example.com`의 주소를 답해요.'
+            - p: 'DNS의 기록에는 종류가 있어요. **A**는 IPv4 주소, **AAAA**는 IPv6 주소, **CNAME**은 "이 이름은 저 이름과 같다"고 다른 이름을 가리켜요. CDN이나 클라우드 로드 밸런서를 쓸 때 CNAME을 자주 만나요.'
+      - quiz:
+          q: '서버를 새 IP로 옮기고 DNS 기록을 바꿨어요. 그런데 일부 사용자는 한동안 옛 서버로 접속해요. 가장 알맞은 이유는 무엇일까요?'
+          options:
+            - 사용자의 브라우저가 IP 주소를 북마크해서
+            - 옛 주소가 TTL 동안 브라우저, OS, 리졸버에 기억되어 있어서
+            - DNS는 한 번 정한 주소를 바꿀 수 없어서
+          answer: 2
+          explain: DNS의 답은 TTL 동안 여러 곳에 기억돼요. 기억이 끝나야 새 주소를 물어요.
+      - next: 이제 IP 주소를 알았어요. 그 주소로 요청은 어떻게 갈까요?
+    recall: DNS에 물어 이름을 IP 주소로 바꿔요. 연결은 이름이 아니라 IP 주소로 맺어요. 찾은 답은 TTL 동안 브라우저, OS, 리졸버가 기억해서 다음에는 묻지 않아요. localhost와 숫자 주소는 DNS에 묻지 않아요.
   - id: q3
     title: 서버를 찾은 뒤 요청은 어떻게 가나요?
     conclusion:
@@ -101,6 +221,89 @@ questions:
     asks:
       - '본문의 예시: 소켓에 쓴 요청 글에서 서버가 "어느 사이트로 온 요청인지" 알려고 보는 헤더는 무엇인가 (Host)'
       - '옮긴 상황: `http://`로 시작하는 주소와 `https://`로 시작하는 주소를 열 때, 서버와 처음 주고받는 단계에서 다른 것은 무엇인가 (https는 TCP 연결 뒤 TLS 연결을 한 번 더 맺는다)'
+    body:
+      - p: 주소를 알았으니 이제 연결해요. 브라우저는 그 IP 주소의 443번 포트로 **TCP 연결**을 맺어요. TCP 연결은 두 프로그램 사이에 놓은 통로예요. 한쪽이 넣은 바이트가 다른 쪽에 빠짐없이 순서대로 나와요. 통로를 놓는 데 서로 한 번 주고받는 시간(왕복 한 번)이 들어요.
+      - p: '`https`라서 한 단계가 더 있어요. TCP 통로 위에 **TLS 연결**을 맺어요. 서버가 정말 `shop.example.com`인지 인증서로 확인하고, 앞으로 주고받을 내용을 암호화할 키를 정해요. 이것도 왕복 한 번이 들어요.'
+      - p: 그다음에야 **HTTP 요청**이 가요. 아래에서 한 단계씩 넘겨 보세요.
+      - widget:
+          kind: timeline
+          layout: [duo, timeline, buttons, verdict]
+          lanes: [브라우저, 상대 컴퓨터]
+          initial:
+            duo:
+              - {label: 브라우저가 아는 것, state: dim, text: '주소창의 URL뿐'}
+              - {label: 연결 상태, state: dim, text: 없음}
+          scenarios:
+            default:
+              - event:
+                  dir: right
+                  title: DNS 서버에게 묻기
+                  text: 'shop.example.com의 주소는?'
+                  note: 기억해 둔 답이 없으면 리졸버에게 물어요.
+              - event:
+                  dir: left
+                  title: DNS 서버의 답
+                  text: '[[93.184.215.14]] (TTL 300초)'
+                  note: 이제 IP 주소를 알아요.
+                duo:
+                  - label: 브라우저가 아는 것
+                    rows: [{k: IP 주소, v: 93.184.215.14, mark: changed}]
+                  - {label: 연결 상태, text: 없음}
+              - event:
+                  dir: right
+                  title: TCP 연결 맺기
+                  text: '93.184.215.14의 [[443번 포트]]로 연결 요청'
+                  note: https라서 443번이에요. 상대가 받으면 통로가 생겨요(왕복 한 번).
+                duo:
+                  - label: 브라우저가 아는 것
+                    rows: [{k: IP 주소, v: 93.184.215.14}]
+                  - label: 연결 상태
+                    rows: [{k: TCP, v: 연결됨, mark: changed}]
+              - event:
+                  dir: left
+                  title: TLS 연결 맺기
+                  text: '인증서: [[shop.example.com]]'
+                  note: 서버가 인증서로 자기가 누구인지 보이고, 암호화할 키를 함께 정해요(왕복 한 번).
+                duo:
+                  - label: 브라우저가 아는 것
+                    rows: [{k: IP 주소, v: 93.184.215.14}, {k: 서버, v: 확인함, mark: changed}]
+                  - label: 연결 상태
+                    rows: [{k: TCP, v: 연결됨}, {k: TLS, v: 암호화 중, mark: changed}]
+              - event:
+                  dir: right
+                  title: HTTP 요청
+                  text: |
+                    GET /products/7?tab=review HTTP/1.1
+                    [[Host: shop.example.com]]
+                  note: 경로와 쿼리, 그리고 URL의 호스트가 요청 글에 들어가요. TLS가 이 글을 암호화해서 보내요.
+              - event:
+                  dir: left
+                  title: HTTP 응답
+                  text: |
+                    HTTP/1.1 200
+                    Content-Type: text/html
+                  note: 서버가 같은 연결로 응답 글을 돌려줘요.
+                verdict: 'DNS로 주소를 찾고, TCP로 통로를 놓고, TLS로 암호화한 뒤에야 HTTP 요청이 가요. 처음 요청에는 이 모든 단계가 들어요.'
+      - h3: HTTP 요청은 글이에요
+      - p: 'HTTP 요청은 TCP 통로에 넣는 **글**이에요. 첫 줄에 무엇을 할지(`GET`), 어디를(`/products/7`), 어떤 버전으로(`HTTP/1.1`) 적고, 그 아래에 `이름: 값` 모양의 헤더를 적고, 빈 줄로 끝내요. 처음 예측한 코드는 이 글을 브라우저 없이 소켓에 직접 썼어요. 서버는 답할까요?'
+      - ci:
+          key: raw
+          label: 소켓으로 받은 응답 보기
+          source: UrlToResponseTest.rawRequestOverSocket
+          code: rawRequest
+      - p: '답했어요. **상품 정보를 답한다**가 정답이에요. {{predict-result}} 서버는 요청을 누가 보냈는지 모르고, 글의 형식만 봐요. 브라우저도, 자바 `HttpClient`도, 터미널의 `curl`도 결국 이 글을 써서 보낼 뿐이에요. 응답도 글이에요. 첫 줄의 `200`이 결과, 그 아래가 헤더, 빈 줄 뒤가 본문이에요.'
+      - p: '`Host` 헤더에는 URL의 호스트를 적어요. IP 주소 하나에 사이트가 여럿 있을 수 있어서, 서버는 이 헤더를 보고 어느 사이트로 온 요청인지 알아요.'
+      - muted: '본문 앞뒤의 `18`과 `0`은 본문을 조각으로 나눠 보내는 방식(chunked)의 표시예요. 응답의 모양은 HTTP 요청과 응답 레슨에서 자세히 봐요. 이 테스트는 로컬 서버라 `http`로 보냈고, TLS 단계는 HTTPS와 TLS 레슨에서 직접 맺어 봐요.'
+      - quiz:
+          q: '`http://`로 시작하는 주소와 `https://`로 시작하는 주소를 처음 열 때, 서버와 주고받는 단계에서 달라지는 것은 무엇일까요?'
+          options:
+            - https는 DNS에 묻지 않는다
+            - https는 TCP 연결 뒤에 TLS 연결을 한 번 더 맺는다
+            - https는 HTTP 요청을 보내지 않는다
+          answer: 2
+          explain: 'https도 DNS로 주소를 찾고 TCP 연결을 맺어요. 그 위에 TLS 연결을 맺어 HTTP 요청을 암호화해 보내요.'
+      - next: 응답으로 HTML을 받았어요. 화면이 뜨려면 이것으로 끝일까요?
+    recall: 그 주소와 포트로 TCP 연결을 맺고, 연결 위로 HTTP 요청을 글로 보내요. 요청은 첫 줄(메서드, 경로, 버전), 헤더, 빈 줄로 되어 있고 Host 헤더에 호스트를 적어요. 서버는 같은 연결로 응답 글을 돌려줘요. https면 TCP 연결 위에 TLS 연결을 맺어 암호화해요.
   - id: q4
     title: 응답을 받은 브라우저는 무엇을 더 하나요?
     conclusion:
@@ -114,28 +317,120 @@ questions:
     asks:
       - '본문의 예시: HTML에 `<link href="/app.css">`와 `<script src="/app.js">`가 있으면 브라우저가 이 페이지를 위해 보내는 요청은 최소 몇 개인가 (3개. HTML, CSS, JS)'
       - '옮긴 상황: 같은 페이지를 두 번째로 열었더니 첫 번째보다 빨랐다. 이유로 맞지 않는 것은 (보기: DNS 결과를 기억함, 연결을 다시 씀, 서버의 CPU가 빨라짐)'
+    body:
+      - p: 상품 페이지의 HTML이 이렇게 생겼다고 해 볼게요.
+      - code: html
+        notes:
+          - mark: /app.css
+            as: str
+            text: 모양을 정하는 CSS 파일이에요.
+          - mark: /app.js
+            as: str
+            text: 화면에서 돌아갈 자바스크립트 파일이에요.
+          - mark: /coffee.png
+            as: str
+            text: 상품 사진이에요.
+      - p: 브라우저는 HTML을 위에서부터 읽다가 다른 파일의 주소를 만나면 **그 파일을 받으러 요청을 더 보내요**. 이 페이지 하나를 그리는 데 요청이 넷(HTML, CSS, JS, 이미지) 나가요. 실제 쇼핑몰 페이지는 수십 개가 나가요. 다 받으면 HTML로 화면의 뼈대를, CSS로 모양을 정해 그리고, 자바스크립트를 실행해요. 자바스크립트는 그 뒤에도 `fetch`로 API를 불러 요청을 더 보내요.
+      - h3: 두 번째 요청부터는 연결을 다시 써요
+      - p: 요청마다 TCP와 TLS 연결을 새로 맺으면 그때마다 왕복이 두 번씩 더 들어요. 그래서 HTTP/1.1은 **응답을 보낸 뒤에도 연결을 닫지 않고 두는 것**이 기본이에요. 같은 서버로 가는 다음 요청은 그 연결로 바로 보내요.
+      - p: 정말 같은 연결인지 확인해 봤어요. 서버가 "요청을 보낸 쪽의 포트 번호"를 돌려주게 하고, 같은 `HttpClient`로 두 번 요청했어요. 연결이 같으면 포트도 같아요. 시간도 함께 쟀어요.
+      - ci:
+          key: reuse
+          label: 두 요청의 포트와 시간 보기
+          source: UrlToResponseTest.secondRequestReusesConnection
+          code: reuseRun
+      - p: 포트가 같아요. 두 번째 요청은 새 연결을 맺지 않고 첫 연결을 다시 썼어요. 첫 요청이 더 오래 걸린 것은 연결을 맺고 서버가 처음 요청을 준비하는 시간까지 들어서예요. 이 테스트는 같은 컴퓨터 안이라 왕복이 1밀리초도 안 되지만, 서울에서 미국 서버라면 왕복 한 번이 150밀리초쯤이라 차이가 훨씬 커요.
+      - p: 정리하면, 페이지를 처음 열 때가 가장 느려요. DNS, TCP, TLS를 모두 처음 하니까요. 다시 열 때는 DNS 답을 기억하고, 연결을 다시 쓰고, 받아 둔 파일을 다시 쓰기도 해서(HTTP 캐시 레슨) 빨라요.
+      - muted: 연결을 다시 쓰는 규칙과 연결을 닫는 방법은 HTTP 요청과 응답 레슨에서 소켓으로 직접 확인해요.
+      - quiz:
+          q: 'HTML에 `<link href="/app.css">`와 `<script src="/app.js">`만 들어 있어요. 이 페이지를 그리기 위해 브라우저가 보내는 요청은 최소 몇 개일까요?'
+          options:
+            - 1개
+            - 2개
+            - 3개
+          answer: 3
+          explain: HTML을 받는 요청 하나, 그 안에 적힌 CSS와 JS를 받는 요청 둘이에요.
+    recall: HTML을 읽으며 그 안에 적힌 CSS, 자바스크립트, 이미지를 받으러 요청을 더 보내고, 다 모아 화면을 그려요. 같은 서버로 가는 추가 요청은 맺어 둔 연결을 다시 써서 빨라요. 처음 요청은 DNS, TCP, TLS를 모두 거쳐서 가장 느려요.
 practice:
+  title: 서버가 다른 서버를 부를 때
   says:
     - '서버가 다른 서버를 부를 때도 같은 순서다. `RestClient`로 결제 API를 부르면 DNS, TCP, TLS, HTTP를 똑같이 밟는다(코드 restClient)'
     - '시간 제한은 둘이다. 연결 시간 제한(TCP 연결을 맺기까지)과 읽기 시간 제한(응답을 기다리기까지). `JdkClientHttpRequestFactory`의 `setReadTimeout`과 `HttpClient`의 `connectTimeout`으로 정한다'
     - '흔한 실수: 시간 제한 없이 외부 API를 부른다. 상대가 응답하지 않으면 우리 스레드가 기다리기만 한다. 3초 걸리는 서버를 읽기 시간 제한 1초로 불러 1초 만에 예외가 나는 것을 테스트로 보인다'
     - '오류의 이름으로 어느 단계인지 읽는다: `UnknownHostException`은 DNS, `ConnectException: Connection refused`는 TCP(그 포트에 프로그램이 없음), 시간 초과는 연결이나 응답을 기다리다 멈춤. 앞의 둘을 테스트로 만든다'
     - 'JVM도 DNS 결과를 기억한다. 성공한 결과는 기본 30초다(보안 관리자가 없을 때). `networkaddress.cache.ttl`로 바꾼다 (자바 문서 근거)'
+  body:
+    - p: 스프링 서버가 결제 API를 부르면 서버가 브라우저 자리에 서요. 질문 넷의 순서를 그대로 밟아요. 이름을 주소로 바꾸고, 연결을 맺고, 요청 글을 보내고, 응답을 기다려요. 스프링 부트 3.5에서는 `RestClient`로 불러요.
+    - code: restClient
+      notes:
+        - mark: connectTimeout
+          as: code
+          text: TCP 연결을 맺기까지 기다릴 시간이에요(질문 3의 연결 맺기).
+        - mark: setReadTimeout
+          as: code
+          text: 요청을 보낸 뒤 응답을 기다릴 시간이에요.
+    - h3: '흔한 실수: 시간 제한 없이 부르기'
+    - p: 시간 제한을 정하지 않으면 상대가 응답하지 않을 때 우리 쪽 스레드는 하염없이 기다려요. 요청을 처리하는 스레드가 하나둘 묶이면 결국 우리 서버도 다른 요청에 답하지 못해요. 외부 API 하나가 느려졌을 뿐인데 우리 서비스 전체가 멈추는 장애예요.
+    - p: 3초 뒤에 답하는 주소를 읽기 시간 제한 1초로 불러 봤어요.
+    - ci:
+        key: timeout
+        label: 실제 결과 보기
+        source: UrlToResponseTest.readTimeout
+        code: timeoutRun
+    - p: 1초를 조금 넘겨 포기하고 예외를 던졌어요. 예외를 받은 코드는 사용자에게 "잠시 후 다시 시도해 주세요"라고 답하거나 다른 길을 고를 수 있어요. 외부 API를 부르는 코드에는 **두 시간 제한을 꼭 정해요**. 값은 상대 API의 평소 응답 시간을 보고 정해요.
+    - h3: 예외 이름으로 단계 읽기
+    - p: 'API 호출이 실패하면 예외 이름이 어느 단계에서 멈췄는지 알려 줘요. 없는 이름과 아무도 듣지 않는 포트로 연결해 봤어요.'
+    - ci:
+        key: errors
+        label: 두 예외 보기
+        source: UrlToResponseTest.connectionRefused
+        code: errorsRun
+    - table:
+        head: [예외, 멈춘 단계, 먼저 볼 것]
+        rows:
+          - ['`UnknownHostException`', 'DNS (질문 2)', '주소의 철자, DNS 설정']
+          - ['`ConnectException` (refused)', 'TCP 연결 (질문 3)', '상대 서버가 떠 있는지, 포트 번호']
+          - ['연결 시간 초과', 'TCP 연결 (질문 3)', '방화벽, 상대 컴퓨터가 켜져 있는지']
+          - ['읽기 시간 초과', '응답 기다리기', '상대 API가 느린지']
+    - p: refused는 상대 컴퓨터까지는 갔는데 "그 포트에는 아무도 없어"라는 답을 받은 거예요. 그래서 대개 서버가 꺼져 있거나 포트를 잘못 적은 것이에요.
+    - h3: JVM도 DNS 답을 기억해요
+    - p: '질문 2의 기억은 JVM 안에도 있어요. JVM은 성공한 DNS 답을 기본 30초 동안 기억해요. 상대 서버의 IP가 자주 바뀌는 환경(클라우드의 로드 밸런서)이라면 이 값이 중요해요. 보안 속성 `networkaddress.cache.ttl`로 바꿔요.'
+    - muted: '근거: [자바 네트워킹 문서](link:javaNet)의 networkaddress.cache.ttl, [스프링 문서의 REST 클라이언트](link:restClient). 시간 제한과 예외는 테스트로 확인했어요.'
+interview:
+  question: 브라우저 주소창에 URL을 입력하면 어떤 일이 일어나나요?
+  model:
+    - label: 정의
+      text: 브라우저는 URL에서 스킴, 호스트, 포트, 경로를 읽고, 호스트 이름을 IP 주소로 바꾼 뒤 그 서버와 연결을 맺어 HTTP 요청을 보내고, 받은 응답으로 화면을 그립니다.
+    - label: 원리
+      text: 먼저 DNS에 물어 이름을 IP 주소로 바꾸고, 그 주소의 포트(https면 443)로 TCP 연결을 맺습니다. https면 그 위에 TLS 연결을 맺어 서버의 인증서를 확인하고 암호화할 키를 정합니다. 그다음 GET 요청을 Host 헤더와 함께 보내고, 응답으로 HTML을 받으면 그 안의 CSS, JS, 이미지를 받으러 요청을 더 보냅니다.
+    - label: 주의할 점
+      text: DNS 답은 TTL 동안 캐시되고, HTTP/1.1은 연결을 다시 써서 처음 요청이 가장 느립니다. 서버가 외부 API를 부를 때도 같은 순서라서, 연결 시간 제한과 읽기 시간 제한을 정하고 UnknownHostException, Connection refused 같은 예외로 어느 단계에서 멈췄는지 읽습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 외부 API에 시간 제한이 없어서 그 API가 느려졌을 때 우리 서버까지 멈춘 일을 겪고, RestClient에 읽기 시간 제한을 넣었습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라, 스프링 부트 3.5 서버를 띄우고 자바 21의 URI, InetAddress, Socket, HttpClient, RestClient로 요청해 받은 값이에요. 코드가 바뀔 때마다 테스트([UrlToResponseTest](link:test))가 다시 돌아요.
+footer: '근거: URL의 구조는 RFC 3986, 기본 포트와 Host 헤더는 RFC 9110, DNS와 TTL은 RFC 1034, .invalid와 localhost는 RFC 6761, HTML이 자원을 가져오는 것은 HTML 명세, JVM의 DNS 캐시는 자바 네트워킹 문서. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '`URI`로 코드 url을 쪼개면 스킴 https, 호스트 shop.example.com, 포트 -1, 경로 /products/7, 쿼리 tab=review다'
     how: 'URI.create로 쪼갠다'
+    test: UrlToResponseTest.splitUrl
   - claim: '`InetAddress.getByName`은 localhost를 127.0.0.1로, 숫자 주소는 그대로 주고, `.invalid`로 끝나는 이름은 `UnknownHostException`을 던진다'
     how: '세 이름을 넣어 본다. `.invalid`는 RFC 6761이 결코 풀리지 않게 정한 이름이다'
+    test: UrlToResponseTest.resolveNames
   - claim: '소켓에 HTTP 요청을 글자 그대로 써서 보내면 스프링 서버가 상태 줄, 헤더, 본문으로 된 응답 글을 돌려준다'
     how: 'MiniWeb으로 컨트롤러를 띄우고 java.net.Socket으로 요청 글을 쓴다'
+    test: UrlToResponseTest.rawRequestOverSocket
   - claim: '같은 HttpClient로 요청을 두 번 보내면 서버가 본 클라이언트 포트가 같다(연결을 다시 씀)'
     how: '컨트롤러가 request.getRemotePort()를 돌려준다'
+    test: UrlToResponseTest.secondRequestReusesConnection
   - claim: '첫 요청이 두 번째 요청보다 오래 걸린다'
     how: '같은 HttpClient로 두 번 보내 시간을 잰다. 값은 기록만 하고 크기를 단정하지 않는다'
+    test: UrlToResponseTest.secondRequestReusesConnection
   - claim: '읽기 시간 제한 1초로 3초 걸리는 주소를 부르면 1초쯤에 시간 초과 예외가 난다'
     how: 'RestClient와 JdkClientHttpRequestFactory로 부른다'
-  - claim: '아무도 듣지 않는 포트로 연결하면 `ConnectException`(Connection refused)이 난다'
+    test: UrlToResponseTest.readTimeout
+  - claim: '없는 이름은 `UnknownHostException`, 아무도 듣지 않는 포트로 연결하면 `ConnectException`(Connection refused)이 난다'
     how: '서버를 띄웠다 닫은 포트로 연결한다'
+    test: UrlToResponseTest.connectionRefused
 sources:
   - 'URI의 구조: RFC 3986 https://www.rfc-editor.org/rfc/rfc3986.html'
   - 'http와 https의 기본 포트, Host 헤더: RFC 9110 https://www.rfc-editor.org/rfc/rfc9110.html'
