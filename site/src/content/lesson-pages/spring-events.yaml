@@ -1,0 +1,117 @@
+# 스프링 이벤트 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 스프링 이벤트
+unit: 스프링
+roadmap: S13
+type: 동작 확인
+prerequisites:
+  - {slug: tx-propagation, title: 트랜잭션 전파와 롤백 규칙}
+  - {slug: observer, title: 옵저버 패턴과 이벤트}
+assume: '자바 21, 스프링 부트 3.5, PostgreSQL 16. 알리는 쪽과 듣는 쪽을 떼어 놓는 옵저버 패턴과 `@EventListener`가 같은 스레드에서 돌고 예외가 `publishEvent`를 부른 쪽으로 올라간다는 것(옵저버 패턴과 이벤트 레슨). 합류와 롤백 전용, `REQUIRES_NEW`(트랜잭션 전파와 롤백 규칙 레슨).'
+example: '회원 가입 `MemberService.join`이 `MemberJoined` 이벤트를 내고, 환영 메일 발송과 가입 쿠폰 발급이 그 이벤트를 듣는다. 메일 서버가 실패할 때와 가입이 롤백될 때 무엇이 남는지 본다.'
+intro:
+  - '가입 서비스에 메일 발송, 쿠폰 발급, 추천인 포인트가 줄줄이 붙었어요. 메일 서버가 잠깐 멈추자 가입까지 실패해요. 반대로 가입이 롤백됐는데 환영 메일은 이미 나간 일도 생겨요.'
+  - '스프링 이벤트는 가입 서비스가 "가입했다"는 사실만 알리고, 후속 일은 각자 듣게 떼어 놓는 장치예요. 그런데 기본 `@EventListener`는 같은 트랜잭션, 같은 스레드에서 돌아서 떼어 놓은 것처럼 보여도 운명을 함께해요. 커밋된 뒤에만 실행하는 `@TransactionalEventListener`를 알아야 메일이 잘못 나가는 일을 막을 수 있어요.'
+  - '이 레슨에서는 리스너의 실행 시점과 스레드, 리스너 예외가 가입을 롤백시키는지, 커밋 뒤에 도는 리스너의 함정을 DB의 행으로 확인해요.'
+covers:
+  - topic: '`ApplicationEventPublisher.publishEvent`로 이벤트를 내고 `@EventListener`로 듣는다. 이벤트는 보통 record'
+    where: '질문 1'
+  - topic: '`@EventListener`는 기본으로 `publishEvent`를 부른 스레드에서, 그 자리에서 바로 돈다. 그래서 같은 트랜잭션에 합류한다'
+    where: '질문 1. 원리는 옵저버 패턴과 이벤트(O13)'
+  - topic: '리스너가 런타임 예외를 던지면 `publishEvent`를 부른 쪽으로 올라가 가입 트랜잭션이 롤백된다'
+    where: '질문 2'
+  - topic: '`@TransactionalEventListener`(기본 `AFTER_COMMIT`)는 트랜잭션이 커밋된 뒤에 돈다. 롤백되면 돌지 않는다'
+    where: '질문 2'
+  - topic: '`phase`: `BEFORE_COMMIT`, `AFTER_COMMIT`, `AFTER_ROLLBACK`, `AFTER_COMPLETION`'
+    where: '질문 2의 더 알아보기'
+  - topic: '`AFTER_COMMIT` 리스너에서 DB에 쓰려면 이미 끝난 트랜잭션이라 `REQUIRES_NEW`가 필요하다. 그냥 쓰면 반영되지 않는다'
+    where: '질문 3'
+  - topic: '`AFTER_COMMIT` 리스너의 예외는 이미 커밋된 가입을 되돌리지 못한다. 실패한 후속 일은 따로 다시 시도해야 한다'
+    where: '질문 3'
+  - topic: '리스너를 다른 스레드에서 돌리려면 `@Async`를 함께 붙인다'
+    where: '질문 3의 더 알아보기. @Async(S14)'
+  - topic: '트랜잭션 밖에서 낸 이벤트는 `@TransactionalEventListener`가 기본으로 듣지 않는다(`fallbackExecution`)'
+    where: '질문 2의 더 알아보기'
+  - topic: '서버가 죽으면 커밋 뒤 메모리의 이벤트가 사라진다. 꼭 전달해야 하면 트랜잭셔널 아웃박스'
+    where: '다루지 않음: 트랜잭셔널 아웃박스(심화). 실무에서는에 한 줄'
+  - topic: '서버 밖으로 이벤트를 보내기(메시지 큐)'
+    where: '다루지 않음: 메시지 큐(A8)'
+codes:
+  predict: |-
+    @Transactional
+    public void join(SignUp s) {
+      members.save(new Member(s.email()));
+      events.publishEvent(
+          new MemberJoined(s.email()));
+    }
+
+    @EventListener
+    void sendWelcome(MemberJoined e) {
+      mail.send(e.email());  // 예외
+    }
+  afterCommit: |-
+    @TransactionalEventListener
+    void sendWelcome(MemberJoined e) {
+      mail.send(e.email());
+    }
+predict:
+  text: '코드 predict에서 메일 발송이 런타임 예외를 던졌어요. 가입한 회원 행은 DB에 남을까요? 보기: 남는다, 남지 않는다, 회원은 남고 예외도 없다.'
+  answer: '남지 않는다. `@EventListener`는 같은 스레드에서 바로 돌고, 예외가 `publishEvent`를 거쳐 `join`의 프록시까지 올라가 롤백된다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 스프링 이벤트는 언제, 어느 스레드에서 리스너를 부르나요?
+    conclusion:
+      lead: '`publishEvent`를 부른 그 자리에서, 같은 스레드로 바로 불러요.'
+      sub: '그래서 리스너는 이벤트를 낸 트랜잭션 안에서 돌아요. 코드는 떼어 놓았지만 실행은 이어져 있어요.'
+    says:
+      - '이벤트 record, 내는 쪽, 듣는 쪽의 코드를 보인다'
+      - '`publishEvent` 앞뒤와 리스너 안에서 스레드 이름과 트랜잭션 여부, 순서를 기록해 실제 출력으로 보인다'
+      - '리스너가 둘이면 둘 다 그 자리에서 차례로 돈다. 순서는 `@Order`'
+    asks:
+      - '본문의 예시: `publishEvent` 바로 다음 줄의 로그와 리스너 안의 로그 가운데 무엇이 먼저 남나 (리스너. 그 자리에서 바로 돈다)'
+      - '옮긴 상황: `@Transactional` 주문 서비스가 이벤트를 내고 `@EventListener`가 재고를 줄인다. 재고 감소는 주문과 같은 트랜잭션인가 (그렇다. 같은 스레드에서 합류한다)'
+  - id: q2
+    title: 리스너가 실패하면 이벤트를 낸 쪽은 어떻게 되나요?
+    conclusion:
+      lead: '`@EventListener`의 예외는 이벤트를 낸 쪽으로 올라가 그 트랜잭션을 롤백시켜요.'
+      sub: '`@TransactionalEventListener`는 커밋된 뒤에만 돌아서, 가입이 롤백되면 메일이 나가지 않고 메일이 실패해도 가입은 남아요.'
+    says:
+      - '코드 predict를 돌린다. 회원 행이 없다. 예측의 답을 밝힌다'
+      - '코드 afterCommit으로 바꾸면 메일이 실패해도 회원은 남고, 가입이 롤백되면 리스너가 돌지 않는다. 두 경우를 DB의 행과 기록으로 보인다'
+      - '더 알아보기: `phase` 네 가지, 트랜잭션 밖에서 낸 이벤트와 `fallbackExecution`'
+    widget:
+      kind: compare
+      note: '두 칸은 "@EventListener"와 "@TransactionalEventListener". 버튼으로 "메일 실패", "가입 롤백"을 고른다. 칸마다 회원 행, 메일 발송, 호출한 쪽의 예외를 결과 줄에 보인다'
+    asks:
+      - '본문의 예시: 코드 afterCommit에서 메일이 예외를 던지면 회원 행은 남나 (남는다. 이미 커밋된 뒤다)'
+      - '옮긴 상황: 주문 서비스가 이벤트를 낸 뒤 결제 검증에서 런타임 예외로 롤백됐다. `@TransactionalEventListener`의 배송 요청 리스너는 도나 (돌지 않는다)'
+  - id: q3
+    title: 커밋 뒤에 도는 리스너에서는 무엇을 조심하나요?
+    conclusion:
+      lead: '이미 끝난 트랜잭션 뒤라서, DB에 쓰려면 `REQUIRES_NEW`로 새 트랜잭션을 열어야 하고, 실패해도 앞의 커밋은 되돌릴 수 없어요.'
+      sub: '그래서 커밋 뒤 리스너의 실패는 따로 기록하고 다시 시도할 방법을 둬요.'
+    says:
+      - '`AFTER_COMMIT` 리스너에서 쿠폰을 저장한다. `REQUIRES_NEW` 없이 쓰면 반영되지 않고, 붙이면 반영되는 것을 보인다(결과는 테스트로 확인해 적는다)'
+      - '리스너의 예외가 호출한 쪽으로 가는지, 가입은 남는지를 보인다'
+      - '더 알아보기: `@Async`를 붙이면 다른 스레드에서 돈다(S14)'
+    asks:
+      - '본문의 예시: `@TransactionalEventListener` 안에서 `REQUIRES_NEW` 없이 `coupons.save`를 하면 쿠폰이 DB에 남나 (테스트 결과로 정한다)'
+      - '옮긴 상황: 커밋 뒤 리스너에서 포인트 적립이 실패했다. 가입은 롤백되나 (되지 않는다. 이미 커밋됐다)'
+practice:
+  says:
+    - '실무 모양: 가입 서비스는 이벤트만 내고, 메일과 쿠폰은 `@TransactionalEventListener`. 쿠폰처럼 DB에 쓰는 리스너는 `REQUIRES_NEW`'
+    - '흔한 실수: `@EventListener`로 외부 메일을 보내 롤백된 가입에도 메일이 나간다. 고친 코드: `@TransactionalEventListener`'
+    - '메모리 이벤트는 서버가 죽으면 사라진다. 꼭 전달해야 하면 아웃박스 테이블에 같은 트랜잭션으로 적는다고 한 줄 적고 심화 레슨으로 넘긴다'
+claims:
+  - claim: '`@EventListener`는 `publishEvent`를 부른 스레드에서 그 자리에서 돌고 같은 트랜잭션에 있다'
+    how: '`@SpringBootTest`와 PostgreSQL 컨테이너. 스레드 이름, `isActualTransactionActive`, 기록 순서'
+  - claim: '`@EventListener`의 예외는 가입 트랜잭션을 롤백시킨다'
+    how: 'DB의 행'
+  - claim: '`@TransactionalEventListener`는 커밋 뒤에만 돌고, 롤백되면 돌지 않으며, 그 예외는 가입을 되돌리지 않는다'
+    how: 'DB의 행과 기록, 호출한 쪽이 받은 예외'
+  - claim: '`AFTER_COMMIT` 리스너에서 `REQUIRES_NEW` 없이 쓴 행과 붙여 쓴 행의 차이'
+    how: 'DB의 행. 결과대로 본문을 쓴다'
+sources:
+  - '애플리케이션 이벤트: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events'
+  - '트랜잭션에 묶인 이벤트: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html'
