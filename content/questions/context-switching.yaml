@@ -1,0 +1,221 @@
+# 컨텍스트 스위칭 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/context-switching.yaml의 says).
+# 시간에 관한 정답은 verification의 contextswitch/ContextSwitchingTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: context-switching
+  title: 컨텍스트 스위칭
+  unit: 운영체제와 동시성
+  order: 402
+concepts:
+  - key: core
+    name: 컨텍스트 스위칭
+coreQuestions:
+  - key: q1
+    text: "코어보다 스레드가 많으면 어떻게 모두 실행되나요?"
+  - key: q2
+    text: "컨텍스트 스위칭은 무엇을 바꾸고 언제 일어나나요?"
+  - key: q3
+    text: "컨텍스트 스위칭은 왜 비용이 드나요?"
+  - key: q4
+    text: "스레드를 늘리면 늘 빨라지나요?"
+questions:
+  # ── 질문 1 ──
+  - key: cs-cores-running
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 코어 2개인 기계에서 계산만 하는 스레드 8개를 띄웠어요. 한 순간에 실제로 코어에서 실행되는 스레드는 최대 몇 개일까요?
+    choices:
+      - 1개
+      - 2개
+      - 4개
+      - 8개
+    answer: "2"
+    explanation: |-
+      **2개예요.** 코어 하나는 한 순간에 스레드 하나만 실행해요.
+
+      - 나머지 6개는 차례를 기다리고, 스케줄러가 짧은 시간씩 번갈아 코어에 올려요
+      - 번갈아 진행하는 것이 동시성, 여러 코어에서 같은 순간에 실행하는 것이 병렬성이에요
+    source: https://docs.kernel.org/scheduler/sched-design-CFS.html
+  - key: cs-waiting-threads
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 코어 8개인 서버에 스레드가 200개 있고, 그 가운데 190개는 DB의 응답을 기다리는 중이에요. 지금 코어를 차지하려고 다투는 스레드는 대략 몇 개일까요?
+    choices:
+      - 200개
+      - 190개
+      - 10개 이하
+      - 8개만 존재한다
+    answer: "3"
+    explanation: |-
+      **10개 이하예요.** 응답을 기다리는 스레드는 차례를 받지 않아 CPU를 쓰지 않아요.
+
+      - 실행할 준비가 된 스레드만 코어를 두고 다퉈요
+      - 자바에서는 기다리는 스레드가 WAITING, TIMED_WAITING 같은 상태로 보여요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.State.html
+  # ── 질문 2 ──
+  - key: cs-resume-point
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 스레드 A가 실행 위치 PC=12에서 타임 슬라이스를 다 써서 코어에서 내려왔어요. 나중에 다시 코어에 올라오면 어디서부터 실행할까요?
+    choices:
+      - 메서드의 처음부터
+      - 저장해 둔 PC=12부터
+      - 다른 스레드가 멈춘 곳부터
+      - 스레드를 새로 만들어 처음부터
+    answer: "2"
+    explanation: |-
+      **저장해 둔 PC=12부터 이어서 실행해요.** 내려올 때 커널이 레지스터와 실행 위치(문맥)를 메모리에 저장하고, 올라올 때 불러와요.
+
+      - 이렇게 저장하고 불러오는 일이 컨텍스트 스위칭이에요
+    source: https://docs.kernel.org/scheduler/sched-design-CFS.html
+  - key: cs-sleep-switch
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"스레드가 타임 슬라이스를 남긴 채 Thread.sleep(1000)을 부르면, 남은 시간이 끝날 때까지 코어를 쥐고 있다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 기다리는 일(sleep, 입출력, 락)을 만나면 스레드는 남은 시간과 상관없이 코어를 내려놓고, 다른 스레드가 올라와요.
+
+      - 컨텍스트 스위칭은 타임 슬라이스가 끝날 때, 기다리는 일을 만날 때, 급한 스레드가 깨어날 때 일어나요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.State.html
+  # ── 질문 3 ──
+  - key: cs-ping-pong
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 두 스레드가 값을 하나씩 10만 번 주고받는 코드와, 한 스레드가 같은 덧셈을 10만 번 하는 코드가 있어요. 어느 쪽이 더 오래 걸릴까요?
+    choices:
+      - 주고받는 쪽
+      - 한 스레드 쪽
+      - 같다
+      - 코어 수에 따라 반대가 된다
+    answer: "1"
+    explanation: |-
+      **주고받는 쪽이 훨씬 오래 걸려요.** 값을 넘길 때마다 기다리던 쪽이 깨어나야 해서 컨텍스트 스위칭이 생겨요.
+
+      - 테스트에서 주고받기 한 번에 마이크로초 단위가 걸렸고, 한 스레드의 10만 번은 몇 밀리초였어요
+      - 검증: ContextSwitchingTest.pingPongCostsMore
+    source: https://docs.kernel.org/scheduler/sched-design-CFS.html
+  - key: cs-tiny-handoff
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 로그를 한 줄 쓸 때마다 다른 스레드에 넘기고, 그 스레드가 다 쓸 때까지 기다리는 코드가 있어요. 로그 한 줄을 쓰는 일은 아주 짧아요. 이 코드에서 시간을 가장 많이 차지하는 것은?
+    choices:
+      - 로그를 쓰는 일 자체
+      - 스레드를 바꾸고 다시 깨우는 비용
+      - 가비지 컬렉션
+      - 디스크의 회전
+    answer: "2"
+    explanation: |-
+      **스레드를 바꾸고 깨우는 비용이에요.** 일이 짧을수록 전환 비용이 상대적으로 커져요.
+
+      - 바꾸는 동안에는 우리 코드가 실행되지 않고, 바꾼 뒤에는 CPU 캐시가 식어 한동안 느려요
+    source: https://docs.kernel.org/scheduler/sched-design-CFS.html
+  # ── 질문 4 ──
+  - key: cs-cpu-more-threads
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 코어 4개인 기계에서 계산만 하는 작업 8개를 스레드 4개짜리 풀과 64개짜리 풀로 각각 돌렸어요. 64개짜리 풀은 얼마나 빠를까요?
+    choices:
+      - 16배쯤 빠르다
+      - 2배쯤 빠르다
+      - 거의 같다
+      - 8배쯤 빠르다
+    answer: "3"
+    explanation: |-
+      **거의 같아요.** 한 순간에 실행되는 것은 코어 수만큼뿐이라, 스레드를 늘려도 번갈아 돌 뿐이에요.
+
+      - 오히려 전환 비용만큼 조금 느려질 수 있어요
+      - 검증: ContextSwitchingTest.cpuTasksDoNotScalePastCores
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runtime.html
+  - key: cs-io-more-threads
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 외부 API를 부르고 200ms 기다리는 작업 100개를 처리해요. 외부 API는 동시 호출을 막지 않아요. 스레드 10개 풀과 100개 풀 가운데 어느 쪽이 빨리 끝나고, 대략 얼마나 걸릴까요?
+    choices:
+      - 10개 풀, 0.2초쯤
+      - 100개 풀, 0.2초쯤
+      - 둘 다 2초쯤
+      - 100개 풀, 2초쯤
+    answer: "2"
+    explanation: |-
+      **100개 풀이 0.2초쯤에 끝나요.** 기다리는 스레드는 코어를 쓰지 않아서 100개가 함께 기다릴 수 있어요.
+
+      - 10개 풀은 한 번에 10개씩 열 번 기다려 2초쯤 걸려요
+      - 검증: ContextSwitchingTest.waitingTasksScaleWithThreads (같은 원리, 100ms 작업 16개)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.State.html
+  - key: cs-image-pool
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 코어 8개 서버에서 이미지 크기를 바꾸는 계산 작업을 아래 풀에 맡겨요. 이 설정의 문제로 맞는 것은?
+    code: |-
+      // 이미지 변환은 계산만 한다
+      var imagePool = Executors
+          .newFixedThreadPool(200);
+    choices:
+      - 문제없다. 스레드가 많을수록 빠르다
+      - 코어보다 훨씬 많아 빨라지지 않고 전환과 스택 메모리만 는다. 코어 수 정도로 둔다
+      - 200개는 너무 적다. 1000개로 늘린다
+      - 고정 풀이라 작업을 하나만 실행한다
+    answer: "2"
+    explanation: |-
+      **코어 수를 넘는 스레드는 계산을 빠르게 하지 않아요.** 한 순간에 8개만 실행되고 나머지는 번갈아 돌며 전환 비용과 메모리만 써요.
+
+      - 계산 중심 작업의 풀은 Runtime.getRuntime().availableProcessors()로 시작해요
+      - 톰캣이 200개를 두는 것은 요청 처리가 대개 기다리는 일이라서예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runtime.html
+  # ── 네 질문을 하나로 ──
+  - key: cs-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "컨텍스트 스위칭이 무엇이고 왜 비용이 드는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **코어가 실행하던 스레드의 문맥을 저장하고 다른 스레드의 것을 불러오는 일이고, 그동안 일을 못 하고 캐시가 식어서 비용이 들어요.**
+
+      - **번갈아 실행:** 코어 하나는 한 순간에 스레드 하나만 실행하고, 스케줄러가 짧은 시간씩 번갈아 올린다
+      - **언제:** 타임 슬라이스가 끝날 때, 입출력이나 락을 기다릴 때, 급한 스레드가 깨어날 때
+      - **비용:** 저장과 복원, 커널 진입의 직접 비용과 캐시가 식는 간접 비용. 프로세스 전환은 주소 공간까지 바꿔 더 비싸다
+      - **스레드 수:** 계산 중심은 코어 수 정도, 기다리는 일이 많으면 더 많이
+    checklist:
+      - 레지스터와 실행 위치를 저장하고 불러오는 일이라고 말했다
+      - 언제 일어나는지(타임 슬라이스, 기다림)를 말했다
+      - 직접 비용이나 캐시가 식는 간접 비용을 말했다
+      - 스레드 전환과 프로세스 전환의 차이를 말했다
+      - 계산 중심과 입출력 중심에서 스레드 수를 다르게 정한다고 말했다
+    source: https://docs.kernel.org/scheduler/sched-design-CFS.html
