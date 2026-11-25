@@ -60,9 +60,37 @@ class TestcontainersTest {
         return jdbc(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 
+    /**
+     * H2에 연결한다. H2는 테스트 클래스패스에 두지 않고(스프링 부트가 내장 DB로 자동 설정해 다른 레슨이 바뀐다)
+     * build.gradle이 넘긴 jar를 따로 읽는다.
+     */
     static JdbcTemplate h2(String name, String mode) {
         String url = "jdbc:h2:mem:" + name + ";DB_CLOSE_DELAY=-1" + (mode == null ? "" : ";MODE=" + mode);
-        return jdbc(url, "sa", "");
+        try {
+            java.sql.Driver driver = (java.sql.Driver) Class.forName("org.h2.Driver", true, h2Loader())
+                    .getDeclaredConstructor().newInstance();
+            java.util.Properties props = new java.util.Properties();
+            props.setProperty("user", "sa");
+            props.setProperty("password", "");
+            return new JdbcTemplate(new org.springframework.jdbc.datasource.SingleConnectionDataSource(
+                    driver.connect(url, props), true));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    static ClassLoader h2Loader;
+
+    static synchronized ClassLoader h2Loader() throws java.net.MalformedURLException {
+        if (h2Loader == null) {
+            String jar = System.getProperty("h2.jar");
+            if (jar == null) {
+                throw new IllegalStateException("h2.jar 시스템 프로퍼티가 없다. gradle test로 돌린다");
+            }
+            h2Loader = new java.net.URLClassLoader(new java.net.URL[] {java.nio.file.Path.of(jar).toUri().toURL()},
+                    ClassLoader.getPlatformClassLoader());
+        }
+        return h2Loader;
     }
 
     static final String UPSERT = """
