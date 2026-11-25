@@ -1,0 +1,136 @@
+# MVCC (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: MVCC
+unit: DB
+roadmap: D13
+type: 동작 확인
+prerequisites:
+  - {slug: isolation-level, title: 격리 수준과 이상 현상}
+assume: 'PostgreSQL 16. READ COMMITTED는 문장마다, REPEATABLE READ는 첫 문장 때의 스냅샷을 본다는 것(격리 수준 레슨). UPDATE가 행을 커밋까지 잠근다는 것(낙관적 락과 비관적 락 레슨).'
+example: '계좌 테이블 하나. A가 잔액을 고치는 동안 B가 읽고, 행의 숨은 열(`xmin`, `xmax`, `ctid`)로 한 행이 여러 버전으로 남는 것을 들여다봐요. 끝나지 않은 긴 트랜잭션이 옛 버전 청소를 막는 것도 봐요.'
+intro:
+  - '대량 UPDATE가 도는 동안에도 조회 API는 멀쩡히 응답해요. 쓰는 쪽이 행을 잠갔는데 읽는 쪽은 왜 기다리지 않을까요? 반대로 어느 날은 업데이트만 많은 작은 테이블이 몇 GB로 불어나 있어요. 누군가 몇 시간째 열어 둔 트랜잭션 하나 때문이었어요.'
+  - '두 장면 모두 MVCC(다중 버전 동시성 제어)에서 나와요. PostgreSQL과 MySQL InnoDB, 오라클이 모두 이 방식이라, 백엔드 개발자가 긴 트랜잭션을 왜 피해야 하는지, 읽기 전용 쿼리도 왜 오래 열어 두면 안 되는지 설명하는 바탕이 돼요.'
+  - '이 레슨에서는 PostgreSQL의 숨은 열과 통계로 행의 버전이 생기고 사라지는 것을 직접 보고, 긴 트랜잭션이 VACUUM을 막는 것을 재현해요.'
+covers:
+  - topic: 'MVCC는 행을 고칠 때 덮어쓰지 않고 새 버전을 만든다. 옛 버전은 아직 그것을 봐야 하는 트랜잭션을 위해 남는다'
+    where: '질문 1'
+  - topic: '그래서 읽기는 쓰기를 기다리지 않고, 쓰기는 읽기를 기다리지 않는다. 쓰기와 쓰기만 행 락으로 기다린다'
+    where: '질문 1'
+  - topic: 'PostgreSQL 행의 숨은 열: xmin(만든 트랜잭션), xmax(지운 트랜잭션), ctid(물리적 위치). UPDATE하면 ctid가 바뀐 새 행이 생긴다'
+    where: '질문 2'
+  - topic: '스냅샷은 "어느 트랜잭션까지 커밋된 것이 보이나"의 기록이다. 행 버전의 xmin, xmax와 스냅샷을 비교해 보일지 정한다'
+    where: '질문 2. 격리 수준과의 관계는 격리 수준과 이상 현상(D9)'
+  - topic: '옛 버전(죽은 행)은 VACUUM이 치운다. autovacuum이 자동으로 돈다'
+    where: '질문 3'
+  - topic: '오래 열린 트랜잭션이 있으면 그 스냅샷이 볼 수도 있는 옛 버전을 치우지 못해 테이블이 불어난다(bloat)'
+    where: '질문 3'
+  - topic: '읽기 전용이라도 트랜잭션을 오래 열어 두면 같은 문제다. idle in transaction 세션'
+    where: '질문 3과 실무에서는'
+  - topic: 'MVCC에서도 같은 행을 고치는 쓰기끼리는 기다리고, REPEATABLE READ에서는 40001이 된다'
+    where: '질문 4. 락은 낙관적 락과 비관적 락(D10)'
+  - topic: 'MySQL InnoDB는 옛 버전을 언두 로그에 두는 다른 구현이다. 원리는 같다'
+    where: '질문 1의 더 알아보기에 한 줄'
+  - topic: '트랜잭션 id가 한 바퀴 도는 것(wraparound)과 freeze'
+    where: '질문 3의 더 알아보기에 한 줄'
+  - topic: 'idle_in_transaction_session_timeout, 스프링에서 트랜잭션 안에서 외부 호출을 하지 않기'
+    where: '실무에서는'
+codes:
+  predict: |-
+    -- A: 아직 커밋 전
+    A: begin;
+    A: update account
+          set balance = 50
+        where owner = 'kim';
+
+    -- B: 잠금 없는 일반 SELECT
+    B: select balance from account
+        where owner = 'kim';
+  hidden: |-
+    select xmin, xmax, ctid, balance
+      from account
+     where owner = 'kim';
+predict:
+  text: '코드 predict에서 A가 kim의 행을 고치고 아직 커밋하지 않았어요. 행은 A가 잠갔어요. 이때 B의 일반 SELECT는 어떻게 될까요? 보기: A가 끝날 때까지 기다린다, 바로 100을 읽는다, 바로 50을 읽는다.'
+  answer: '바로 100을 읽는다. A가 만든 새 버전은 아직 커밋 전이라 B에게 보이지 않고, B는 옛 버전을 읽는다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 쓰는 중인 행을 읽는데 왜 기다리지 않나요?
+    conclusion:
+      lead: 'MVCC는 행을 고칠 때 덮어쓰지 않고 새 버전을 만들어서, 읽는 쪽은 자기에게 보이는 옛 버전을 기다림 없이 읽어요.'
+      sub: '그래서 읽기와 쓰기는 서로 기다리지 않아요. 같은 행을 고치는 쓰기끼리만 행 락으로 기다려요.'
+    says:
+      - '예측의 답을 밝힌다. A가 잠근 채로 B의 일반 SELECT가 바로 100을 돌려준다. 걸린 시간을 실제 출력으로 보인다'
+      - 'MVCC(다중 버전 동시성 제어)는 한 행의 여러 버전을 함께 두는 방식이다. UPDATE는 옛 버전에 "지워짐" 표시를 하고 새 버전을 만든다. 커밋되기 전의 새 버전은 다른 트랜잭션에게 보이지 않는다'
+      - '같은 순간 B가 `for update`로 읽거나 같은 행을 UPDATE하면 기다린다. 쓰기끼리는 행 락으로 차례를 지킨다'
+      - '읽을 때 공유 락을 거는 방식이었다면 쓰는 동안 읽기가 모두 멈췄을 것이다. 대량 UPDATE 중에도 조회가 도는 이유다'
+      - '더 알아보기: MySQL InnoDB는 옛 버전을 언두 로그에 두고, 읽을 때 거슬러 올라가 만든다. 구현은 달라도 원리는 같다'
+    asks:
+      - '본문의 예시: A가 kim의 행을 UPDATE하고 커밋하기 전에 B가 일반 SELECT로 읽으면 (기다리지 않고 옛 값 100을 읽는다)'
+      - '옮긴 상황: 배치가 주문 100만 행을 한 트랜잭션으로 고치는 중이다. 그 주문을 조회하는 API는 (기다리지 않고 배치 전 값을 읽는다. 같은 행을 고치려는 요청만 기다린다)'
+  - id: q2
+    title: 각 트랜잭션은 어떤 버전을 보나요?
+    conclusion:
+      lead: '행의 버전마다 만든 트랜잭션(xmin)과 지운 트랜잭션(xmax)이 적혀 있고, 내 스냅샷에서 "만든 쪽은 커밋됐고 지운 쪽은 아직 아닌" 버전이 보여요.'
+      sub: 'READ COMMITTED는 문장마다, REPEATABLE READ는 첫 문장 때 스냅샷을 찍어서 보이는 버전이 달라져요.'
+    says:
+      - '코드 hidden으로 숨은 열을 본다. UPDATE 전, UPDATE 후(커밋 전 A가 볼 때와 B가 볼 때), 커밋 후의 xmin, xmax, ctid를 표로 보인다. UPDATE마다 ctid가 바뀌어 새 행이 생긴 것을 보인다'
+      - '스냅샷은 "지금 진행 중인 트랜잭션 목록과 그 경계"다. `pg_current_snapshot()`으로 보인다. 버전의 xmin이 스냅샷에서 커밋된 것이고 xmax가 아직 커밋되지 않았으면 보인다(단순하게 줄인 규칙)'
+      - '격리 수준과 잇는다. READ COMMITTED는 문장마다 새 스냅샷이라 커밋된 새 버전이 다음 문장에서 보이고, REPEATABLE READ는 첫 스냅샷을 쓰니 옛 버전을 계속 본다(D9 질문 3, 4)'
+    widget:
+      kind: steps
+      note: '한 행의 버전들을 상자로 쌓는다. 단계마다 A의 UPDATE(새 버전, 옛 버전에 xmax), A의 커밋을 보이고, 오른쪽 duo에 READ COMMITTED의 B와 REPEATABLE READ의 C가 각각 어느 버전을 보는지 표시한다'
+    asks:
+      - '본문의 예시: kim의 행을 UPDATE한 뒤 `ctid`는 어떻게 되나 (바뀐다. 새 위치에 새 버전이 생겼다)'
+      - '옮긴 상황: REPEATABLE READ의 C가 첫 SELECT를 한 뒤, A가 같은 행을 세 번 고치고 커밋했다. C가 다시 읽으면 어느 버전인가 (C의 첫 스냅샷 때 커밋돼 있던 버전. 세 번의 수정 전 값)'
+  - id: q3
+    title: 옛 버전은 언제 사라지고, 긴 트랜잭션은 왜 문제인가요?
+    conclusion:
+      lead: '어떤 트랜잭션도 더는 볼 수 없게 된 옛 버전(죽은 행)을 VACUUM이 치워요.'
+      sub: '오래 열린 트랜잭션이 하나라도 있으면 그 스냅샷이 볼 수도 있는 옛 버전을 치우지 못해서, 업데이트가 많은 테이블이 계속 불어나요.'
+    says:
+      - '같은 행을 1000번 UPDATE한 뒤 `pg_stat_user_tables.n_dead_tup`으로 죽은 행 수를 보이고, `vacuum`으로 치운 뒤 다시 보인다'
+      - '다른 연결에서 REPEATABLE READ 트랜잭션을 열고 첫 SELECT만 한 채 둔다. 그동안 UPDATE를 1000번 하고 `vacuum verbose`를 돌리면 "dead row versions cannot be removed yet"과 남은 죽은 행 수가 나온다. 그 트랜잭션을 끝내면 치워진다. 실제 출력을 보인다'
+      - '테이블 크기(`pg_relation_size`)가 치우지 못하는 동안 커지는 것을 보인다. 이것을 bloat라고 한다'
+      - '읽기만 하는 트랜잭션이어도 같다. 트랜잭션을 연 채 아무것도 하지 않는 세션(idle in transaction)이 흔한 원인이다'
+      - 'autovacuum은 죽은 행이 쌓이면 자동으로 돈다. 그래도 긴 트랜잭션이 막으면 소용이 없다'
+      - '더 알아보기: 트랜잭션 id는 32비트라 한 바퀴 돈다. 오래된 행을 얼려(freeze) 대비하는데, 이것도 VACUUM의 일이다'
+    asks:
+      - '본문의 예시: REPEATABLE READ 트랜잭션 하나가 열린 채로 같은 행을 1000번 고친 뒤 VACUUM하면 죽은 행은 어떻게 되나 (대부분 치우지 못하고 남는다)'
+      - '옮긴 상황: 관리자 도구가 DB 연결을 열고 `begin` 뒤 SELECT 하나를 하고 점심을 먹으러 갔다. 그동안 주문 테이블에 생길 수 있는 일은 (UPDATE로 생긴 옛 버전을 VACUUM이 치우지 못해 테이블이 불어난다)'
+  - id: q4
+    title: MVCC에서도 기다리거나 실패하는 것은 무엇인가요?
+    conclusion:
+      lead: 'MVCC가 없애는 것은 읽기와 쓰기 사이의 기다림이고, 같은 행을 고치는 쓰기끼리는 여전히 행 락으로 기다려요.'
+      sub: '그리고 REPEATABLE READ에서는 내 스냅샷 뒤에 누가 고친 행을 내가 고치려 하면, 기다린 끝에 40001로 실패해요.'
+    says:
+      - 'A가 UPDATE한 행을 B도 UPDATE하면 B는 A의 커밋까지 기다린다. READ COMMITTED에서는 A의 새 버전을 다시 읽어 그 위에 고친다(D9 질문 5의 원자적 UPDATE)'
+      - 'REPEATABLE READ의 B는 자기 스냅샷의 옛 버전을 기준으로 고치려 했으므로, A가 커밋하면 40001이다. 새 버전 위에 덮어쓰면 A의 수정을 모르고 지우게 되기 때문이다(D9 질문 4의 이유를 MVCC로 다시 설명)'
+      - 'A가 롤백하면 B는 옛 버전 그대로 진행해 성공한다. 두 경우를 실제로 보인다'
+    asks:
+      - '본문의 예시: READ COMMITTED에서 A가 UPDATE하고 커밋 전에 B가 같은 행을 UPDATE하면 (A가 끝날 때까지 기다린다)'
+      - '옮긴 상황: REPEATABLE READ의 B가 기다리던 중 A가 롤백했다. B의 UPDATE는 (성공한다. 고칠 행의 최신 버전이 B가 본 그 버전이다)'
+practice:
+  says:
+    - '흔한 실수: `@Transactional` 메서드 안에서 외부 API를 부르거나 파일을 만든다. 그동안 트랜잭션이 열려 있어 VACUUM을 막고 행 락을 쥔다. 고친 코드: 외부 호출은 트랜잭션 밖으로 뺀다(스프링 문서 근거, 긴 트랜잭션이 VACUUM을 막는 것은 질문 3의 테스트)'
+    - '운영 설정: `idle_in_transaction_session_timeout`으로 트랜잭션을 연 채 놀고 있는 세션을 끊는다. 테스트로 설정한 시간 뒤 연결이 끊기는 것을 보인다'
+    - '찾는 법: `pg_stat_activity`에서 `state = ''idle in transaction''`이고 `xact_start`가 오래된 세션을 찾는 쿼리를 보인다'
+claims:
+  - claim: 'A가 UPDATE하고 커밋 전에 B의 일반 SELECT는 기다리지 않고 옛 값을 읽는다'
+    how: 'PostgreSQL 16 컨테이너에서 연결 두 개로 실행하고 걸린 시간을 본다'
+  - claim: 'UPDATE하면 ctid가 바뀌고 새 버전의 xmin이 A의 트랜잭션 id다'
+    how: '숨은 열과 `txid_current()`를 비교한다'
+  - claim: 'UPDATE 1000번 뒤 n_dead_tup이 늘고, VACUUM 뒤 줄어든다'
+    how: '`pg_stat_user_tables`. 통계 반영을 기다리기 위해 `pg_stat_force_next_flush()`를 부른다'
+  - claim: '열린 REPEATABLE READ 트랜잭션이 있으면 VACUUM이 죽은 행을 치우지 못하고, 끝내면 치운다'
+    how: '`vacuum verbose`의 메시지와 n_dead_tup을 본다'
+  - claim: 'REPEATABLE READ에서 남이 커밋한 행을 고치면 40001이고, 남이 롤백하면 성공한다'
+    how: '연결 두 개로 실행한다'
+  - claim: 'idle_in_transaction_session_timeout이 지나면 세션이 끊긴다'
+    how: '세션에 짧은 시간을 주고 기다린 뒤 다음 문장의 오류를 본다'
+sources:
+  - 'MVCC와 동시성 제어: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/mvcc-intro.html'
+  - '숨은 열: https://www.postgresql.org/docs/16/ddl-system-columns.html'
+  - 'VACUUM과 죽은 행: https://www.postgresql.org/docs/16/routine-vacuuming.html'
+  - 'idle_in_transaction_session_timeout: https://www.postgresql.org/docs/16/runtime-config-client.html'

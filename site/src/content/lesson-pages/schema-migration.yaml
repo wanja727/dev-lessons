@@ -1,0 +1,140 @@
+# 스키마 변경과 마이그레이션 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 스키마 변경과 마이그레이션
+unit: DB
+roadmap: D16
+type: 동작 확인
+prerequisites:
+  - {slug: tx-basics, title: 트랜잭션 기초}
+assume: 'PostgreSQL 16. 트랜잭션과 커밋(트랜잭션 기초 레슨). 인덱스(인덱스와 실행계획 레슨)와 행 락(낙관적 락과 비관적 락 레슨)을 알면 더 잘 읽혀요.'
+example: '회원 테이블에 `phone` 열을 더하고, 나중에 NOT NULL로 바꾸고, 이름을 `phone_number`로 바꾸는 일을 서비스를 멈추지 않고 해요. 그 사이 서버는 옛 버전과 새 버전이 함께 떠 있어요.'
+intro:
+  - '배포 시간에 `alter table member add column ...` 한 줄을 돌렸더니 사이트 전체가 몇십 초 멈췄어요. 그 테이블에 오래 걸리는 조회 하나가 돌고 있었는데, ALTER가 그 뒤에서 기다리고, 그 뒤의 모든 요청이 ALTER 뒤에서 기다렸어요.'
+  - '서비스가 커지면 테이블 구조를 바꾸는 일도 배포의 일부가 돼요. 스프링 백엔드는 대개 Flyway나 Liquibase로 변경 SQL을 버전별로 관리하고, 앱이 뜰 때 적용해요. 어떤 변경이 테이블을 잠그는지, 옛 앱과 새 앱이 함께 떠 있는 동안 무엇이 깨지는지 알아야 멈추지 않고 바꿀 수 있어요.'
+  - '이 레슨에서는 PostgreSQL에서 ALTER TABLE이 다른 요청을 막는 줄서기를 재현하고, 큰 테이블에도 안전한 방법(lock_timeout, NOT VALID, CONCURRENTLY, 나눠서 채우기)을 실제로 돌려 봐요.'
+covers:
+  - topic: '마이그레이션 도구(Flyway)는 V1__, V2__처럼 번호 붙은 SQL을 순서대로 한 번씩 적용하고, 적용한 기록을 테이블(flyway_schema_history)에 남긴다. 적용한 파일을 고치면 체크섬이 달라 실패한다'
+    where: '질문 1'
+  - topic: '스프링 부트는 Flyway 의존성이 있으면 앱이 뜰 때 마이그레이션을 적용한다. ddl-auto는 운영에서 쓰지 않는다'
+    where: '질문 1과 실무에서는'
+  - topic: 'ALTER TABLE은 대개 가장 강한 락(ACCESS EXCLUSIVE)을 잡는다. 앞에 긴 트랜잭션이 있으면 기다리고, 기다리는 동안 그 뒤의 모든 조회도 ALTER 뒤에 줄을 선다'
+    where: '질문 2'
+  - topic: 'DDL에 lock_timeout을 걸어 오래 기다리지 않고 실패한 뒤 다시 시도한다'
+    where: '질문 2'
+  - topic: 'PostgreSQL 11부터 상수 기본값을 가진 열 추가는 테이블을 다시 쓰지 않아 빠르다. 열의 타입을 바꾸는 것은 테이블을 다시 쓴다'
+    where: '질문 2의 더 알아보기'
+  - topic: '큰 테이블의 제약과 인덱스: CHECK와 외래 키는 NOT VALID로 만들고 VALIDATE로 나중에 확인한다. 인덱스는 CREATE INDEX CONCURRENTLY(트랜잭션 안에서 못 쓴다)'
+    where: '질문 3'
+  - topic: '새 열 채우기는 나눠서 한다(대량 DML D15)'
+    where: '질문 3'
+  - topic: '배포 중에는 옛 앱과 새 앱이 함께 돈다. 열 이름 바꾸기와 지우기는 늘리고(expand) 옮기고 줄이는(contract) 여러 번의 배포로 나눈다'
+    where: '질문 4. 무중단 배포는 CI/CD와 무중단 배포(T6)'
+  - topic: '되돌리기: 마이그레이션은 앞으로만 간다. 되돌리는 것도 새 마이그레이션으로 쓴다'
+    where: '질문 4'
+  - topic: 'Liquibase, 마이그레이션을 앱 시작이 아니라 배포 파이프라인에서 돌리기'
+    where: '실무에서는에 한 줄'
+codes:
+  predict: |-
+    -- 연결 1: 오래 걸리는 조회
+    begin;
+    select count(*) from member;
+    -- (아직 커밋하지 않음)
+
+    -- 연결 2: 열 추가
+    alter table member
+      add column phone text;
+
+    -- 연결 3: 평범한 조회
+    select * from member where id = 1;
+  flyway: |-
+    src/main/resources/db/migration/
+      V1__create_member.sql
+      V2__add_member_phone.sql
+predict:
+  text: '연결 1이 회원 테이블을 읽는 트랜잭션을 열어 둔 채예요. 연결 2가 열을 더하는 ALTER를 보내고, 그 뒤에 연결 3이 회원 한 명을 조회해요. 연결 3은 어떻게 될까요? 보기: 바로 결과가 나온다, 연결 1이 끝날 때까지 기다린다, 오류가 난다.'
+  answer: '연결 1이 끝날 때까지 기다린다. ALTER가 연결 1을 기다리며 줄 맨 앞에 서고, 연결 3의 조회는 ALTER 뒤에 줄을 선다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 마이그레이션 도구는 무엇을 해 주나요?
+    conclusion:
+      lead: '번호 붙은 변경 SQL을 순서대로 한 번씩 적용하고, 어디까지 적용했는지 DB에 기록해서 모든 환경의 스키마를 같은 순서로 맞춰요.'
+      sub: '이미 적용한 파일을 고치면 기록의 체크섬과 달라 실패해요. 바꿀 것이 있으면 새 번호의 파일을 더해요.'
+    says:
+      - '코드 flyway처럼 `V1__`, `V2__` 파일을 둔다. Flyway는 `flyway_schema_history` 테이블에 적용한 버전, 설명, 체크섬, 성공 여부를 남기고, 다음 실행에서 아직 적용하지 않은 번호만 적용한다'
+      - '이미 적용한 V2를 고치면 체크섬이 달라 검증에서 실패한다. 개발자 PC, 테스트 DB, 운영 DB가 모두 같은 순서의 변경을 거치게 하는 장치다'
+      - '스프링 부트는 Flyway 의존성이 있으면 앱이 뜰 때 적용한다. `spring.jpa.hibernate.ddl-auto=update`로 하이버네이트가 테이블을 고치게 두지 않는다. 무엇이 바뀌는지 기록도 되돌릴 길도 없다'
+      - 'Flyway는 이 저장소의 검증 프로젝트에 의존성이 없어서 문서를 근거로 보이고, 같은 생각(버전 기록 테이블)을 SQL로 흉내 낸 테스트를 둔다'
+    asks:
+      - '본문의 예시: 운영에 이미 적용된 `V2__add_member_phone.sql`의 열 타입을 고쳐 다시 배포하면 (체크섬이 달라 마이그레이션 검증이 실패한다. V3 파일로 고친다)'
+      - '옮긴 상황: 개발자 셋이 각자 PC의 DB에 손으로 ALTER를 돌려 왔다. 생기는 문제와 고침은 (환경마다 스키마가 달라진다. 변경을 번호 붙은 마이그레이션 파일로만 한다)'
+  - id: q2
+    title: 테이블을 고치면 왜 서비스가 멈추나요?
+    conclusion:
+      lead: 'ALTER TABLE은 대개 그 테이블의 가장 강한 락을 잡아야 해서, 앞의 트랜잭션이 끝날 때까지 기다리고, 그동안 뒤에 오는 모든 조회가 ALTER 뒤에 줄을 서요.'
+      sub: '열 추가 자체는 빨라도, 줄서기 때문에 멈춰요. 그래서 DDL에는 lock_timeout을 걸어 짧게 기다리다 물러나고 다시 시도해요.'
+    says:
+      - '예측의 답을 밝힌다. 연결 1이 열린 채면 ALTER가 기다리고, 연결 3의 평범한 조회도 기다린다. 연결 1을 커밋하면 ALTER가 끝나고 연결 3이 결과를 받는다. 각 연결이 기다린 시간을 보인다'
+      - '`pg_locks`로 ALTER가 `AccessExclusiveLock`을 기다리는 것과, 연결 3이 `AccessShareLock`을 기다리는 것을 보인다. 락은 들어온 순서로 줄을 서서, 약한 락도 앞에서 기다리는 강한 락을 앞지르지 못한다'
+      - '`set lock_timeout = ''2s''` 뒤에 ALTER를 보내면 2초 뒤 55P03으로 실패하고, 그동안 막혔던 조회는 풀린다. 마이그레이션은 실패해도 다시 돌리면 되지만, 서비스 전체가 멈추는 것은 되돌릴 수 없다'
+      - '더 알아보기: PostgreSQL 11부터 `add column ... default 0`처럼 상수 기본값을 가진 열 추가는 테이블을 다시 쓰지 않아 바로 끝난다. 열의 타입을 바꾸면 테이블 전체를 다시 써서 그동안 락을 쥔다. 테이블의 파일 번호(relfilenode)가 바뀌는지로 보인다'
+    widget:
+      kind: timeline
+      note: '연결 1과 DB 사이가 아니라, 줄을 선 연결들을 차례로 쌓는다. 연결 1의 조회(락 쥠), 연결 2의 ALTER(기다림), 연결 3의 조회(ALTER 뒤에서 기다림), 연결 1의 커밋 뒤 차례로 풀리는 것. lanes는 [앞 트랜잭션, 뒤에 온 요청]'
+    asks:
+      - '본문의 예시: 긴 조회 트랜잭션이 열린 테이블에 ALTER를 보냈다. 그 뒤에 온 평범한 SELECT는 (ALTER 뒤에 줄을 서서 기다린다)'
+      - '옮긴 상황: 마이그레이션 SQL 맨 위에 `set lock_timeout = ''3s''`를 두었다. 배치가 그 테이블을 10분째 읽고 있으면 (ALTER가 3초 뒤 실패하고 서비스는 멈추지 않는다. 나중에 다시 돌린다)'
+  - id: q3
+    title: 큰 테이블에 제약과 인덱스는 어떻게 더하나요?
+    conclusion:
+      lead: '확인과 생성을 나눠요. 제약은 NOT VALID로 먼저 걸고 VALIDATE로 나중에 확인하고, 인덱스는 CONCURRENTLY로 쓰기를 막지 않고 만들어요.'
+      sub: '새 열을 채우는 것도 한 UPDATE로 하지 않고 나눠서 해요.'
+    says:
+      - '`alter table member add constraint phone_not_blank check (phone <> '''') not valid`는 기존 행을 검사하지 않아 바로 끝나고, 새로 들어오는 행부터 검사한다. `validate constraint`는 기존 행을 검사하지만 쓰기를 막지 않는 약한 락을 쓴다. 두 단계를 보이고, NOT VALID 상태에서 새 위반 행이 막히는 것을 보인다'
+      - '`create index concurrently`는 쓰기를 막지 않고 인덱스를 만든다. 대신 더 오래 걸리고, 트랜잭션 블록 안에서는 쓸 수 없다(오류를 보인다). Flyway에서는 그 마이그레이션만 트랜잭션 없이 돌리게 설정한다'
+      - '새 열의 값 채우기는 대량 DML(D15)처럼 id 범위로 나눠 커밋한다. NOT NULL은 다 채운 뒤에 건다'
+    asks:
+      - '본문의 예시: `create index concurrently`를 `begin`과 `commit` 사이에서 실행하면 (오류가 난다. 트랜잭션 블록 안에서 쓸 수 없다)'
+      - '옮긴 상황: 주문 5천만 건 테이블에 `check (amount >= 0)`를 걸어야 한다. 서비스를 멈추지 않는 순서는 (NOT VALID로 걸고, 나중에 VALIDATE CONSTRAINT)'
+  - id: q4
+    title: 열 이름을 바꾸거나 지울 때는 어떻게 하나요?
+    conclusion:
+      lead: '배포하는 동안 옛 앱과 새 앱이 함께 돌아서, 한 번에 바꾸면 옛 앱이 깨져요. 늘리고, 옮기고, 줄이는 여러 번의 배포로 나눠요.'
+      sub: '이름 바꾸기는 새 열 더하기 → 두 열에 함께 쓰기 → 옛 데이터 옮기기 → 새 열만 읽기 → 옛 열 지우기 순서예요.'
+    says:
+      - '무중단 배포는 서버를 하나씩 바꾼다(T6). 그동안 옛 버전 서버가 `phone`을 읽는데 마이그레이션이 이름을 `phone_number`로 바꿨다면 옛 서버의 쿼리는 42703 오류다. 테스트로 오류를 보인다'
+      - '늘리고 줄이기(expand and contract): 1 `phone_number` 열 더하기(옛 앱은 모름) 2 새 앱이 두 열에 함께 쓰기 3 옛 행을 나눠서 옮기기 4 새 앱이 새 열만 읽기 5 옛 앱이 모두 사라진 뒤 `phone` 지우기. 각 단계가 배포 하나다'
+      - '열 지우기도 같다. 먼저 앱이 그 열을 안 쓰게 배포하고, 다음 배포에서 지운다. JPA 엔티티에 남은 필드가 있으면 INSERT가 그 열을 넣으려다 실패한다'
+      - '마이그레이션은 앞으로만 간다. 되돌리는 것도 새 번호의 마이그레이션으로 쓴다. 지운 열의 데이터는 되돌릴 수 없으니 지우는 단계는 가장 늦게 한다'
+    widget:
+      kind: steps
+      note: '열 이름 바꾸기의 다섯 단계를 한 단계씩. 단계마다 테이블의 열(phone, phone_number)과, 그때 떠 있는 옛 앱과 새 앱이 읽고 쓰는 열을 duo로 보인다. 어느 단계에서도 떠 있는 앱이 없는 열을 읽지 않는 것을 강조한다'
+    asks:
+      - '본문의 예시: 서버 4대를 하나씩 바꾸는 배포에서 첫 배포에 `rename column phone to phone_number`를 넣었다. 아직 안 바뀐 서버 3대의 회원 조회는 (없는 열 phone을 읽어 42703 오류가 난다)'
+      - '옮긴 상황: 더는 쓰지 않는 `nickname` 열을 지우려 한다. 안전한 순서는 (먼저 앱이 nickname을 읽고 쓰지 않게 배포하고, 모든 서버가 바뀐 뒤 다음 배포에서 열을 지운다)'
+practice:
+  says:
+    - '스프링 부트에 Flyway를 쓰는 설정: `org.flywaydb:flyway-core`와 `flyway-database-postgresql` 의존성, `src/main/resources/db/migration`의 파일, `spring.jpa.hibernate.ddl-auto=validate`. 엔티티와 테이블이 어긋나면 앱이 뜨지 않게 한다(스프링 부트, Flyway 문서 근거)'
+    - '흔한 실수: 운영에서 `ddl-auto=update`를 켠다. 열은 더해 주지만 지우거나 이름을 바꾸지 못하고, 락과 순서를 통제할 수 없고, 기록도 남지 않는다. 고친 것: Flyway와 `validate`'
+    - '흔한 실수 둘: 열 추가와 함께 기존 행을 채우는 UPDATE를 같은 마이그레이션 파일에 넣는다. 한 트랜잭션으로 돌아 질문 2와 대량 DML의 문제가 함께 온다. 고친 것: 열 추가와 채우기를 나누고, 채우기는 나눠서'
+    - '마이그레이션을 앱이 뜰 때가 아니라 배포 파이프라인의 한 단계로 따로 돌리는 팀도 많다. 서버 여러 대가 동시에 뜨며 같은 마이그레이션을 돌리려 하지 않게 하려는 것이다(Flyway는 DB 락으로 한 대만 돌게 막는다)'
+claims:
+  - claim: '열린 조회 트랜잭션 뒤에서 ALTER가 기다리고, 그 뒤의 평범한 SELECT도 기다린다. 앞 트랜잭션이 끝나면 차례로 풀린다'
+    how: 'PostgreSQL 16 컨테이너에서 연결 셋으로 실행하고 기다린 시간과 `pg_locks`를 본다'
+  - claim: 'lock_timeout을 건 ALTER는 그 시간 뒤 55P03으로 실패하고, 막혔던 SELECT가 풀린다'
+    how: '같은 방법'
+  - claim: '상수 기본값의 열 추가는 relfilenode가 그대로이고, 타입 변경은 바뀐다'
+    how: '`pg_class.relfilenode`를 전후로 비교한다'
+  - claim: 'NOT VALID 제약은 기존 위반 행이 있어도 걸리고 새 위반 행은 막는다. VALIDATE는 기존 위반 행이 있으면 실패한다'
+    how: '위반 행을 넣고 순서대로 실행한다'
+  - claim: 'create index concurrently는 트랜잭션 블록 안에서 25001 오류다'
+    how: '`autoCommit(false)` 연결에서 실행한다'
+  - claim: '열 이름을 바꾸면 옛 이름을 쓰는 쿼리는 42703 오류다'
+    how: 'rename 뒤 옛 쿼리를 실행한다'
+  - claim: '버전 기록 테이블로 아직 적용하지 않은 마이그레이션만 적용하는 흉내를 낸다'
+    how: '작은 마이그레이션 실행기를 테스트 안에 만들어 두 번 돌린다. Flyway 자체는 문서 근거'
+sources:
+  - 'ALTER TABLE과 락: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/sql-altertable.html, https://www.postgresql.org/docs/16/explicit-locking.html'
+  - 'CREATE INDEX CONCURRENTLY: https://www.postgresql.org/docs/16/sql-createindex.html'
+  - 'Flyway: https://documentation.red-gate.com/fd/migrations-184127470.html'
+  - '스프링 부트의 Flyway: https://docs.spring.io/spring-boot/how-to/data-initialization.html'
