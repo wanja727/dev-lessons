@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/proxy-decorator.yaml의 says).
 # 동작에 관한 정답은 verification의 ProxyDecoratorTest로 확인했다 (자바 21, 스프링 프레임워크 6.2).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CachingPriceService는 PriceService를 구현하고, 진짜 PriceService를 필드로 가져요. 캐시에 없는 상품만 진짜에게 넘겨요. id를 1, 2, 1, 3, 2 순서로 물으면 진짜 API는 몇 번 불릴까요?
     choices:
@@ -46,7 +47,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: MemberService는 생성자로 MemberRepository(인터페이스)를 받아요. findById 결과를 로그로 남기려고 MemberRepository를 구현하고 진짜 리포지토리를 감싸는 LoggingMemberRepository를 만들었어요. MemberService를 고쳐야 할까요?
     choices:
@@ -63,7 +64,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: TimingPriceService는 PriceService를 구현하고, 늘 진짜에게 넘긴 뒤 걸린 시간을 찍어요. 이것으로 감싸고 같은 상품을 세 번 물으면 진짜 API는 몇 번 불릴까요? 그리고 이 클래스는 무엇에 가까울까요?
     choices:
@@ -80,7 +81,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 관리자가 아니면 delete를 막고 예외를 던지는 감싸는 클래스를 만들었어요. 프록시와 데코레이터 가운데 어느 의도에 가까울까요?
     choices:
@@ -97,7 +98,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 캐시가 바깥, 시간 재기가 안쪽이에요. 같은 상품 price(1)을 다섯 번 물으면 시간 로그는 몇 번 찍힐까요?
     code: |-
@@ -117,7 +118,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 권한 확인 프록시(권한이 없으면 예외)와 로그 데코레이터(들어온 호출을 기록)를 겹쳐요. 권한이 없어 막힌 호출도 로그에 남기려면 무엇을 바깥에 둬야 할까요?
     choices:
@@ -134,7 +135,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Proxy.newProxyInstance로 PriceService의 프록시를 만들고, 핸들러는 메서드 이름을 기록한 뒤 method.invoke(api, args)로 넘겨요. proxy.price(1)을 두 번 부르면 핸들러가 받은 호출은 몇 번일까요?
     choices:
@@ -151,7 +152,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"동적 프록시로 감싼 OrderService의 placeOrder()가 안에서 this.validate()를 부르면, 핸들러는 placeOrder와 validate 두 호출을 받는다\""
     answer: X
@@ -161,7 +162,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 빈 OrderService의 placeAll()(@Transactional 없음)이 for 문에서 같은 클래스의 @Transactional 메서드 place()를 this로 불러요. 컨트롤러가 placeAll()을 부르면 place()에 트랜잭션이 걸릴까요?
     choices:
@@ -179,7 +180,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "프록시 패턴과 데코레이터 패턴을 설명하고, 스프링 AOP와 어떻게 이어지는지 말해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

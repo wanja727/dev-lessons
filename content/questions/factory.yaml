@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/factory.yaml의 says).
 # 동작에 관한 정답은 verification의 FactoryTest로 확인했다 (자바 21, 스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 두 줄은 각각 무엇을 찍을까요?
     code: |-
@@ -56,7 +57,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Boolean.valueOf("true")를 두 번 불러 ==로 비교하면 결과는 무엇이고, 그 이유는 무엇일까요?
     choices:
@@ -73,7 +74,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: Order의 생성자는 private이고, 밖에는 static Order create(...)만 열려 있어요. 다른 클래스에서 아래 코드를 쓰면 어떻게 될까요?
     code: |-
@@ -92,7 +93,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 정적 팩토리 메서드의 관례 이름 가운데, 다른 타입의 값 하나를 받아 이 타입으로 바꿀 때 쓰는 것은 무엇일까요? (예 Money.???("1,000원"))
     choices:
@@ -110,7 +111,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래에서 new SmsAlertService().alert("010", "배송 시작")을 부르면 어느 Notifier가 쓰일까요?
     code: |-
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Editor.open()이 createDocument()를 불러 문서를 만들고, PdfEditor와 WordEditor가 createDocument()를 각각 오버라이드해요. 이것은 무엇일까요?
     choices:
@@ -158,7 +159,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 알림을 보내는 서비스 일곱 곳이 NotifierFactory.of(Channel.SMS)로 알림 객체를 얻어요. 문자 업체를 바꿀 때 일곱 서비스 가운데 고칠 파일은 몇 개일까요?
     choices:
@@ -174,7 +175,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 여러 서비스가 각자 new TossClient(key)로 결제 클라이언트를 만들어요. 결제사의 키를 받는 방법이 바뀌면 어디를 고쳐야 할까요? 만드는 코드를 팩토리 하나로 모았다면 어디를 고칠까요?
     choices:
@@ -188,7 +189,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: findName(id)가 이름이 없으면 null을 돌려줘요. 이름이 없는 id로 아래 코드를 실행하면 어떻게 될까요?
     code: |-
@@ -209,7 +210,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "생성자 대신 정적 팩토리 메서드를 쓰는 이유와, 팩토리 메서드 패턴이 무엇인지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
