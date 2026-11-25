@@ -300,6 +300,7 @@ questions:
       - widget:
           kind: steps
           layout: [selector, buttons, log, verdict]
+          initial: {}
           selector:
             label: 경우
             options:

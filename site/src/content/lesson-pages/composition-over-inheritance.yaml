@@ -181,7 +181,8 @@ codes:
       }
     }
   deque: |-
-    Deque<String> deque = new ArrayDeque<>();
+    Deque<String> deque =
+        new ArrayDeque<>();
     deque.push("A");
     deque.push("B");
     deque.pop();
