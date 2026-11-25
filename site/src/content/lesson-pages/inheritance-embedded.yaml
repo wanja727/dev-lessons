@@ -1,8 +1,9 @@
-# 상속 매핑과 값 타입 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 상속 매핑과 값 타입
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/inheritance-embedded.yaml에 있다.
 title: 상속 매핑과 값 타입
+description: 상속을 테이블로 옮기는 방법은 무엇이 있는지, 부모 타입으로 조회하면 SQL이 어떻게 다른지, 값 타입은 무엇이고 테이블은 어떻게 되는지, 값 타입은 왜 불변으로 만드는지. 네 가지 질문에 스스로 답할 수 있게, 결제 수단과 회원 주소를 매핑해 보는 대화형 레슨.
 unit: JPA
+minutes: 20
 roadmap: P10
 type: 동작 확인
 prerequisites:
@@ -34,7 +35,55 @@ covers:
     where: '질문 4'
   - topic: '값 타입 컬렉션(`@ElementCollection`)은 바뀔 때 전부 지우고 다시 넣는다. 그래서 엔티티로 바꾸는 편이 낫다'
     where: '질문 4의 더 알아보기'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/inheritance/InheritanceEmbeddedTest.java
+  spec: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  hibernate: https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-inheritance
 codes:
+  joined: |-
+    @Entity
+    @Inheritance(strategy =
+        InheritanceType.[[JOINED]])
+    abstract class Payment { ... }
+  polyRun: |-
+    List<Payment> all = em.createQuery(
+        "select p from Payment p",
+        Payment.class).getResultList();
+  override: |-
+    @Embedded
+    @AttributeOverride(name = "city",
+        column = @Column(name = "work_city"))
+    // street, zipcode도 같은 방식
+    Address work;
+  mutable: |-
+    @Embeddable
+    public class Address {
+      private String city;
+      public void setCity(String city) {
+        this.city = city;
+      }
+    }
+  sharedRun: |-
+    Address addr = new Address("서울", ...);
+    em.persist(new Member("kim", addr));
+    em.persist(new Member("lee", addr));
+    em.flush();
+    kim.getHome().setCity("부산");
+  move: |-
+    public void moveHome(Address home) {
+      this.home = home;
+    }
+
+    kim.moveHome(new Address(
+        "부산", "중앙대로 1", "48058"));
+  base: |-
+    @MappedSuperclass
+    public abstract class BaseTimeEntity {
+      @CreationTimestamp
+      private LocalDateTime createdAt;
+      @UpdateTimestamp
+      private LocalDateTime updatedAt;
+    }
   predict: |-
     @Entity
     @Inheritance(strategy =
@@ -66,8 +115,17 @@ codes:
       @Embedded Address home;
     }
 predict:
-  text: '코드 predict는 결제 수단을 SINGLE_TABLE로 매핑해요. 만들어지는 테이블은 몇 개일까요? 보기: 1개, 2개, 3개.'
-  answer: '1개. 부모와 자식의 필드가 모두 payment 테이블 하나에 들어가고 dtype 컬럼이 종류를 나눈다. 질문 1에서 밝힌다.'
+  title: 테이블은 몇 개 만들어질까요?
+  text: '결제 수단 `Payment`를 카드와 계좌 이체가 상속하고, `@Inheritance(strategy = SINGLE_TABLE)`로 매핑했어요. 엔티티 클래스는 셋이에요. 만들어지는 테이블은 몇 개일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '1', label: 1개}
+    - {value: '2', label: 2개}
+    - {value: '3', label: 3개}
+  answer: '1'
+  storageKey: inherit-predict
+  wrong: 예측은 "{label}"였어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 상속을 테이블로 옮기는 방법은 무엇이 있나요?
@@ -85,6 +143,36 @@ questions:
     asks:
       - '본문의 예시: JOINED로 매핑한 결제 수단에서 카드 결제 하나를 저장하면 INSERT는 몇 번인가 (2번. payment와 card_payment)'
       - '옮긴 상황: 상품(`Item`)을 책, 음반, 영화가 상속하고 SINGLE_TABLE이다. 책 행의 `artist` 컬럼에는 무엇이 들어가나 (NULL)'
+    body:
+      - p: '자바에서는 카드 결제와 계좌 이체가 결제 수단을 상속해요. 그런데 테이블에는 상속이 없어요. JPA는 상속을 테이블로 옮기는 방법 셋을 줘요. 같은 세 클래스를 전략만 바꿔 매핑하고, 만들어진 테이블을 DB에서 읽었어요.'
+      - ci:
+          key: tables
+          label: 실제 테이블과 컬럼 보기
+          source: InheritanceEmbeddedTest.tablesPerStrategy
+      - p: '답은 **1개**예요. {{predict-result}}'
+      - table:
+          head: [전략, 테이블, 특징]
+          rows:
+            - ['**SINGLE_TABLE** (기본값)', '`st_payment` 하나', '모든 필드가 한 테이블에. `dtype` 컬럼이 어느 자식인지 나눈다']
+            - ['**JOINED**', '부모 하나, 자식마다 하나', '공통 필드는 부모 테이블, 자식만의 필드는 자식 테이블. 같은 id로 잇는다']
+            - ['**TABLE_PER_CLASS**', '자식마다 하나', '자식 테이블이 공통 필드를 각자 가진다']
+      - code: joined
+      - p: '카드 결제 하나를 저장할 때 나가는 INSERT도 달라요.'
+      - ci:
+          key: inserts
+          label: 실제 SQL 보기
+          source: InheritanceEmbeddedTest.insertsPerStrategy
+      - p: 'SINGLE_TABLE은 INSERT 1번이고 `dtype`에 `StCard`를 넣어요. 카드 행의 `bank_code`는 NULL이에요. 그래서 SINGLE_TABLE에서는 자식만의 컬럼에 NOT NULL을 걸 수 없어요. JOINED는 부모와 자식 테이블에 INSERT를 한 번씩, 2번 보내요.'
+      - quiz:
+          q: '상품(`Item`)을 책, 음반, 영화가 상속하고 SINGLE_TABLE로 매핑했어요. 책 행의 `artist`(음반만의 필드) 컬럼에는 무엇이 들어갈까요?'
+          options:
+            - 빈 문자열
+            - NULL
+            - 책의 저자
+          answer: 2
+          explain: 'SINGLE_TABLE은 모든 자식의 필드를 한 테이블에 두어서, 그 자식이 아닌 행에는 NULL이 들어가요.'
+      - next: '저장은 봤어요. 결제 목록처럼 종류를 섞어 조회하면 어떨까요?'
+    recall: '한 테이블에 모두 담기(SINGLE_TABLE), 부모와 자식을 나눠 같은 id로 잇기(JOINED), 자식마다 따로 두기(TABLE_PER_CLASS)가 있어요. `@Inheritance(strategy = ...)`로 고르고 기본값은 SINGLE_TABLE이에요. SINGLE_TABLE은 `dtype` 컬럼으로 종류를 나누고 자식만의 컬럼은 NULL을 허용해야 해요. JOINED는 저장할 때 INSERT가 두 번이에요.'
   - id: q2
     title: 부모 타입으로 조회하면 SQL은 어떻게 다른가요?
     conclusion:
@@ -97,6 +185,33 @@ questions:
     asks:
       - '본문의 예시: TABLE_PER_CLASS에서 `select p from Payment p`를 실행하면 SQL에 무엇이 나오나 (UNION)'
       - '옮긴 상황: 자식 종류가 3개이고 자식만의 컬럼은 하나씩이다. 결제 목록 화면은 종류를 섞어 보인다. 어느 전략을 고르나 (SINGLE_TABLE. 테이블 하나로 읽는다)'
+    body:
+      - p: '부모 타입으로 모든 결제 수단을 조회했어요. 세 전략에서 Hibernate가 만든 SQL이에요.'
+      - ci:
+          key: query
+          label: 실제 SQL 보기
+          source: InheritanceEmbeddedTest.polymorphicQuery
+          code: polyRun
+      - ul:
+          - '**SINGLE_TABLE:** 테이블 하나를 읽어요. 가장 단순하고 빨라요'
+          - '**JOINED:** 부모 테이블에 자식 테이블을 모두 LEFT JOIN해요. 자식 종류가 늘수록 조인이 늘어요'
+          - '**TABLE_PER_CLASS:** 자식 테이블을 모두 UNION으로 합쳐 읽어요. 자식마다 테이블 전체를 읽고, 모든 자식 테이블에 걸친 id를 따로 관리해야 해요'
+      - p: '그래서 고르는 기준은 이래요. 기본은 **SINGLE_TABLE**이에요. 자식만의 컬럼이 많아 NULL이 넘치거나, 자식 컬럼의 NOT NULL 제약이 중요하면 **JOINED**를 써요. **TABLE_PER_CLASS**는 부모 타입 조회가 무거워서 쓰지 않아요.'
+      - more:
+          summary: '더 알아보기: 필드만 물려주는 @MappedSuperclass'
+          body:
+            - code: base
+            - p: '모든 엔티티에 들어가는 생성 시각, 수정 시각 같은 필드만 물려주고 싶을 때는 상속 매핑이 아니라 `@MappedSuperclass`를 써요. 부모는 엔티티가 아니어서 테이블이 없고, 필드가 자식 테이블마다 들어가요. 그래서 `select b from BaseTimeEntity b`처럼 부모 타입으로 조회할 수는 없어요.'
+      - quiz:
+          q: 'TABLE_PER_CLASS로 매핑한 결제 수단에서 `select p from Payment p`를 실행하면 SQL에 무엇이 나올까요?'
+          options:
+            - 테이블 하나
+            - LEFT JOIN
+            - UNION
+          answer: 3
+          explain: '자식마다 테이블이 따로라서, 부모 타입으로 조회하면 자식 테이블을 모두 UNION으로 합쳐요.'
+      - next: '상속은 엔티티끼리의 관계였어요. 엔티티 안의 필드 몇 개를 한 덩어리로 묶고 싶을 때는 어떻게 할까요?'
+    recall: 'SINGLE_TABLE은 테이블 하나를 읽고, JOINED는 부모에 자식 테이블을 LEFT JOIN하고, TABLE_PER_CLASS는 자식 테이블을 모두 UNION으로 읽어요. 그래서 기본은 SINGLE_TABLE, 자식 컬럼이 많고 NOT NULL 제약이 중요하면 JOINED를 쓰고, TABLE_PER_CLASS는 쓰지 않아요.'
   - id: q3
     title: 값 타입(@Embeddable)은 무엇이고 테이블은 어떻게 되나요?
     conclusion:
@@ -109,6 +224,27 @@ questions:
     asks:
       - '본문의 예시: `Member`에 `@Embedded Address home`이 있다. 만들어지는 테이블은 몇 개인가 (1개. member)'
       - '옮긴 상황: 주문에 `@Embedded Money price`(amount, currency)를 두었다. 주문 테이블의 컬럼에 무엇이 더해지나 (amount, currency)'
+    body:
+      - p: '회원의 주소는 도시, 거리, 우편번호가 한 덩어리예요. 따로 흩어 두면 "주소가 같은가"를 비교하거나 주소를 검증하는 코드가 여기저기 생겨요. 이렇게 여러 필드를 묶은 값을 **값 타입**이라고 해요. 자기 id가 없고, 그 값을 가진 엔티티의 일부예요.'
+      - code: address
+      - p: '`@Embeddable`로 값 타입을 정의하고, 엔티티에서 `@Embedded`로 써요. 테이블은 어떻게 될까요?'
+      - ci:
+          key: embedded
+          label: 실제 컬럼 보기
+          source: InheritanceEmbeddedTest.embeddedColumnsAndRecord
+      - p: '`Address`의 테이블은 따로 없어요. `city`, `street`, `zipcode`가 **회원 테이블에 그대로** 들어갔어요. 회원을 지우면 주소도 함께 사라지고, 다른 엔티티가 이 주소를 가리킬 수는 없어요.'
+      - p: '집 주소와 회사 주소처럼 같은 값 타입을 두 번 쓰면 컬럼 이름이 겹쳐요. `@AttributeOverride`로 한쪽의 컬럼 이름을 바꿔요. 위 출력의 `work_city`가 그렇게 만든 컬럼이에요.'
+      - code: override
+      - quiz:
+          q: '주문 엔티티에 `@Embedded Money price`를 두었어요. `Money`는 `amount`와 `currency` 필드를 가진 `@Embeddable`이에요. 만들어지는 테이블은?'
+          options:
+            - orders 하나에 amount, currency 컬럼이 더해진다
+            - orders와 money 두 테이블
+            - money 테이블이 orders를 가리킨다
+          answer: 1
+          explain: '값 타입은 테이블이 없고, 컬럼이 그것을 쓰는 엔티티의 테이블에 들어가요.'
+      - next: '값 타입은 엔티티의 일부예요. 그런데 같은 값 객체를 두 엔티티에 넣으면 어떻게 될까요?'
+    recall: '여러 필드를 한 덩어리 값으로 묶은 클래스예요. `@Embeddable`로 정의하고 엔티티에서 `@Embedded`로 쓰며, 자기 id와 테이블이 없어서 컬럼이 엔티티의 테이블에 그대로 들어가요. 같은 값 타입을 두 번 쓰면 `@AttributeOverride`로 컬럼 이름을 바꿔요.'
   - id: q4
     title: 값 타입은 왜 불변으로 만드나요?
     conclusion:
@@ -122,7 +258,44 @@ questions:
     asks:
       - '본문의 예시: 같은 `Address` 객체를 kim과 lee에게 넣고 `kim.getHome().setCity("부산")`을 했다. 커밋 뒤 lee의 도시는 (부산)'
       - '옮긴 상황: 주문 둘에 같은 `Money` 객체(바꿀 수 있는 클래스)를 넣고 한 주문의 금액을 바꿨다. 무엇이 문제이고 어떻게 막나 (두 주문이 함께 바뀐다. Money를 불변 record로 만든다)'
+    body:
+      - p: '바꿀 수 있는 주소 클래스를 만들고, 주소 객체 하나를 kim과 lee에게 함께 넣었어요. 그리고 kim의 도시만 바꿨어요.'
+      - code: mutable
+      - ci:
+          key: shared
+          label: 실제 출력 보기
+          source: InheritanceEmbeddedTest.sharedMutableValueChangesBoth
+          code: sharedRun
+      - p: 'UPDATE가 **두 번** 나갔고 lee의 도시도 부산이 됐어요. 두 회원의 `home` 필드는 같은 객체를 가리켜요([값과 참조](lesson:value-and-reference)). kim의 주소를 바꾼 것이 곧 lee의 주소를 바꾼 것이고, 변경 감지는 두 회원 모두에서 바뀐 값을 봐요([영속성 컨텍스트](lesson:jpa-persistence-context)).'
+      - p: '값 타입을 **불변**으로 만들면 이런 일이 생기지 않아요. 바꾸는 방법이 새 객체를 넣는 것뿐이라, 한 회원의 주소를 바꿔도 다른 회원은 원래 객체를 그대로 가져요([불변 객체](lesson:immutable-object)).'
+      - code: move
+      - p: 'Hibernate 6.2부터 **record**를 `@Embeddable`로 쓸 수 있어요. record는 필드가 final이고 setter가 없어서 그대로 불변 값 타입이 돼요. 질문 3의 `Address`가 record이고, 저장한 뒤 다시 읽어도 같은 값이었어요.'
+      - more:
+          summary: '더 알아보기: 값 타입의 목록'
+          body:
+            - p: '`@ElementCollection`으로 값 타입의 목록(회원의 배송지 여러 개)을 둘 수 있어요. 목록은 별도 테이블에 담기는데, 하나만 바꿔도 그 회원의 행을 모두 지우고 다시 넣어요. 값 타입은 id가 없어서 어느 행이 바뀌었는지 알 수 없기 때문이에요. 그래서 목록이 커지면 배송지를 엔티티로 만들고 일대다로 잇는 편이 나아요. 이 내용은 Hibernate 문서가 근거이고 테스트하지 않았어요.'
+      - quiz:
+          q: '주문 둘에 같은 `Money` 객체(setter가 있는 클래스)를 넣고, 한 주문의 금액을 setter로 바꾼 뒤 커밋했어요. 다른 주문의 금액은?'
+          options:
+            - 그대로다
+            - 함께 바뀐다
+            - 예외가 난다
+          answer: 2
+          explain: '두 주문이 같은 객체를 가리켜서 함께 바뀌어요. `Money`를 불변 record로 만들어 막아요.'
+    recall: '같은 값 객체를 두 엔티티가 함께 가리키면, 한쪽에서 바꿀 때 둘 다 바뀌기 때문이에요. 변경 감지가 두 엔티티 모두에서 바뀐 값을 보고 UPDATE를 두 번 보내요. 불변이면 바꿀 때 새 객체를 넣어야 해서 이런 일이 없어요. Hibernate 6.2부터 record를 값 타입으로 쓸 수 있어요.'
 practice:
+  title: 엔티티에서는 이렇게 써요
+  body:
+    - p: '실무 엔티티는 상속 매핑보다 아래 두 가지를 훨씬 자주 써요.'
+    - h3: 공통 필드는 @MappedSuperclass로
+    - code: base
+    - p: '생성 시각과 수정 시각을 모든 엔티티에 넣을 때 이 클래스를 상속해요. 테이블은 만들지 않고 필드만 물려줘요. `@CreationTimestamp`와 `@UpdateTimestamp`는 Hibernate가 저장과 수정 때 시각을 채우는 어노테이션이에요.'
+    - h3: 값은 record 값 타입으로
+    - p: '주소, 금액, 기간처럼 여러 필드가 한 덩어리인 값은 record로 만든 `@Embeddable`로 둬요. 검증이나 계산을 그 record에 모을 수 있고, 질문 4의 공유 문제가 생기지 않아요.'
+    - h3: '흔한 실수: 받은 값 객체를 그대로 다른 엔티티에 넣기'
+    - p: '회원 가입 요청에서 받은 주소 객체를 회원과 기본 배송지 엔티티 둘에 그대로 넣었다가, 나중에 회원의 주소만 setter로 바꿔요. 배송지까지 함께 바뀌어요(질문 4의 테스트와 같은 상황). 고친 코드는 값 타입을 record로 바꾸는 거예요. 바꿀 때는 `moveHome(new Address(...))`처럼 새 값을 넣어요.'
+    - p: 'SINGLE_TABLE을 쓸 때 자식만의 컬럼에는 DB의 NOT NULL을 걸 수 없어요. 카드 결제에 카드 번호가 꼭 있어야 한다는 규칙은 엔티티의 생성자나 입력 검증에서 지켜요.'
+    - muted: '근거: 상속 매핑과 값 타입은 [Jakarta Persistence 3.1 명세](link:spec) 2.5절과 2.12절, 상속 전략의 SQL과 record 값 타입은 [Hibernate 6.6 문서](link:hibernate). 테이블, SQL, 공유된 값의 UPDATE는 테스트로 확인했어요.'
   says:
     - '실무 모양: 공통 필드는 `@MappedSuperclass`로 둔 `BaseTimeEntity`(createdAt, updatedAt). 값 타입은 record로 만든 `Address`, `Money`'
     - '흔한 실수: 회원 가입 때 받은 주소 객체를 그대로 다른 회원 엔티티에 넣는다(질문 4). 고친 코드는 record 값 타입. 테스트로 보인다'
@@ -141,3 +314,16 @@ claims:
 sources:
   - '상속 매핑과 값 타입: Jakarta Persistence 3.1 명세 2.12, 2.5 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
   - 'record 값 타입: Hibernate 6.6 문서 https://docs.hibernate.org/orm/6.6/userguide/html_single/#embeddable-instantiator-property'
+interview:
+  question: JPA에서 상속은 어떻게 매핑하고, 값 타입은 무엇인가요?
+  model:
+    - label: 정의
+      text: 테이블에는 상속이 없어서 JPA는 한 테이블에 모두 담는 SINGLE_TABLE, 부모와 자식 테이블을 같은 id로 잇는 JOINED, 자식마다 테이블을 두는 TABLE_PER_CLASS로 옮깁니다. 값 타입은 주소처럼 여러 필드를 묶은 @Embeddable 클래스로, 자기 id와 테이블 없이 엔티티의 테이블에 컬럼으로 들어갑니다.
+    - label: 원리
+      text: 부모 타입으로 조회하면 SINGLE_TABLE은 테이블 하나, JOINED는 자식 테이블을 조인, TABLE_PER_CLASS는 UNION으로 읽습니다. SINGLE_TABLE은 dtype 컬럼으로 종류를 나누고 자식만의 컬럼은 NULL을 허용해야 합니다.
+    - label: 주의할 점
+      text: 기본은 SINGLE_TABLE, 제약이 중요하면 JOINED를 쓰고 TABLE_PER_CLASS는 피합니다. 값 타입 객체를 두 엔티티가 함께 가리키면 한쪽 변경이 둘 다 바꾸므로 값 타입은 불변으로, Hibernate 6.2부터는 record로 만듭니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 생성 시각과 수정 시각을 MappedSuperclass로 모으고, 금액을 record 값 타입으로 바꿔 계산 코드를 한곳에 모았습니다.'
+verified: 이 레슨의 테이블과 SQL은 짐작이 아니라 스프링 부트 3.5와 Hibernate 6.6으로 PostgreSQL 16 컨테이너에 만들고 DB에서 직접 읽은 값이에요. 코드가 바뀔 때마다 테스트([InheritanceEmbeddedTest](link:test))가 다시 돌아요.
+footer: '근거: 상속 매핑과 값 타입은 [Jakarta Persistence 3.1 명세](link:spec), 상속 전략과 record 값 타입은 [Hibernate 6.6 문서](link:hibernate). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

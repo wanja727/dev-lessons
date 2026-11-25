@@ -1,0 +1,201 @@
+# 상속 매핑과 값 타입 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/inheritance-embedded.yaml의 says).
+# 동작에 관한 정답은 verification의 InheritanceEmbeddedTest로 확인했다 (Hibernate 6.6, PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들었다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: inheritance-embedded
+  title: 상속 매핑과 값 타입
+  unit: JPA
+  order: 810
+concepts:
+  - key: core
+    name: 상속 매핑과 값 타입
+coreQuestions:
+  - key: q1
+    text: "상속을 테이블로 옮기는 방법은 무엇이 있나요?"
+  - key: q2
+    text: "부모 타입으로 조회하면 SQL은 어떻게 다른가요?"
+  - key: q3
+    text: "값 타입(@Embeddable)은 무엇이고 테이블은 어떻게 되나요?"
+  - key: q4
+    text: "값 타입은 왜 불변으로 만드나요?"
+questions:
+  # ── 질문 1 ──
+  - key: inh-joined-insert
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Payment를 CardPayment와 BankPayment가 상속하고 @Inheritance(strategy = JOINED)로 매핑했어요. 카드 결제 하나를 저장하면 INSERT는 몇 번 나갈까요?
+    choices:
+      - 1번
+      - 2번
+      - 3번
+    answer: "2"
+    explanation: |-
+      **2번이에요.** JOINED는 공통 필드를 부모 테이블에, 카드만의 필드를 자식 테이블에 두고 같은 id로 이어요.
+
+      - SINGLE_TABLE이면 테이블 하나에 INSERT 1번이에요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-inheritance
+  - key: inh-single-null
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 상품 Item을 Book(author 필드), Album(artist 필드), Movie(director 필드)가 상속하고 SINGLE_TABLE로 매핑했어요. 책 한 권을 저장한 행의 artist 컬럼에는 무엇이 들어갈까요?
+    choices:
+      - 빈 문자열
+      - "NULL"
+      - 책의 저자
+      - artist 컬럼이 없다
+    answer: "2"
+    explanation: |-
+      **NULL이에요.** SINGLE_TABLE은 모든 자식의 필드를 한 테이블에 두어서, 다른 자식의 컬럼은 비어요.
+
+      - 그래서 자식만의 컬럼에는 NOT NULL을 걸 수 없어요
+      - dtype 컬럼이 어느 자식인지 나눠요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-inheritance
+  # ── 질문 2 ──
+  - key: inh-union
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 결제 수단을 TABLE_PER_CLASS로 매핑하고 select p from Payment p를 실행했어요. Hibernate가 만든 SQL의 모양은 무엇일까요?
+    choices:
+      - 테이블 하나를 읽는다
+      - 부모 테이블에 자식 테이블을 LEFT JOIN한다
+      - 자식 테이블을 UNION으로 합쳐 읽는다
+    answer: "3"
+    explanation: |-
+      **UNION이에요.** 자식마다 테이블이 따로라서 부모 타입으로 조회하면 모두 합쳐 읽어요.
+
+      - 그래서 TABLE_PER_CLASS는 쓰지 않아요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-inheritance
+  - key: inh-choose
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 알림(Notification)을 이메일, 문자, 푸시가 상속해요. 자식만의 필드는 하나씩이고, 알림 목록 화면은 종류를 섞어 최신순으로 보여 줘요. 어느 상속 전략을 고를까요?
+    choices:
+      - SINGLE_TABLE
+      - JOINED
+      - TABLE_PER_CLASS
+    answer: "1"
+    explanation: |-
+      **SINGLE_TABLE이에요.** 자식 컬럼이 적어 NULL이 많지 않고, 섞어 조회할 때 테이블 하나만 읽어요.
+
+      - 자식 컬럼이 많고 NOT NULL 제약이 중요하면 JOINED를 써요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#entity-inheritance
+  # ── 질문 3 ──
+  - key: inh-embedded-table
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Member에 @Embedded Address home이 있고, Address는 city, street, zipcode를 가진 @Embeddable이에요. 만들어지는 테이블은 무엇일까요?
+    choices:
+      - member 하나에 city, street, zipcode 컬럼이 들어간다
+      - member와 address 두 테이블
+      - address 테이블에 member_id 외래 키
+    answer: "1"
+    explanation: |-
+      **member 하나예요.** 값 타입은 자기 id와 테이블이 없고, 컬럼이 그것을 쓰는 엔티티의 테이블에 들어가요.
+
+      - 회원을 지우면 주소도 함께 사라져요
+    source: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  - key: inh-override
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회사(Company) 엔티티에 본사 주소와 지사 주소를 둘 다 @Embedded Address로 두었어요. 아무 설정도 하지 않으면 무엇이 문제이고 어떻게 고칠까요?
+    choices:
+      - 문제없다. 컬럼 이름이 자동으로 달라진다
+      - city 같은 컬럼 이름이 겹친다. 한쪽에 @AttributeOverride로 컬럼 이름을 바꾼다
+      - 값 타입은 엔티티에 하나만 둘 수 있다
+    answer: "2"
+    explanation: |-
+      **컬럼 이름이 겹쳐요.** 같은 값 타입을 두 번 쓰면 @AttributeOverride로 한쪽의 컬럼 이름을 바꿔요.
+
+      - 레슨에서는 회사 주소를 work_city 같은 이름으로 바꿨어요
+    source: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  # ── 질문 4 ──
+  - key: inh-shared-value
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Address는 setCity가 있는 @Embeddable 클래스예요. 한 트랜잭션에서 아래를 실행하고 커밋했어요. 커밋 뒤 lee의 도시와, 마지막 줄 때문에 나간 UPDATE 수는 무엇일까요?
+    code: |-
+      Address addr = new Address("서울", "세종대로 1");
+      Member kim = new Member("kim", addr);
+      Member lee = new Member("lee", addr);
+      em.persist(kim);
+      em.persist(lee);
+      em.flush();
+      kim.getHome().setCity("부산");
+    choices:
+      - 서울, UPDATE 1번
+      - 부산, UPDATE 2번
+      - 부산, UPDATE 1번
+    answer: "2"
+    explanation: |-
+      **부산, UPDATE 2번이에요.** 두 회원의 home이 같은 객체를 가리켜서, kim의 주소를 바꾼 것이 lee의 주소도 바꿨어요.
+
+      - 값 타입을 불변(record)으로 만들어 막아요
+    source: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  - key: inh-record-money
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문의 금액을 @Embeddable record Money(long amount, String currency)로 바꿨어요. 이제 한 주문의 금액을 바꾸려면 어떻게 해야 하고, 다른 주문에는 영향이 있을까요?
+    choices:
+      - money.setAmount(...)로 바꾸고, 같은 객체를 쓰는 주문도 바뀐다
+      - order.changePrice(new Money(...))처럼 새 값을 넣고, 다른 주문은 그대로다
+      - record는 값 타입으로 쓸 수 없다
+    answer: "2"
+    explanation: |-
+      **새 값을 넣어요.** record는 setter가 없는 불변이라 바꾸는 방법이 새 객체를 넣는 것뿐이고, 다른 주문이 가진 객체는 그대로예요.
+
+      - Hibernate 6.2부터 record를 @Embeddable로 쓸 수 있어요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#embeddable-instantiator-property
+  # ── 네 질문을 하나로 ──
+  - key: inh-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "JPA에서 상속은 어떻게 매핑하고, 값 타입은 무엇인가요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **상속은 SINGLE_TABLE, JOINED, TABLE_PER_CLASS로 테이블에 옮기고, 값 타입은 여러 필드를 묶어 엔티티의 테이블에 컬럼으로 넣는 @Embeddable이에요.**
+
+      - SINGLE_TABLE은 dtype으로 나누고 자식 컬럼이 NULL이다
+      - 부모 타입 조회는 테이블 하나, 조인, UNION으로 달라진다
+      - 기본은 SINGLE_TABLE, 제약이 중요하면 JOINED
+      - 값 타입은 공유되면 함께 바뀌어서 불변(record)으로 만든다
+    checklist:
+      - 상속 전략 셋을 말했다
+      - 부모 타입 조회 SQL의 차이를 말했다
+      - 고르는 기준을 말했다
+      - 값 타입이 엔티티 테이블의 컬럼이 된다고 말했다
+      - 값 타입을 불변으로 만드는 이유를 말했다
+    source: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
