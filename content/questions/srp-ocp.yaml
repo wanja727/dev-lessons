@@ -13,7 +13,7 @@ lesson:
   key: srp-ocp
   title: 단일 책임과 개방 폐쇄 원칙
   unit: 객체지향 설계와 패턴
-  order: 35
+  order: 303
 concepts:
   - key: core
     name: 단일 책임과 개방 폐쇄 원칙

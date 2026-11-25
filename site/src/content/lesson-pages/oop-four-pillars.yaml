@@ -1,8 +1,10 @@
-# 객체지향의 네 가지 특징 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 객체지향의 네 가지 특징
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/oop-four-pillars.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 객체지향의 네 가지 특징
+description: 캡슐화가 무엇을 막는지, getter와 setter만 열면 왜 캡슐화가 아닌지, 추상화는 무엇을 감추는지, 상속과 다형성이 무엇을 쉽게 하는지. 네 가지 질문에 스스로 답할 수 있게 포인트 지갑과 결제 코드로 배우는 대화형 레슨.
 unit: 객체지향 설계와 패턴
+minutes: 20
 roadmap: O1
 type: 설계
 prerequisites:
@@ -46,6 +48,10 @@ covers:
     where: '다루지 않음: 결합도와 응집도(O2)'
   - topic: 'JPA 엔티티의 기본 생성자와 접근 수준'
     where: '다루지 않음: ORM과 JPA(P1)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/oopbasics/OopFourPillarsTest.java
+  jlsAccess: https://docs.oracle.com/javase/specs/jls/se21/html/jls-6.html#jls-6.6
+  unmodifiable: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html#unmodifiableList(java.util.List)
 codes:
   publicWallet: |-
     class PointWallet {
@@ -115,9 +121,99 @@ codes:
                   int amount) {
       payment.pay(amount);
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  walletMark: |-
+    class PointWallet {
+      [[private]] int balance;
+
+      void use(int amount) {
+        [[if (amount > balance)]] {
+          throw new IllegalStateException(
+              "잔액 부족");
+        }
+        balance -= amount;
+      }
+
+      void charge(int amount) {
+        balance += amount;
+      }
+    }
+  outside: |-
+    class OrderService {
+      void order(PointWallet wallet) {
+        wallet.balance -= 3000;
+      }
+    }
+  setterMark: |-
+    class PointWallet {
+      private int balance;
+      int getBalance() { return balance; }
+      [[void setBalance(int b)]] {
+        balance = b;
+      }
+    }
+
+    // 주문 서비스
+    int b = wallet.getBalance();
+    wallet.setBalance(b - 3000);
+  tell: |-
+    // 꺼내서 계산한다 (묻기)
+    if (wallet.getBalance() >= 3000) {
+      wallet.setBalance(
+          wallet.getBalance() - 3000);
+    }
+
+    // 객체에 시킨다
+    wallet.use(3000);
+  historyFixed: |-
+    List<Long> getHistory() {
+      return [[Collections⤶
+          .unmodifiableList(history)]];
+    }
+  checkoutMark: |-
+    void checkout(Payment payment,
+                  int amount) {
+      [[payment.pay(amount)]];
+    }
+  kakao: |-
+    class KakaoPayment implements Payment {
+      public void pay(int amount) {
+        // 카카오페이 API를 부른다
+      }
+    }
+  entityBad: |-
+    // 롬복 @Setter로 모든 필드에 setter
+    member.setPoint(
+        member.getPoint() - 3000);
+  entityGood: |-
+    class Member {
+      private int point;
+
+      void usePoint(int amount) {
+        if (amount > point) {
+          throw new IllegalStateException(
+              "포인트 부족");
+        }
+        point -= amount;
+      }
+    }
+
+    member.usePoint(3000);
 predict:
-  text: '포인트 지갑의 잔액이 1000점이에요. 코드 publicWallet처럼 잔액 필드가 `public`이고, 주문 서비스가 `wallet.balance -= 3000`을 실행해요. 무슨 일이 일어날까요? 보기: 컴파일 오류, 실행 중 예외, 잔액이 -2000이 된다.'
-  answer: '잔액이 -2000이 된다. 필드가 열려 있으면 "잔액보다 많이 쓸 수 없다"는 규칙을 아무도 확인하지 않는다. 질문 1에서 밝힌다.'
+  title: 잔액이 1000점인 지갑에서 3000을 빼면?
+  text: '포인트 지갑의 잔액이 1000점이에요. 잔액 필드가 `public`이고, 주문 서비스가 `wallet.balance -= 3000`을 실행해요. 무슨 일이 일어날까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: publicWallet
+  label: 내 예측
+  options:
+    - value: compile
+      label: 컴파일 오류
+    - value: exception
+      label: 실행 중 예외
+    - value: negative
+      label: 잔액이 -2000이 된다
+  answer: negative
+  storageKey: oop-four-pillars-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 캡슐화는 무엇이고, 무엇을 막아 주나요?
@@ -133,6 +229,45 @@ questions:
     asks:
       - '본문의 예시: 코드 wallet에서 잔액 1000점일 때 `use(3000)`을 부르면 어떻게 되나 (예외가 나고 잔액은 1000)'
       - '옮긴 상황: 재고 `Stock` 클래스의 `quantity` 필드가 public이다. 재고를 줄이는 코드가 다섯 곳에 있을 때 "재고는 0 밑으로 내려가지 않는다"를 지키려면 몇 곳을 확인해야 하나. private으로 닫고 `decrease()`에 두면 몇 곳인가 (5곳, 1곳)'
+    body:
+      - ci:
+          key: public
+          label: 코드 publicWallet을 실제로 돌린 결과 보기
+          source: OopFourPillarsTest.publicFieldGoesNegative
+          code: publicWallet
+      - p: '처음에 예측한 답은 **잔액이 -2000이 된다**예요. 컴파일러도 JVM도 막지 않아요. 필드가 열려 있으면 "잔액보다 많이 쓸 수 없다"는 규칙을 아무도 확인하지 않기 때문이에요. {{predict-result}}'
+      - p: '규칙은 어디에 있어야 할까요? 필드가 열려 있으면 **잔액을 바꾸는 모든 곳**이 규칙을 지켜야 해요. 주문, 환불, 이벤트 서비스 세 곳이 잔액을 바꾸면 세 곳 모두 확인해야 하고, 하나라도 빠뜨리면 잘못된 값이 들어가요.'
+      - p: '**캡슐화**는 데이터와 그 데이터를 바꾸는 규칙을 한 객체 안에 두고, 밖에서는 그 객체의 메서드로만 바꾸게 하는 것이에요.'
+      - code: walletMark
+        notes:
+          - mark: private
+            as: code
+            text: '필드를 닫아요. 이 클래스 밖에서는 `balance`를 읽지도 바꾸지도 못해요.'
+          - mark: if (amount > balance)
+            as: code
+            text: '규칙이 여기 한 곳에 있어요. 잔액은 `use()`를 거쳐야만 줄어들어요.'
+      - ci:
+          key: wallet
+          label: 같은 일을 use()로 해 본 결과 보기
+          source: OopFourPillarsTest.encapsulatedWalletRejects
+      - p: '`use(3000)`은 예외를 던지고 잔액은 1000 그대로예요. 이제 서비스가 몇 곳이든 잔액을 바꾸는 길은 `use()` 하나라서 규칙을 건너뛸 수 없어요.'
+      - p: '접근 제어자 `private`은 이 약속을 **컴파일러가 지키게** 해요. 지갑 밖의 클래스에서 예전처럼 필드를 직접 바꾸면 컴파일되지 않아요([자바 언어 명세 6.6](link:jlsAccess)).'
+      - ci:
+          key: private
+          label: 컴파일 결과 보기
+          source: OopFourPillarsTest.privateFieldIsCompileError
+          code: outside
+      - p: '규칙이 바뀔 때도 좋아요. "한 번에 5만 점까지만 쓸 수 있다"를 더하려면 `use()` 한 곳만 고치면 돼요.'
+      - quiz:
+          q: '재고 클래스의 `quantity` 필드가 public이고, 재고를 줄이는 코드가 다섯 곳에 있어요. 필드를 private으로 닫고 줄이는 일을 `decrease()` 메서드에만 두면, "재고는 0 밑으로 내려가지 않는다"를 확인해야 하는 곳은 몇 곳이 될까요?'
+          options:
+            - 5곳 그대로
+            - 1곳
+            - 0곳. 컴파일러가 확인한다
+          answer: 2
+          explanation: '재고를 줄이는 길이 `decrease()` 하나뿐이라 그 안에서만 확인하면 돼요. 컴파일러는 밖에서 필드를 직접 바꾸는 것을 막을 뿐, 0 밑으로 내려가는지는 메서드가 확인해요.'
+      - next: '그렇다면 필드를 private으로 두고 getter와 setter를 열어 두면 캡슐화일까요?'
+    recall: '데이터와 그 데이터를 바꾸는 규칙을 한 객체 안에 두고, 밖에서는 메서드로만 바꾸게 하는 것이에요. 필드가 열려 있으면 잔액 1000점에서 3000을 빼도 -2000이 되고, 규칙을 잔액을 바꾸는 모든 곳에서 지켜야 해요. 필드를 `private`으로 닫고 `use()`에서만 빼면 규칙이 한 곳에 모이고, 컴파일러가 밖에서 필드를 바꾸는 코드를 막아 줘요.'
   - id: q2
     title: 필드를 private으로 두고 getter와 setter를 열면 캡슐화인가요?
     conclusion:
@@ -151,6 +286,88 @@ questions:
     asks:
       - '본문의 예시: 코드 setterWallet에서 잔액이 1000점이고 서비스가 `wallet.setBalance(wallet.getBalance() - 3000)`을 실행하면 잔액은 얼마인가 (-2000)'
       - '옮긴 상황: 장바구니가 `private final List<Item> items`를 두고 `getItems()`로 그대로 돌려준다. 밖에서 `cart.getItems().clear()`를 하면 장바구니는 어떻게 되나 (비워진다)'
+    body:
+      - p: '필드를 `private`으로 두는 것만으로는 캡슐화가 되지 않아요. 아래 지갑은 필드가 private인데도 잔액을 마음대로 바꿀 수 있어요.'
+      - code: setterMark
+        notes:
+          - mark: void setBalance(int b)
+            as: code
+            text: '아무 값이나 받아서 그대로 넣어요. 필드를 연 것과 같은 길이에요.'
+      - ci:
+          key: setter
+          label: 실제로 돌린 결과 보기
+          source: OopFourPillarsTest.setterGoesNegative
+      - p: '결과는 필드가 public일 때와 같은 **-2000**이에요. 잔액을 확인하는 규칙이 여전히 서비스 쪽에 있어야 하고, 잔액을 바꾸는 서비스가 셋이면 셋 모두가 확인해야 해요.'
+      - p: '고치는 방법은 **꺼내서 계산하지 말고 객체에게 시키는 것**이에요. 잔액이 충분한지는 잔액을 가진 지갑이 가장 잘 알아요.'
+      - code: tell
+      - p: '아래에서 요구를 골라 보세요. 왼쪽은 setter로 잔액을 바꾸는 서비스 세 곳, 오른쪽은 `use()`를 부르는 서비스 세 곳이에요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 들어온 요구
+            options:
+              - {value: check, label: 잔액 확인 규칙 더하기}
+              - {value: limit, label: 한 번에 5만 점 제한}
+          sides:
+            - label: setter로 바꾸는 쪽
+              items:
+                - {name: 주문 서비스, note: 꺼내서 빼고 setBalance}
+                - {name: 환불 서비스, note: 꺼내서 더하고 setBalance}
+                - {name: 이벤트 서비스, note: 꺼내서 빼고 setBalance}
+                - {name: PointWallet, note: getter와 setter뿐}
+            - label: use()에 시키는 쪽
+              items:
+                - {name: 주문 서비스, note: wallet.use(3000)}
+                - {name: 환불 서비스, note: wallet.charge(3000)}
+                - {name: 이벤트 서비스, note: wallet.use(500)}
+                - {name: PointWallet, note: use()와 charge()에 규칙}
+          scenes:
+            check:
+              sides:
+                - marks:
+                    - {name: 주문 서비스, tag: 고침, mark: bad}
+                    - {name: 이벤트 서비스, tag: 고침, mark: bad}
+                  result: [{k: 고치는 곳, v: '2', mark: bad}]
+                - marks: [{name: PointWallet, tag: 고침}]
+                  result: [{k: 고치는 곳, v: '1'}]
+              verdict: '잔액을 빼는 서비스마다 확인을 넣어야 해요. 하나를 빠뜨리면 다시 마이너스가 돼요.'
+            limit:
+              sides:
+                - marks:
+                    - {name: 주문 서비스, tag: 고침, mark: bad}
+                    - {name: 이벤트 서비스, tag: 고침, mark: bad}
+                  result: [{k: 고치는 곳, v: '2', mark: bad}]
+                - marks: [{name: PointWallet, tag: 고침}]
+                  result: [{k: 고치는 곳, v: '1'}]
+              verdict: '규칙이 지갑 안에 있으면 쓰는 서비스가 늘어도 고칠 곳은 use() 하나예요.'
+      - h3: 컬렉션을 그대로 돌려주는 getter
+      - p: '지갑이 사용 기록을 리스트로 가진다고 해 볼게요. 아래 getter는 내부 리스트를 **그대로** 돌려줘요.'
+      - code: history
+      - ci:
+          key: history
+          label: 밖에서 리스트를 건드린 결과 보기
+          source: OopFourPillarsTest.collectionGetter
+      - p: '밖에서 `getHistory().clear()`를 하자 지갑의 기록이 사라졌어요. 돌려받은 것이 복사본이 아니라 지갑 안의 그 리스트이기 때문이에요. 바꿀 수 없는 보기를 돌려주면 밖에서 `add`할 때 예외가 나고 지갑은 그대로예요([API 문서](link:unmodifiable)).'
+      - code: historyFixed
+        notes:
+          - mark: Collections.unmodifiableList(history)
+            as: code
+            text: '읽기만 되는 보기예요. `List.copyOf(history)`로 복사본을 돌려줘도 돼요.'
+      - more:
+          summary: 절차지향 코드와 무엇이 다른가요?
+          body:
+            - p: '절차지향 코드는 데이터를 꺼내 바깥 함수가 처리해요. getter와 setter만 있는 클래스는 데이터 묶음이고, 규칙은 그것을 쓰는 서비스에 있어요. 객체지향 코드는 데이터를 가진 객체가 그 데이터로 일을 해요. `wallet.use(3000)`이 그 모양이에요.'
+      - quiz:
+          q: '장바구니가 `private final List<Item> items`를 두고 `getItems()`에서 `items`를 그대로 돌려줘요. 밖에서 `cart.getItems().clear()`를 하면 장바구니는 어떻게 될까요?'
+          options:
+            - 그대로다. items가 private이다
+            - 비워진다
+            - 컴파일 오류
+          answer: 2
+          explanation: 'private은 필드 이름으로 닿는 것만 막아요. getter가 내부 리스트 자체를 돌려주면 밖에서 그 리스트를 바꿀 수 있어요.'
+      - next: '캡슐화가 데이터와 규칙을 감춘다면, 쓰는 쪽에 보일 모양은 무엇으로 정할까요?'
+    recall: '아니요. setter로 아무 값이나 넣을 수 있으면 private이어도 규칙은 밖에 있어요. 잔액을 꺼내 빼고 다시 넣는 코드는 필드가 public일 때처럼 -2000을 만들어요. 값을 꺼내 계산하지 말고 `wallet.use(3000)`처럼 객체에게 시키고, 컬렉션은 `unmodifiableList`나 `List.copyOf`로 바꿀 수 없게 돌려줘요.'
   - id: q3
     title: 추상화는 무엇인가요?
     conclusion:
@@ -164,6 +381,26 @@ questions:
     asks:
       - '본문의 예시: 결제 코드가 `Payment`만 알 때, 포인트 결제의 잔액 확인 규칙이 바뀌면 고칠 곳은 어디인가 (`PointWallet`. 결제 코드는 그대로)'
       - '옮긴 상황: 알림을 보내는 인터페이스의 메서드 이름 후보 `send(message)`와 `sendBySmtpOrKakao(message)` 가운데 추상화가 잘된 것은 무엇이고 왜인가 (`send`. 어떻게 보내는지는 구현이 정한다)'
+    body:
+      - p: '이제 결제로 넘어가 볼게요. 쇼핑몰은 카드와 포인트로 결제를 받아요. 카드는 카드사 API를 부르고, 포인트는 지갑에서 빼요. 하는 일은 달라도 결제 코드가 알고 싶은 것은 하나예요. **"이 금액을 결제해 줘."**'
+      - p: '**추상화**는 쓰는 쪽이 알아야 할 것만 남기고 세부를 감춘 타입을 만드는 것이에요. 자바에서는 인터페이스나 추상 클래스로 만들어요.'
+      - code: payment
+        notes:
+          - mark: void pay(int amount);
+            text: '결제 코드에 보이는 것은 이 한 줄이에요. 카드사 API와 지갑은 구현 클래스 안에 있어요.'
+      - p: '결제 코드가 `Payment`만 알면, 포인트 결제의 잔액 규칙이 바뀌어도 결제 코드는 그대로예요. 고칠 곳은 `PointWallet`이고, 그 규칙은 질문 1에서 지갑 안에 모았어요.'
+      - h3: 이름이 "무엇을"을 말해야 해요
+      - p: '`pay(amount)`는 무엇을 하는지만 말해요. `callCardApiOrUsePoint()` 같은 이름은 어떻게 하는지를 드러내서, 계좌이체를 더하는 순간 이름이 거짓말이 돼요. 추상화한 타입의 이름과 메서드는 쓰는 쪽의 말로 지어요.'
+      - callout: '**캡슐화와 추상화는 둘 다 감추지만 감추는 것이 달라요.** 캡슐화는 객체 안의 데이터와 규칙을 감추고, 추상화는 쓰는 쪽에게 어떤 모양(타입과 메서드)으로 보일지를 정해요.'
+      - quiz:
+          q: '알림을 보내는 인터페이스의 메서드 이름으로 `send(message)`와 `sendBySmtpOrKakao(message)` 가운데 추상화가 잘된 것은 무엇일까요?'
+          options:
+            - send(message)
+            - sendBySmtpOrKakao(message)
+          answer: 1
+          explanation: '이름은 무엇을 하는지만 말해요. 메일로 보낼지 카카오로 보낼지는 구현 클래스가 정할 일이고, 방법이 바뀌거나 늘어도 이름이 그대로 맞아요.'
+      - next: '`Payment` 타입 하나로 카드와 포인트를 함께 다루려면 무엇이 필요할까요?'
+    recall: '쓰는 쪽이 알아야 할 것만 남기고 세부를 감춘 타입을 만드는 것이에요. 결제 코드는 `Payment.pay(amount)`만 알고, 카드사 API를 부르는지 지갑에서 빼는지는 구현 클래스 안에 감춰져요. 이름과 메서드는 "무엇을 하나"를 말하고 "어떻게 하나"는 말하지 않아요.'
   - id: q4
     title: 상속과 다형성은 무엇이고, 무엇을 쉽게 해 주나요?
     conclusion:
@@ -178,24 +415,89 @@ questions:
     asks:
       - '본문의 예시: 코드 checkout에 계좌이체 결제를 더할 때 고치는 파일과 새로 만드는 파일 (고치는 파일 없음. `BankTransferPayment` 새로 만듦. 넘겨 주는 곳은 제외)'
       - '옮긴 상황: 도형의 넓이를 구하는 코드가 `if (shape instanceof Circle) ... else if (shape instanceof Square) ...`로 되어 있다. 삼각형을 더할 때 이 코드를 고치지 않으려면 어떻게 바꾸나 (`Shape`에 `area()`를 두고 각 도형이 구현한다)'
+    body:
+      - p: '`Payment`가 없다면 결제 코드는 이렇게 결제 수단을 문자열로 나눠야 해요.'
+      - code: checkoutIf
+      - p: '`CardPayment`와 `PointPayment`가 둘 다 `Payment`를 구현하면 둘은 **같은 타입**으로 묶여요. 이것이 상속(여기서는 인터페이스 구현)이 하는 일이에요. 그러면 결제 코드는 이렇게 줄어요.'
+      - code: checkoutMark
+        notes:
+          - mark: payment.pay(amount)
+            as: code
+            text: '같은 한 줄이 카드 객체를 받으면 카드 결제를, 포인트 객체를 받으면 포인트 결제를 실행해요. 이것이 **다형성**이에요.'
+      - p: '어느 `pay`가 실행될지는 변수의 타입이 아니라 넘어온 실제 객체가 정해요. 상속과 다형성 레슨에서 본 오버라이딩이에요.'
+      - p: '여기에 카카오페이를 더해 볼게요. 두 코드에서 고치는 파일을 세었어요.'
+      - code: kakao
+      - ci:
+          key: add-payment
+          label: 더하기 전과 뒤의 파일 비교 보기
+          source: OopFourPillarsTest.addingPaymentMethod
+      - p: '`if`로 나눈 코드는 `Checkout`을 열어 `else if`를 더해야 해요. 다형성을 쓴 코드는 `KakaoPayment` 파일 하나가 생기고 `Checkout`은 그대로예요. 새 종류를 더할 때 부르는 쪽을 고치지 않는 것, 이것이 다형성이 쉽게 해 주는 일이에요. 이 생각을 원칙으로 정리한 것이 [단일 책임과 개방 폐쇄 원칙](lesson:srp-ocp)이에요.'
+      - h3: 네 가지는 서로 기대요
+      - table:
+          head: [특징, 이 레슨의 코드에서 한 일]
+          rows:
+            - [추상화, '`Payment`로 결제 코드에 보일 모양을 정했어요']
+            - [상속, '카드, 포인트, 카카오페이를 `Payment` 타입으로 묶었어요']
+            - [다형성, '`payment.pay(amount)` 한 줄이 객체마다 다르게 동작해요']
+            - [캡슐화, '잔액 규칙은 `PointWallet` 안에, 카드사 호출은 `CardPayment` 안에 있어요']
+      - muted: '여기서 쓴 상속은 인터페이스 구현이에요. 클래스를 상속해 코드를 물려받는 재사용에는 다른 문제가 있어서 상속보다 조합 레슨에서 따로 다뤄요.'
+      - quiz:
+          q: '도형의 넓이를 `if (shape instanceof Circle) ... else if (shape instanceof Square) ...`로 구해요. 삼각형을 더할 때 이 코드를 고치지 않으려면 어떻게 바꿔야 할까요?'
+          options:
+            - else if를 하나 더 쓴다
+            - Shape에 area()를 두고 도형마다 구현한다
+            - 도형을 문자열로 나눈다
+          answer: 2
+          explanation: '도형마다 `area()`를 구현하면 넓이를 구하는 코드는 `shape.area()` 한 줄이 돼요. 삼각형은 `Triangle` 클래스를 더하기만 하면 돼요.'
+    recall: '상속(인터페이스 구현 포함)은 여러 클래스를 같은 타입으로 묶고, 다형성은 같은 호출이 넘어온 실제 객체에 따라 다르게 동작하게 해요. 결제 코드가 `Payment` 타입으로 받고 `payment.pay(amount)`만 부르면, 카카오페이를 더할 때 `KakaoPayment` 파일 하나만 생기고 결제 코드는 고치지 않아요. 추상화로 모양을 정하고, 상속으로 묶고, 다형성으로 부르고, 캡슐화로 세부를 감춰요.'
 practice:
+  title: 엔티티에 setter를 열지 마세요
   says:
     - 'JPA 엔티티에서 흔한 실수: 모든 필드에 setter를 연다(롬복 `@Setter`). 서비스가 `member.setPoint(member.getPoint() - 3000)`처럼 규칙을 밖에서 계산한다. 고친 코드: setter를 두지 않고 `member.usePoint(3000)` 같은 메서드에서 확인한다. 엔티티 없이 같은 모양의 클래스로 테스트한다'
     - '엔티티의 컬렉션 getter도 같다. `order.getItems().add(item)` 대신 `order.addItem(item)`에서 주문 금액을 함께 맞춘다'
     - '스프링 서비스는 구현 클래스가 아니라 인터페이스를 받는다. 어느 구현을 넘길지는 스프링이 정하고, 그 원리는 의존 역전 원칙과 의존성 주입(O5)에서 다룬다'
+  body:
+    - p: '스프링과 JPA로 만든 서버에서 캡슐화가 가장 자주 깨지는 곳은 엔티티예요. 롬복의 `@Setter`를 클래스에 붙이면 모든 필드에 setter가 생기고, 서비스가 질문 2의 코드처럼 값을 꺼내 계산하게 돼요.'
+    - code: entityBad
+    - p: '포인트를 쓰는 서비스가 늘수록 "포인트보다 많이 쓸 수 없다"는 확인도 그만큼 흩어져요. 엔티티에는 setter 대신 **뜻이 있는 메서드**를 둬요.'
+    - code: entityGood
+      notes:
+        - mark: void usePoint(int amount)
+          text: '질문 1의 `use()`와 같은 모양이에요. 이 레슨의 테스트가 같은 모양의 지갑 클래스로 예외와 잔액을 확인했어요.'
+    - p: '컬렉션도 같아요. `order.getItems().add(item)`처럼 밖에서 목록을 바꾸면 주문 금액이 목록과 어긋나요. `order.addItem(item)` 안에서 목록에 넣고 금액도 함께 맞춰요.'
+    - muted: '엔티티는 JPA가 객체를 만들 수 있게 기본 생성자가 있어야 해요. 그 규칙은 ORM과 JPA 레슨에서, 서비스가 인터페이스를 받고 스프링이 구현을 넣어 주는 원리는 의존 역전 원칙과 의존성 주입 레슨에서 다뤄요.'
+interview:
+  question: 객체지향의 네 가지 특징을 코드와 함께 설명해 주세요
+  model:
+    - label: 정의
+      text: 캡슐화는 데이터와 그것을 바꾸는 규칙을 한 객체에 두고 메서드로만 바꾸게 하는 것, 추상화는 쓰는 쪽에 필요한 것만 보이는 타입을 만드는 것, 상속은 여러 클래스를 같은 타입으로 묶는 것, 다형성은 같은 호출이 실제 객체에 따라 다르게 동작하는 것입니다.
+    - label: 원리
+      text: 필드를 private으로 닫으면 규칙을 건너뛰는 길이 없어져 잘못된 값을 한 곳에서 막습니다. 인터페이스로 모양을 정하고 구현 클래스들이 그것을 구현하면, 부르는 쪽은 인터페이스 메서드 하나만 부르고 실행할 때 실제 객체의 구현이 돕니다. 그래서 새 종류를 더해도 부르는 쪽을 고치지 않습니다.
+    - label: 주의할 점
+      text: getter와 setter를 모두 열면 private이어도 캡슐화가 아닙니다. 값을 꺼내 계산하지 말고 객체에게 시키고, 컬렉션은 바꿀 수 없는 보기로 돌려줍니다. 코드를 물려받는 클래스 상속은 부모에 강하게 묶이므로 조합을 먼저 생각합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 엔티티의 @Setter를 지우고 usePoint 같은 메서드로 규칙을 모아, 포인트가 음수가 되는 버그를 막았습니다.'
+verified: '이 레슨의 잔액, 예외, 컴파일 오류, 고친 파일은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([OopFourPillarsTest](link:test))가 다시 돌아요.'
+footer: '근거: 접근 제어는 [자바 언어 명세 6.6](link:jlsAccess), 바꿀 수 없는 보기는 [Collections API 문서](link:unmodifiable). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 publicWallet에서 잔액 1000에 3000을 빼면 -2000이 된다'
     how: '같은 클래스를 만들어 돌린다'
+    test: OopFourPillarsTest.publicFieldGoesNegative
   - claim: '코드 wallet에서 `use(3000)`은 `IllegalStateException`을 던지고 잔액은 1000 그대로다'
     how: '예외와 잔액을 확인한다'
+    test: OopFourPillarsTest.encapsulatedWalletRejects
   - claim: 'private 필드를 클래스 밖에서 바꾸면 컴파일 오류다'
-    how: '`JavaSource`로 `wallet.balance -= 3000`을 다른 클래스에서 컴파일한다'
+    how: '`BrokenFiles`로 `wallet.balance -= 3000`을 다른 클래스에서 컴파일한다'
+    test: OopFourPillarsTest.privateFieldIsCompileError
   - claim: '코드 setterWallet도 -2000이 된다'
     how: '같은 클래스를 만들어 돌린다'
+    test: OopFourPillarsTest.setterGoesNegative
   - claim: '내부 리스트를 그대로 돌려주면 밖의 `clear()`가 안을 비우고, `List.copyOf`나 `unmodifiableList`를 돌려주면 `add`에서 `UnsupportedOperationException`이 난다'
     how: '두 getter로 확인한다'
+    test: OopFourPillarsTest.collectionGetter
   - claim: '코드 checkout에 결제 수단을 더하면 고친 파일 없이 새 파일 하나만 생기고, 코드 checkoutIf는 `checkout`이 든 파일을 고친다'
-    how: '더하기 전후 패키지를 나란히 두고 파일을 비교한다 (srp-ocp의 `SrpOcpChangeTest` 방식)'
+    how: '더하기 전후 소스를 `SourceChange`로 비교하고, 더한 뒤의 소스가 컴파일되는 것을 본다'
+    test: OopFourPillarsTest.addingPaymentMethod
 sources:
   - '접근 제어: 자바 언어 명세 6.6 https://docs.oracle.com/javase/specs/jls/se21/html/jls-6.html#jls-6.6'
   - '`Collections.unmodifiableList`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html'
