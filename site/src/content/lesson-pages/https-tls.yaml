@@ -1,0 +1,172 @@
+# HTTPS와 TLS (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: HTTPS와 TLS
+unit: 네트워크와 웹
+roadmap: N6
+type: 개념 설명
+prerequisites:
+  - {slug: tcp-udp, title: TCP와 UDP}
+  - {slug: http-basics, title: HTTP 요청과 응답}
+assume: 'TCP 연결 위로 HTTP 요청이 글로 간다는 것(HTTP 요청과 응답 레슨), 연결을 맺는 데 왕복이 든다는 것(TCP와 UDP 레슨). 자바 21의 TLS(JSSE). 암호의 수학은 다루지 않고, 무엇을 지키는지와 순서를 다뤄요. TLS의 메시지는 자바 코드에 보이지 않아서 RFC 8446을 근거로 적어요.'
+example: '로그인 요청 `POST /login`(비밀번호가 든 본문)을 HTTP와 HTTPS로 보내기. 테스트에서는 클라이언트와 서버 사이에 오가는 바이트를 엿보는 중계기를 두고, keytool로 만든 인증서로 TLS 서버를 띄워요.'
+intro:
+  - '카페 와이파이에서 로그인하면 같은 와이파이에 있는 사람이 비밀번호를 볼 수 있을까요? HTTP라면 볼 수 있어요. 요즘 브라우저가 HTTP 사이트에 "안전하지 않음"을 띄우는 이유예요.'
+  - '스프링 개발자는 HTTPS를 직접 구현하지 않지만 자주 만나요. 외부 API를 부르다 `SSLHandshakeException: PKIX path building failed`를 보거나, 로드 밸런서 뒤의 서버가 `http://`로 리다이렉트해서 로그인이 깨지는 일이 그래요. 면접에서는 "HTTPS는 어떻게 안전한가요", "TLS handshake를 설명해 주세요"를 물어요.'
+  - '이 레슨에서는 중계기로 HTTP와 HTTPS의 바이트를 엿봐서 무엇이 보이는지 비교하고, 직접 만든 인증서로 TLS 서버를 띄워 클라이언트가 어떤 경우에 연결을 거부하는지 확인해요.'
+covers:
+  - {topic: 'HTTP의 위험 세 가지: 엿보기(도청), 바꾸기(변조), 흉내 내기(사칭)', where: 질문 1}
+  - {topic: 'HTTPS는 HTTP를 TLS 위에서 보내는 것이다. TLS가 기밀성, 무결성, 인증을 맡는다', where: 질문 1}
+  - {topic: 'HTTPS에서도 보이는 것: 상대의 IP와 포트, 접속하려는 도메인 이름(SNI), 주고받은 양', where: 질문 1의 더 알아보기}
+  - {topic: '대칭키 암호: 같은 키로 잠그고 연다. 빠르지만 키를 어떻게 나눌지가 문제다', where: 질문 2}
+  - {topic: '공개키 암호와 키 교환: 공개된 값만 주고받고 양쪽이 같은 비밀 키를 만든다(ECDHE)', where: 질문 2}
+  - {topic: 'TLS는 키 교환으로 대칭키를 정하고, 데이터는 대칭키로 암호화한다', where: 질문 2}
+  - {topic: '암호화 묶음(cipher suite)과 TLS 1.3', where: 질문 2}
+  - {topic: '인증서는 "이 공개키는 이 도메인의 것"이라고 인증 기관(CA)이 서명한 문서다', where: 질문 3}
+  - {topic: '클라이언트가 확인하는 것: 믿는 CA까지 이어지는 서명(체인), 도메인 이름, 유효 기간', where: 질문 3}
+  - {topic: '자바의 신뢰 저장소(cacerts)와 PKIX path building failed', where: '질문 3, 실무에서는'}
+  - {topic: 'TLS 1.3 handshake: ClientHello, ServerHello, 인증서, Finished. TCP 다음에 왕복 한 번', where: 질문 4}
+  - {topic: 'handshake 비용과 세션 재개', where: 질문 4의 더 알아보기}
+  - {topic: '스프링 부트에서 HTTPS 켜기: server.ssl과 SSL 번들', where: 실무에서는}
+  - {topic: '로드 밸런서에서 TLS를 끝내는 구성과 X-Forwarded-Proto, server.forward-headers-strategy', where: 실무에서는}
+  - {topic: '흔한 실수: 인증서 확인을 끄는 코드', where: 실무에서는}
+  - {topic: 'HSTS', where: '다루지 않음: 웹 보안 기초(N10)'}
+  - {topic: '해시와 전자 서명의 수학', where: '다루지 않음: 개발자가 직접 구현하지 않아 로드맵에 두지 않는다. 이 레슨은 하는 일만 설명한다'}
+codes:
+  login: |-
+    POST /login HTTP/1.1
+    Host: localhost
+    Content-Type: application/json
+
+    {"user":"kim","password":"s3cret!"}
+  keytool: |-
+    keytool -genkeypair -alias shop
+      -keyalg EC -validity 1
+      -dname "CN=localhost"
+      -ext "SAN=dns:localhost"
+      -keystore server.p12
+  trustClient: |-
+    SSLContext ctx =
+        SSLContext.getInstance("TLS");
+    ctx.init(null, [[trustOnly(shopCert)]],
+        null);
+    HttpClient client = HttpClient
+        .newBuilder().sslContext(ctx)
+        .build();
+  bootSsl: |-
+    server:
+      port: 8443
+      ssl:
+        bundle: [[shop]]
+    spring:
+      ssl:
+        bundle:
+          pem:
+            shop:
+              keystore:
+                certificate: classpath:shop.crt
+                private-key: classpath:shop.key
+  forwarded: |-
+    server:
+      [[forward-headers-strategy]]: framework
+  trustAll: |-
+    // 이렇게 하지 않는다
+    new X509TrustManager() {
+      public void checkServerTrusted(
+          X509Certificate[] chain,
+          String authType) {
+        [[// 아무것도 확인하지 않음]]
+      }
+      ...
+    }
+predict:
+  text: '클라이언트와 서버 사이에 오가는 바이트를 모두 기록하는 중계기를 두고, 코드 login을 한 번은 HTTP로, 한 번은 HTTPS로 보냈어요. 기록된 바이트에서 `s3cret!`을 찾으면 어떻게 될까요? 보기: 둘 다 찾는다, HTTP에서만 찾는다, 둘 다 못 찾는다.'
+  answer: 'HTTP에서만 찾는다. HTTP는 글 그대로 가고, HTTPS는 TLS가 암호화한 바이트만 간다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: HTTP는 무엇이 위험하고, HTTPS는 무엇을 지키나요?
+    conclusion:
+      lead: 'HTTP는 글 그대로 가서 중간에서 엿보고, 바꾸고, 서버인 척할 수 있어요. HTTPS는 HTTP를 TLS 위에서 보내서 이 셋을 막아요.'
+      sub: 'TLS는 내용을 암호화하고(기밀성), 바뀌면 알아채고(무결성), 상대가 그 도메인의 진짜 서버인지 확인해요(인증).'
+    says:
+      - '요청은 와이파이 공유기, 통신사 장비 같은 여러 장비를 거친다(N2). HTTP는 글 그대로라 그 사이의 누구든 읽고 바꿀 수 있다. 서버인 척 대신 답할 수도 있다'
+      - '중계기로 HTTP와 HTTPS의 바이트를 기록해 비밀번호를 찾는다. HTTP에서는 찾고 HTTPS에서는 못 찾는다. 예측의 답을 밝힌다. 실제 출력에 두 기록의 앞부분을 보인다'
+      - 'HTTPS는 새 프로토콜이 아니라 HTTP를 TLS 연결 위에서 보내는 것이다. 요청 글은 같다. 기본 포트가 443이다'
+      - 'TLS가 지키는 세 가지: 기밀성(엿봐도 못 읽음), 무결성(바꾸면 받는 쪽이 알아챔), 인증(인증서로 서버 확인). 셋 중 하나라도 빠지면 안전하지 않다. 암호화만 하고 상대를 확인하지 않으면, 공격자와 암호화된 대화를 하게 된다'
+      - '더 알아보기: HTTPS에서도 숨기지 못하는 것. 상대 IP와 포트, 주고받은 양과 시각, 그리고 TLS를 시작할 때 보내는 도메인 이름(SNI)이다. 경로, 쿼리, 헤더, 본문은 숨겨진다'
+    asks:
+      - '본문의 예시: HTTPS로 보낸 로그인 요청에서 중간 장비가 읽을 수 없는 것은 (보기: 서버의 IP 주소, 요청 본문의 비밀번호, 접속한 포트 443)'
+      - '옮긴 상황: 공격자가 자기 인증서로 TLS를 맺어 은행 서버인 척한다. 내용은 암호화된다. TLS의 세 가지 가운데 무엇이 이것을 막나 (인증. 그 도메인의 인증서가 아니라 클라이언트가 거부한다)'
+  - id: q2
+    title: TLS는 내용을 어떻게 암호화하나요?
+    conclusion:
+      lead: '연결을 시작할 때 키 교환으로 양쪽만 아는 대칭키를 만들고, 그 뒤의 데이터는 그 대칭키로 암호화해요.'
+      sub: '대칭키 암호는 빠르지만 키를 미리 나눌 방법이 없어요. 키 교환은 엿듣는 사람이 있어도 양쪽만 같은 키를 갖게 해 줘요.'
+    says:
+      - '대칭키 암호: 같은 키로 잠그고 연다(AES). 빠르다. 문제는 처음 만나는 서버와 키를 어떻게 나누느냐다. 키를 그냥 보내면 엿보는 사람도 키를 얻는다'
+      - '키 교환(ECDHE): 양쪽이 각자 비밀 값을 만들고, 거기서 계산한 공개 값만 주고받는다. 각자 자기 비밀 값과 상대의 공개 값으로 같은 키를 계산한다. 엿보는 사람은 공개 값만 보아서 키를 계산하지 못한다. 수학은 다루지 않고 이 성질만 쓴다'
+      - '연결마다 새 비밀 값을 쓰므로, 나중에 서버의 개인키가 새어도 지난 대화를 풀 수 없다(전방 비밀성). TLS 1.3은 이런 키 교환만 허용한다'
+      - '자바 클라이언트로 TLS 연결을 맺고 고른 버전과 암호화 묶음을 출력한다. `TLSv1.3`과 `TLS_AES_256_GCM_SHA384` 같은 값이다. 실제 출력을 보인다'
+      - '암호화 묶음의 AES_256_GCM은 대칭키 암호와 무결성 확인을 함께 하는 방식이다. 바뀐 바이트가 오면 풀지 않고 연결을 끊는다'
+    asks:
+      - '본문의 예시: TLS 연결에서 HTTP 요청과 응답 본문을 암호화하는 데 쓰는 것은 (보기: 서버의 개인키, 키 교환으로 만든 대칭키, 인증서)'
+      - '옮긴 상황: 1년 전 TLS 1.3 통신을 모두 녹화해 둔 공격자가 오늘 서버의 개인키를 훔쳤다. 녹화한 대화를 풀 수 있나 (없다. 연결마다 새로 만든 키 교환 값은 남지 않았다)'
+  - id: q3
+    title: 인증서는 무엇을 증명하고, 클라이언트는 무엇을 확인하나요?
+    conclusion:
+      lead: '인증서는 "이 공개키는 이 도메인의 것"이라고 인증 기관(CA)이 서명한 문서예요.'
+      sub: '클라이언트는 서명이 자기가 믿는 CA까지 이어지는지, 인증서의 도메인이 접속한 주소와 같은지, 유효 기간 안인지를 보고 하나라도 틀리면 연결을 끊어요.'
+    says:
+      - '키 교환만으로는 상대가 누구인지 모른다. 서버는 인증서와 함께, 그 인증서의 공개키에 맞는 개인키로 handshake 내용에 서명해 보인다. 개인키를 가진 서버만 할 수 있다'
+      - '인증서에는 도메인 이름(SAN), 공개키, 유효 기간, 발급한 CA의 서명이 있다. CA의 인증서는 다시 상위 CA가 서명한다. 브라우저와 자바는 믿는 최상위 CA의 목록(신뢰 저장소, 자바는 cacerts)을 가지고 있다'
+      - 'keytool로 localhost 인증서를 만들어 TLS 서버를 띄운다(코드 keytool). 세 경우를 보인다: 기본 신뢰 저장소의 클라이언트는 `PKIX path building failed`로 거부, 이 인증서를 믿게 한 클라이언트(코드 trustClient)는 성공, 인증서의 도메인이 다른 서버(`CN=shop.example.com`)는 이름이 맞지 않아 거부'
+      - '스스로 서명한(self-signed) 인증서는 믿을 CA가 없어서 다른 사람의 클라이언트가 거부한다. 운영에서는 CA가 발급한 인증서를 쓴다(예: Let''s Encrypt)'
+    widget:
+      kind: classify
+      note: '상황(믿는 CA가 발급, 도메인 일치, 기간 안 / 자기 서명 / 다른 도메인의 인증서 / 어제 만료 / 중간 CA 인증서를 빼먹은 서버)을 "연결됨"과 "거부됨"으로 고른다. 거부되면 무엇을 확인하다 걸렸는지 설명한다'
+    asks:
+      - '본문의 예시: keytool로 만든 자기 서명 인증서로 띄운 서버에 기본 설정의 자바 HttpClient로 요청하면 (SSLHandshakeException, PKIX path building failed)'
+      - '옮긴 상황: `api.shop.com`의 인증서를 받아 `pay.shop.com` 서버에 그대로 설치했다. CA가 발급했고 기간 안이다. 클라이언트가 `https://pay.shop.com`에 연결하면 (도메인이 맞지 않아 거부한다)'
+  - id: q4
+    title: TLS 연결은 어떤 순서로 맺나요?
+    conclusion:
+      lead: 'TCP 연결을 맺은 뒤, 클라이언트가 ClientHello를 보내고 서버가 ServerHello, 인증서, Finished로 답하고, 클라이언트가 Finished를 보내요.'
+      sub: 'TLS 1.3은 TCP 다음에 왕복 한 번이면 암호화한 HTTP를 보내기 시작해요. 그래서 HTTPS의 첫 요청은 HTTP보다 왕복 한 번이 더 들어요.'
+    says:
+      - 'ClientHello: 지원하는 TLS 버전과 암호화 묶음, 키 교환의 공개 값, 접속할 도메인(SNI). ServerHello: 고른 버전과 묶음, 서버의 키 교환 공개 값. 여기서 양쪽이 대칭키를 계산한다 (RFC 8446 근거)'
+      - '그 뒤의 서버 메시지는 이미 암호화된다: 인증서, 인증서의 개인키로 한 서명(CertificateVerify), Finished(지금까지 주고받은 내용의 확인 값). 클라이언트가 인증서를 확인하고 Finished를 보낸다'
+      - 'N1의 순서에 놓으면 DNS, TCP(왕복 한 번), TLS(왕복 한 번), HTTP 요청과 응답(왕복 한 번)이다'
+      - '더 알아보기: 한 번 연결한 서버에 다시 연결할 때는 지난 연결의 값으로 인증서 확인을 줄이는 세션 재개가 있다. 연결을 다시 쓰면(N4) handshake를 아예 하지 않는다'
+    widget:
+      kind: timeline
+      note: '클라이언트와 서버 레인에 TCP 연결, ClientHello, ServerHello, (암호화) 인증서와 CertificateVerify와 Finished, 클라이언트 Finished, (암호화) HTTP 요청, 응답을 차례로 넘긴다. 위쪽 두 칸에 양쪽이 가진 것(키 교환 값, 대칭키, 확인한 인증서)을 두고 단계마다 바꾼다'
+    asks:
+      - '본문의 예시: TLS 1.3 handshake에서 서버의 인증서는 암호화되어 가나 (간다. ServerHello 뒤에 대칭키가 생겨 그 뒤 메시지는 암호화된다)'
+      - '옮긴 상황: 서울에서 미국 서버까지 왕복이 150ms다. 연결을 새로 맺어 HTTPS 요청 하나를 보내고 응답을 받기까지 왕복이 최소 몇 번 드나(DNS 제외) (세 번. TCP, TLS, HTTP)'
+practice:
+  says:
+    - '스프링 부트에서 HTTPS를 직접 켤 때는 `server.ssl`에 SSL 번들을 걸어 인증서와 개인키를 준다(코드 bootSsl). 공식 문서 근거'
+    - '운영에서는 로드 밸런서나 리버스 프록시가 TLS를 끝내고(TLS termination) 스프링 서버에는 HTTP로 보내는 경우가 많다. 이때 스프링은 요청이 HTTP로 왔다고 본다'
+    - '흔한 실수 하나: 로드 밸런서 뒤에서 리다이렉트 주소와 `request.getScheme()`이 `http`가 된다. 로드 밸런서가 보낸 `X-Forwarded-Proto: https`를 읽게 `server.forward-headers-strategy`를 켠다(코드 forwarded). 켜기 전과 뒤의 scheme을 테스트로 남긴다'
+    - '흔한 실수 둘: `PKIX path building failed`를 없애려고 모든 인증서를 믿는 코드(코드 trustAll)를 붙인다. 질문 3의 인증을 끄는 것이라 사칭을 막지 못한다. 사내 CA라면 그 CA 인증서를 신뢰 저장소에 넣는다'
+claims:
+  - claim: 'HTTP로 보낸 요청의 바이트에는 비밀번호가 그대로 있고, HTTPS로 보낸 바이트에는 없다'
+    how: '클라이언트와 서버 사이에 바이트를 기록하는 TCP 중계기를 두고 두 방식으로 보낸다'
+  - claim: '자바 21 클라이언트와 서버가 TLS 1.3과 AES GCM 묶음으로 연결한다'
+    how: 'SSLSocket의 세션에서 프로토콜과 묶음을 읽는다'
+  - claim: '자기 서명 인증서의 서버에 기본 신뢰 저장소로 연결하면 PKIX path building failed로 거부된다'
+    how: 'keytool로 인증서를 만들어 SSLServerSocket을 띄우고 HttpClient로 요청한다'
+  - claim: '그 인증서를 믿게 한 SSLContext로는 연결된다'
+    how: '인증서만 든 신뢰 저장소로 SSLContext를 만든다'
+  - claim: '인증서의 도메인이 접속한 이름과 다르면 거부된다'
+    how: 'SAN이 shop.example.com인 인증서를 믿게 하고 localhost로 접속한다'
+  - claim: '로드 밸런서가 보낸 X-Forwarded-Proto: https를 스프링은 기본으로 읽지 않고, forward-headers-strategy=framework면 scheme이 https가 된다'
+    how: 'MiniWeb처럼 작은 앱을 두 설정으로 띄워 request.getScheme()을 돌려받는다'
+sources:
+  - 'HTTPS: RFC 9110 4.2.2 https://www.rfc-editor.org/rfc/rfc9110.html#section-4.2.2'
+  - 'TLS 1.3과 handshake 메시지: RFC 8446 https://www.rfc-editor.org/rfc/rfc8446.html'
+  - '인증서와 경로 확인: RFC 5280 https://www.rfc-editor.org/rfc/rfc5280.html'
+  - '서버 이름 확인: RFC 9525 https://www.rfc-editor.org/rfc/rfc9525.html'
+  - '자바의 TLS(JSSE): https://docs.oracle.com/en/java/javase/21/security/java-secure-socket-extension-jsse-reference-guide.html'
+  - '스프링 부트의 SSL 번들: https://docs.spring.io/spring-boot/reference/features/ssl.html'
+  - '스프링 부트의 forward-headers-strategy: https://docs.spring.io/spring-boot/how-to/webserver.html#howto.webserver.use-behind-a-proxy-server'

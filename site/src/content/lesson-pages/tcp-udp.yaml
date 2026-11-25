@@ -1,0 +1,153 @@
+# TCP와 UDP (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: TCP와 UDP
+unit: 네트워크와 웹
+roadmap: N3
+type: 개념 설명
+prerequisites:
+  - {slug: network-layers, title: OSI 7계층과 TCP/IP 4계층}
+assume: '전송 계층이 포트로 프로그램을 구별한다는 것, 아래 계층(IP)은 패킷을 목적지로 보낼 뿐 도착을 약속하지 않는다는 것(OSI 7계층과 TCP/IP 4계층 레슨). 자바 21. 패킷이 오가는 모습은 자바 코드에서 보이지 않아서 RFC를 근거로 적고, 자바 소켓에 드러나는 결과를 테스트로 확인해요.'
+example: '주문 서버와 결제 서버가 TCP로 주고받는 연결 하나. 테스트에서는 자바 소켓으로 연결을 맺고, 쓰고, 닫아 보고, 같은 일을 UDP의 DatagramSocket으로 해서 비교해요.'
+intro:
+  - '"3-way handshake를 설명해 보세요", "TCP와 UDP의 차이는요?"는 네트워크 면접의 단골이에요. 답을 외우기는 쉽지만, 그것이 왜 서버 코드에 중요한지까지 말하는 사람은 적어요.'
+  - '스프링 서버가 DB, Redis, 다른 API를 부를 때 모두 TCP 연결을 써요. 커넥션 풀(HikariCP)과 HTTP 클라이언트를 재사용하라는 말은 연결을 맺고 끊는 비용 때문이고, 요청마다 연결을 새로 만들던 서버가 포트를 다 써서 멈추는 장애도 여기서 나와요.'
+  - '이 레슨에서는 자바 소켓으로 연결이 맺어지는 시점, 쓴 데이터가 받는 쪽에 도착하는 모양, 연결을 닫을 때 상대가 보는 것을 확인하고, UDP로 같은 일을 해서 무엇이 다른지 봐요.'
+covers:
+  - {topic: 'TCP는 연결을 맺은 뒤에 데이터를 보낸다. 3-way handshake(SYN, SYN-ACK, ACK)', where: 질문 1}
+  - {topic: '연결을 맺는 일은 OS가 한다. 서버 프로그램이 accept를 부르기 전에도 연결은 맺어진다', where: 질문 1}
+  - {topic: '연결을 맺는 데 왕복 한 번이 든다. 그래서 연결을 다시 쓴다', where: '질문 1, 실무에서는'}
+  - {topic: '아무도 듣지 않는 포트에 연결하면 거절(RST)되어 Connection refused가 난다', where: 질문 1}
+  - {topic: 'TCP는 순서 번호와 확인 응답(ACK)으로 빠진 것을 다시 보내고 순서를 맞춘다', where: 질문 2}
+  - {topic: '흐름 제어: 받는 쪽이 읽지 않으면 보내는 쪽의 쓰기가 멈춘다(수신 윈도)', where: 질문 2}
+  - {topic: '혼잡 제어: 네트워크가 막히면 보내는 속도를 줄인다', where: 질문 2의 더 알아보기}
+  - {topic: 'TCP는 바이트의 흐름이라 메시지의 경계가 없다. 두 번 쓴 것을 한 번에 읽을 수 있다', where: 질문 2}
+  - {topic: '연결 끊기: FIN을 주고받는다(4-way). 상대가 닫으면 read가 -1을 돌려준다', where: 질문 3}
+  - {topic: '먼저 닫은 쪽에 TIME_WAIT가 남는다', where: 질문 3}
+  - {topic: 'UDP는 연결이 없고, 도착과 순서를 약속하지 않고, 보낸 단위(데이터그램)가 그대로 도착한다', where: 질문 4}
+  - {topic: 'UDP를 쓰는 곳: DNS, 실시간 영상과 음성, 게임, HTTP/3(QUIC)', where: 질문 4}
+  - {topic: '요청마다 연결을 새로 만드는 실수와 연결 재사용(HTTP 클라이언트, 커넥션 풀)', where: 실무에서는}
+  - {topic: '연결 시간 제한과 읽기 시간 제한', where: '다루지 않음: 브라우저에 주소를 입력하면(N1)'}
+  - {topic: 'HTTP의 연결 재사용(keep-alive)', where: '다루지 않음: HTTP 요청과 응답(N4)'}
+  - {topic: '커넥션 풀의 크기', where: '다루지 않음: 커넥션 풀(D 과정의 connection-pool)'}
+codes:
+  connectNoAccept: |-
+    ServerSocket server =
+        new ServerSocket(0);
+    // [[accept()를 부르지 않는다]]
+    Socket client = new Socket(
+        "localhost", server.getLocalPort());
+    client.isConnected(); // ?
+  twoWrites: |-
+    out.write("PAY:1000".getBytes());
+    out.write("PAY:2000".getBytes());
+    // 받는 쪽
+    int n = in.read(buf); // ?
+  closeRead: |-
+    // 결제 서버가 연결을 닫는다
+    server.close();
+    // 주문 서버 쪽
+    int n = in.read(buf); // ?
+  udpSend: |-
+    DatagramSocket udp =
+        new DatagramSocket();
+    udp.send(new DatagramPacket(
+        data, data.length, addr, port));
+  newClientEachTime: |-
+    for (int i = 0; i < 5; i++) {
+      HttpClient c = [[HttpClient.newHttpClient()]];
+      c.send(req, ofString());
+    }
+  sharedClient: |-
+    private final HttpClient client =
+        HttpClient.newHttpClient();
+predict:
+  text: '코드 connectNoAccept는 서버 소켓을 열기만 하고 `accept()`를 부르지 않아요. 서버 프로그램은 연결을 받겠다고 한 적이 없어요. 클라이언트의 연결은 맺어질까요? 보기: 맺어진다, accept를 부를 때까지 new Socket에서 멈춘다, 거절되어 예외가 난다.'
+  answer: '맺어진다. 3-way handshake는 OS가 하고, accept는 이미 맺어진 연결을 꺼내 갈 뿐이다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: TCP는 연결을 어떻게 맺나요?
+    conclusion:
+      lead: '클라이언트가 SYN을 보내고, 서버가 SYN-ACK로 답하고, 클라이언트가 ACK를 보내는 세 번의 주고받기로 맺어요.'
+      sub: '서로 "보낼 준비가 됐고, 네 첫 번호를 받았다"를 확인하는 과정이에요. 이 일은 OS가 하고, 프로그램은 맺어진 연결을 받아 쓰기만 해요.'
+    says:
+      - 'TCP는 데이터를 보내기 전에 연결을 맺는다. 양쪽이 각자 시작할 순서 번호를 정하고 상대가 받았는지 확인해야 하기 때문이다. SYN(내 첫 번호는 x), SYN-ACK(받았다, 내 첫 번호는 y), ACK(받았다) 세 번이다 (RFC 9293 근거)'
+      - '세 번 가운데 앞의 두 번이 왕복 한 번이다. 연결 하나를 맺는 데 왕복 한 번이 들고, 서울과 미국 사이면 100밀리초가 넘는다'
+      - '코드 connectNoAccept를 돌린다. accept를 부르지 않아도 연결이 맺어진다. 예측의 답을 밝힌다. OS가 handshake를 끝낸 연결을 대기열에 쌓아 두고, accept는 거기서 하나를 꺼낸다'
+      - '아무도 듣지 않는 포트에 SYN을 보내면 상대 OS가 RST(거절)로 답한다. 자바에서는 `ConnectException: Connection refused`다'
+    widget:
+      kind: timeline
+      note: '주문 서버(클라이언트)와 결제 서버 두 레인에 SYN, SYN-ACK, ACK를 차례로 넘긴다. 위쪽 두 칸에 양쪽의 연결 상태(CLOSED, SYN_SENT, SYN_RECEIVED, ESTABLISHED)를 두고 단계마다 바꾼다. 마지막 단계에서 서버 프로그램이 accept로 연결을 꺼낸다'
+    asks:
+      - '본문의 예시: 3-way handshake에서 서버가 보내는 것은 (SYN-ACK)'
+      - '옮긴 상황: 결제 서버 프로그램이 죽어서 그 포트를 듣는 프로그램이 없다. 컴퓨터는 켜져 있다. 주문 서버가 연결하면 무슨 일이 생기나 (상대 OS가 RST로 거절해 바로 Connection refused가 난다)'
+  - id: q2
+    title: TCP는 어떻게 데이터를 빠짐없이 순서대로 전하나요?
+    conclusion:
+      lead: '보내는 바이트마다 순서 번호를 붙이고, 받는 쪽이 어디까지 받았는지 확인 응답(ACK)을 돌려줘요. 확인이 오지 않으면 다시 보내고, 받는 쪽은 번호로 순서를 맞춰요.'
+      sub: '받는 쪽이 읽지 못하면 받을 수 있는 양(윈도)을 줄여 보내는 쪽을 멈춰요. 대신 TCP는 바이트의 흐름이라, 몇 번에 나눠 썼는지는 전하지 않아요.'
+    says:
+      - 'IP는 패킷이 빠지거나 순서가 바뀌어도 고쳐 주지 않는다. TCP가 바이트마다 순서 번호를 매기고 받은 곳까지 ACK를 받는다. 정해진 시간 안에 ACK가 없으면 다시 보낸다. 받는 쪽은 번호를 보고 순서대로 맞춰 프로그램에 준다 (RFC 9293 근거)'
+      - '흐름 제어: 받는 쪽은 아직 프로그램이 읽지 않은 데이터를 버퍼에 둔다. 버퍼가 차면 "더 받을 수 없다"고 알려 보내는 쪽이 멈춘다. 받는 쪽이 읽지 않을 때 보내는 쪽의 write가 어느 순간 멈추는 것을 테스트로 보인다'
+      - 'TCP는 메시지가 아니라 바이트의 흐름이다. 코드 twoWrites처럼 두 번 쓴 것을 받는 쪽이 한 번에 읽을 수 있다. 실제 출력을 보인다. 그래서 HTTP 같은 위 계층이 길이(`Content-Length`)나 구분자로 메시지의 끝을 정한다'
+      - '더 알아보기: 혼잡 제어. 네트워크가 막혀 패킷이 버려지면 보내는 속도를 줄였다가 천천히 올린다. 흐름 제어가 받는 쪽을 지키는 것이라면 혼잡 제어는 중간의 네트워크를 지킨다'
+    asks:
+      - '본문의 예시: 코드 twoWrites에서 받는 쪽의 `read` 한 번이 "PAY:1000PAY:2000"을 한꺼번에 돌려줄 수 있나 (있다. TCP는 쓴 횟수를 전하지 않는다)'
+      - '옮긴 상황: 받는 쪽 프로그램이 바빠서 소켓을 읽지 않는다. 보내는 쪽이 계속 쓰면 어떻게 되나 (받는 쪽 버퍼가 차면 보내는 쪽의 write가 멈춘다. 흐름 제어)'
+  - id: q3
+    title: TCP 연결은 어떻게 끊나요?
+    conclusion:
+      lead: '각자 "더 보낼 것이 없다"는 FIN을 보내고 상대가 ACK로 받아요. 양쪽이 따로 하므로 네 번 주고받아요.'
+      sub: '상대가 FIN을 보내면 자바의 `read`가 -1을 돌려줘요. 먼저 닫은 쪽에는 한동안 TIME_WAIT 상태가 남아요.'
+    says:
+      - '끊을 때는 양쪽이 각자 FIN을 보낸다. 한쪽이 FIN을 보내도 다른 쪽은 남은 데이터를 더 보낼 수 있다. 그래서 FIN과 ACK가 양쪽으로 한 번씩, 네 번이다 (RFC 9293 근거)'
+      - '코드 closeRead. 결제 서버가 소켓을 닫으면 주문 서버의 `read`가 -1을 돌려준다. "상대가 더 보내지 않는다"는 뜻이다. 실제 출력을 보인다'
+      - '먼저 닫은 쪽은 TIME_WAIT 상태로 잠시(보통 수십 초에서 몇 분) 그 연결의 네 값(IP와 포트 쌍)을 붙잡아 둔다. 늦게 도착한 옛 패킷이 같은 네 값의 새 연결에 섞이지 않게 하려는 것이다. 짧은 연결을 아주 많이 만들면 이 상태가 쌓여 쓸 수 있는 포트가 모자란다'
+    asks:
+      - '본문의 예시: 상대가 연결을 닫은 뒤 자바 `InputStream.read`가 돌려주는 값은 (-1)'
+      - '옮긴 상황: 서버가 다른 API를 부를 때마다 연결을 새로 맺고 끊어서 초당 수천 개씩 연결을 만든다. 먼저 닫는 쪽에 쌓여서 새 연결을 맺지 못하게 만들 수 있는 것은 (TIME_WAIT 상태의 연결)'
+  - id: q4
+    title: UDP는 무엇이 다르고 언제 쓰나요?
+    conclusion:
+      lead: 'UDP는 연결을 맺지 않고 데이터그램을 바로 보내요. 도착도 순서도 약속하지 않는 대신, 빠르고 보낸 단위가 그대로 도착해요.'
+      sub: '그래서 조금 빠져도 되고 늦으면 쓸모없는 것(실시간 영상, 음성, 게임)과 짧게 한 번 묻는 것(DNS)에 써요.'
+    says:
+      - 'UDP는 handshake가 없다. 받을 프로그램이 없는 포트로 보내도 `send`는 예외 없이 끝난다(코드 udpSend). 보냈다는 것만 알고 도착했는지는 모른다. TCP가 refused를 바로 아는 것과 비교한다'
+      - 'UDP는 보낸 단위(데이터그램)를 지킨다. 두 번 보내면 받는 쪽도 두 번에 나눠 받는다. 질문 2의 TCP와 비교한다'
+      - '빠진 것을 다시 보내지 않고 순서를 맞추지 않는다. 필요하면 프로그램이 직접 한다'
+      - '쓰는 곳: DNS는 질문 하나에 답 하나라 연결을 맺는 비용이 아깝다. 영상 통화는 늦게 다시 온 데이터가 쓸모없다. HTTP/3는 UDP 위에 QUIC이라는 프로토콜을 올려 신뢰성을 직접 만든다'
+    widget:
+      kind: compare
+      note: 'TCP와 UDP 두 칸에 연결, 도착 보장, 순서, 메시지 경계, 속도를 항목으로 둔다. 상황(듣는 프로그램이 없는 포트로 보냄, 두 번 나눠 보냄, 중간에 패킷 하나가 빠짐)을 고르면 양쪽에서 무엇이 일어나는지 강조한다'
+    asks:
+      - '본문의 예시: 아무도 듣지 않는 포트로 UDP 데이터그램을 `send`하면 보내는 쪽에서 예외가 나나 (나지 않는다)'
+      - '옮긴 상황: 주식 시세를 초마다 보내는 서비스에서 1초 전 시세가 늦게 도착해도 쓸모없다. TCP와 UDP 가운데 무엇이 더 맞나, 이유는 (UDP. 다시 보낸 늦은 데이터를 기다릴 필요가 없다)'
+practice:
+  says:
+    - '스프링 서버의 TCP 연결은 대부분 라이브러리가 관리한다. DB는 HikariCP가, HTTP는 `HttpClient`나 `RestClient`의 연결 풀이 연결을 맺어 두고 다시 쓴다. 질문 1의 handshake와 질문 3의 TIME_WAIT를 줄이는 장치다'
+    - '흔한 실수: 요청마다 `HttpClient.newHttpClient()`를 새로 만든다(코드 newClientEachTime). 클라이언트마다 연결 풀이 따로라서 매번 연결을 새로 맺는다. 서버가 본 클라이언트 포트가 요청마다 다른 것을 테스트로 보인다'
+    - '고친 코드: 클라이언트를 필드나 빈 하나로 두고 함께 쓴다(코드 sharedClient). 다섯 요청이 같은 포트, 곧 같은 연결로 간다'
+    - '`RestClient`나 `RestTemplate`도 같다. 빈 하나를 만들어 주입받아 쓴다 (스프링 문서 근거)'
+claims:
+  - claim: '서버 소켓이 accept를 부르지 않아도 클라이언트의 연결은 맺어진다'
+    how: 'ServerSocket을 열고 accept 없이 Socket으로 연결한다'
+  - claim: '아무도 듣지 않는 포트로 연결하면 `ConnectException`(Connection refused)이 바로 난다'
+    how: '열었다 닫은 포트로 연결하고 걸린 시간을 기록한다'
+  - claim: '두 번 쓴 바이트를 받는 쪽이 한 번의 read로 함께 읽을 수 있다'
+    how: '두 번 쓰고 잠시 기다린 뒤 큰 버퍼로 한 번 읽는다. 읽은 바이트 수를 기록한다'
+  - claim: '받는 쪽이 읽지 않으면 보내는 쪽의 write가 어느 순간 멈춘다'
+    how: '다른 스레드에서 계속 쓰고, 1초 뒤 쓰기가 멈춰 있는지와 그때까지 쓴 양을 기록한다'
+  - claim: '상대가 소켓을 닫으면 read가 -1을 돌려준다'
+    how: '서버 쪽 소켓을 닫고 클라이언트에서 읽는다'
+  - claim: '아무도 듣지 않는 포트로 UDP를 보내도 send는 예외 없이 끝난다'
+    how: 'DatagramSocket.send'
+  - claim: 'UDP로 두 번 보내면 받는 쪽은 두 번에 나눠 받는다'
+    how: 'DatagramSocket.receive를 두 번 부른다'
+  - claim: '요청마다 새 HttpClient를 만들면 서버가 본 클라이언트 포트가 매번 다르고, 하나를 함께 쓰면 같다'
+    how: 'MiniWeb 컨트롤러가 request.getRemotePort()를 돌려준다'
+sources:
+  - 'TCP의 연결 맺기, 순서 번호, 재전송, 윈도, 끊기, TIME_WAIT: RFC 9293 https://www.rfc-editor.org/rfc/rfc9293.html'
+  - '혼잡 제어: RFC 5681 https://www.rfc-editor.org/rfc/rfc5681.html'
+  - 'UDP: RFC 768 https://www.rfc-editor.org/rfc/rfc768.html'
+  - 'QUIC: RFC 9000 https://www.rfc-editor.org/rfc/rfc9000.html'
+  - 'HttpClient는 연결 풀을 가지며 다시 써야 한다: https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpClient.html'

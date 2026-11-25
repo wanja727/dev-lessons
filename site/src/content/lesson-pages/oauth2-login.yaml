@@ -1,0 +1,192 @@
+# OAuth 2.0과 소셜 로그인 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: OAuth 2.0과 소셜 로그인
+unit: 네트워크와 웹
+roadmap: N8
+type: 개념 설명
+prerequisites:
+  - {slug: cookie-session-token, title: 쿠키, 세션, 토큰}
+  - {slug: https-tls, title: HTTPS와 TLS}
+assume: '세션과 JWT로 로그인 상태를 유지하는 법(쿠키, 세션, 토큰 레슨), HTTPS가 내용을 숨기고 서버를 확인한다는 것(HTTPS와 TLS 레슨), 3xx 응답과 Location 헤더(HTTP 요청과 응답 레슨). 실제 구글이나 카카오 서버에는 테스트로 요청할 수 없어서, RFC 6749의 규칙대로 만든 작은 인가 서버로 흐름을 돌리고 그렇다고 밝혀요.'
+example: '쇼핑몰(우리 서비스)에 "카카오로 로그인" 버튼을 두는 일. 등장인물은 사용자 kim, 쇼핑몰 서버, 카카오의 로그인 서버(인가 서버), 카카오의 사용자 정보 API(자원 서버)예요.'
+intro:
+  - '"구글로 로그인" 버튼을 누르면 구글 화면으로 갔다가 돌아오는데, 우리 서비스는 사용자의 구글 비밀번호를 한 번도 보지 않아요. 그런데 어떻게 그 사용자가 누구인지 알까요?'
+  - '스프링 개발자는 소셜 로그인을 붙일 때 이 흐름을 그대로 설정해요. `client-id`, `client-secret`, `redirect-uri`, `scope`가 무엇인지 모르면 `redirect_uri_mismatch` 같은 에러에서 막혀요. 면접에서는 "OAuth 2.0의 인가 코드 흐름을 설명해 주세요", "OAuth와 로그인은 무엇이 다른가요"를 물어요.'
+  - '이 레슨에서는 RFC 6749의 규칙대로 만든 작은 인가 서버와 쇼핑몰 서버를 띄워 인가 코드 흐름을 한 단계씩 밟고, 코드를 두 번 쓰거나 비밀값을 틀리면 무슨 일이 생기는지 확인해요.'
+covers:
+  - {topic: 'OAuth 2.0은 비밀번호를 넘기지 않고, 정해진 범위의 권한(액세스 토큰)을 다른 서비스에 넘기는 규칙이다', where: 질문 1}
+  - {topic: '네 역할: 자원 소유자(사용자), 클라이언트(우리 서비스), 인가 서버, 자원 서버', where: 질문 1}
+  - {topic: 'scope: 넘기는 권한의 범위. 사용자가 동의 화면에서 본다', where: 질문 1}
+  - {topic: '클라이언트 등록: client_id, client_secret, redirect_uri를 미리 등록한다', where: 질문 1}
+  - {topic: '인가 코드 흐름의 단계: 인가 요청 리다이렉트, 로그인과 동의, 코드를 들고 돌아오기, 코드를 토큰으로 바꾸기, 토큰으로 API 부르기', where: 질문 2}
+  - {topic: 'state: 시작한 요청과 돌아온 요청이 같은지 확인해 CSRF를 막는다', where: 질문 2}
+  - {topic: '프론트 채널(브라우저를 거침)과 백 채널(서버끼리 직접)', where: 질문 3}
+  - {topic: '코드를 한 번 더 바꾸는 이유: 코드는 브라우저 주소에 드러나니 짧게 살고 한 번만 쓰이고, 토큰은 client_secret과 함께 서버끼리 받는다', where: 질문 3}
+  - {topic: 'redirect_uri는 등록한 값과 정확히 같아야 한다', where: '질문 3, 실무에서는'}
+  - {topic: 'PKCE: 비밀값을 둘 수 없는 앱을 위한 장치', where: 질문 3의 더 알아보기}
+  - {topic: 'OAuth는 권한을 넘기는 규칙이지 로그인 규칙이 아니다. 로그인에는 OpenID Connect의 ID 토큰을 쓴다', where: 질문 4}
+  - {topic: 'ID 토큰은 JWT이고 sub(그 서비스 안의 사용자 번호)로 사용자를 구별한다', where: 질문 4}
+  - {topic: '소셜 로그인 뒤 우리 회원과 잇기(제공자와 sub로), 그 뒤는 우리 세션이나 JWT', where: 질문 4}
+  - {topic: '리프레시 토큰으로 액세스 토큰 다시 받기', where: 질문 4의 더 알아보기}
+  - {topic: '스프링 시큐리티 OAuth2 Client: 의존성, application.yml의 registration과 provider, oauth2Login()', where: 실무에서는}
+  - {topic: '스프링의 기본 주소: /oauth2/authorization/{id}, /login/oauth2/code/{id}', where: 실무에서는}
+  - {topic: '흔한 실수: 로드 밸런서 뒤에서 redirect_uri가 http로 만들어져 등록 값과 다름', where: 실무에서는}
+  - {topic: '스프링 시큐리티의 필터 체인', where: '다루지 않음: 인증과 인가(S12)'}
+  - {topic: '우리 서비스가 인가 서버가 되는 일(Spring Authorization Server)', where: '다루지 않음: 백엔드 신입이 만들 일이 드물어 로드맵에 두지 않는다'}
+  - {topic: '클라이언트 자격 증명 방식(서버끼리 부르는 OAuth)', where: '질문 1의 더 알아보기'}
+codes:
+  authorize: |-
+    HTTP/1.1 302
+    Location: https://auth.kakao.com
+      /oauth/authorize
+      ?response_type=[[code]]
+      &client_id=shop
+      &redirect_uri=https://shop.com
+        /login/oauth2/code/kakao
+      &scope=profile
+      &state=[[x7Kp2]]
+  callback: |-
+    GET /login/oauth2/code/kakao
+        ?code=[[Sp1xlOBe]]&state=x7Kp2
+    Host: shop.com
+  tokenRequest: |-
+    POST /oauth/token
+    Host: auth.kakao.com
+    Content-Type:
+      application/x-www-form-urlencoded
+
+    grant_type=authorization_code
+    &code=Sp1xlOBe
+    &redirect_uri=https://shop.com/...
+    &client_id=shop
+    &client_secret=[[s3cr3t]]
+  tokenResponse: |-
+    {"access_token":"ya29.a0Af...",
+     "token_type":"Bearer",
+     "expires_in":3600,
+     "id_token":"eyJhbGci..."}
+  idTokenPayload: |-
+    {"iss":"https://auth.kakao.com",
+     [["sub":"3812294"]],
+     "aud":"shop",
+     "exp":1795000000}
+  gradle: |-
+    implementation 'org.springframework.boot:⤷
+    spring-boot-starter-oauth2-client'
+  yml: |-
+    spring:
+      security:
+        oauth2:
+          client:
+            registration:
+              kakao:
+                client-id: shop
+                client-secret: ${KAKAO_SECRET}
+                authorization-grant-type:
+                  authorization_code
+                redirect-uri: "{baseUrl}⤷
+    /login/oauth2/code/{registrationId}"
+                scope: profile
+            provider:
+              kakao:
+                authorization-uri: ...
+                token-uri: ...
+                user-info-uri: ...
+                user-name-attribute: id
+  security: |-
+    @Bean
+    SecurityFilterChain web(HttpSecurity http)
+        throws Exception {
+      http
+        .authorizeHttpRequests(a -> a
+          .anyRequest().authenticated())
+        .[[oauth2Login]](Customizer.withDefaults());
+      return http.build();
+    }
+predict:
+  text: '쇼핑몰 서버가 카카오에서 받은 인가 코드로 액세스 토큰을 받았어요. 그런데 네트워크가 끊겨 같은 코드로 토큰 요청을 한 번 더 보냈어요. 인가 서버는 어떻게 답할까요? 보기: 같은 토큰을 다시 준다, 새 토큰을 하나 더 준다, 거절한다(invalid_grant).'
+  answer: '거절한다. 인가 코드는 한 번만 쓸 수 있다. 두 번째로 쓰면 거절하고, 그 코드로 준 토큰도 취소하는 것이 좋다고 RFC 6749가 정한다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: OAuth 2.0은 비밀번호 없이 무엇을 어떻게 넘기나요?
+    conclusion:
+      lead: '사용자의 비밀번호 대신, 사용자가 동의한 범위(scope)만큼만 쓸 수 있는 액세스 토큰을 우리 서비스에 넘겨요.'
+      sub: '토큰은 사용자가 비밀번호를 넣은 인가 서버가 만들어 줘요. 우리 서비스는 비밀번호를 보지 못하고, 토큰으로는 허락받은 일만 해요.'
+    says:
+      - '옛날 방식: 다른 서비스의 연락처를 가져오려고 사용자의 그 서비스 비밀번호를 받아 저장했다. 비밀번호가 새면 모든 권한이 새고, 일부만 허락하거나 우리 서비스만 끊을 수 없다'
+      - 'OAuth 2.0의 네 역할을 예제의 인물로 맞춘다. 자원 소유자(kim), 클라이언트(쇼핑몰 서버), 인가 서버(카카오 로그인), 자원 서버(카카오 사용자 정보 API). 클라이언트는 사용자가 아니라 우리 서비스다'
+      - '인가 서버는 kim이 로그인하고 동의하면 액세스 토큰을 준다. 토큰에는 범위(scope)가 있다. `profile`만 동의했으면 친구 목록은 못 읽는다. kim은 카카오에서 쇼핑몰의 권한만 끊을 수 있다'
+      - '클라이언트는 미리 인가 서버에 등록해 client_id(공개 이름), client_secret(서버만 아는 비밀값), redirect_uri(돌아올 주소)를 받는다'
+      - '더 알아보기: 사용자 없이 서버끼리 부를 때는 클라이언트 자격 증명 방식(client_credentials)으로 client_id와 secret만으로 토큰을 받는다'
+    asks:
+      - '본문의 예시: 카카오 로그인 흐름에서 "클라이언트"는 누구인가 (보기: kim의 브라우저, 쇼핑몰 서버, 카카오 인가 서버)'
+      - '옮긴 상황: 일정 관리 앱이 사용자의 구글 캘린더를 읽기만 하려 한다. 구글 비밀번호를 받는 대신 무엇을 받고, 그것으로 일정을 지울 수 있나 (읽기 scope의 액세스 토큰. 지울 수 없다)'
+  - id: q2
+    title: 인가 코드 흐름은 어떤 순서로 진행되나요?
+    conclusion:
+      lead: '우리 서버가 브라우저를 인가 서버로 보내고, 사용자가 거기서 로그인하고 동의하면, 인가 서버가 코드를 붙여 브라우저를 우리 서버로 돌려보내요. 우리 서버는 그 코드를 인가 서버에 직접 보내 토큰으로 바꿔요.'
+      sub: 'state 값을 보냈다가 돌아올 때 같은지 확인해서, 우리가 시작한 흐름으로 돌아온 것인지 봐요.'
+    says:
+      - '1단계: kim이 "카카오로 로그인"을 누르면 쇼핑몰 서버는 302로 브라우저를 인가 서버로 보낸다(코드 authorize). response_type=code, client_id, redirect_uri, scope, state를 쿼리로 붙인다'
+      - '2단계: kim은 카카오 화면에서 카카오 비밀번호로 로그인하고 동의한다. 쇼핑몰은 이 화면을 보지 못한다'
+      - '3단계: 인가 서버는 302로 브라우저를 redirect_uri로 돌려보낸다. 주소에 code와 state가 붙는다(코드 callback)'
+      - '4단계: 쇼핑몰 서버는 state가 1단계에서 세션에 넣어 둔 값과 같은지 확인한다. 다르면 멈춘다. 공격자가 자기 코드를 kim의 브라우저로 보내 kim을 공격자 계정으로 로그인시키는 일을 막는다'
+      - '5단계: 쇼핑몰 서버가 인가 서버에 코드와 client_secret을 보내 토큰을 받는다(코드 tokenRequest, tokenResponse). 6단계: 액세스 토큰을 `Authorization: Bearer`에 실어 사용자 정보 API를 부른다'
+      - '작은 인가 서버로 흐름 전체를 돌린 기록(주고받은 주소와 응답)을 실제 출력으로 보인다'
+    widget:
+      kind: steps
+      note: '여섯 단계를 하나씩 넘긴다. 단계마다 누가 누구에게 보내는지(브라우저를 거치는지, 서버끼리인지), 오가는 값(state, code, client_secret, access_token)을 로그 한 줄로 쌓고, 지금까지 브라우저 주소창에 드러난 값을 따로 보여 준다'
+    asks:
+      - '본문의 예시: 인가 서버가 사용자를 쇼핑몰로 돌려보낼 때 주소에 붙여 주는 것은 (보기: 액세스 토큰, 인가 코드와 state, 사용자의 비밀번호)'
+      - '옮긴 상황: 돌아온 요청의 state가 세션에 넣어 둔 값과 다르다. 쇼핑몰 서버는 어떻게 해야 하나 (토큰을 받지 않고 흐름을 멈춘다)'
+  - id: q3
+    title: 왜 바로 토큰을 주지 않고 코드를 거치나요?
+    conclusion:
+      lead: '코드는 브라우저 주소에 드러나서 새기 쉬우니, 짧게 살고 한 번만 쓰이고 그것만으로는 쓸모없게 해요. 토큰은 client_secret을 가진 우리 서버만 서버끼리 직접 받아요.'
+      sub: '브라우저를 거치는 길(프론트 채널)에는 코드만, 서버끼리의 길(백 채널)에는 토큰이 다녀요.'
+    says:
+      - '브라우저를 거치는 값은 주소창, 방문 기록, 서버 로그, Referer 헤더에 남을 수 있다. 여기에 토큰을 실으면 토큰이 샌다'
+      - '코드는 그것만으로 API를 부를 수 없다. 토큰으로 바꾸려면 client_secret이 필요하고, 그것은 우리 서버에만 있다. 토큰 요청은 HTTPS로 서버끼리 직접 간다(N6)'
+      - '코드는 짧게 산다(RFC 6749는 최대 10분을 권한다). 한 번만 쓸 수 있다. 같은 코드로 두 번째 토큰을 요청하면 invalid_grant로 거절된다. 예측의 답을 밝힌다'
+      - '틀린 client_secret은 invalid_client, 1단계와 다른 redirect_uri는 invalid_grant다. 인가 서버는 등록한 redirect_uri와 정확히 같아야만 돌려보낸다. 세 경우를 작은 인가 서버로 돌린 결과를 보인다. 실제 카카오나 구글이 아니라 RFC의 규칙대로 만든 서버라고 밝힌다'
+      - '더 알아보기: 모바일 앱과 SPA는 client_secret을 숨길 수 없다. PKCE는 흐름을 시작할 때 무작위 값의 해시를 보내고 토큰을 받을 때 원래 값을 보내서, 코드를 가로챈 사람이 토큰을 받지 못하게 한다'
+    asks:
+      - '본문의 예시: 이미 토큰으로 바꾼 인가 코드로 토큰을 다시 요청하면 인가 서버의 답은 (invalid_grant로 거절)'
+      - '옮긴 상황: 누군가 kim의 브라우저 기록에서 인가 코드를 훔쳤다. 아직 쓰이지 않은 코드다. client_secret은 모른다. 이 코드로 토큰을 받을 수 있나 (없다. 토큰 요청에 client_secret이 필요하다)'
+  - id: q4
+    title: 소셜 로그인은 OAuth와 무엇이 다른가요?
+    conclusion:
+      lead: 'OAuth의 액세스 토큰은 "무엇을 해도 되는지"만 알려 주고 "누구인지"는 약속하지 않아요. 로그인에는 OAuth 위에 OpenID Connect를 얹어 받은 ID 토큰으로 사용자를 확인해요.'
+      sub: 'ID 토큰은 인가 서버가 서명한 JWT이고, 그 안의 sub로 사용자를 구별해요. 확인이 끝나면 우리 서비스는 우리 세션이나 JWT로 로그인 상태를 유지해요.'
+    says:
+      - '액세스 토큰은 자원 서버에 내는 권한 증명이다. 클라이언트가 그 안을 읽어 사용자를 알아내는 용도가 아니다. 사용자 정보 API를 불러 누구인지 알아낼 수는 있지만, 그것은 로그인을 위한 표준 규칙이 아니었다'
+      - 'OpenID Connect: scope에 `openid`를 넣으면 토큰 응답에 ID 토큰이 함께 온다(코드 tokenResponse). ID 토큰은 JWT다(N7). iss(발급자), sub(사용자 번호), aud(우리 client_id), exp(만료)를 확인한다(코드 idTokenPayload)'
+      - '우리 회원과 잇는 열쇠는 이메일이 아니라 (제공자, sub)다. 이메일은 바뀌거나 비어 있을 수 있다. 처음 온 sub면 회원을 만들고, 아는 sub면 그 회원으로 로그인한다'
+      - '확인이 끝나면 카카오 토큰과 우리 로그인은 따로다. 쇼핑몰은 N7의 세션이나 JWT로 kim의 로그인을 유지한다. 카카오 토큰은 카카오 API를 부를 때만 쓴다'
+      - '더 알아보기: 액세스 토큰은 짧게 살고, 토큰 응답의 리프레시 토큰으로 사용자 없이 새 액세스 토큰을 받는다'
+    asks:
+      - '본문의 예시: 소셜 로그인으로 들어온 사용자를 우리 회원과 이을 때 쓰는 값으로 가장 알맞은 것은 (보기: 이메일, 제공자와 ID 토큰의 sub, 액세스 토큰 문자열)'
+      - '옮긴 상황: 어느 서비스가 "액세스 토큰이 있으면 로그인한 사용자"라고 보고, 토큰이 어느 client_id에게 발급된 것인지 확인하지 않는다. 다른 앱이 받은 토큰을 들고 오면 어떻게 되나 (그 토큰의 사용자로 로그인된다. ID 토큰의 aud처럼 우리에게 발급된 것인지 확인해야 한다)'
+practice:
+  says:
+    - '스프링에서는 흐름을 직접 짜지 않고 스프링 시큐리티의 OAuth2 Client에 맡긴다. 의존성(코드 gradle), application.yml의 registration과 provider(코드 yml), `oauth2Login()`(코드 security). 구글, 깃허브 등은 provider를 적지 않아도 스프링이 안다. 카카오, 네이버는 provider를 직접 적는다 (스프링 시큐리티 문서 근거)'
+    - '스프링이 만드는 주소: 1단계는 `/oauth2/authorization/{registrationId}`, 3단계로 돌아오는 주소는 `/login/oauth2/code/{registrationId}`다. state 생성과 확인, 코드 교환, 사용자 정보 불러오기를 스프링이 한다. 우리는 `OAuth2UserService`로 회원과 잇는 일만 한다'
+    - '흔한 실수: 로드 밸런서 뒤에서 `{baseUrl}`이 `http://`로 만들어져 등록한 `https://` redirect_uri와 달라 인가 서버가 `redirect_uri_mismatch`로 거절한다. HTTPS와 TLS 레슨의 forward-headers-strategy를 켜서 고친다 (문서 근거)'
+    - 'client-secret은 코드나 저장소에 적지 않고 환경 변수로 준다(`${KAKAO_SECRET}`)'
+    - '이 구역은 스프링 시큐리티를 프로젝트에 더해야 돌릴 수 있어서 테스트가 아니라 공식 문서를 근거로 적는다'
+claims:
+  - claim: '1단계 리다이렉트의 Location에 response_type=code, client_id, redirect_uri, scope, state가 붙는다'
+    how: 'RFC 6749 4.1의 규칙대로 만든 작은 인가 서버와 쇼핑몰 서버를 JDK HttpServer로 띄우고, 리다이렉트를 따라가지 않는 HttpClient로 흐름을 밟는다'
+  - claim: '흐름을 끝까지 밟으면 쇼핑몰 서버가 액세스 토큰으로 사용자 정보를 받는다'
+    how: '같은 서버들로 여섯 단계를 기록한다'
+  - claim: '같은 코드로 두 번째 토큰 요청을 하면 invalid_grant, 틀린 client_secret은 invalid_client, 다른 redirect_uri는 invalid_grant다'
+    how: '작은 인가 서버에 요청한다. RFC 6749 5.2의 에러 이름을 쓴다'
+  - claim: '돌아온 state가 다르면 쇼핑몰 서버가 토큰을 요청하지 않는다'
+    how: 'state를 바꿔 콜백 주소를 부르고 인가 서버가 받은 토큰 요청 수를 센다'
+sources:
+  - 'OAuth 2.0의 역할, 인가 코드 흐름, state, 코드의 수명과 한 번 쓰기, 에러 이름: RFC 6749 https://www.rfc-editor.org/rfc/rfc6749.html'
+  - 'Bearer 토큰: RFC 6750 https://www.rfc-editor.org/rfc/rfc6750.html'
+  - 'PKCE: RFC 7636 https://www.rfc-editor.org/rfc/rfc7636.html'
+  - 'OpenID Connect의 ID 토큰: https://openid.net/specs/openid-connect-core-1_0.html'
+  - '스프링 시큐리티 OAuth2 Login: https://docs.spring.io/spring-security/reference/servlet/oauth2/login/core.html'
