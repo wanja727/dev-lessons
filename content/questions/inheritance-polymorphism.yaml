@@ -1,0 +1,268 @@
+# 상속과 다형성 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/inheritance-polymorphism.yaml의 says).
+# 동작에 관한 정답은 verification의 PolymorphismTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: inheritance-polymorphism
+  title: 상속과 다형성
+  unit: 자바 언어
+  order: 43
+concepts:
+  - key: core
+    name: 상속과 다형성
+coreQuestions:
+  - key: q1
+    text: "부모 타입의 변수에 자식 객체를 담으면 무엇을 할 수 있나요?"
+  - key: q2
+    text: "오버라이딩한 메서드는 어느 쪽 것이 실행되나요?"
+  - key: q3
+    text: "오버로딩은 오버라이딩과 무엇이 다른가요?"
+  - key: q4
+    text: "인터페이스와 추상 클래스는 무엇이 다르고 언제 무엇을 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: poly-variable-type
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: SmsNotifier에만 remaining() 메서드가 있어요. 아래 코드는 어떻게 될까요?
+    code: |-
+      Notifier n = new SmsNotifier();
+      n.remaining();
+    choices:
+      - remaining()이 실행된다. 실제 객체가 SmsNotifier다
+      - 컴파일 오류. 변수의 타입 Notifier에 그 메서드가 없다
+      - 실행할 때 ClassCastException
+      - 실행할 때 NullPointerException
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** 컴파일러는 변수의 타입만 보고 부를 수 있는 메서드를 정해요.
+
+      - 객체는 SmsNotifier 그대로지만 변수 n의 타입은 Notifier예요
+      - 쓰려면 instanceof로 확인하고 SmsNotifier 타입의 변수로 받아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12
+  - key: poly-downcast
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: EmailNotifier와 SmsNotifier는 둘 다 Notifier를 상속하고, 서로는 상관없어요. 아래 코드는 어떻게 될까요?
+    code: |-
+      Notifier n = new EmailNotifier();
+      SmsNotifier s = (SmsNotifier) n;
+    choices:
+      - 컴파일 오류
+      - 컴파일은 되고 실행할 때 ClassCastException
+      - s가 null이 된다
+      - 정상으로 실행된다
+    answer: "2"
+    explanation: |-
+      **컴파일은 되고 실행할 때 ClassCastException이 나요.** 컴파일러는 n이 SmsNotifier일 수도 있다고 보고 통과시켜요.
+
+      - 실제 객체가 EmailNotifier라 실행할 때 변환이 실패해요
+      - 내려받기 전에 instanceof로 확인해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.20.2
+  # ── 질문 2 ──
+  - key: poly-field
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드는 무엇을 출력할까요?
+    code: |-
+      class Notifier { String name = "기본"; }
+      class SmsNotifier extends Notifier {
+        String name = "문자";
+      }
+
+      Notifier n = new SmsNotifier();
+      System.out.println(n.name);
+    choices:
+      - 기본
+      - 문자
+      - 컴파일 오류
+      - "null"
+    answer: "1"
+    explanation: |-
+      **기본이에요.** 필드는 오버라이딩되지 않고 변수의 타입으로 정해져요.
+
+      - 실제 객체를 보고 고르는 것은 인스턴스 메서드뿐이에요
+      - static 메서드도 변수의 타입(클래스)으로 정해져요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.11.1
+  - key: poly-nearest
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드의 마지막 줄은 무엇을 돌려줄까요?
+    code: |-
+      class Animal { String sound() { return "..."; } }
+      class Dog extends Animal {
+        String sound() { return "멍"; }
+      }
+      class Puppy extends Dog { }
+
+      Animal a = new Puppy();
+      a.sound();
+    choices:
+      - '"..."'
+      - '"멍"'
+      - 컴파일 오류. Puppy에 sound가 없다
+      - 실행할 때 예외
+    answer: "2"
+    explanation: |-
+      **"멍"이에요.** 실제 객체는 Puppy이고, Puppy가 다시 정의하지 않았으니 가장 가까운 부모 Dog의 구현이 실행돼요.
+
+      - 변수의 타입 Animal이 아니라 실제 객체의 클래스에서부터 찾아 올라가요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.8
+  # ── 질문 3 ──
+  - key: poly-overload-object
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: SmsNotifier에는 send(Object)를 오버라이딩한 메서드("Sms, Object")와 send(String) 메서드("Sms, String")가 있어요. 아래 코드는 무엇을 출력할까요?
+    code: |-
+      SmsNotifier s = new SmsNotifier();
+      Object o = "주문 완료";
+      s.send(o);
+    choices:
+      - Sms, String
+      - Sms, Object
+      - Notifier, Object
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **Sms, Object예요.** 오버로딩은 컴파일러가 변수의 타입으로 정하고, o의 타입은 Object예요.
+
+      - 실제 객체가 문자열이어도 오버로딩은 그것을 보지 않아요
+      - 그래서 send(Object)가 골라지고 SmsNotifier의 구현이 실행돼요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12
+  - key: poly-handler
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: OrderEvent는 Event를 상속해요. 아래 코드는 무엇을 출력할까요?
+    code: |-
+      class Handler {
+        void handle(Event e) { print("기본"); }
+      }
+      class OrderHandler extends Handler {
+        void handle(OrderEvent e) { print("주문"); }
+      }
+
+      Handler h = new OrderHandler();
+      Event e = new OrderEvent();
+      h.handle(e);
+    choices:
+      - 주문
+      - 기본
+      - 컴파일 오류
+      - 실행할 때 예외
+    answer: "2"
+    explanation: |-
+      **기본이에요.** handle(OrderEvent)는 매개변수 타입이 달라서 오버라이딩이 아니라 오버로딩이에요.
+
+      - 컴파일러는 변수 h의 타입 Handler에서 handle(Event)를 골라요
+      - OrderHandler는 그것을 다시 정의하지 않았으니 부모의 구현이 실행돼요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.8
+  - key: poly-override-annotation
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 앞 문제의 OrderHandler에 @Override를 붙이고 컴파일했어요. 어떻게 될까요?
+    code: |-
+      class OrderHandler extends Handler {
+        @Override
+        void handle(OrderEvent e) { print("주문"); }
+      }
+    choices:
+      - 컴파일되고 이제 "주문"이 출력된다
+      - 컴파일 오류. 부모에 같은 시그니처의 메서드가 없다
+      - 컴파일되지만 경고가 난다
+      - 실행할 때 예외가 난다
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** @Override는 정말 부모의 메서드를 다시 정의했는지 컴파일러가 검사하게 해요.
+
+      - 부모에는 handle(Event)만 있어요
+      - 오버라이딩하는 메서드에는 언제나 @Override를 붙여서 이 실수를 막아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html#jls-9.6.4.4
+  # ── 질문 4 ──
+  - key: poly-abstract-field
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 문자와 메일 알림이 "보낸 횟수"를 세는 int sent 필드와 "보내기 전에 수신 거부를 확인한다"는 순서를 함께 써야 해요. 그 필드와 순서를 둘 부모로 알맞은 것은 무엇일까요?
+    choices:
+      - 인터페이스. default 메서드에 필드를 둔다
+      - 추상 클래스. 인스턴스 필드와 공통 구현을 둘 수 있다
+      - 둘 다 인스턴스 필드를 가질 수 없다
+      - 아무 클래스나 상관없다
+    answer: "2"
+    explanation: |-
+      **추상 클래스예요.** 추상 클래스는 인스턴스 필드와 생성자, 일부 구현을 가질 수 있어요.
+
+      - 인터페이스는 default 메서드로 구현을 줄 수 있지만 상태(인스턴스 필드)는 가질 수 없어요
+      - 타입은 인터페이스로 정하고, 공통 구현은 그것을 구현한 추상 클래스에 두는 식으로 함께 쓰기도 해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html
+  - key: poly-multi-implements
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: Document는 클래스, Printable과 Exportable은 인터페이스예요. 컴파일되는 선언은 무엇일까요?
+    choices:
+      - class Report extends Document, Printable
+      - class Report extends Document implements Printable, Exportable
+      - class Report implements Document, Printable
+      - 셋 다 컴파일된다
+    answer: "2"
+    explanation: |-
+      **extends Document implements Printable, Exportable이에요.** 클래스는 하나만 상속하고, 인터페이스는 여러 개 구현해요.
+
+      - extends 뒤에는 클래스 하나만 와요
+      - 클래스를 implements할 수는 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.4
+  # ── 네 질문을 하나로 ──
+  - key: poly-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "오버라이딩과 오버로딩의 차이, 그리고 다형성을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **오버로딩은 컴파일할 때 인자의 타입으로, 오버라이딩은 실행할 때 실제 객체의 타입으로 정해지고, 뒤의 것이 다형성이에요.**
+
+      - **부모 타입 변수:** 부를 수 있는 메서드는 변수의 타입이 정한다
+      - **오버라이딩:** 자식이 같은 시그니처로 다시 정의. 실행할 때 실제 객체의 구현이 돈다. 필드와 static은 해당하지 않는다
+      - **오버로딩:** 이름만 같은 다른 메서드. 컴파일러가 변수와 인자의 타입으로 고른다
+      - **주의:** 매개변수 타입을 다르게 쓰면 오버로딩이 되니 @Override를 붙인다. 인터페이스로 타입을 정하고 구현을 바꿔 끼운다
+    checklist:
+      - 오버라이딩은 자식이 같은 시그니처로 다시 정의하는 것이라고 말했다
+      - 오버라이딩은 실행할 때 실제 객체의 타입으로 정해진다(다형성)고 말했다
+      - 오버로딩은 이름이 같고 매개변수가 다른 메서드이고 컴파일할 때 정해진다고 말했다
+      - 매개변수 타입을 다르게 쓰면 오버로딩이 되니 @Override를 붙인다고 말했다
+      - 인터페이스나 추상 클래스로 구현을 바꿔 끼우는 예를 들었다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12
