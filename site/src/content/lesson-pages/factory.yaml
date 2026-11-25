@@ -1,7 +1,9 @@
-# 팩토리 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 팩토리
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/factory.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 팩토리
+description: 정적 팩토리 메서드가 생성자로 못 하는 일, 이름 짓는 관례와 단점, 팩토리 메서드 패턴과 단순 팩토리의 차이, 만드는 코드를 따로 빼면 좋아지는 것. 네 가지 질문에 스스로 답할 수 있게 주문과 알림 발송 코드로 배우는 대화형 레슨.
+minutes: 20
 unit: 객체지향 설계와 패턴
 roadmap: O9
 type: 설계
@@ -44,6 +46,11 @@ covers:
     where: '다루지 않음: 빌더 패턴(O10)'
   - topic: '하나만 만드는 getInstance'
     where: '다루지 않음: 싱글톤 패턴(O11)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
+  valueOf: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Integer.html#valueOf(int)
+  listOf: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html#unmodifiable
+  bean: https://docs.spring.io/spring-framework/reference/core/beans/java/bean-annotation.html
 codes:
   ctor: |-
     Order order = new Order(member,
@@ -96,9 +103,51 @@ codes:
         return new AligoSmsNotifier();
       }
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  staticFactoryMark: |-
+    class Order {
+      [[private]] Order(...) {...}
+
+      static Order [[create]](Member m,
+                          List<Item> items) {
+        int total = items.stream()
+            .mapToInt(Item::price).sum();
+        return new Order(m, items, total,
+            Status.CREATED);
+      }
+    }
+  useFactory: |-
+    // 서비스 일곱 곳
+    Notifier n =
+        NotifierFactory.of(Channel.SMS);
+  beanMethod: |-
+    @Configuration
+    class PaymentConfig {
+      @Bean
+      TossClient tossClient(
+          @Value("${toss.key}") String key) {
+        return new TossClient(key);
+      }
+    }
+  optionalBad: |-
+    Optional<String> name =
+        Optional.of(repository
+            .findName(id));
 predict:
-  text: '코드 valueOf를 돌리면 `a == b`와 `a == c`는 각각 무엇을 찍을까요? (`new Integer`는 자바 9부터 쓰지 말라는 경고가 나지만 아직 동작해요.) 보기: true와 true, true와 false, false와 false.'
-  answer: 'true와 false. `Integer.valueOf(100)`은 -128부터 127까지 미리 만들어 둔 객체를 돌려주고, `new`는 항상 새 객체를 만든다. 질문 1에서 밝힌다.'
+  title: Integer.valueOf(100)을 두 번 부르면?
+  text: '아래 코드에서 `a == b`와 `a == c`는 각각 무엇을 찍을까요? `==`는 같은 객체인지를 봐요(값과 참조 레슨). `new Integer`는 자바 9부터 쓰지 말라는 경고가 나지만 아직 동작해요. 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: valueOf
+  label: 내 예측 (a == b, a == c)
+  options:
+    - value: tt
+      label: true와 true
+    - value: tf
+      label: true와 false
+    - value: ff
+      label: false와 false
+  answer: tf
+  storageKey: factory-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 정적 팩토리 메서드는 생성자로 못 하는 무엇을 하나요?
@@ -113,6 +162,34 @@ questions:
     asks:
       - '본문의 예시: `Integer.valueOf(1000) == Integer.valueOf(1000)`은 무엇을 찍나 (false. 캐시 범위 밖)'
       - '옮긴 상황: `Boolean.valueOf("true")`를 두 번 부른 결과를 `==`로 비교하면 (true. 미리 만든 `Boolean.TRUE`를 돌려준다)'
+    body:
+      - p: '**정적 팩토리 메서드**는 생성자 대신 객체를 돌려주는 `static` 메서드예요. 디자인 패턴의 "팩토리 메서드 패턴"(질문 3)과는 다른 것이에요. 생성자로는 못 하는 일이 세 가지 있어요.'
+      - h3: 하나, 이름이 있어요
+      - code: ctor
+      - p: '`0, null, false`가 무엇인지 보이지 않아요. 생성자는 이름이 클래스 이름 하나뿐이라, 같은 타입의 인자로 뜻이 다른 생성자를 둘 둘 수도 없어요. `Order.create(member, items)`는 무엇을 하는지 말해요.'
+      - h3: 둘, 매번 새 객체를 만들지 않아도 돼요
+      - ci:
+          key: valueof
+          label: 코드 valueOf를 돌린 결과 보기
+          source: FactoryTest.valueOfCaches
+          code: valueOf
+      - p: '처음에 예측한 답은 **true와 false**예요. `Integer.valueOf`는 -128부터 127까지 미리 만들어 둔 객체를 돌려줘서 두 번 불러도 같은 객체예요. 생성자 `new`는 항상 새 객체를 만들어요. 1000처럼 범위 밖이면 `valueOf`도 새 객체예요([API 문서](link:valueOf)). {{predict-result}}'
+      - h3: 셋, 감춘 다른 클래스를 돌려줄 수 있어요
+      - code: listOf
+      - ci:
+          key: listof
+          label: 실제 클래스 이름 보기
+          source: FactoryTest.listOfHiddenClasses
+      - p: '`List.of`는 원소 수에 따라 다른 클래스를 돌려줘요. 쓰는 쪽은 `List`만 알고, JDK는 이 클래스를 감춘 채 바꿀 수 있어요. API 문서도 어떤 클래스를 돌려줄지 정하지 않았어요([List API 문서](link:listOf)). 생성자는 언제나 그 클래스의 객체만 만들어요.'
+      - quiz:
+          q: '`Integer.valueOf(1000) == Integer.valueOf(1000)`은 무엇을 찍을까요?'
+          options:
+            - 'true'
+            - 'false'
+          answer: 2
+          explain: '`valueOf`가 미리 만들어 두는 범위는 -128부터 127까지예요. 1000은 범위 밖이라 부를 때마다 새 객체예요.'
+      - next: '정적 팩토리 메서드는 어떻게 이름 짓고, 단점은 없을까요?'
+    recall: '이름을 가질 수 있고, 매번 새 객체를 만들지 않아도 되고, 선언한 타입의 다른 클래스 객체를 돌려줄 수 있어요. `Integer.valueOf(100)`은 두 번 불러도 같은 객체를 주지만 `new Integer(100)`은 늘 새 객체이고, `List.of`는 원소 수에 따라 `List12`나 `ListN` 같은 감춘 클래스를 돌려줘요.'
   - id: q2
     title: 정적 팩토리 메서드는 어떻게 짓고, 언제 단점이 되나요?
     conclusion:
@@ -127,6 +204,42 @@ questions:
     asks:
       - '본문의 예시: 코드 staticFactory에서 다른 클래스가 `new Order(m, items, 0, Status.CREATED)`를 쓰면 (컴파일 오류. 생성자가 private)'
       - '옮긴 상황: 금액 클래스 `Money`에 `Money.won(1000)`과 `Money.from(String text)`가 있다. 이 가운데 다른 타입 하나를 받아 바꾸는 관례 이름은 (`from`)'
+    body:
+      - p: '정적 팩토리 메서드는 이름이 자유로워서 관례를 따라요.'
+      - table:
+          head: [이름, 뜻, 예]
+          rows:
+            - [of, 여러 값으로 만든다, '`List.of("a", "b")`']
+            - [from, 다른 타입 하나에서 바꾼다, '`Date.from(instant)`']
+            - [valueOf, 값으로 만든다. 캐시하기도 한다, '`Integer.valueOf(100)`']
+            - [getInstance, 같은 객체일 수 있다, '`Calendar.getInstance()`']
+            - [newInstance나 create, 항상 새 객체, '`Order.create(...)`']
+      - h3: 생성 규칙을 한 곳에 모아요
+      - code: staticFactoryMark
+        notes:
+          - mark: private
+            as: code
+            text: '생성자를 막아요. 밖에서는 `create`로만 만들 수 있어요.'
+          - mark: create
+            as: code
+            text: '총액을 계산하고 상태를 정하는 규칙이 여기 한 곳에 있어요.'
+      - p: '생성자가 `private`이라 밖에서 총액을 빠뜨린 주문을 만들 수 없어요. 만드는 방법이 여럿이면 이름을 나눠요(`Order.create`, `Order.reorderOf`).'
+      - ci:
+          key: private
+          label: 밖에서 생성자를 부르고, 상속해 본 결과 보기
+          source: FactoryTest.privateConstructor
+      - h3: 단점도 있어요
+      - p: '첫째, 생성자가 `private`뿐이면 **상속할 수 없어요.** 위 결과처럼 자식의 생성자가 부모 생성자를 부르지 못해 컴파일 오류예요. [상속보다 조합](lesson:composition-over-inheritance)을 쓰라는 신호로 보기도 해요.'
+      - p: '둘째, API 문서에서 생성자는 따로 모여 보이지만 정적 팩토리는 다른 메서드 사이에 섞여서 **찾기 어려워요.** 그래서 관례 이름이 중요해요.'
+      - quiz:
+          q: '금액 클래스 `Money`에 `Money.won(1000)`과 `Money.from("1,000원")`이 있어요. 다른 타입 하나를 받아 바꾸는 관례 이름은 무엇일까요?'
+          options:
+            - won
+            - from
+          answer: 2
+          explain: '`from`은 다른 타입의 값 하나를 받아 이 타입으로 바꿀 때 써요.'
+      - next: '정적 팩토리 메서드와 이름이 비슷한 "팩토리 메서드 패턴"은 무엇일까요?'
+    recall: '관례에 맞는 이름(of, from, valueOf, getInstance, create)을 붙이고, 생성 규칙을 그 안에 모은 뒤 생성자를 `private`으로 막아요. `Order.create`가 총액과 상태를 정하면 밖에서 총액을 빠뜨린 주문을 만들 수 없어요. 생성자를 막으면 상속할 수 없고, API 문서에서 생성자처럼 눈에 띄지 않는 것이 단점이에요.'
   - id: q3
     title: 팩토리 메서드 패턴은 무엇이고, 단순한 팩토리와 무엇이 다른가요?
     conclusion:
@@ -140,6 +253,29 @@ questions:
     asks:
       - '본문의 예시: 코드 factoryMethod에서 `new SmsAlertService().alert(...)`를 부르면 어느 `Notifier`가 쓰이나 (`AligoSmsNotifier`)'
       - '옮긴 상황: 문서 편집기의 `Editor.open()`이 `createDocument()`를 불러 문서를 만들고, `PdfEditor`와 `WordEditor`가 이 메서드를 각각 오버라이드한다. 이것은 단순 팩토리와 팩토리 메서드 패턴 가운데 무엇인가 (팩토리 메서드 패턴)'
+    body:
+      - p: '"무엇을 만들지 고르는 코드"를 따로 두는 방법은 두 가지가 자주 쓰여요.'
+      - h3: 단순 팩토리
+      - code: simpleFactory
+      - p: '한 클래스가 조건에 따라 구현을 골라 만들어요. 쓰는 쪽은 `NotifierFactory.of(ch)`만 불러요. GoF 패턴 목록에는 없지만 가장 흔한 모양이에요.'
+      - h3: 팩토리 메서드 패턴
+      - code: factoryMethod
+      - p: '`AlertService`는 알림을 보내는 순서를 갖고, **어떤 `Notifier`를 만들지는 `createNotifier()`로 자식에게 맡겨요.** [템플릿 메서드 패턴](lesson:template-method)에서 단계 하나가 "만들기"인 모양이에요.'
+      - p: '차이는 새 채널을 더할 때 보여요. 단순 팩토리는 `switch`에 한 줄을 더하고, 팩토리 메서드 패턴은 새 자식 클래스를 더해요.'
+      - more:
+          summary: 추상 팩토리 패턴은 무엇인가요?
+          body:
+            - p: '서로 어울리는 객체 묶음을 함께 만드는 인터페이스예요. 예를 들어 결제사마다 승인 클라이언트와 취소 클라이언트를 짝으로 만들어야 할 때, `PaymentFactory`에 두 메서드를 두고 결제사마다 구현해요. 짝이 섞이는 실수를 막아요.'
+      - quiz:
+          q: '문서 편집기의 `Editor.open()`이 `createDocument()`를 불러 문서를 만들고, `PdfEditor`와 `WordEditor`가 이 메서드를 각각 오버라이드해요. 이것은 무엇일까요?'
+          options:
+            - 단순 팩토리
+            - 팩토리 메서드 패턴
+            - 정적 팩토리 메서드
+          answer: 2
+          explain: '무엇을 만들지를 자식이 메서드를 오버라이드해 정하는 것이 팩토리 메서드 패턴이에요.'
+      - next: '어느 방법이든 만드는 코드를 따로 뺐어요. 그러면 무엇이 좋아질까요?'
+    recall: '무엇을 만들지를 자식 클래스가 메서드를 오버라이드해 정하는 패턴이에요. `AlertService`가 알림 순서를 갖고 `createNotifier()`를 자식에게 맡기는 모양이에요. 단순 팩토리는 한 클래스가 `switch` 같은 조건문으로 만들 것을 고르고, 팩토리 메서드 패턴은 상속으로 고른다는 점이 달라요.'
   - id: q4
     title: 만드는 코드를 따로 빼면 무엇이 좋아지나요?
     conclusion:
@@ -154,24 +290,79 @@ questions:
       - '본문의 예시: 서비스 일곱 곳이 코드 simpleFactory로 알림을 얻는다. 문자 업체를 바꿀 때 일곱 서비스 가운데 고칠 파일 수는 (0개)'
       - '옮긴 상황: 결제 클라이언트를 여러 서비스가 `new TossClient(key)`로 만든다. 결제사의 키를 받는 방법이 바뀌면 어디를 고치나. 팩토리로 모으면 어디를 고치나 (모든 서비스. 팩토리 한 곳)'
       - '실무 구역: `Optional.of(member)`에 `member`가 null이면 무슨 일이 생기나 (`NullPointerException`. null일 수 있으면 `ofNullable`)'
+    body:
+      - p: '알림을 보내는 서비스가 일곱 곳이고, 모두 `new AligoSmsNotifier()`를 직접 해요. 문자 업체를 바꿔 볼게요. 같은 일곱 곳이 아래처럼 팩토리에서 받는 코드와 비교했어요.'
+      - code: useFactory
+      - ci:
+          key: vendor
+          label: 두 코드에서 고친 파일 보기
+          source: FactoryTest.switchVendor
+      - p: '직접 만드는 코드는 일곱 파일을 고쳐요. 팩토리를 쓰는 코드는 팩토리 한 파일과 새 구현만 바뀌고 서비스 일곱 곳은 그대로예요. 쓰는 쪽이 **구체 클래스의 이름을 모르기** 때문이에요.'
+      - p: '[의존 역전 원칙과 의존성 주입](lesson:dip-di)에서 본 "조립하는 곳"과 같은 생각이에요. 차이는 누가 움직이느냐예요. 의존성 주입은 만든 객체를 넣어 주고, 팩토리는 쓰는 쪽이 팩토리를 불러 받아 와요.'
+      - callout: '**팩토리를 늘 둘 필요는 없어요.** 만드는 곳이 한 곳이고 바뀔 일이 없으면 `new`가 가장 읽기 쉬워요.'
+      - quiz:
+          q: '서비스 일곱 곳이 `NotifierFactory.of(SMS)`로 알림을 얻어요. 문자 업체를 바꿀 때 일곱 서비스 가운데 고칠 파일은 몇 개일까요?'
+          options:
+            - 7개
+            - 1개
+            - 0개
+          answer: 3
+          explain: '서비스는 `Notifier`와 팩토리만 알아요. 팩토리 안의 `new`와 새 구현만 바뀌어요.'
+    recall: '쓰는 쪽이 구체 클래스의 이름을 몰라도 돼서, 구현을 바꿀 때 만드는 곳 한 곳만 고쳐요. 서비스 일곱 곳이 각자 `new AligoSmsNotifier()`를 하면 업체를 바꿀 때 일곱 파일을 고치고, `NotifierFactory`에 모으면 팩토리 한 파일과 새 구현만 바뀌어요. 만드는 곳이 하나이고 바뀔 일이 없으면 `new`가 더 읽기 쉬워요.'
 practice:
+  title: 스프링과 자바 API의 팩토리
   says:
     - '스프링의 `@Configuration` 클래스 안 `@Bean` 메서드는 팩토리 메서드다. 메서드가 객체를 만들어 돌려주고, 스프링이 그 결과를 빈으로 관리한다. 외부 라이브러리 객체(결제 클라이언트)처럼 `@Component`를 붙일 수 없는 클래스를 만들 때 쓴다. 작은 `AnnotationConfigApplicationContext`로 확인한다'
     - '엔티티의 정적 팩토리: JPA 엔티티는 기본 생성자가 있어야 하지만 `protected`로 둘 수 있다. 밖에는 `Order.create(...)`만 열어 생성 규칙을 모은다. 엔티티 없이 같은 모양의 클래스로 확인한다. 기본 생성자의 규칙은 ORM과 JPA(P1)'
     - '흔한 실수: `Optional.of(repository.findName(id))`처럼 null일 수 있는 값에 `of`를 쓴다. 값이 null이면 `NullPointerException`이 난다. 고친 코드: `Optional.ofNullable(...)`. 두 팩토리 메서드는 이름으로 약속이 다르다'
+  body:
+    - p: '스프링의 `@Bean` 메서드는 팩토리 메서드예요. 메서드가 객체를 만들어 돌려주면 스프링이 그 결과를 빈으로 관리해요. 외부 라이브러리의 클래스(결제 클라이언트처럼 `@Component`를 붙일 수 없는 것)를 빈으로 만들 때 써요([스프링 문서](link:bean)).'
+    - code: beanMethod
+    - ci:
+        key: bean
+        label: 작은 스프링 컨텍스트로 확인한 결과 보기
+        source: FactoryTest.beanMethodIsFactory
+    - p: '두 번 꺼내도 같은 객체예요. `@Bean` 메서드는 컨테이너가 한 번 불러 만든 객체를 나눠 줘요.'
+    - muted: 'JPA 엔티티도 질문 2처럼 정적 팩토리로 만들 수 있어요. JPA는 기본 생성자가 있어야 하지만 `protected`로 둘 수 있고, 밖에는 `Order.create(...)`만 열어요. 기본 생성자의 규칙은 ORM과 JPA 레슨에서 다뤄요.'
+    - h3: '흔한 실수: Optional.of에 null이 올 수 있는 값'
+    - code: optionalBad
+    - ci:
+        key: optional
+        label: null을 넘긴 결과 보기
+        source: FactoryTest.optionalFactories
+    - p: '`Optional.of`는 "null이 아닌 값"을 약속받는 팩토리라서 null이면 바로 예외를 던져요. null일 수 있는 값은 `Optional.ofNullable`로 만들어요. 두 정적 팩토리 메서드는 **이름으로 약속이 달라요.**'
+interview:
+  question: 생성자 대신 정적 팩토리 메서드를 쓰는 이유와, 팩토리 메서드 패턴이 무엇인지 설명해 주세요
+  model:
+    - label: 정의
+      text: 정적 팩토리 메서드는 생성자 대신 객체를 돌려주는 static 메서드이고, 팩토리 메서드 패턴은 무엇을 만들지를 자식 클래스가 메서드를 오버라이드해 정하는 패턴입니다.
+    - label: 원리
+      text: 정적 팩토리 메서드는 이름으로 무엇을 만드는지 말할 수 있고, Integer.valueOf처럼 만들어 둔 객체를 다시 줄 수 있고, List.of처럼 감춘 하위 클래스를 돌려줄 수 있습니다. 생성자를 private으로 막고 생성 규칙을 팩토리 메서드에 모으면 잘못된 객체가 만들어지지 않습니다. 만드는 코드를 팩토리로 모으면 쓰는 쪽이 구체 클래스를 몰라서 구현을 바꿀 때 한 곳만 고칩니다.
+    - label: 주의할 점
+      text: 생성자를 private으로만 두면 상속할 수 없고, API 문서에서 찾기 어려워 of, from, valueOf 같은 관례 이름을 씁니다. Optional.of와 ofNullable처럼 이름이 약속을 담으니 null일 수 있으면 ofNullable을 씁니다. 만드는 곳이 하나면 new가 더 읽기 쉽습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문 엔티티의 생성자를 막고 Order.create로 총액과 상태를 정해, 총액이 빠진 주문이 저장되던 버그를 막았습니다.'
+verified: '이 레슨의 `==` 결과, 클래스 이름, 컴파일 오류, 고친 파일, 스프링 빈은 짐작이 아니라 자바 21과 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([FactoryTest](link:test))가 다시 돌아요.'
+footer: '근거: `Integer.valueOf`의 캐시는 [API 문서](link:valueOf), `List.of`가 구현 클래스를 정하지 않는 것은 [List API 문서](link:listOf), `@Bean` 메서드는 [스프링 공식 문서](link:bean). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '`Integer.valueOf(100)` 두 번은 `==`가 true, `new Integer(100)`과는 false, `Integer.valueOf(1000)` 두 번은 false'
     how: '돌려서 확인한다'
+    test: FactoryTest.valueOfCaches
   - claim: '`List.of`의 실제 클래스 이름은 원소 1개와 2개에서 `List12`, 3개 이상에서 `ListN`'
     how: '`getClass().getSimpleName()`을 찍는다 (자바 21)'
+    test: FactoryTest.listOfHiddenClasses
   - claim: 'private 생성자를 밖에서 부르면 컴파일 오류, private 생성자만 있는 클래스를 상속하면 컴파일 오류'
     how: '`JavaSource`로 컴파일한다'
+    test: FactoryTest.privateConstructor
   - claim: '서비스 일곱 곳이 직접 `new`하는 판은 업체를 바꿀 때 일곱 파일이 바뀌고, 팩토리판은 팩토리와 새 구현만 바뀐다'
     how: '바꾸기 전후 패키지를 비교한다'
+    test: FactoryTest.switchVendor
   - claim: '`@Bean` 메서드가 돌려준 객체가 빈이 된다'
     how: '`AnnotationConfigApplicationContext`로 확인한다'
+    test: FactoryTest.beanMethodIsFactory
   - claim: '`Optional.of(null)`은 `NullPointerException`, `ofNullable(null)`은 빈 Optional'
     how: '돌려서 확인한다'
+    test: FactoryTest.optionalFactories
 sources:
   - '`Integer.valueOf`의 캐시: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Integer.html#valueOf(int)'
   - '`List.of`는 구현 클래스를 정하지 않는다: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html#unmodifiable'
