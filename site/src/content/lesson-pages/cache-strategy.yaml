@@ -1,8 +1,9 @@
-# 캐시 전략과 무효화 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 캐시 전략과 무효화
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/cache-strategy.yaml에 있다.
 title: 캐시 전략과 무효화
+description: 캐시가 무엇을 빠르게 하는지와 cache-aside, 값이 바뀔 때 캐시를 지우는 순서, 만료 시간과 크기 한도, 인기 키가 만료되는 순간의 캐시 스탬피드. 실제 PostgreSQL과 Redis로 옛 가격이 남는 순간을 재현하는 대화형 레슨.
 unit: 시스템 설계와 아키텍처
+minutes: 25
 roadmap: A4
 type: 동작 확인
 prerequisites:
@@ -63,16 +64,48 @@ codes:
           + " set price = ? where id = ?",
           price, id);
     }
+  aside: |-
+    long get(long id) {
+      String c = redis.get("price:" + id);
+      [[if (c != null) return parse(c);]]
+      long p = [[loadFromDb(id)]];
+      redis.set("price:" + id, str(p),
+          px(60_000));
+      return p;
+    }
+  hitRun: |-
+    cache.get(1);   // 캐시 없음
+    cache.get(1);   // 캐시 있음
   deleteFirst: |-
     void update(long id, long price) {
-      redis.del("price:" + id);
+      [[redis.del("price:" + id);]]
       updateDb(id, price);
     }
   dbFirst: |-
     void update(long id, long price) {
       updateDb(id, price);
-      redis.del("price:" + id);
+      [[redis.del("price:" + id);]]
     }
+  ttlPick: |-
+    상품 설명    몇 시간
+    카테고리     몇 시간
+    가격         몇 분
+    실시간 순위  몇 초
+  singleFlight: |-
+    CompletableFuture<Long> mine =
+        new CompletableFuture<>();
+    var running =
+        inFlight.putIfAbsent(id, mine);
+    if (running != null) {
+      return [[running.join()]];
+    }
+    long p = loadFromDb(id);
+    redis.set(key, str(p), px(ttl));
+    mine.complete(p);
+  jitter: |-
+    long ttl = 3_600_000
+        + [[random.nextLong(300_000)]];
+    redis.set(key, value, px(ttl));
   cacheable: |-
     @Cacheable(cacheNames = "price",
         key = "#id")
@@ -84,9 +117,58 @@ codes:
     public void change(long id, long p) {
       updateDb(id, p);
     }
+  cacheRun: |-
+    service.price(1);
+    service.price(1);
+    service.change(1, 8_000);
+    service.price(1);
+    service.priceInside(2);
+    service.priceInside(2);
+  selfCall: |-
+    @Service
+    class PriceService {
+      @Cacheable("price")
+      public long price(long id) { ... }
+
+      public long priceInside(long id) {
+        return [[this.price(id)]];
+      }
+    }
+  config: |-
+    spring:
+      cache:
+        type: redis
+        redis:
+          time-to-live: 10m
+  configCaffeine: |-
+    spring:
+      cache:
+        type: caffeine
+        caffeine:
+          spec: maximumSize=10000,⤷
+    expireAfterWrite=10m
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cache/CacheStrategyTest.java
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cache/CachePracticeTest.java
+  springCache: https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html
+  bootCache: https://docs.spring.io/spring-boot/reference/io/caching.html
+  redisEviction: https://redis.io/docs/latest/develop/reference/eviction/
+  redisSet: https://redis.io/docs/latest/commands/set/
 predict:
-  text: '코드 predict로 가격 10000원인 상품을 한 번 조회해 캐시에 넣었어요. 관리자가 `update(1, 8000)`으로 가격을 바꾼 뒤 바로 다시 `get(1)`을 부르면 무엇이 나올까요? 보기: 8000, 10000, 오류.'
-  answer: '10000. DB만 바꾸고 캐시를 그대로 두어, 캐시가 만료되는 60초 동안 옛 가격을 준다. 질문 2에서 밝힌다.'
+  title: 가격을 바꿨는데 뭐가 보일까요?
+  text: '코드 predict로 가격 10000원인 상품을 한 번 조회해 캐시에 넣었어요. 관리자가 `update(1, 8000)`으로 가격을 바꾼 뒤 바로 다시 `get(1)`을 부르면 무엇이 나올까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: '8000'
+      label: '8000'
+    - value: '10000'
+      label: '10000'
+    - value: error
+      label: 오류
+  answer: '10000'
+  storageKey: cache-strategy-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 캐시는 무엇을 빠르게 하고, cache-aside는 어떻게 동작하나요?
@@ -102,6 +184,48 @@ questions:
     asks:
       - '본문의 예시: cache-aside로 빈 캐시에서 같은 상품을 세 번 조회하면 DB 조회는 몇 번인가 (한 번)'
       - '옮긴 상황: 서버 세 대가 각자 메모리 맵으로 상품 가격을 캐시한다. 비어 있는 상태에서 같은 상품을 라운드 로빈으로 세 번 조회하면 DB 조회는 몇 번인가 (세 번. 서버마다 캐시가 따로 비어 있다)'
+    body:
+      - p: '**캐시**는 느린 원본의 사본을 더 빠른 곳에 두는 거예요. 상품 가격의 원본은 DB에 있고 조회 한 번에 50ms가 걸려요. 같은 가격을 Redis에 두면 메모리에서 바로 꺼내요.'
+      - p: '가장 흔한 방식은 **cache-aside**예요. 캐시를 옆(aside)에 두고 애플리케이션이 직접 챙겨요.'
+      - code: aside
+        notes:
+          - mark: 'if (c != null) return parse(c);'
+            as: code
+            text: '캐시에 있으면 DB에 가지 않고 돌려줘요. 이것을 **적중**(hit)이라고 해요.'
+          - mark: loadFromDb(id)
+            as: code
+            text: '없으면(**놓침**, miss) DB에서 읽어 캐시에 넣고 돌려줘요. 60초 뒤에 사라지는 만료 시간(TTL)을 함께 줘요.'
+      - p: '같은 상품을 두 번 조회해 봤어요. DB 조회에는 50ms가 걸리게 해 뒀어요.'
+      - ci:
+          key: hit
+          label: 실제 결과 보기
+          source: CacheStrategyTest.cacheAsideHitsCacheAfterFirstRead
+          code: hitRun
+      - p: '첫 조회만 DB에 갔어요. 같은 값을 많이 읽을수록 이득이 커요. 전체 조회 가운데 적중한 비율을 **적중률**이라고 해요. 사용자마다 다른 값처럼 같은 키를 다시 읽는 일이 드물면 적중률이 낮아서, 캐시를 한 번 더 보는 비용만 늘어요.'
+      - p: '그래서 캐시는 **여러 번 읽히고, 자주 바뀌지 않고, 조금 늦게 바뀌어도 괜찮은 데이터**에 맞아요. 상품 정보, 카테고리 목록, 설정 값이 그래요.'
+      - h3: 서버 메모리에 둘까, Redis에 둘까
+      - table:
+          head: [ '', 로컬 캐시 (서버 메모리), 원격 캐시 (Redis)]
+          rows:
+            - ['예', '`HashMap`, Caffeine', 'Redis']
+            - ['속도', '네트워크를 타지 않아 더 빠르다', '네트워크를 한 번 탄다']
+            - ['서버가 여러 대면', '서버마다 따로라 어긋난다', '모든 서버가 같은 캐시를 본다']
+      - p: '[서버를 늘리는 방법](lesson:scale-out)에서 본 것처럼 서버 메모리의 값은 서버마다 따로예요. 서버 1에서 캐시를 지워도 서버 2에는 옛 값이 남아요. 바뀌면 바로 맞아야 하는 값은 Redis에 두는 편이 맞추기 쉬워요. 이 레슨은 Redis 캐시로 이어 가요.'
+      - more:
+          summary: 쓸 때 채우는 방식도 있어요
+          body:
+            - p: '**write-through**는 값을 쓸 때 DB와 캐시를 함께 바꿔요. 바로 다음 조회가 DB에 가지 않고 새 값을 캐시에서 읽어요. 테스트에서 가격을 write-through로 바꾸니 다음 조회가 DB 없이 8000을 줬어요.'
+            - p: '**write-behind**는 캐시에 먼저 쓰고 DB에는 나중에 모아서 써요. 쓰기가 아주 빠르지만, DB에 쓰기 전에 캐시가 죽으면 쓴 값을 잃어요.'
+      - quiz:
+          q: '서버 세 대가 각자 메모리 맵으로 가격을 캐시해요. 셋 다 비어 있을 때 같은 상품을 라운드 로빈으로 세 번 조회하면 DB 조회는 몇 번인가요?'
+          options:
+            - '한 번'
+            - '세 번'
+            - '0번'
+          answer: 2
+          explain: '서버마다 캐시가 따로 비어 있어서, 세 서버가 각자 한 번씩 DB에 가요.'
+      - next: '캐시는 사본이에요. 원본이 바뀌면 사본은 어떻게 될까요?'
+    recall: '캐시는 느린 원본(DB)의 사본을 메모리나 Redis 같은 빠른 곳에 두어 같은 값을 다시 읽을 때 원본까지 가지 않게 해요. cache-aside는 읽을 때 캐시를 먼저 보고, 있으면(적중) 바로 돌려주고 없으면(놓침) DB에서 읽어 만료 시간과 함께 넣어요. 여러 번 읽히고 조금 늦게 바뀌어도 되는 데이터에 맞아요. 서버 메모리 캐시는 빠르지만 서버마다 따로라 어긋나고, Redis는 모든 서버가 같은 캐시를 봐요.'
   - id: q2
     title: 값이 바뀌면 캐시를 언제 어떤 순서로 지우나요?
     conclusion:
@@ -119,6 +243,83 @@ questions:
     asks:
       - '본문의 예시: 쓰기가 캐시를 지우고 DB를 바꾸는 사이에 조회가 끼어들었다. 끝난 뒤 DB와 캐시의 값은 (DB 8000, 캐시 10000)'
       - '옮긴 상황: 회원 닉네임을 캐시한다. 닉네임을 바꾸는 코드가 `cache.delete(key)` 다음 `memberRepository.save(...)`를 부른다. 이 순서로 생길 수 있는 문제와 고친 순서는 (그 사이의 조회가 옛 닉네임을 다시 넣는다. 저장한 뒤 지운다)'
+    body:
+      - p: '처음 예측의 답은 **10000**이에요. {{predict-result}} `update`는 DB만 바꾸고 캐시를 그대로 뒀어요. 다음 조회는 캐시에서 적중하니 DB를 보지 않아요. 캐시가 만료되는 60초 동안 옛 가격이 나가요.'
+      - p: '그래서 값을 바꾸면 캐시를 **지워요**(무효화). 다음 조회가 놓침이 되어 DB에서 새 값을 읽어 오게요. 지우는 때는 DB를 바꾸기 전과 후, 두 가지예요.'
+      - code: deleteFirst
+      - code: dbFirst
+      - p: '하나씩 쓰면 둘 다 맞아요. 그런데 조회와 쓰기는 동시에 와요. 캐시를 먼저 지우는 쪽에서 조회 하나가 사이에 끼어드는 순서를 직접 맞춰 돌려 봤어요.'
+      - widget:
+          kind: steps
+          layout: [selector, duo, log, buttons, verdict]
+          selector:
+            label: 쓰기의 순서
+            options:
+              - {value: delFirst, label: 캐시 먼저 지우기}
+              - {value: dbFirst, label: DB 먼저 바꾸기}
+          initial:
+            duo:
+              - {label: DB 가격, rows: [{k: 'price:1', v: '10000'}]}
+              - {label: 캐시 가격, rows: [{k: 'price:1', v: '10000'}]}
+          scenarios:
+            delFirst:
+              - log: '쓰기: 캐시를 지운다'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '10000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '없음', mark: changed}]}
+              - log: '조회: 캐시 놓침 → DB에서 10000을 읽는다 (아직 넣지 않음)'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '10000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '없음'}]}
+              - log: '쓰기: DB를 8000으로 바꾼다'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000', mark: changed}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '없음'}]}
+              - log: '조회: 읽어 둔 10000을 캐시에 넣는다 (TTL 60초)'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '10000', mark: bad}]}
+                verdict: '쓰기는 끝났는데 캐시에 옛 가격이 다시 들어갔어요. 60초 동안 10000이 나가요.'
+            dbFirst:
+              - log: '쓰기: DB를 8000으로 바꾼다'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000', mark: changed}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '10000'}]}
+              - log: '조회: 캐시 적중 → 10000 (쓰기가 아직 캐시를 지우기 전)'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '10000'}]}
+              - log: '쓰기: 캐시를 지운다'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '없음', mark: changed}]}
+              - log: '다음 조회: 캐시 놓침 → DB에서 8000을 읽어 넣는다'
+                duo:
+                  - {label: DB 가격, rows: [{k: 'price:1', v: '8000'}]}
+                  - {label: 캐시 가격, rows: [{k: 'price:1', v: '8000', mark: changed}]}
+                verdict: '사이에 낀 조회는 잠깐 옛 값을 받았지만, 지운 뒤로는 새 가격이 나가요.'
+      - p: '테스트로 재현한 캐시 먼저 지우기의 결과예요.'
+      - ci:
+          key: stale-race
+          label: 실제 결과 보기
+          source: CacheStrategyTest.deleteThenUpdateRaceLeavesStaleCache
+      - p: '캐시를 먼저 지우면 지운 **뒤에** 옛 값이 다시 들어갈 틈이 생겨요. DB를 먼저 바꾸면 사이에 낀 조회가 잠깐 옛 값을 받을 뿐, 캐시를 지운 뒤에는 새 값이 들어가요. 그래서 **DB를 먼저 바꾸고 캐시를 지워요.** 테스트에서도 이 순서로 바꾼 뒤의 조회는 8000이었어요.'
+      - p: '지우지 말고 새 값으로 덮어쓰면 어떨까요? 쓰기 두 건(9000, 8000)이 동시에 오면 DB에는 8000이 남는데 캐시에는 늦게 쓴 9000이 남을 수 있어요. 지우기는 다음 조회가 DB에서 다시 읽게 하니 이런 엇갈림이 적어요.'
+      - more:
+          summary: DB를 먼저 바꿔도 완전하지는 않아요
+          body:
+            - p: '아주 드문 순서가 있어요. 조회가 캐시를 놓치고 DB에서 옛 값을 읽은 뒤 멈춰 있는 동안, 쓰기가 DB를 바꾸고 캐시까지 지우고, 그다음에야 조회가 옛 값을 넣는 경우예요. DB 조회가 쓰기 전체보다 오래 걸려야 생겨서 드물어요.'
+            - p: '그래서 무효화와 함께 **TTL을 안전망으로** 둬요. 어긋나도 만료 시간이 지나면 저절로 맞춰져요.'
+      - quiz:
+          q: '회원 닉네임을 캐시해요. 닉네임을 바꾸는 코드가 `cache.delete(key)`를 먼저 부르고 `memberRepository.save(...)`를 불러요. 무엇이 문제이고 어떻게 고치나요?'
+          options:
+            - '문제없다. 지웠으니 다음 조회가 새 값을 읽는다'
+            - '그 사이의 조회가 옛 닉네임을 다시 넣을 수 있다. 저장한 뒤에 지운다'
+            - '지우지 말고 캐시를 비워 둔다'
+          answer: 2
+          explain: '지우기와 저장 사이에 끼어든 조회가 DB의 옛 값을 읽어 캐시에 넣을 수 있어요. DB를 먼저 바꾸고 캐시를 지워요.'
+      - next: '어긋남을 막는 마지막 안전망은 만료 시간이었어요. 만료 시간은 얼마로 정할까요?'
+    recall: 'DB를 먼저 바꾸고 그다음 캐시를 지워요. DB만 바꾸고 캐시를 두면 만료될 때까지 옛 값을 줘요. 캐시를 먼저 지우면 지운 뒤 DB를 바꾸기 전에 들어온 조회가 DB의 옛 값을 읽어 캐시에 다시 넣고, 그 값이 TTL 동안 남아요. 덮어쓰기보다 지우기가 동시 쓰기에서 덜 엇갈리고, DB를 먼저 바꿔도 드물게 어긋날 수 있어 TTL을 안전망으로 함께 둬요.'
   - id: q3
     title: 캐시에 얼마나 오래, 얼마나 많이 두나요?
     conclusion:
@@ -133,6 +334,33 @@ questions:
     asks:
       - '본문의 예시: TTL 60초로 가격을 캐시한 뒤 DB만 바꿨다. 가장 늦게 언제 새 가격이 보이나 (캐시에 넣은 때부터 60초 뒤)'
       - '옮긴 상황: 최대 크기 2인 LRU 캐시에 A, B를 넣고 A를 읽은 뒤 C를 넣었다. 캐시에 남은 것은 (A와 C. 가장 오래 쓰지 않은 B를 지운다)'
+    body:
+      - p: '**TTL**(time to live)은 캐시에 넣은 값이 사라지는 시간이에요. Redis에서는 `SET`에 `PX`(밀리초)나 `EX`(초)로 줘요([Redis 문서](link:redisSet)). TTL을 0.5초로 주고, DB만 바꾼 뒤 기다려 봤어요. 0.5초 안에는 옛 값이, 지난 뒤에는 키가 사라져 DB의 새 값이 나왔어요.'
+      - p: 'TTL은 **옛 값을 얼마나 오래 보여 줘도 괜찮은가**로 정해요. 질문 2의 무효화가 실패해도 TTL이 지나면 맞춰지니, TTL은 "최악에 이만큼 늦을 수 있다"는 약속이기도 해요.'
+      - code: ttlPick
+      - h3: 크기 한도와 내보내기
+      - p: '만료만으로는 부족해요. 상품 100만 개를 모두 캐시하면 메모리가 모자라요. 그래서 캐시에 **크기 한도**를 두고, 차면 무엇을 지울지(내보내기, eviction) 정해요. 가장 흔한 기준은 **LRU**(Least Recently Used), 가장 오래 쓰지 않은 것부터 지우기예요.'
+      - p: '자바의 로컬 캐시 라이브러리 Caffeine에 최대 크기 2를 주고 셋째를 넣어 봤어요.'
+      - ci:
+          key: evict
+          label: 실제 결과 보기
+          source: CachePracticeTest.sizeLimitEvicts
+      - p: '한도를 넘자 하나를 내보내 2개만 남았어요. Caffeine은 LRU를 고친 방식(W-TinyLFU)을 써서 최근에 쓴 것뿐 아니라 자주 쓴 것도 봐요. 그래서 정확한 LRU와 지우는 것이 다를 수 있어요. Redis도 메모리 한도(`maxmemory`)와 내보내기 정책을 정할 수 있어요([Redis 문서](link:redisEviction)).'
+      - p: '반대로 `HashMap`에 넣기만 하고 지우지 않는 캐시는 만료도 한도도 없어요. 옛 값을 영원히 주고, 쌓이는 만큼 메모리를 차지해 결국 `OutOfMemoryError`로 가요. [가비지 컬렉션](lesson:garbage-collection) 레슨에서 본 새는 캐시예요.'
+      - h3: 캐시하지 않는 것
+      - ul:
+          - '**사용자마다 다르고 자주 바뀌는 값:** 같은 키를 다시 읽는 일이 드물어 적중률이 낮아요.'
+          - '**틀리면 안 되는 값:** 재고, 잔액, 결제 상태를 옛 값으로 판단하면 초과 판매나 이중 지급 같은 사고가 나요. 원본에서 읽어요.'
+      - quiz:
+          q: '최대 크기 2인 LRU 캐시에 A, B를 넣고 A를 읽은 뒤 C를 넣었어요. 캐시에 남은 것은?'
+          options:
+            - 'A와 B'
+            - 'A와 C'
+            - 'B와 C'
+          answer: 2
+          explain: 'A를 방금 읽어서 가장 오래 쓰지 않은 것은 B예요. LRU는 B를 지워요.'
+      - next: '만료는 꼭 필요하지만, 많이 읽히는 키가 만료되는 순간에는 무슨 일이 생길까요?'
+    recall: '옛 값을 얼마나 오래 보여 줘도 되는지로 만료 시간(TTL)을 정해요. 상품 설명은 몇 시간, 가격은 몇 분, 실시간 순위는 몇 초처럼요. TTL은 무효화가 실패해도 이만큼 지나면 맞춰진다는 안전망이에요. 메모리에 크기 한도를 두고 차면 LRU처럼 오래 쓰지 않은 것부터 내보내요. 만료도 한도도 없는 맵 캐시는 메모리를 계속 차지해요. 재고와 잔액처럼 틀리면 안 되는 값은 캐시하지 않아요.'
   - id: q4
     title: 인기 키가 만료되는 순간 무슨 일이 생기나요?
     conclusion:
@@ -147,12 +375,78 @@ questions:
       - '본문의 예시: 같은 키를 놓친 요청 100건 가운데 한 건만 DB로 보내고 나머지가 기다리게 했다. 서버가 한 대일 때 DB 조회는 몇 번인가 (한 번)'
       - '옮긴 상황: 자정에 상품 1만 개를 한꺼번에 캐시에 넣으며 모두 TTL 1시간을 줬다. 새벽 1시에 생길 일과 고치는 방법은 (1만 개가 함께 만료되어 DB로 몰린다. TTL에 무작위 값을 더한다)'
       - '실무 구역: `@Cacheable`에 `sync = true`를 주면 무엇이 달라지나 (한 서버 안에서 같은 키를 놓친 요청 가운데 하나만 메서드를 실행한다)'
+    body:
+      - p: '메인 페이지의 인기 상품 가격은 1초에 수백 번 읽혀요. 그 키가 만료되는 순간, 그때 들어온 요청은 **모두** 캐시를 놓쳐요. 그리고 모두 DB로 가요. 앞 요청이 캐시를 채우기 전까지 뒤 요청도 계속 놓치니까요.'
+      - p: '캐시가 막 만료된 순간 같은 상품을 동시에 100번 조회해 봤어요.'
+      - ci:
+          key: stampede
+          label: 실제 결과 보기
+          source: CacheStrategyTest.stampedeAndSingleFlight
+      - p: '그냥 cache-aside는 요청 대부분이 DB로 갔어요. 평소엔 캐시가 막아 주던 부하가 한순간에 DB로 쏟아지는 것을 **캐시 스탬피드**(cache stampede)라고 해요. DB가 느려지면 캐시를 채우는 것도 느려져서 더 많은 요청이 놓치는 악순환이 돼요.'
+      - h3: 막는 방법 셋
+      - p: '**같은 키는 한 요청만 DB로.** 키마다 "지금 읽는 중"인 조회를 하나 두고, 뒤에 온 요청은 그 결과를 기다려요. 위 결과의 둘째 줄이 이것이고, DB 조회가 한 번이었어요.'
+      - code: singleFlight
+        notes:
+          - mark: running.join()
+            as: code
+            text: '이미 누가 DB에서 읽고 있으면 새로 읽지 않고 그 결과를 기다려요.'
+      - p: '이 방법은 **서버 한 대 안에서** 묶어요. 서버가 다섯 대면 서버마다 한 번씩, DB에는 다섯 번 가요. 서버들을 묶어 한 번만 가게 하려면 Redis에 락을 두는데, 심화 레슨 "분산 락"에서 다뤄요.'
+      - p: '**만료 시간 흩기.** 자정에 상품 1만 개를 한꺼번에 넣으며 TTL을 모두 1시간으로 주면 새벽 1시에 1만 개가 함께 만료돼요. TTL에 무작위 몇 분을 더해 만료를 흩어 놓아요.'
+      - code: jitter
+      - p: '**미리 갱신.** 만료가 가까워지면 백그라운드에서 DB를 다시 읽어 넣어요. 인기 키가 비는 순간이 아예 없어요.'
+      - quiz:
+          q: '자정에 상품 1만 개를 캐시에 넣으며 모두 TTL 1시간을 줬어요. 새벽 1시쯤 무슨 일이 생기고, 어떻게 고치나요?'
+          options:
+            - '아무 일도 없다'
+            - '1만 개가 함께 만료되어 DB로 몰린다. TTL에 무작위 값을 더한다'
+            - '캐시가 가득 차 쓰기를 거절한다. 크기 한도를 없앤다'
+          answer: 2
+          explain: '같은 때 넣고 같은 TTL을 주면 같은 때 만료돼요. 무작위 값을 더해 만료를 흩어요.'
+      - next: '원리는 여기까지예요. 이제 스프링에서 캐시를 붙이는 애너테이션과 흔한 실수를 볼게요.'
+    recall: '인기 키가 만료되는 순간 들어온 요청들이 모두 캐시를 놓치고 한꺼번에 DB로 가요. 이것이 캐시 스탬피드예요. 같은 키를 놓친 요청 가운데 하나만 DB로 보내고 나머지가 그 결과를 기다리게 하면(서버 한 대 안에서) DB 조회가 한 번이 돼요. 같은 때 넣은 키들은 TTL에 무작위 값을 더해 만료를 흩고, 만료 전에 백그라운드에서 미리 갱신하기도 해요.'
 practice:
+  title: 스프링에서 캐시를 붙일 때
   says:
     - '스프링의 캐시 추상화: `@EnableCaching`, 코드 cacheable의 `@Cacheable`과 `@CacheEvict`. 캐시 매니저만 바꾸면 메모리, Caffeine, Redis로 바꿀 수 있다. 두 번 부르면 메서드가 한 번만 실행되는 것과 `@CacheEvict` 뒤 다시 실행되는 것을 테스트로 보인다'
     - '`@CacheEvict`는 기본으로 메서드가 끝난 뒤 지운다. 질문 2의 "DB 먼저, 캐시 나중" 순서와 같다. `beforeInvocation = true`면 먼저 지운다'
     - '흔한 실수: 같은 클래스 안에서 `this.price(id)`로 부르면 캐시가 걸리지 않는다. `@Cacheable`은 프록시가 처리하기 때문이다(S9, S10과 같은 이유). 테스트로 내부 호출에서 메서드가 매번 실행되는 것을 보인다. 고친 코드: 캐시 메서드를 다른 빈으로 뺀다'
     - 'Redis 캐시 매니저의 TTL 설정: `spring.cache.redis.time-to-live`. Caffeine 캐시는 `spring.cache.caffeine.spec=maximumSize=10000,expireAfterWrite=10m`. 설정 이름은 스프링 부트 문서가 근거다'
+  body:
+    - h3: '@Cacheable과 @CacheEvict'
+    - p: '스프링은 cache-aside를 애너테이션으로 붙이게 해 줘요([스프링 문서](link:springCache)). `@EnableCaching`을 켜고 메서드에 붙여요.'
+    - code: cacheable
+    - p: '`@Cacheable`은 메서드를 부르기 전에 캐시를 보고, 있으면 메서드를 실행하지 않고 돌려줘요. 없으면 실행하고 결과를 넣어요. `@CacheEvict`는 그 키를 지워요. 기본으로 **메서드가 끝난 뒤에** 지워서, 질문 2의 "DB 먼저, 캐시 나중" 순서와 같아요(`beforeInvocation = true`면 먼저 지워요).'
+    - ci:
+        key: cacheable
+        label: 실제 결과 보기
+        source: CachePracticeTest.cacheableAndSelfInvocation
+        code: cacheRun
+    - p: '앞의 두 줄이 기대한 대로예요. 두 번 불러도 한 번 실행되고, 지운 뒤에는 다시 실행돼요. 셋째 줄이 흔한 실수예요.'
+    - h3: 흔한 실수 하나
+    - code: selfCall
+      notes:
+        - mark: this.price(id)
+          as: code
+          text: '같은 객체 안에서 부르면 캐시가 걸리지 않아요. 위 결과에서 두 번 모두 실행됐어요.'
+    - p: '`@Cacheable`은 스프링이 빈 앞에 세운 **프록시**가 처리해요. 바깥에서 빈을 부르면 프록시를 거치지만, `this.price()`는 프록시를 거치지 않고 진짜 객체의 메서드를 바로 불러요. `@Transactional`이 내부 호출에서 빠지는 것과 같은 이유예요([@Transactional 동작 원리](lesson:transactional-proxy)). 고친 코드는 캐시 메서드를 **다른 빈으로 빼서** 그 빈을 주입받아 부르는 거예요.'
+    - p: '`@Cacheable(sync = true)`를 주면 같은 키를 놓친 요청 가운데 하나만 메서드를 실행하고 나머지는 기다려요. 질문 4의 "한 요청만 DB로"를 한 서버 안에서 해 줘요.'
+    - h3: 캐시 매니저와 설정
+    - p: '어디에 캐시할지는 캐시 매니저가 정해요. 스프링 부트는 의존성과 설정에 따라 캐시 매니저를 만들어 줘요([스프링 부트 문서](link:bootCache)). 이 두 설정은 검증 프로젝트에 넣지 않아서 문서가 근거예요. Redis면 만료 시간을, Caffeine이면 크기 한도와 만료를 줘요.'
+    - code: config
+    - code: configCaffeine
+interview:
+  question: 캐시를 쓸 때 DB와 캐시를 어떻게 맞추고, 무엇을 조심하나요?
+  model:
+    - label: 정의
+      text: 캐시는 느린 원본의 사본을 빠른 곳에 두는 것이고, 가장 흔한 cache-aside는 읽을 때 캐시를 보고 없으면 DB에서 읽어 TTL과 함께 넣습니다. 여러 번 읽히고 조금 늦게 바뀌어도 되는 데이터에 맞습니다.
+    - label: 원리
+      text: 값을 바꾸면 DB를 먼저 바꾸고 캐시를 지웁니다. 캐시를 먼저 지우면 그 사이 조회가 옛 값을 다시 넣어 TTL 동안 남습니다. 드물게 어긋날 수 있어 TTL을 안전망으로 두고, 크기 한도와 LRU 같은 내보내기 정책으로 메모리를 지킵니다.
+    - label: 주의할 점
+      text: 인기 키가 만료되는 순간 요청이 DB로 몰리는 캐시 스탬피드는 같은 키를 한 요청만 읽게 하거나 TTL에 무작위 값을 더해 막습니다. 재고와 잔액처럼 틀리면 안 되는 값은 캐시하지 않습니다. @Cacheable은 프록시라 같은 클래스 안의 호출에는 걸리지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 가격을 바꿔도 몇 분간 옛 가격이 보이던 문제를 무효화 순서를 DB 먼저로 바꾸고 TTL을 줄여 고쳤습니다.'
+verified: 캐시 적중, 옛 가격이 남는 순서, 스탬피드의 DB 조회 수, @Cacheable의 실행 횟수는 PostgreSQL 16, Redis 7, 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([CacheStrategyTest](link:test), [CachePracticeTest](link:practiceTest))가 다시 돌아요.
+footer: '근거: `SET`의 만료 옵션은 [Redis 문서](link:redisSet), 내보내기 정책은 [Redis 문서](link:redisEviction), `@Cacheable`과 `@CacheEvict`는 [스프링 문서](link:springCache), 캐시 설정은 [스프링 부트 문서](link:bootCache). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 'cache-aside에서 첫 조회만 DB를 읽고 두 번째부터 캐시에서 준다'
     how: 'PostgreSQL과 Redis 컨테이너, DB 조회 횟수 세기'
@@ -166,13 +460,18 @@ claims:
   - claim: 'TTL이 지나면 다음 조회는 DB를 읽는다'
     how: '0.5초 TTL'
     test: 'CacheStrategyTest.ttlExpires'
+  - claim: 'write-through는 다음 조회가 DB 없이 새 값을 준다'
+    how: '같은 구성'
+    test: 'CacheStrategyTest.writeThroughKeepsCacheFresh'
   - claim: '만료 순간 동시 조회 100건이 그냥은 DB로 많이 가고, 단일 로드로 묶으면 한 번이다'
     how: '스레드 100개'
     test: 'CacheStrategyTest.stampedeAndSingleFlight'
-  - claim: 'Caffeine에 최대 크기를 주면 넘칠 때 오래 쓰지 않은 것을 지운다'
-    how: '`maximumSize(2)`와 `cleanUp()` 뒤 남은 키를 본다. Caffeine은 정확한 LRU가 아니라 W-TinyLFU라 결과를 확인하고 본문을 맞춘다'
+  - claim: 'Caffeine에 최대 크기를 주면 넘칠 때 하나를 내보낸다'
+    how: '`maximumSize(2)`와 `cleanUp()` 뒤 남은 키를 본다. Caffeine은 정확한 LRU가 아니라 W-TinyLFU라서, 남은 수와 새로 넣은 키만 단정하고 본문에도 그렇게 적었다'
+    test: 'CachePracticeTest.sizeLimitEvicts'
   - claim: '`@Cacheable` 메서드를 두 번 부르면 한 번만 실행되고, `@CacheEvict` 뒤에는 다시 실행된다. 같은 클래스 안의 호출에는 캐시가 걸리지 않는다'
     how: '`AnnotationConfigApplicationContext`와 `ConcurrentMapCacheManager`로 작은 컨텍스트를 띄운다'
+    test: 'CachePracticeTest.cacheableAndSelfInvocation'
 sources:
   - '스프링 캐시 추상화: https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html'
   - '스프링 부트 캐시 설정: https://docs.spring.io/spring-boot/reference/io/caching.html'

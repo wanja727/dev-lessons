@@ -127,7 +127,7 @@ links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/scaleout/ScaleOutTest.java
   nginx: https://nginx.org/en/docs/http/load_balancing.html
   springSession: https://docs.spring.io/spring-session/reference/guides/boot-redis.html
-  servletSession: https://jakarta.ee/specifications/servlet/6.0/apidocs/jakarta.servlet/jakarta/servlet/http/httpservletrequest#getSession(boolean)
+  servletSession: https://jakarta.ee/specifications/servlet/6.0/apidocs/jakarta.servlet/jakarta/servlet/http/HttpServletRequest.html#getSession(boolean)
 predict:
   title: 서버를 두 대로 늘리면?
   text: '코드 predict를 서버 두 대에 띄우고, 로드 밸런서가 요청을 서버 1, 서버 2 순서로 번갈아 보내요. 사용자가 `POST /login`을 보낸 뒤 `GET /me`를 두 번 보내요. 두 번의 `/me`는 각각 무엇을 받을까요? 답은 질문 3에 나와요.'

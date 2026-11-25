@@ -1,19 +1,20 @@
 ---
-title: 캐시 전략과 무효화
-unit: DB
-order: 27
+title: "캐시 전략과 무효화"
+unit: 시스템 설계와 아키텍처
+order: 904
 stage: 실무 시스템
-summary: cache-aside와 write-through, TTL을 배우고, 캐시를 먼저 지우면 옛 값이 다시 캐시되는 경쟁과 만료 순간 DB로 몰리는 캐시 스탬피드를 실제 Redis로 재현해요.
-minutes: 30
+summary: 캐시가 무엇을 빠르게 하는지와 cache-aside, 값이 바뀔 때 캐시를 지우는 순서, 만료 시간과 크기 한도, 캐시 스탬피드. 네 가지 질문에 스스로 답할 수 있게 실제 PostgreSQL과 Redis로 옛 가격이 남는 순간을 재현해 봐요.
+minutes: 25
 page: cache-strategy
 verifiedBy:
   - verification/src/test/java/lab/devlessons/cache/CacheStrategyTest.java
+  - verification/src/test/java/lab/devlessons/cache/CachePracticeTest.java
 sources:
   - https://redis.io/docs/latest/commands/set/
-  - https://redis.io/docs/latest/commands/expire/
-  - https://docs.spring.io/spring-framework/reference/integration/cache.html
-  - https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html
-updated: 2026-11-17
+  - https://redis.io/docs/latest/develop/reference/eviction/
+  - https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html
+  - https://docs.spring.io/spring-boot/reference/io/caching.html
+updated: 2026-11-25
 ---
 
-선수 레슨 없음.
+선수 레슨: 서버를 늘리는 방법.
