@@ -1,8 +1,9 @@
-# 웹 보안 기초 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 웹 보안 기초
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/web-security-basics.yaml에 있다.
 title: 웹 보안 기초
+description: XSS, CSRF, SQL 인젝션이 어떻게 일어나고 어떻게 막는지, 로그인 쿠키와 토큰을 어떻게 지키는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 22
 roadmap: N10
 type: 개념 설명
 prerequisites:
@@ -50,7 +51,8 @@ codes:
     </script>
   escaped: |-
     return "<p>"
-        + [[HtmlUtils.htmlEscape]](r.content())
+        + [[HtmlUtils.htmlEscape]](
+            r.content())
         + "</p>";
   csrfForm: |-
     <!-- https://evil.com 의 페이지 -->
@@ -61,6 +63,24 @@ codes:
     <script>
       document.forms[0].submit();
     </script>
+  csrfRun: |-
+    # evil.com의 폼이 보낸 것과 같은 요청
+    POST /orders HTTP/1.1
+    Origin: https://evil.com
+    Cookie: SESSION=kim-session
+    Content-Type:
+      application/x-www-form-urlencoded
+
+    productId=7
+  originCheck: |-
+    String origin = req.getHeader("Origin");
+    boolean ours =
+        "https://shop.com".equals(origin);
+    if (!"GET".equals(req.getMethod())
+        && origin != null && [[!ours]]) {
+      res.sendError(403);
+      return false;
+    }
   login: |-
     String sql =
         "SELECT * FROM member "
@@ -69,13 +89,29 @@ codes:
   injection: |-
     email: admin@shop.com' --
     pw:    아무거나
+  injectedSql: |-
+    SELECT * FROM member
+    WHERE email = 'admin@shop.com' ⤶
+    [[--' AND password = '아무거나']]
   loginSafe: |-
     String sql = "SELECT * FROM member "
-        + "WHERE email = [[?]] AND password = [[?]]";
+        + "WHERE email = [[?]] "
+        + "AND password = [[?]]";
     PreparedStatement ps =
         conn.prepareStatement(sql);
     ps.setString(1, email);
     ps.setString(2, pw);
+  jpql: |-
+    // 이렇게 하지 않는다
+    em.createQuery(
+        "select m from Member m "
+        + "where m.email = '" + email + "'");
+
+    // 파라미터로 넣는다
+    em.createQuery(
+        "select m from Member m "
+        + "where m.email = [[:email]]")
+      .setParameter("email", email);
   cookie: |-
     ResponseCookie c = ResponseCookie
         .from("SESSION", id)
@@ -83,20 +119,60 @@ codes:
         .[[secure(true)]]
         .[[sameSite("Lax")]]
         .path("/")
+        .maxAge(Duration.ofMinutes(30))
         .build();
+  thymeleaf: |-
+    <!-- 바꿔 쓴다 -->
+    <p [[th:text]]="${review.content}"></p>
+
+    <!-- 그대로 쓴다. 사용자 글에 쓰지 않는다 -->
+    <p [[th:utext]]="${review.content}"></p>
   sortMistake: |-
-    String sql = "SELECT * FROM product "
-        + "ORDER BY " + [[sort]];
+    @GetMapping("/products")
+    List<String> list(
+        @RequestParam String sort) {
+      return jdbc.queryForList(
+          "SELECT name FROM product "
+          + "ORDER BY " + [[sort]],
+          String.class);
+    }
+  sortAttack: |-
+    # admin 비밀번호의 첫 글자를 맞혀 본다
+    sort=price
+    sort=(CASE WHEN (SELECT password
+      FROM member WHERE id = 1)
+      LIKE 'a%' THEN price ELSE -price END)
+    sort=(... LIKE 'b%' ...)
   sortFixed: |-
     private static final Set<String>
         SORTABLE = Set.of("price", "name");
 
-    if (!SORTABLE.contains(sort)) {
+    if (![[SORTABLE.contains(sort)]]) {
       throw new IllegalArgumentException();
     }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/websecurity/WebSecurityTest.java
+  owaspXss: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  owaspCsrf: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  owaspSqli: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  mdnSameSite: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value
+  springExploits: https://docs.spring.io/spring-security/reference/servlet/exploits/index.html
+  thymeleaf: https://www.thymeleaf.org/doc/tutorials/3.1/usingthymeleaf.html
 predict:
-  text: '로그인 쿼리를 코드 login처럼 문자열로 이어 붙여 만들었어요. 회원 표에는 `admin@shop.com`이 있고 비밀번호는 모르는 값이에요. 코드 injection의 입력을 넣으면 쿼리는 몇 행을 돌려줄까요? 보기: 0행(비밀번호가 틀림), 1행(admin), SQL 문법 오류.'
-  answer: '1행(admin). `--` 뒤가 주석이 되어 비밀번호 조건이 사라진다. 질문 3에서 밝힌다.'
+  title: 따옴표 하나로 로그인이 될까요?
+  text: '로그인 쿼리를 아래처럼 문자열로 이어 붙여 만들었어요. 회원 표에는 `admin@shop.com`이 있고, 공격자는 그 비밀번호를 몰라요. 공격자가 이메일 칸에 `admin@shop.com'' --`, 비밀번호 칸에 아무 글자나 넣으면 쿼리는 몇 행을 돌려줄까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: login
+  label: 내 예측
+  options:
+    - value: zero
+      label: 0행 (비밀번호가 틀림)
+    - value: admin
+      label: 1행 (admin)
+    - value: error
+      label: SQL 문법 오류
+  answer: admin
+  storageKey: sec-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: XSS는 어떻게 일어나고 어떻게 막나요?
@@ -112,6 +188,43 @@ questions:
     asks:
       - '본문의 예시: 후기 내용 `<b>좋아요</b>`를 `HtmlUtils.htmlEscape`로 바꿔 내보내면 화면에 무엇이 보이나 (굵은 글씨가 아니라 `<b>좋아요</b>`라는 글자 그대로)'
       - '옮긴 상황: 검색 결과 화면이 `"검색어: " + q`를 HTML에 그대로 넣는다. 공격자가 `?q=<script>...</script>`인 주소를 메일로 보낸다. 무슨 공격이고 누가 피해를 보나 (반사형 XSS. 그 주소를 연 사람)'
+    body:
+      - p: 상품 후기를 보여 주는 컨트롤러예요. 후기 내용을 HTML에 그대로 끼워 넣어요.
+      - code: review
+        notes:
+          - mark: r.content()
+            as: code
+            text: 사용자가 쓴 글이 아무 처리 없이 HTML의 일부가 돼요.
+      - p: 공격자가 이런 후기를 남겼어요.
+      - code: attack
+      - p: 서버가 이 후기를 어떻게 내보내는지 보세요.
+      - ci:
+          key: xss
+          label: 서버가 돌려준 HTML 보기
+          source: WebSecurityTest.xssEscaping
+          code: review
+      - p: '첫 응답에 `<script>`가 그대로 들어 있어요. 이 후기를 연 **모든 사용자의 브라우저**는 이것을 글이 아니라 스크립트로 보고 실행해요. 스크립트는 shop.com의 페이지 안에서 돌아서 **shop.com의 출처**로 실행돼요. 그래서 같은 출처 정책(CORS 레슨)이 막아 주지 않아요. 쿠키를 읽어 evil.com으로 보내고, 사용자인 척 주문이나 비밀번호 변경을 요청할 수 있어요. 이 공격을 **XSS**(Cross-Site Scripting)라고 해요.'
+      - ul:
+          - '**저장형:** 후기처럼 서버에 저장되어, 그 글을 보는 모든 사람에게 나가요.'
+          - '**반사형:** 검색 결과 화면이 주소의 `?q=` 값을 그대로 보여 주면, 공격자가 스크립트를 넣은 주소를 메일로 보내 그 주소를 연 사람만 당해요.'
+      - h3: 내보낼 때 바꿔 써요
+      - p: '막는 법은 **HTML에 끼워 넣기 전에 특수 문자를 바꿔 쓰는 것**(이스케이프)이에요. `<`는 `&lt;`, `>`는 `&gt;`, `"`는 `&quot;`가 돼요. 브라우저는 이것을 태그가 아니라 글자 `<`로 화면에 보여 줘요. 위 둘째 응답이 `HtmlUtils.htmlEscape`로 바꿔 쓴 결과예요.'
+      - code: escaped
+      - p: '바꿔 쓰는 때는 **입력을 받을 때가 아니라 내보낼 때**예요. 같은 글이 HTML, JSON, 자바스크립트 문자열 어디로 나가느냐에 따라 바꾸는 법이 달라서, 받을 때 한 번 바꿔 두면 다른 곳에서 깨지거나 빠뜨려요. 타임리프 같은 템플릿 엔진은 기본으로 바꿔 써요(실무 구역).'
+      - more:
+          summary: '더 알아보기: 한 번 더 막는 Content-Security-Policy'
+          body:
+            - p: '응답에 `Content-Security-Policy: script-src ''self''` 헤더를 붙이면, 브라우저는 우리 서버의 스크립트 파일만 실행하고 HTML 안에 끼어든 인라인 스크립트는 실행하지 않아요. 바꿔 쓰기를 어딘가 빠뜨려도 한 번 더 막아 줘요. 다만 우리 페이지의 인라인 스크립트도 막히니 설정을 맞춰야 해요.'
+      - quiz:
+          q: '후기 내용 `<b>좋아요</b>`를 `HtmlUtils.htmlEscape`로 바꿔 HTML에 넣었어요. 브라우저 화면에는 무엇이 보일까요?'
+          options:
+            - 굵은 글씨 "좋아요"
+            - '`<b>좋아요</b>`라는 글자 그대로'
+            - 아무것도 보이지 않는다
+          answer: 2
+          explain: '`<`와 `>`가 `&lt;`와 `&gt;`로 바뀌어 브라우저는 태그가 아니라 글자로 보여 줘요.'
+      - next: XSS는 공격자의 스크립트가 우리 사이트 안에서 돈 경우예요. 우리 사이트 밖에서도 사용자인 척 요청을 보낼 수 있을까요?
+    recall: 사용자가 넣은 글을 HTML에 그대로 끼워 내보내면, 그 안의 script가 다른 사용자의 브라우저에서 우리 사이트의 출처로 실행돼 쿠키를 읽거나 사용자인 척 요청해요. 저장형과 반사형이 있어요. 내보낼 때 특수 문자를 HTML 문자 참조로 바꿔 쓰면 글자로만 보여요. 템플릿 엔진은 기본으로 바꿔 쓰고, CSP로 한 번 더 막아요.
   - id: q2
     title: CSRF는 어떻게 일어나고 어떻게 막나요?
     conclusion:
@@ -130,6 +243,101 @@ questions:
     asks:
       - '본문의 예시: evil.com이 shop.com으로 폼을 보낼 때 shop.com의 세션 쿠키를 싣는 것은 누구인가 (kim의 브라우저가 자동으로)'
       - '옮긴 상황: 은행이 이체를 `GET /transfer?to=...&amount=...`로 받는다. 공격자가 게시판에 그 주소를 이미지 태그로 넣었다. 로그인한 사용자가 게시판을 열면 (이체 요청이 쿠키와 함께 가서 처리된다)'
+    body:
+      - p: 'kim이 shop.com에 로그인해 둔 채, 다른 탭에서 evil.com을 열었어요. evil.com의 페이지에는 이런 코드가 숨어 있어요.'
+      - code: csrfForm
+      - p: '페이지가 열리자마자 shop.com으로 주문 폼이 전송돼요. 이때 **브라우저는 shop.com으로 가는 요청에 shop.com의 세션 쿠키를 자동으로 실어요**(쿠키, 세션, 토큰 레슨). 서버가 보기에는 kim이 직접 보낸 주문과 똑같아요. 이 공격을 **CSRF**(Cross-Site Request Forgery)라고 해요.'
+      - p: 'CORS 레슨에서 본 것처럼 폼 전송은 단순 요청이라 사전 요청 없이 바로 가요. CORS는 응답을 evil.com에 넘기지 않을 뿐, 요청을 막지 않아요. evil.com과 같은 요청(쿠키와 다른 출처의 Origin)을 보호 없는 주소와, Origin을 확인하는 주소에 보내 봤어요.'
+      - ci:
+          key: csrf
+          label: 두 주소의 결과 보기
+          source: WebSecurityTest.crossSiteRequest
+          code: csrfRun
+      - p: '보호가 없는 주소는 kim의 주문을 만들었어요. evil.com은 응답을 읽지 못했지만, 목적은 이미 이뤘어요. Origin을 확인한 주소는 403으로 거절했어요.'
+      - p: '**XSS와의 차이**를 정리하면, XSS는 공격자의 스크립트가 **우리 사이트 안에서** 돌아서 응답까지 읽어요. CSRF는 **우리 사이트 밖에서** 요청만 보내게 하고 응답은 보지 못해요. 그래서 CSRF는 주문, 이체, 비밀번호 변경처럼 **상태를 바꾸는 요청**을 노려요.'
+      - h3: 막는 법
+      - ol:
+          - '**CSRF 토큰:** 우리 화면을 줄 때 세션마다 무작위 값을 폼에 숨겨 넣고, 상태를 바꾸는 요청에 그 값이 없거나 다르면 거절해요. evil.com은 우리 화면의 응답을 읽을 수 없으니 그 값을 몰라요. 스프링 시큐리티가 기본으로 해요.'
+          - '**SameSite 쿠키:** 세션 쿠키에 `SameSite=Lax`를 붙이면, 브라우저는 다른 사이트에서 시작한 POST에는 그 쿠키를 싣지 않아요(질문 4).'
+          - '**Origin 확인:** 상태를 바꾸는 요청의 `Origin` 헤더가 우리 출처가 아니면 거절해요. 위 결과의 둘째 주소가 이 코드예요.'
+      - code: originCheck
+        notes:
+          - mark: '!ours'
+            as: code
+            text: 'GET이 아닌 요청이 다른 출처에서 왔으면 403으로 끝내요.'
+      - p: '그리고 **상태를 바꾸는 일을 GET으로 하지 않아요**(REST API 설계 레슨의 안전한 메서드). GET이면 `<img src="https://bank.com/transfer?to=...">` 한 줄로, 폼도 없이 요청이 가요.'
+      - p: 아래에서 보호가 없는 서버와 CSRF 토큰을 확인하는 서버를 비교해 보세요.
+      - widget:
+          kind: timeline
+          layout: [selector, timeline, buttons, verdict]
+          lanes: [kim의 브라우저, shop.com 서버]
+          initial: {}
+          selector:
+            label: shop.com 서버
+            options:
+              - {value: open, label: 보호 없음}
+              - {value: token, label: CSRF 토큰 확인}
+          scenarios:
+            open:
+              - event:
+                  dir: right
+                  title: kim의 로그인
+                  text: POST /login
+              - event:
+                  dir: left
+                  title: 응답
+                  text: '[[Set-Cookie: SESSION=kim-session]]'
+                  note: kim의 브라우저에 세션 쿠키가 생겨요.
+              - event:
+                  dir: right
+                  title: evil.com의 폼이 보낸 요청
+                  text: |
+                    POST /orders
+                    Origin: https://evil.com
+                    [[Cookie: SESSION=kim-session]]
+                  note: kim은 evil.com을 열었을 뿐이에요. 쿠키는 브라우저가 자동으로 실었어요.
+              - event:
+                  dir: left
+                  title: 응답
+                  text: '[[200 kim의 주문 생성]]'
+                  note: 서버는 kim의 요청으로 알고 처리했어요.
+                verdict: 서버는 쿠키만 보고 kim의 요청으로 믿었어요. 요청이 어느 화면에서 왔는지는 확인하지 않았어요.
+            token:
+              - event:
+                  dir: right
+                  title: kim이 주문 화면을 엶
+                  text: GET /order-form
+              - event:
+                  dir: left
+                  title: 응답
+                  text: |
+                    <form ...>
+                    [[<input name="_csrf" value="9f3a...">]]
+                  note: 세션마다 다른 무작위 값을 폼에 숨겨 줘요.
+              - event:
+                  dir: right
+                  title: evil.com의 폼이 보낸 요청
+                  text: |
+                    POST /orders
+                    Cookie: SESSION=kim-session
+                    (_csrf 없음)
+                  note: evil.com은 shop.com의 응답을 읽을 수 없어서 _csrf 값을 몰라요.
+              - event:
+                  dir: left
+                  title: 응답
+                  text: '[[403]]'
+                  note: 토큰이 없어 거절해요.
+                verdict: 쿠키는 자동으로 실려도, 우리 화면에만 있는 값은 다른 사이트가 알 수 없어요. 그 값을 확인하면 CSRF를 막아요.
+      - quiz:
+          q: 'kim이 shop.com에 로그인한 채 evil.com을 열자, evil.com의 폼이 shop.com으로 주문을 보냈어요. 이 요청에 shop.com의 세션 쿠키를 실은 것은 누구일까요?'
+          options:
+            - evil.com의 서버가 훔쳐서 넣었다
+            - kim의 브라우저가 자동으로 실었다
+            - shop.com 서버가 채워 넣었다
+          answer: 2
+          explain: 브라우저는 shop.com으로 가는 요청에 shop.com의 쿠키를 자동으로 실어요. evil.com은 쿠키 값을 몰라도 돼요.
+      - next: 지금까지는 브라우저를 노린 공격이에요. 서버 안의 DB를 노리는 공격도 있을까요?
+    recall: 사용자가 로그인한 채 다른 사이트를 열면, 그 사이트가 사용자의 브라우저로 우리 서버에 요청을 보내게 해요. 브라우저가 쿠키를 자동으로 실어서 서버는 사용자의 요청으로 알아요. CORS는 이것을 막지 않아요. CSRF 토큰, SameSite 쿠키, Origin 확인으로 막고, 상태를 바꾸는 일을 GET으로 하지 않아요.
   - id: q3
     title: SQL 인젝션은 어떻게 일어나고 어떻게 막나요?
     conclusion:
@@ -144,6 +352,43 @@ questions:
     asks:
       - '본문의 예시: 코드 loginSafe에 `admin@shop.com'' --`를 이메일로 넣으면 몇 행이 나오나 (0행. 그런 이메일 값을 찾는다)'
       - '옮긴 상황: 상품 검색이 `"WHERE name LIKE ''%" + q + "%''"`로 만들어진다. `q`에 따옴표와 주석을 넣는 공격을 막으려면 무엇을 바꾸나 (`LIKE ?`로 바꾸고 `%`를 붙인 값을 바인딩한다)'
+    body:
+      - p: '처음 예측한 로그인 코드예요. 사용자가 넣은 이메일과 비밀번호를 SQL 문자열에 그대로 이어 붙여요.'
+      - code: login
+      - p: '공격자가 이메일 칸에 `admin@shop.com'' --`를 넣으면, 이어 붙인 SQL은 이렇게 돼요.'
+      - code: injectedSql
+        notes:
+          - mark: "--' AND password = '아무거나'"
+            as: code
+            text: 'PostgreSQL에서 `--` 뒤는 주석이에요. 비밀번호 조건이 통째로 사라져요.'
+      - p: '입력에 든 따옴표 `''`가 이메일 문자열을 닫아 버리고, 그 뒤의 `--`가 나머지를 주석으로 만들었어요. 입력이 **값**이 아니라 **SQL의 일부**가 된 거예요. PostgreSQL에 실제로 보내 봤어요.'
+      - ci:
+          key: sqli
+          label: PostgreSQL의 실제 결과 보기
+          source: WebSecurityTest.sqlInjection
+          code: injection
+      - p: '**1행(admin)**이 정답이에요. {{predict-result}} 비밀번호를 몰라도 관리자로 로그인돼요. 비밀번호 칸에 `'' OR ''1''=''1`을 넣으면 조건이 늘 참이 되어 모든 회원이 나와요. 이렇게 입력으로 SQL의 구조를 바꾸는 공격이 **SQL 인젝션**이에요.'
+      - h3: 바인딩하면 입력은 값일 뿐이에요
+      - p: '막는 법은 SQL에 **`?`로 자리만 두고, 값은 따로 넣는 것**이에요.'
+      - code: loginSafe
+        notes:
+          - mark: '?'
+            as: code
+            text: '값이 들어갈 자리예요. SQL의 모양은 여기서 정해지고 바뀌지 않아요.'
+      - p: '`PreparedStatement`는 SQL의 모양을 먼저 DB에 보내고, 값은 따로 보내요. 값 안에 따옴표나 `--`가 있어도 그냥 글자일 뿐이라, DB는 "이메일이 `admin@shop.com'' --`인 회원"을 찾아요. 위 결과의 아래쪽처럼 같은 입력에 0행이에요.'
+      - p: 'JPA도 같아요. JPQL을 문자열로 이으면 같은 구멍이 생겨요. 파라미터로 넣어요. 스프링 데이터 JPA의 메서드 이름 쿼리(`findByEmail`)와 `@Query`의 `:email`은 바인딩을 써요.'
+      - code: jpql
+      - p: '자바 String 레슨에서 문자열을 `+`로 이어 붙이는 법을 배웠어요. **SQL만은 이어 붙이지 않아요.** 사용자 입력이 섞이는 SQL은 언제나 바인딩이에요.'
+      - quiz:
+          q: '아래 코드에 이메일로 `admin@shop.com'' --`를 넣으면 몇 행이 나올까요? `SELECT * FROM member WHERE email = ? AND password = ?`에 `setString`으로 값을 넣어요.'
+          options:
+            - 1행 (admin)
+            - 0행
+            - SQL 문법 오류
+          answer: 2
+          explain: 바인딩한 값은 SQL의 일부가 되지 않아요. 이메일이 그 글자 그대로인 회원을 찾으니 0행이에요.
+      - next: 지금까지 본 공격들은 결국 로그인한 사용자의 쿠키나 토큰을 노렸어요. 그 쿠키와 토큰은 어떻게 지킬까요?
+    recall: 입력을 SQL 문자열에 이어 붙이면 입력 안의 따옴표와 주석이 SQL의 구조를 바꿔요. admin@shop.com' --를 넣으면 비밀번호 조건이 주석이 되어 관리자로 로그인돼요. PreparedStatement의 ?처럼 바인딩하면 SQL의 모양을 먼저 보내고 값을 따로 보내서 입력은 값일 뿐이에요. JPA도 파라미터를 써요.
   - id: q4
     title: 로그인 쿠키와 토큰은 어떻게 지키나요?
     conclusion:
@@ -161,25 +406,139 @@ questions:
     asks:
       - '본문의 예시: `HttpOnly`가 붙은 세션 쿠키를 XSS 스크립트가 `document.cookie`로 읽으면 (그 쿠키는 보이지 않는다)'
       - '옮긴 상황: 서비스가 JWT를 localStorage에 두고 Authorization 헤더로 보낸다. CSRF와 XSS 가운데 무엇에 더 신경 써야 하나 (XSS. 자동으로 실리지 않아 CSRF에는 강하지만 XSS면 토큰을 읽힌다)'
+    body:
+      - p: '세 공격이 노리는 것은 결국 **로그인 상태**예요. 세션 쿠키에는 그것을 지키는 속성을 붙여요.'
+      - table:
+          head: [속성, 하는 일, 막는 것]
+          rows:
+            - ['`HttpOnly`', '자바스크립트(`document.cookie`)가 읽지 못해요', '질문 1의 XSS 스크립트가 쿠키를 훔쳐 보내는 것']
+            - ['`Secure`', 'HTTPS 연결에만 실어요', 'HTTP로 가다 엿보이는 것(HTTPS와 TLS 레슨)']
+            - ['`SameSite=Lax`', '다른 사이트에서 시작한 요청에는 싣지 않아요. 링크로 들어오는 GET에만 실어요', '질문 2의 CSRF']
+      - p: '`SameSite`는 셋 중 하나예요. `Strict`는 다른 사이트에서 시작한 요청에 늘 싣지 않아서, 메일의 링크로 들어와도 로그인이 풀린 것처럼 보여요. `Lax`는 링크로 들어오는 GET에는 실어서 쓰기 편해요. `None`은 늘 싣고 `Secure`가 함께 있어야 해요. 크롬 등 여러 브라우저는 적지 않으면 `Lax`처럼 다루지만, 브라우저마다 달라서 서버가 직접 적어요.'
+      - p: '스프링에서는 `ResponseCookie`로 만들어요.'
+      - ci:
+          key: cookie
+          label: 만들어진 Set-Cookie 보기
+          source: WebSecurityTest.cookieAttributes
+          code: cookie
+      - h3: 토큰은 어디에 둘까요
+      - p: '쿠키, 세션, 토큰 레슨의 JWT를 브라우저에서 쓸 때 어디에 둘지가 자주 논쟁거리예요. 두 가지를 상황별로 비교해 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 생긴 일
+            options:
+              - {value: xss, label: 후기에 XSS 스크립트가 들어감}
+              - {value: csrf, label: evil.com이 주문 폼을 보냄}
+          sides:
+            - label: localStorage에 두고 Authorization 헤더로 보냄
+              items:
+                - {name: 자바스크립트로 읽기, note: 읽을 수 있다}
+                - {name: 요청에 실리는 방식, note: 우리 코드가 직접 넣는다}
+            - label: HttpOnly, SameSite=Lax 쿠키에 둠
+              items:
+                - {name: 자바스크립트로 읽기, note: 읽을 수 없다}
+                - {name: 요청에 실리는 방식, note: 브라우저가 자동으로 싣는다}
+          scenes:
+            xss:
+              sides:
+                - marks: [{name: 자바스크립트로 읽기, tag: 토큰을 읽어 감, mark: bad}]
+                  result: [{k: 토큰, v: 공격자에게 넘어감, mark: bad}]
+                - marks: [{name: 자바스크립트로 읽기, tag: 못 읽음}]
+                  result: [{k: 토큰, v: '지켜짐 (스크립트가 그 자리에서 요청은 할 수 있음)'}]
+              verdict: XSS에는 HttpOnly 쿠키가 강해요. 그래도 스크립트가 페이지 안에서 요청을 보내는 것까지는 막지 못해서, XSS 자체를 막는 것이 먼저예요.
+            csrf:
+              sides:
+                - marks: [{name: 요청에 실리는 방식, tag: evil.com은 못 넣음}]
+                  result: [{k: 주문, v: 생기지 않음}]
+                - marks: [{name: 요청에 실리는 방식, tag: SameSite가 막음}]
+                  result: [{k: 주문, v: '생기지 않음 (Lax가 POST에 안 실음)'}]
+              verdict: localStorage는 자동으로 실리지 않아 CSRF에 강해요. 쿠키는 SameSite와 CSRF 토큰으로 막아야 해요.
+      - p: '정리하면, localStorage는 **CSRF에 강하고 XSS에 약해요**. HttpOnly 쿠키는 **XSS에 강하고 CSRF를 따로 막아야** 해요. 어느 쪽을 고르든 공통점이 있어요. **XSS가 나면 둘 다 위험해요.** 스크립트가 우리 페이지 안에서 돌면, 쿠키를 읽지 못해도 그 자리에서 사용자인 척 요청을 보낼 수 있으니까요. 그래서 질문 1의 바꿔 쓰기가 먼저예요.'
+      - more:
+          summary: '더 알아보기: HTTPS로만 오게 하는 HSTS'
+          body:
+            - p: '사용자가 주소창에 `shop.com`만 치면 브라우저는 먼저 `http://`로 가요. 그 첫 요청을 가로채면 HTTPS로 넘어가지 못하게 붙잡을 수 있어요. 응답에 `Strict-Transport-Security: max-age=31536000` 헤더를 주면, 브라우저는 1년 동안 이 사이트에 `http://`로 가지 않고 처음부터 `https://`로 가요.'
+      - quiz:
+          q: '`HttpOnly`가 붙은 세션 쿠키가 있는 페이지에서 XSS 스크립트가 `document.cookie`를 읽으면 어떻게 될까요?'
+          options:
+            - 세션 쿠키가 보인다
+            - 세션 쿠키는 보이지 않는다
+            - 예외가 나서 스크립트가 멈춘다
+          answer: 2
+          explain: HttpOnly 쿠키는 자바스크립트에 보이지 않아요. 브라우저는 요청에는 그대로 실어요.
+    recall: 세션 쿠키에 HttpOnly(자바스크립트가 못 읽음), Secure(HTTPS로만), SameSite(다른 사이트에서 시작한 요청에 안 실음)를 붙여요. 토큰을 localStorage에 두면 CSRF에는 강하지만 XSS 한 번에 읽히고, HttpOnly 쿠키에 두면 XSS에는 강하지만 CSRF를 따로 막아야 해요. 어느 쪽이든 XSS를 막는 것이 먼저예요.
 practice:
+  title: 스프링에서 막는 법
   says:
     - '스프링 시큐리티는 기본으로 CSRF 토큰을 확인한다. 세션 쿠키로 로그인하는 서비스는 끄지 않는다. 토큰만 Authorization 헤더로 받는 API(STATELESS)는 끄기도 한다. 보안 헤더(`X-Content-Type-Options: nosniff`, `X-Frame-Options`, HTTPS면 HSTS)도 기본으로 붙인다 (스프링 시큐리티 문서 근거)'
     - '타임리프의 `th:text`는 바꿔 쓰고 `th:utext`는 그대로 쓴다. 사용자가 쓴 글에 `th:utext`를 쓰지 않는다 (타임리프 문서 근거)'
     - 'JSON API도 응답 Content-Type을 `application/json`으로 정확히 준다. 브라우저가 HTML로 해석하지 않게 하려는 것이다'
     - '흔한 실수: 정렬 칸을 `?sort=price`로 받아 코드 sortMistake처럼 이어 붙인다. ORDER BY의 칸 이름은 `?`로 바인딩할 수 없어서 이어 붙이게 된다. `sort`에 `(SELECT CASE WHEN ...)` 같은 식을 넣으면 SQL이 실행된다. 고친 코드는 허락한 칸 이름의 목록에서만 고른다(코드 sortFixed). 두 코드를 PostgreSQL에서 돌려 결과를 테스트로 남긴다'
+  body:
+    - h3: 스프링 시큐리티가 기본으로 하는 것
+    - p: '스프링 시큐리티를 쓰면 질문 2의 **CSRF 토큰 확인이 기본으로 켜져** 있어요. 타임리프 폼에는 토큰이 자동으로 들어가요. 세션 쿠키로 로그인하는 서비스라면 끄지 않아요. 브라우저 쿠키를 쓰지 않고 `Authorization` 헤더의 토큰만 받는 API(STATELESS)는 쿠키가 자동으로 실리지 않으니 끄기도 해요. 보안 헤더(`X-Content-Type-Options: nosniff`, 다른 사이트가 우리 페이지를 틀 안에 넣지 못하게 하는 `X-Frame-Options`, HTTPS면 HSTS)도 기본으로 붙여요.'
+    - muted: '이 내용은 스프링 시큐리티를 프로젝트에 더해야 해서 테스트가 아니라 [스프링 시큐리티 문서의 공격 막기](link:springExploits)를 근거로 적었어요. 필터가 이 일을 어떻게 하는지는 인증과 인가 레슨에서 다뤄요.'
+    - h3: 템플릿에서는 th:text
+    - code: thymeleaf
+      notes:
+        - mark: th:text
+          as: code
+          text: 질문 1의 바꿔 쓰기를 해요.
+        - mark: th:utext
+          as: code
+          text: 바꾸지 않고 그대로 넣어요. 우리가 만든 HTML에만 써요.
+    - p: 'JSON API도 응답의 `Content-Type`을 `application/json`으로 정확히 줘요. 사용자 글이 담긴 응답을 브라우저가 HTML로 해석하지 않게 하려는 거예요.'
+    - h3: '흔한 실수: 정렬 칸을 이어 붙이기'
+    - p: '질문 3의 바인딩에는 빈틈이 하나 있어요. `?`는 **값**의 자리에만 쓸 수 있어요. `ORDER BY` 뒤의 칸 이름이나 테이블 이름은 바인딩할 수 없어요. 그래서 정렬을 요청으로 받으면 이어 붙이게 되기 쉬워요.'
+    - code: sortMistake
+      notes:
+        - mark: sort
+          as: code
+          text: 요청의 값이 그대로 SQL이 돼요.
+    - p: '`sort`에는 칸 이름이 아니라 **SQL 식**도 들어갈 수 있어요. 공격자가 관리자 비밀번호의 첫 글자를 맞혀 보는 식을 넣어 봤어요. 정렬 순서가 바뀌는지로 답을 알아내요.'
+    - ci:
+        key: order-by
+        label: PostgreSQL의 실제 결과 보기
+        source: WebSecurityTest.orderByInjection
+        code: sortAttack
+    - p: '`a`로 시작한다고 물었을 때는 가격순, `b`라고 물었을 때는 반대 순서가 나왔어요. 결과에 비밀번호가 직접 나오지 않아도, 순서만으로 한 글자씩 알아낼 수 있어요. 고친 코드는 **허락한 칸 이름의 목록**에서만 골라요.'
+    - code: sortFixed
+      notes:
+        - mark: SORTABLE.contains(sort)
+          as: code
+          text: 목록에 없는 값은 SQL에 닿기 전에 거절해요. 위 결과의 마지막 줄이에요.
+    - muted: '근거: [OWASP의 XSS](link:owaspXss), [CSRF](link:owaspCsrf), [SQL 인젝션](link:owaspSqli) 막기 안내, [MDN의 SameSite](link:mdnSameSite), [타임리프 문서](link:thymeleaf). 응답과 쿼리 결과는 테스트로 확인했어요.'
+interview:
+  question: XSS, CSRF, SQL 인젝션이 각각 무엇이고 어떻게 막는지 설명해 주세요
+  model:
+    - label: 정의
+      text: XSS는 사용자가 넣은 스크립트가 다른 사용자의 브라우저에서 우리 사이트의 이름으로 실행되는 공격, CSRF는 로그인한 사용자의 브라우저가 다른 사이트에 이끌려 우리 서버로 요청을 보내게 하는 공격, SQL 인젝션은 입력이 SQL의 구조를 바꾸는 공격입니다.
+    - label: 원리
+      text: XSS는 사용자 글을 HTML에 그대로 넣을 때 생겨서, 내보낼 때 특수 문자를 바꿔 쓰고 템플릿 엔진의 기본 이스케이프와 CSP를 씁니다. CSRF는 브라우저가 쿠키를 자동으로 싣기 때문에 생겨서, CSRF 토큰과 SameSite 쿠키, Origin 확인으로 막습니다. SQL 인젝션은 문자열을 이어 붙일 때 생겨서 PreparedStatement와 JPA 파라미터로 값을 바인딩합니다.
+    - label: 주의할 점
+      text: CORS는 CSRF를 막지 않습니다. ORDER BY의 칸 이름처럼 바인딩할 수 없는 자리는 허락 목록으로 고릅니다. 세션 쿠키에는 HttpOnly, Secure, SameSite를 붙이고, 토큰을 localStorage에 두면 XSS에, 쿠키에 두면 CSRF에 신경 써야 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 정렬 기능을 만들며 요청 값을 ORDER BY에 이어 붙였던 것을 허락 목록으로 고쳤습니다.'
+verified: 이 레슨의 응답과 쿼리 결과는 짐작이 아니라, 스프링 부트 3.5 서버와 PostgreSQL 16(Testcontainers)에 자바 21로 공격 입력을 보내 받은 값이에요. 브라우저가 스크립트를 실행하고 쿠키를 싣는 동작은 테스트로 돌릴 수 없어서 명세와 문서를 근거로 적었어요. 코드가 바뀔 때마다 테스트([WebSecurityTest](link:test))가 다시 돌아요.
+footer: '근거: XSS, CSRF, SQL 인젝션을 막는 법은 OWASP Cheat Sheet, 쿠키의 HttpOnly와 Secure는 RFC 6265, SameSite는 MDN, HSTS는 RFC 6797, CSP는 MDN, 스프링 시큐리티의 CSRF와 보안 헤더는 스프링 시큐리티 문서, th:text와 th:utext는 타임리프 문서. 결과는 자바 21과 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '사용자 글을 그대로 넣은 응답 HTML에 `<script>`가 그대로 있고, HtmlUtils.htmlEscape를 쓰면 `&lt;script&gt;`가 된다'
     how: 'MiniWeb으로 두 주소를 띄워 응답 본문을 본다'
+    test: WebSecurityTest.xssEscaping
   - claim: '세션 쿠키와 다른 출처의 Origin을 실은 폼 POST는 보호가 없는 서버에서 처리된다. Origin을 확인하는 서버는 403을 준다'
     how: '주문 수를 세는 컨트롤러와 Origin을 확인하는 인터셉터를 둔 컨트롤러를 부른다'
-  - claim: '문자열로 이어 붙인 로그인 쿼리에 `admin@shop.com'' --`를 넣으면 1행이 나오고, PreparedStatement는 0행이다'
+    test: WebSecurityTest.crossSiteRequest
+  - claim: '문자열로 이어 붙인 로그인 쿼리에 `admin@shop.com'' --`를 넣으면 1행, `'' OR ''1''=''1`은 모든 행이 나오고, PreparedStatement는 0행이다'
     how: 'Testcontainers PostgreSQL에 JDBC로 쿼리한다'
-  - claim: '`'' OR ''1''=''1`을 넣으면 이어 붙인 쿼리가 모든 행을 돌려준다'
-    how: '같은 방법'
-  - claim: 'ORDER BY에 이어 붙인 값은 SQL 식으로 실행되고, 허락 목록은 그 값을 거부한다'
+    test: WebSecurityTest.sqlInjection
+  - claim: 'ORDER BY에 이어 붙인 값은 SQL 식으로 실행되어 다른 테이블의 값을 순서로 흘리고, 허락 목록은 그 값을 거부한다'
     how: '식을 넣은 정렬로 쿼리해 결과 순서가 식대로 바뀌는지 본다'
+    test: WebSecurityTest.orderByInjection
   - claim: 'ResponseCookie로 만든 Set-Cookie에 HttpOnly, Secure, SameSite=Lax가 붙는다'
     how: 'ResponseCookie.toString()을 본다'
+    test: WebSecurityTest.cookieAttributes
 sources:
   - 'XSS와 막는 법: OWASP XSS Prevention Cheat Sheet https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html'
   - 'CSRF와 막는 법: OWASP CSRF Prevention Cheat Sheet https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html'

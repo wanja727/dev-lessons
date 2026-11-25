@@ -1,0 +1,230 @@
+# 웹 보안 기초 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/web-security-basics.yaml의 says).
+# 서버의 응답과 쿼리 결과는 verification의 WebSecurityTest로 확인했다 (스프링 부트 3.5, PostgreSQL 16, 자바 21).
+# 브라우저가 스크립트를 실행하고 쿠키를 싣는 동작은 OWASP, MDN, RFC 6265가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: web-security-basics
+  title: 웹 보안 기초
+  unit: 네트워크와 웹
+  order: 64
+concepts:
+  - key: core
+    name: 웹 보안 기초
+coreQuestions:
+  - key: q1
+    text: "XSS는 어떻게 일어나고 어떻게 막나요?"
+  - key: q2
+    text: "CSRF는 어떻게 일어나고 어떻게 막나요?"
+  - key: q3
+    text: "SQL 인젝션은 어떻게 일어나고 어떻게 막나요?"
+  - key: q4
+    text: "로그인 쿠키와 토큰은 어떻게 지키나요?"
+questions:
+  # ── 질문 1 ──
+  - key: sec-escape
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "후기 내용 `<b>좋아요</b>`를 `HtmlUtils.htmlEscape`로 바꿔 HTML 응답에 넣었어요. 브라우저 화면에는 무엇이 보일까요?"
+    choices:
+      - 굵은 글씨로 "좋아요"
+      - "<b>좋아요</b>라는 글자 그대로"
+      - 아무것도 보이지 않는다
+      - 스크립트 오류가 난다
+    answer: "2"
+    explanation: |-
+      **글자 그대로 보여요.** <와 >가 &lt;와 &gt;로 바뀌어 브라우저는 태그가 아니라 글자로 보여 줘요.
+
+      - 테스트에서 <script>가 &lt;script&gt;로 바뀐 응답을 확인했어요
+      - 바꿔 쓰기는 입력을 받을 때가 아니라 내보낼 때 해요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  - key: sec-reflected-xss
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "검색 결과 화면이 `\"검색어: \" + q`를 HTML에 그대로 넣어 보여 줘요. 공격자가 `?q=<script>...</script>`가 붙은 검색 주소를 메일로 뿌렸어요. 무슨 공격이고 누가 피해를 볼까요?"
+    choices:
+      - 저장형 XSS. 검색 화면을 연 모든 사용자
+      - 반사형 XSS. 그 주소를 연 사람
+      - CSRF. 서버 관리자
+      - SQL 인젝션. DB의 모든 회원
+    answer: "2"
+    explanation: |-
+      **반사형 XSS예요.** 주소의 값을 응답에 그대로 보여 줘서, 그 주소를 연 사람의 브라우저에서 스크립트가 실행돼요.
+
+      - 저장형은 후기처럼 서버에 저장되어 보는 모든 사람에게 나가요
+      - 검색어도 HTML에 넣기 전에 바꿔 써서 막아요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  # ── 질문 2 ──
+  - key: sec-csrf-cookie
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "kim이 shop.com에 로그인한 채 evil.com을 열었더니, evil.com의 숨은 폼이 shop.com으로 주문 POST를 보냈어요. 이 요청에 shop.com의 세션 쿠키를 실은 것은 누구일까요?"
+    choices:
+      - evil.com 서버가 쿠키를 훔쳐서 넣었다
+      - kim의 브라우저가 자동으로 실었다
+      - shop.com 서버가 채워 넣었다
+      - 쿠키는 실리지 않았다
+    answer: "2"
+    explanation: |-
+      **kim의 브라우저가 자동으로 실었어요.** 브라우저는 shop.com으로 가는 요청에 shop.com의 쿠키를 실어요.
+
+      - evil.com은 쿠키 값을 몰라도 돼요. 그래서 서버는 kim의 요청으로 알고 처리해요
+      - CSRF 토큰, SameSite 쿠키, Origin 확인으로 막아요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  - key: sec-get-transfer
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "어떤 은행이 이체를 `GET /transfer?to=...&amount=...`로 받아요. 공격자가 게시판 글에 그 주소를 `<img src=...>`로 넣었어요. 은행에 로그인해 둔 사용자가 그 글을 열면 어떻게 될까요?"
+    choices:
+      - 이미지가 아니라서 요청이 가지 않는다
+      - 이체 요청이 사용자의 쿠키와 함께 가서 처리된다
+      - CORS가 요청을 막는다
+      - 은행 서버가 GET이라서 무시한다
+    answer: "2"
+    explanation: |-
+      **이체가 처리돼요.** 브라우저는 이미지를 받으려고 그 주소로 GET을 보내고, 은행 쿠키를 실어요.
+
+      - 상태를 바꾸는 일을 GET으로 받으면 폼조차 필요 없어요
+      - 이체 같은 일은 POST로 받고 CSRF 토큰을 확인해요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  # ── 질문 3 ──
+  - key: sec-sqli-comment
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "회원 표에 admin@shop.com이 있고 공격자는 비밀번호를 몰라요. 아래 코드에 email = `admin@shop.com' --`, pw = `아무거나`를 넣으면 쿼리는 몇 행을 돌려줄까요? (PostgreSQL 16)"
+    code: |-
+      String sql =
+          "SELECT * FROM member "
+          + "WHERE email = '" + email + "' "
+          + "AND password = '" + pw + "'";
+    choices:
+      - 0행. 비밀번호가 틀렸다
+      - 1행. admin이 나온다
+      - SQL 문법 오류가 난다
+      - 모든 회원이 나온다
+    answer: "2"
+    explanation: |-
+      **1행(admin)이에요.** 따옴표가 이메일 문자열을 닫고, -- 뒤가 주석이 되어 비밀번호 조건이 사라져요.
+
+      - 입력이 값이 아니라 SQL의 일부가 됐어요. SQL 인젝션이에요
+      - PreparedStatement로 ?에 바인딩하면 같은 입력에 0행이에요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  - key: sec-sqli-like
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "상품 검색이 `\"SELECT * FROM product WHERE name LIKE '%\" + q + \"%'\"`로 만들어져요. q에 따옴표와 주석을 넣는 공격을 막으려면 어떻게 고쳐야 할까요?"
+    choices:
+      - q에서 따옴표만 지운다
+      - "`LIKE ?`로 바꾸고 `%`를 붙인 값을 바인딩한다"
+      - 검색어 길이를 10자로 제한한다
+      - q를 대문자로 바꾼다
+    answer: "2"
+    explanation: |-
+      **바인딩해요.** SQL의 모양은 LIKE ?로 고정하고, 값으로 "%" + q + "%"를 넣어요.
+
+      - 바인딩한 값은 무엇이 들어 있어도 SQL의 일부가 되지 않아요
+      - 따옴표만 지우는 식의 거르기는 빠뜨리기 쉬워요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  - key: sec-order-by
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 3
+    body: "정렬 칸을 요청으로 받아 아래처럼 쿼리를 만들어요. 다른 곳은 모두 PreparedStatement로 바인딩해요. 이 코드에 대해 맞는 말은 무엇일까요?"
+    code: |-
+      String sql = "SELECT name FROM product "
+          + "ORDER BY " + sort;
+      jdbc.queryForList(sql, String.class);
+    choices:
+      - 안전하다. ORDER BY에는 SQL 식이 들어갈 수 없다
+      - "sort에 SQL 식이 들어가 실행될 수 있다. 허락한 칸 이름의 목록에서만 고른다"
+      - "ORDER BY ?로 바인딩하면 해결된다"
+      - 안전하다. 결과에 다른 테이블의 값이 나오지 않는다
+    answer: "2"
+    explanation: |-
+      **SQL 식이 실행될 수 있어요.** 칸 이름 자리는 ?로 바인딩할 수 없어서, 허락한 이름의 목록으로 골라요.
+
+      - 테스트에서 CASE WHEN 식으로 관리자 비밀번호의 첫 글자를 정렬 순서로 알아냈어요
+      - 결과에 값이 직접 나오지 않아도 순서로 흘러요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  # ── 질문 4 ──
+  - key: sec-httponly
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"HttpOnly가 붙은 세션 쿠키는 페이지의 자바스크립트가 document.cookie로 읽을 수 없다\""
+    answer: O
+    explanation: |-
+      **맞아요.** HttpOnly 쿠키는 자바스크립트에 보이지 않고, 브라우저가 요청에만 실어요.
+
+      - XSS 스크립트가 쿠키를 훔쳐 보내는 것을 막아요
+      - 그래도 스크립트가 페이지 안에서 요청을 보내는 것까지는 막지 못해서 XSS 자체를 막아야 해요
+    source: https://www.rfc-editor.org/rfc/rfc6265.html#section-4.1.2.6
+  - key: sec-token-storage
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "서비스가 로그인 JWT를 localStorage에 두고, 요청마다 자바스크립트로 Authorization 헤더에 넣어 보내요. CSRF와 XSS 가운데 무엇에 더 신경 써야 할까요?"
+    choices:
+      - CSRF. 브라우저가 토큰을 자동으로 실어서
+      - XSS. 자동으로 실리지 않아 CSRF에는 강하지만 스크립트가 토큰을 읽을 수 있어서
+      - 둘 다 걱정 없다
+      - SQL 인젝션
+    answer: "2"
+    explanation: |-
+      **XSS예요.** localStorage는 자바스크립트가 읽을 수 있어서, XSS가 한 번 나면 토큰을 가져가요.
+
+      - Authorization 헤더는 우리 코드가 직접 넣어서 다른 사이트가 실을 수 없어요. 그래서 CSRF에는 강해요
+      - HttpOnly 쿠키에 두면 반대로 XSS에 강하고 CSRF를 따로 막아야 해요
+    source: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  # ── 전체 ──
+  - key: sec-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "XSS, CSRF, SQL 인젝션이 각각 무엇이고 어떻게 막는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **셋 다 입력이나 자동으로 실리는 쿠키를 믿어서 생기고, 출력 바꿔 쓰기, 요청 출처 확인, 바인딩으로 막아요.**
+
+      - **XSS:** 사용자 글이 스크립트로 실행된다. 내보낼 때 바꿔 쓰고, 템플릿 엔진과 CSP를 쓴다
+      - **CSRF:** 다른 사이트가 사용자의 브라우저로 요청을 보내게 하고 쿠키가 자동으로 실린다. CSRF 토큰, SameSite, Origin 확인
+      - **SQL 인젝션:** 입력이 SQL의 구조를 바꾼다. PreparedStatement와 JPA 파라미터로 바인딩, 칸 이름은 허락 목록
+      - **쿠키:** HttpOnly, Secure, SameSite를 붙인다
+    checklist:
+      - XSS가 무엇이고 내보낼 때 바꿔 써서 막는다고 말했다
+      - CSRF가 쿠키가 자동으로 실려 생기고 토큰이나 SameSite로 막는다고 말했다
+      - SQL 인젝션이 문자열을 이어 붙여 생기고 바인딩으로 막는다고 말했다
+      - 쿠키의 HttpOnly, Secure, SameSite를 말했다
+      - CORS가 CSRF를 막지 않는다거나 칸 이름은 허락 목록으로 고른다는 것을 말했다
+    source: https://cheatsheetseries.owasp.org/
