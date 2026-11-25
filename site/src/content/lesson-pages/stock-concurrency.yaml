@@ -1,8 +1,9 @@
-# 동시 요청에서 재고 지키기 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 동시 요청에서 재고 지키기
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/stock-concurrency.yaml에 있다.
 title: 동시 요청에서 재고 지키기
+description: 재고를 확인하고 줄였는데 재고보다 많이 팔리는 이유, DB에서 조건부 UPDATE와 락으로 지키는 법, Redis로 줄일 때 조심할 것, 여러 방법 가운데 고르는 기준. 실제 PostgreSQL과 Redis에 주문 100건을 동시에 넣어 세어 보는 대화형 레슨.
 unit: 시스템 설계와 아키텍처
+minutes: 25
 roadmap: A7
 type: 동작 확인
 prerequisites:
@@ -55,14 +56,32 @@ codes:
       item.setQuantity(
           item.getQuantity() - 1);
     }
+  predictMark: |-
+    @Transactional
+    void order(long itemId) {
+      Item item = [[items.findById(itemId)]]
+          .orElseThrow();
+      if (item.getQuantity() < 1) {
+        throw new SoldOutException();
+      }
+      [[item.setQuantity(]]
+          [[item.getQuantity() - 1);]]
+    }
   conditional: |-
     @Modifying
     @Query("""
         update Item i
         set i.quantity = i.quantity - 1
         where i.id = :id
-          and i.quantity >= 1""")
+          and [[i.quantity >= 1]]""")
     int decrease(long id);
+  conditionalUse: |-
+    @Transactional
+    void order(long itemId) {
+      if (items.decrease(itemId) == 0) {
+        throw new SoldOutException();
+      }
+    }
   pessimistic: |-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Item i"
@@ -75,9 +94,67 @@ codes:
     then return -1 end
     return redis.call('DECRBY',
       KEYS[1], ARGV[1])
+  decrOnly: |-
+    long left = redis.decr("stock:1");
+    if (left < 0) {
+      throw new SoldOutException();
+    }
+  redisFlow: |-
+    long left = decreaseByLua(itemId);
+    if (left < 0) throw new SoldOut();
+    try {
+      orderService.save(itemId, userId);
+    } catch (RuntimeException e) {
+      [[redis.incr("stock:" + itemId);]]
+      throw e;
+    }
+  longLock: |-
+    @Transactional
+    void order(long itemId) {
+      Item item =
+          items.findForUpdate(itemId);
+      item.decrease();
+      [[payment.approve(...)]]; // 2초
+    }
+  modifyingRun: |-
+    Item item = items.findById(1L)...;
+    items.decrease(1L);
+    item.getQuantity();
+    items.findById(1L)...getQuantity();
+  modifyingFix: |-
+    @Modifying([[clearAutomatically = true]])
+    @Query("update Item i ...")
+    int decrease(long id);
+  lockTimeout: |-
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(
+        name = "jakarta.persistence⤷
+    .lock.timeout", value = "3000"))
+    @Query("select i from Item i"
+        + " where i.id = :id")
+    Item findForUpdate(long id);
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/inventory/InventoryConcurrencyTest.java
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/inventory/InventoryPracticeTest.java
+  pgLock: https://www.postgresql.org/docs/16/explicit-locking.html
+  redisScript: https://redis.io/docs/latest/develop/interact/programmability/eval-intro/
+  dataJpa: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+  dataJpaLocking: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
 predict:
-  text: '코드 predict로 재고 50켤레에 주문 100건을 동시에 넣어요. 재고를 읽어 0보다 크면 1을 줄여요. 성공한 주문은 몇 건일까요? 보기: 정확히 50건, 50건보다 많다, 50건보다 적다.'
-  answer: '50건보다 많다. 여러 주문이 같은 재고를 읽고 같은 값을 써서, 줄인 것보다 많이 팔린다. 질문 1에서 밝힌다.'
+  title: 몇 켤레가 팔릴까요?
+  text: '코드 predict로 재고 50켤레에 주문 100건을 동시에 넣어요. 재고를 읽어 0보다 크면 1을 줄여요. 성공한 주문은 몇 건일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: exact
+      label: 정확히 50건
+    - value: more
+      label: 50건보다 많다
+    - value: less
+      label: 50건보다 적다
+  answer: more
+  storageKey: stock-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 재고를 확인하고 줄였는데 왜 재고보다 많이 팔리나요?
@@ -95,6 +172,60 @@ questions:
     asks:
       - '본문의 예시: 재고 1에서 두 주문이 동시에 재고를 읽고 각자 0을 썼다. 팔린 수와 남은 재고는 (2켤레, 0)'
       - '옮긴 상황: 좌석 예매에서 `seat.isReserved()`가 false면 `seat.reserve()`를 한다. 두 사람이 같은 좌석을 동시에 누르면 생길 수 있는 일은 (둘 다 예매에 성공한다)'
+    body:
+      - p: '재고 50켤레에 주문 100건을 동시에 넣고, 다섯 가지 방법으로 처리해 봤어요. 결과를 한꺼번에 보여 드릴게요. 이 레슨 내내 이 표를 하나씩 풀어 가요.'
+      - ci:
+          key: summary
+          label: 실제 결과 보기
+          source: InventoryConcurrencyTest
+      - p: '처음 예측의 답은 **50건보다 많다**예요. {{predict-result}} 1번 줄이 예측의 코드예요. 재고는 50인데 그보다 많이 팔렸어요. 분명히 "재고가 1보다 작으면 품절"이라고 확인했는데요.'
+      - code: predictMark
+        notes:
+          - mark: items.findById(itemId)
+            as: code
+            text: '재고를 **읽어요.** 이 순간의 값으로 판단해요.'
+          - mark: item.setQuantity(
+            as: code
+            text: '읽은 값에서 1을 뺀 값을 **써요.** 읽기와 쓰기 사이에 다른 주문이 같은 재고를 읽을 수 있어요.'
+      - p: '재고가 1켤레 남았을 때 두 주문이 동시에 오면 어떻게 되는지 한 동작씩 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: DB의 재고, rows: [{k: quantity, v: '1'}]}
+              - {label: 팔린 수, rows: [{k: 주문, v: '0'}]}
+          scenarios:
+            default:
+              - log: '주문 A: 재고를 읽음 → 1. 있으니 팔 수 있다'
+                duo:
+                  - {label: DB의 재고, rows: [{k: quantity, v: '1'}]}
+                  - {label: 팔린 수, rows: [{k: 주문, v: '0'}]}
+              - log: '주문 B: 재고를 읽음 → 1. 있으니 팔 수 있다'
+                duo:
+                  - {label: DB의 재고, rows: [{k: quantity, v: '1'}]}
+                  - {label: 팔린 수, rows: [{k: 주문, v: '0'}]}
+              - log: '주문 A: 1 - 1 = 0을 씀. 커밋'
+                duo:
+                  - {label: DB의 재고, rows: [{k: quantity, v: '0', mark: changed}]}
+                  - {label: 팔린 수, rows: [{k: 주문, v: '1', mark: changed}]}
+              - log: '주문 B: 읽어 둔 1에서 1 - 1 = 0을 씀. 커밋'
+                duo:
+                  - {label: DB의 재고, rows: [{k: quantity, v: '0'}]}
+                  - {label: 팔린 수, rows: [{k: 주문, v: '2', mark: bad}]}
+                verdict: '한 켤레를 두 명에게 팔았어요. B는 A가 줄이기 전의 재고를 보고 판단했어요.'
+      - p: '두 주문이 같은 값을 읽고 각자 1을 뺀 같은 값을 썼어요. 두 번 팔았는데 재고는 한 번만 줄었어요. 앞의 변경이 뒤의 쓰기에 덮여 사라지는 이것을 **갱신 손실**이라고 해요([낙관적 락과 비관적 락](lesson:locking)). 재고 50에 주문 100건이면 이런 겹침이 여기저기서 생겨 50켤레보다 많이 팔려요. **초과 판매**예요.'
+      - p: '`@Transactional`을 붙였는데도요? 트랜잭션은 자기 일을 한 묶음으로 커밋하거나 되돌릴 뿐이에요. PostgreSQL의 기본 격리 수준(READ COMMITTED)은 다른 트랜잭션이 같은 행을 **읽는 것**을 막지 않아요. 둘 다 1을 읽는 것은 막을 수 없어요.'
+      - quiz:
+          q: '좌석 예매에서 `seat.isReserved()`가 false면 `seat.reserve()`를 해요(`@Transactional`). 두 사람이 같은 좌석을 동시에 누르면 무슨 일이 생길 수 있나요?'
+          options:
+            - '한 사람만 예매된다'
+            - '둘 다 예매에 성공한다'
+            - '둘 다 실패한다'
+          answer: 2
+          explain: '둘 다 "비어 있음"을 읽고 둘 다 예매해요. 확인과 쓰기 사이의 틈은 트랜잭션이 막지 않아요.'
+      - next: '읽기와 쓰기 사이의 틈이 문제였어요. DB에서 이 틈을 없애는 방법은 무엇일까요?'
+    recall: '여러 주문이 같은 재고를 동시에 읽고 각자 1을 뺀 같은 값을 써서, 앞의 변경이 뒤의 쓰기에 덮여 사라져요(갱신 손실). 재고가 1일 때 둘 다 1을 읽으면 둘 다 팔 수 있다고 판단해 재고보다 많이 팔려요. `@Transactional`은 일을 묶을 뿐이고, 기본 격리 수준은 다른 트랜잭션이 같은 행을 읽는 것을 막지 않아서 이 틈을 막지 못해요.'
   - id: q2
     title: DB에서는 어떻게 재고를 지키나요?
     conclusion:
@@ -109,6 +240,33 @@ questions:
       - '본문의 예시: 재고 50에 조건부 UPDATE로 동시 주문 100건을 처리했다. 성공, 품절, 남은 재고는 (50, 50, 0)'
       - '옮긴 상황: 쿠폰 1000장을 낙관적 락으로 발급하는데 오픈 순간 1만 명이 몰린다. 재시도 없이 운영하면 생길 일은 (충돌로 실패하는 요청이 많아 쿠폰이 남았는데 발급 실패가 난다)'
       - '실무 구역: 코드 conditional의 `decrease`가 0을 돌려줬다. 서비스는 무엇을 해야 하나 (품절로 판단하고 예외를 던져 주문을 거절한다)'
+    body:
+      - h3: 조건부 UPDATE
+      - p: '읽고 나서 판단하지 말고, **판단을 UPDATE 문 안에 넣어요.**'
+      - code: conditional
+        notes:
+          - mark: i.quantity >= 1
+            as: code
+            text: '재고가 1 이상인 행만 줄여요. 0이면 조건에 맞는 행이 없어 아무것도 바뀌지 않아요.'
+      - code: conditionalUse
+      - p: 'DB는 한 행을 바꾸는 동안 그 행에 락을 걸어요. 같은 행을 바꾸려는 다른 UPDATE는 앞의 것이 커밋할 때까지 기다렸다가, **바뀐 값을 다시 보고** 조건을 따져요([PostgreSQL 문서](link:pgLock)). 그래서 확인과 차감 사이에 틈이 없어요. 바뀐 행 수가 0이면 품절이에요. 처음 표의 2번 줄이 이 방법이고, 정확히 50건 성공, 50건 품절, 남은 재고 0이었어요.'
+      - h3: 비관적 락
+      - p: '읽을 때부터 행을 잠그는 방법이에요. `SELECT ... FOR UPDATE`로 읽으면 그 행에 쓰기 락이 걸려, 다른 주문의 같은 SELECT는 앞 트랜잭션이 끝날 때까지 기다려요.'
+      - code: pessimistic
+      - p: '"충돌할 거라고 비관하고 먼저 잠근다"고 해서 비관적 락이에요. 처음의 읽고-계산하고-쓰기 코드에서 `findById`만 `findForUpdate`로 바꾸면 돼요. 3번 줄이 이 방법이고, 역시 정확히 50건이었어요. 다만 주문이 줄을 서서 하나씩 지나가요.'
+      - h3: 낙관적 락
+      - p: '엔티티에 `@Version` 칸을 두고, 커밋할 때 "내가 읽은 뒤 누가 바꿨나"를 버전으로 확인해요. 바뀌었으면 실패시켜요. 잠그지 않고 "충돌은 드물 것"이라고 낙관해요.'
+      - p: '4번 줄을 보면 초과 판매는 없어요. 그런데 **재고가 남았는데도** 충돌로 실패한 주문이 많아요. 100건이 같은 행을 동시에 바꾸니 대부분이 "누가 먼저 바꿨다"며 실패한 거예요. 재시도를 붙이면 팔 수 있지만, 경쟁이 심할수록 재시도가 꼬리를 물어요. 낙관적 락은 **충돌이 드문 데이터**에 맞고, 모두가 한 행에 몰리는 재고에는 맞지 않아요.'
+      - quiz:
+          q: '쿠폰 1,000장을 낙관적 락(`@Version`)으로 발급해요. 오픈 순간 1만 명이 몰리고 재시도는 없어요. 무슨 일이 생길까요?'
+          options:
+            - '정확히 1,000장이 발급된다'
+            - '충돌로 실패하는 요청이 많아, 쿠폰이 남았는데도 발급 실패가 난다'
+            - '1,000장보다 많이 발급된다'
+          answer: 2
+          explain: '낙관적 락은 초과 발급은 막지만, 같은 행에 몰리면 대부분이 충돌로 실패해요. 경쟁이 심하면 조건부 UPDATE나 비관적 락이 맞아요.'
+      - next: 'DB의 행 하나에 수만 건이 몰리면 DB가 버틸까요? 그래서 Redis로 줄이기도 하는데, 무엇을 조심해야 할까요?'
+    recall: '조건부 UPDATE는 `quantity >= 1`일 때만 줄이는 판단을 UPDATE 문 안에 넣어, DB가 행 락으로 확인과 차감을 한 번에 해요. 바뀐 행 수가 0이면 품절이에요. 비관적 락은 `SELECT ... FOR UPDATE`로 읽을 때부터 행을 잠가 다른 주문을 기다리게 해요. 둘 다 정확히 50건만 팔아요. 낙관적 락은 초과 판매는 막지만 충돌한 주문을 실패시켜, 몰리는 재고에서는 재고가 남았는데 거절되는 주문이 많아요.'
   - id: q3
     title: Redis로 재고를 줄일 때는 무엇을 조심하나요?
     conclusion:
@@ -125,6 +283,64 @@ questions:
     asks:
       - '본문의 예시: 재고 50에 `DECR`만으로 주문 100건을 처리한 뒤 Redis의 재고 값은 (-50)'
       - '옮긴 상황: Lua 스크립트로 재고를 줄인 뒤 DB에 주문을 저장하다가 DB 오류로 실패했다. 아무것도 하지 않으면 생기는 일과 할 일은 (팔리지 않았는데 Redis 재고가 하나 줄어 있다. Redis 재고를 다시 늘린다)'
+    body:
+      - p: 'DB의 행 하나에 주문 수만 건이 몰리면 모두 그 행의 락 앞에 줄을 서요. 그래서 재고 숫자를 Redis에 두고 거기서 줄이기도 해요. [Redis](lesson:redis-ranking) 레슨에서 본 것처럼 Redis는 명령을 하나씩 실행하니 `DECR`이면 될 것 같아요.'
+      - code: decrOnly
+      - p: '처음 표의 5번 줄이 이 방법이에요. 줄어든 결과가 0 이상인 주문만 성공으로 치니 성공은 50건이 맞아요. 그런데 **재고 값이 -50**까지 내려갔어요. `DECR`은 섞이지 않지만 "0보다 클 때만"이라는 조건이 없어서 100번 모두 줄여요. 음수가 된 재고는 화면에 이상하게 보이고, 취소로 재고를 되돌릴 때 계산이 꼬여요.'
+      - p: '`GET`으로 확인하고 `DECR`하면요? 두 명령 사이에 다른 서버의 명령이 끼어들어요. Redis 레슨에서 본 쿠폰 문제 그대로예요. 그래서 확인과 차감을 **Lua 스크립트 하나로** 묶어요. Redis는 스크립트 전체를 명령 하나처럼 실행해서 사이에 끼어들 틈이 없어요([Redis 문서](link:redisScript)).'
+      - code: lua
+      - p: '6번 줄이 이 방법이에요. 정확히 50건 성공하고 재고는 0에서 멈췄어요. 세 방법을 재고 2에 주문 3건으로 줄여서 돌려 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, buttons, log, verdict]
+          selector:
+            label: 줄이는 방법
+            options:
+              - {value: decr, label: DECR만}
+              - {value: getdecr, label: GET 뒤 DECR}
+              - {value: lua, label: Lua 스크립트}
+          run: {label: 주문 3건 보내기}
+          initial:
+            log:
+              - {note: 'stock:1은 2예요. 주문 A, B, C가 동시에 와요.'}
+          scenes:
+            decr:
+              log:
+                - 'A: DECR → 1 (성공)'
+                - 'B: DECR → 0 (성공)'
+                - 'C: DECR → -1 (음수라 품절 처리)'
+              verdict: '판매 수는 맞지만 재고 값이 -1로 남아요.'
+            getdecr:
+              log:
+                - 'A: GET → 2'
+                - 'B: GET → 2'
+                - 'C: GET → 2'
+                - 'A: DECR → 1, B: DECR → 0, C: DECR → -1'
+              verdict: '셋 다 "있음"을 보고 셋 다 팔아요. 초과 판매예요.'
+            lua:
+              log:
+                - 'A: 스크립트 → 1 (성공)'
+                - 'B: 스크립트 → 0 (성공)'
+                - 'C: 스크립트 → -1 (재고 0이라 줄이지 않음, 품절)'
+              verdict: '확인과 차감이 한 번에 실행돼 재고는 0에서 멈춰요.'
+      - h3: 재고가 두 곳이 돼요
+      - p: 'Redis로 줄여도 주문은 DB에 저장해요. 그러면 재고 숫자가 Redis와 DB 두 곳에 생겨요. Redis에서 줄인 뒤 DB에 주문을 저장하다 실패하면, 팔리지 않았는데 Redis 재고만 줄어 있어요. **다시 늘려 되돌려요.**'
+      - code: redisFlow
+        notes:
+          - mark: 'redis.incr("stock:" + itemId);'
+            as: code
+            text: '주문 저장이 실패하면 줄였던 재고를 되돌려요.'
+      - p: 'Redis가 재시작되어 값을 잃으면 DB의 주문 기록으로 남은 재고를 다시 계산해 채워요. Redis는 빠른 판정을 맡고, 원본은 DB예요.'
+      - quiz:
+          q: '재고 50에 `DECR`만 써서 주문 100건을 처리했어요(결과가 0 이상이면 성공). 끝난 뒤 Redis의 재고 값은?'
+          options:
+            - '0'
+            - '-50'
+            - '50'
+          answer: 2
+          explain: '`DECR`은 0에서 멈추지 않고 100번 모두 줄여요. 성공은 50건이지만 재고 값은 -50이에요.'
+      - next: '방법이 여럿이에요. 내 서비스에는 무엇을 고를까요?'
+    recall: '`DECR`은 명령 하나라 섞이지 않지만 "0보다 클 때만"이라는 조건이 없어 재고를 음수까지 내려요. `GET`으로 확인하고 `DECR`하면 사이에 다른 명령이 끼어들어 초과 판매가 나요. 확인과 차감을 Lua 스크립트로 묶으면 한 번에 실행돼 0에서 멈춰요. Redis로 줄이면 재고가 Redis와 DB 두 곳에 생겨서, 주문 저장이 실패하면 Redis 재고를 되돌리고, Redis가 값을 잃으면 DB로 다시 채워요.'
   - id: q4
     title: 여러 방법 가운데 무엇을 고르나요?
     conclusion:
@@ -143,29 +359,106 @@ questions:
     asks:
       - '본문의 예시: 하루 주문 수천 건인 쇼핑몰의 재고 차감에 가장 단순하게 맞는 방법은 (조건부 UPDATE)'
       - '옮긴 상황: `SELECT ... FOR UPDATE`로 재고를 잠근 트랜잭션 안에서 외부 결제 API(2초)를 부른다. 같은 상품에 주문 10건이 동시에 오면 마지막 주문은 대략 얼마를 기다리나 (약 18초. 앞의 9건이 2초씩 락을 잡는다)'
+    body:
+      - table:
+          head: [방법, 맞는 경우, 치르는 값]
+          rows:
+            - ['조건부 UPDATE', '"재고가 있으면 줄이기"처럼 판단이 숫자 하나일 때. 대부분의 쇼핑몰', '거의 없음. 코드가 짧다']
+            - ['비관적 락', '재고와 함께 1인 구매 한도, 회원 등급처럼 읽은 값으로 판단할 것이 많을 때', '락을 잡는 동안 다른 주문이 기다린다']
+            - ['낙관적 락', '충돌이 드문 데이터 (회원 정보 수정)', '몰리면 충돌 실패가 많아 재시도가 필요하다']
+            - ['Redis + Lua', '오픈 순간 수만 건이 한 상품에 몰리는 선착순 판매', '재고가 두 곳, 되돌리기와 맞추기를 운영해야 한다']
+      - p: '처음 표의 시간도 함께 보세요. 같은 100건이라도 방법마다 걸린 시간이 달라요. 시간은 실행할 때마다 조금씩 달라지니 대략의 차이만 봐요.'
+      - p: '골라 보세요.'
+      - widget:
+          kind: classify
+          categories: [조건부 UPDATE, 비관적 락, Redis + Lua]
+          items:
+            - {text: '하루 주문 수천 건인 평범한 쇼핑몰의 재고 차감', answer: 1, explain: '판단이 "재고가 있나" 하나예요. UPDATE 한 문장이면 충분해요.'}
+            - {text: '1인 2개 한도와 VIP 등급을 확인하고 재고를 줄이는 주문', answer: 2, explain: '읽은 값으로 판단할 것이 많아요. 행을 잠가 두고 차례로 판단해요.'}
+            - {text: '오픈 1초에 5만 명이 몰리는 한정판 운동화', answer: 3, explain: 'DB 행 하나에 몰리면 줄이 길어요. Redis에서 빠르게 판정해요.'}
+            - {text: '재고 테이블에 남은 수량만 있는 굿즈 판매, 주문은 분당 수십 건', answer: 1, explain: '몰리지 않고 판단도 단순해요.'}
+      - h3: 락을 잡은 채 오래 걸리는 일을 하지 않아요
+      - code: longLock
+        notes:
+          - mark: payment.approve(...)
+            as: code
+            text: '외부 결제 API예요. 2초 걸리는 동안 재고 행의 락을 쥐고 있어요.'
+      - p: '같은 상품에 주문 10건이 오면 하나씩 2초씩 락을 쥐어서, 마지막 주문은 18초쯤 기다려요. 그동안 DB 연결도 쥐고 있으니 다른 요청까지 느려져요([DB 커넥션과 커넥션 풀](lesson:connection-pool)). 재고를 줄이고 **커밋한 뒤** 결제를 부르고, 결제가 실패하면 재고를 되돌려요.'
+      - more:
+          summary: 재고를 되돌리는 일
+          body:
+            - p: '결제 실패, 주문 취소, 결제 대기 시간 초과에서 모두 줄였던 재고를 되돌려야 해요. 앞에서 한 일을 취소하는 이 동작을 **보상**이라고 해요. 여러 서비스에 걸친 일을 보상으로 되돌리는 흐름은 심화 레슨 "분산 트랜잭션과 사가"에서 다뤄요.'
+      - quiz:
+          q: '`SELECT ... FOR UPDATE`로 재고를 잠근 트랜잭션 안에서 2초 걸리는 결제 API를 불러요. 같은 상품에 주문 10건이 동시에 오면, 마지막 주문은 대략 얼마나 기다리나요?'
+          options:
+            - '2초'
+            - '18초쯤'
+            - '기다리지 않는다'
+          answer: 2
+          explain: '앞의 9건이 하나씩 2초씩 락을 쥐어요. 락을 잡은 채 오래 걸리는 일을 하지 않아요.'
+      - next: '원리는 여기까지예요. 이제 스프링 데이터 JPA로 조건부 UPDATE와 락을 쓰는 코드와, 자주 걸리는 함정을 볼게요.'
+    recall: '판단이 "재고가 있으면 줄이기"처럼 단순하면 대부분 조건부 UPDATE로 충분해요. 재고와 함께 구매 한도나 등급처럼 읽은 값으로 판단할 것이 많으면 비관적 락, 오픈 순간 수만 건이 한 상품에 몰리면 Redis와 Lua를 써요. 낙관적 락은 충돌이 드문 데이터에 맞아요. 어느 방법이든 락을 쥔 채 외부 API를 부르지 않고, 줄이고 커밋한 뒤 부르고 실패하면 재고를 되돌려요.'
 practice:
+  title: 스프링 데이터 JPA로 재고를 줄일 때
   says:
     - '스프링 데이터 JPA의 조건부 UPDATE: 코드 conditional처럼 `@Modifying @Query`로 쓰고 바뀐 행 수(int)를 받는다. 0이면 품절 예외를 던진다'
     - '`@Modifying` 쿼리는 영속성 컨텍스트를 거치지 않고 DB를 바로 바꾼다. 같은 트랜잭션에서 앞서 읽은 `Item` 엔티티의 수량은 옛 값이다. `clearAutomatically = true`를 주거나 다시 읽는다(P8). 테스트로 옛 값을 보인다'
     - '비관적 락: 코드 pessimistic처럼 `@Lock(PESSIMISTIC_WRITE)`. 락을 기다리는 시간의 한도는 `jakarta.persistence.lock.timeout` 힌트로 준다'
     - '흔한 실수: `@Transactional` 없이 `findForUpdate`를 부른다. 락은 트랜잭션이 끝나면 풀리므로, 트랜잭션이 없으면 조회가 끝나자마자 풀린다. 스프링 데이터 JPA는 이 경우 `TransactionRequiredException`류의 오류를 낸다. 테스트로 확인하고 본문을 맞춘다'
+  body:
+    - h3: '@Modifying과 바뀐 행 수'
+    - p: '조건부 UPDATE는 질문 2의 코드처럼 `@Modifying @Query`로 쓰고, 반환 타입을 `int`로 두면 바뀐 행 수를 받아요([스프링 데이터 JPA 문서](link:dataJpa)). 0이면 품절 예외를 던져요.'
+    - h3: 흔한 실수 하나
+    - p: '`@Modifying` 쿼리는 영속성 컨텍스트를 거치지 않고 DB에 바로 UPDATE를 보내요. 같은 트랜잭션에서 그 전에 읽어 둔 엔티티는 바뀐 줄 몰라요.'
+    - ci:
+        key: modifying
+        label: 실제 결과 보기
+        source: InventoryPracticeTest.modifyingQueryLeavesStaleEntity
+        code: modifyingRun
+    - p: 'DB는 49인데 앞서 읽은 엔티티는 50이고, 다시 `findById`해도 1차 캐시에서 같은 객체를 줘서 50이에요. 이 값으로 "남은 재고"를 응답하면 틀린 숫자가 나가요. 쿼리 뒤에 영속성 컨텍스트를 비우도록 `clearAutomatically = true`를 주거나, 수량을 다시 읽을 필요가 없게 짜요. 벌크 연산과 1차 캐시가 어긋나는 이유는 심화 레슨 "벌크 연산과 영속성 컨텍스트"에서 다뤄요.'
+    - code: modifyingFix
+    - h3: 흔한 실수 둘
+    - p: '비관적 락 쿼리를 트랜잭션 없이 부르는 거예요. 락은 트랜잭션이 끝날 때 풀리니, 트랜잭션이 없으면 잠글 수도 없어요. 서비스의 `@Transactional`을 빠뜨리고 불러 봤어요.'
+    - ci:
+        key: lock-no-tx
+        label: 실제 결과 보기
+        source: InventoryPracticeTest.lockQueryWithoutTransaction
+    - p: '조용히 잠그지 않고 넘어가는 대신 오류가 나서 다행이지만, 운영에서 처음 알게 되면 곤란해요. 락 쿼리는 늘 `@Transactional` 서비스 메서드 안에서 불러요.'
+    - h3: 락을 기다리는 시간의 한도
+    - p: '비관적 락은 앞 트랜잭션이 끝날 때까지 기다려요. 한도 없이 기다리면 요청 스레드가 묶여요. 힌트로 기다릴 시간을 정해요([스프링 데이터 JPA 문서](link:dataJpaLocking)). 이 설정은 테스트하지 않아서 문서가 근거예요.'
+    - code: lockTimeout
+interview:
+  question: 동시에 들어온 주문에서 재고를 어떻게 지키나요?
+  model:
+    - label: 정의
+      text: 재고를 읽고 계산해 쓰는 사이에 다른 주문이 같은 재고를 읽으면, 같은 값을 써서 줄인 것이 사라지고 재고보다 많이 팔리는 초과 판매가 생깁니다. @Transactional과 기본 격리 수준은 같은 행을 읽는 것을 막지 않습니다.
+    - label: 원리
+      text: 조건부 UPDATE는 quantity >= 1일 때만 줄이는 판단을 UPDATE 문에 넣어 DB의 행 락으로 확인과 차감을 한 번에 하고, 바뀐 행 수가 0이면 품절입니다. 비관적 락은 SELECT FOR UPDATE로 읽을 때 잠급니다. Redis는 DECR이 0에서 멈추지 않으니 Lua 스크립트로 확인과 차감을 묶습니다.
+    - label: 트레이드오프
+      text: 대부분은 조건부 UPDATE로 충분하고, 판단할 것이 많으면 비관적 락, 수만 건이 몰리면 Redis를 씁니다. 낙관적 락은 몰리면 충돌 실패가 많습니다. Redis는 재고가 두 곳이 되어 되돌리기와 맞추기가 필요하고, 락을 쥔 채 외부 API를 부르지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 한정판 판매에서 초과 판매가 생겨, 읽고 쓰던 코드를 조건부 UPDATE로 바꾸고 바뀐 행 수로 품절을 판단했습니다.'
+verified: 방법마다 주문 100건의 성공, 품절, 남은 재고와 실무 구역의 결과는 PostgreSQL 16, Redis 7, 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([InventoryConcurrencyTest](link:test), [InventoryPracticeTest](link:practiceTest))가 다시 돌아요.
+footer: '근거: UPDATE와 행 락은 [PostgreSQL 문서](link:pgLock), 스크립트의 원자성은 [Redis 문서](link:redisScript), `@Modifying`은 [스프링 데이터 JPA 문서](link:dataJpa), 락 힌트는 [스프링 데이터 JPA 문서](link:dataJpaLocking). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '읽고-계산하고-쓰기는 동시 주문 100건에서 재고 50보다 많이 판다'
     how: 'PostgreSQL 컨테이너, 스레드 100개'
-    test: 'InventoryConcurrencyTest의 읽고-계산하고-쓰기 테스트'
+    test: 'InventoryConcurrencyTest.readModifyWriteOversells'
   - claim: '조건부 UPDATE와 비관적 락은 정확히 50건 성공, 남은 재고 0'
     how: '같은 구성'
-    test: 'InventoryConcurrencyTest의 조건부 UPDATE, 비관적 락 테스트'
+    test: 'InventoryConcurrencyTest.conditionalUpdateIsExact, pessimisticLockIsExact'
   - claim: '낙관적 락은 초과 판매는 없지만 재고가 남았는데 충돌로 실패하는 주문이 생긴다'
     how: '같은 구성'
-    test: 'InventoryConcurrencyTest의 낙관적 락 테스트'
+    test: 'InventoryConcurrencyTest.optimisticLockFailsUnderContention'
   - claim: 'Redis DECR만 쓰면 재고가 -50까지 내려가고, Lua 스크립트는 0에서 멈춘다'
     how: 'Redis 컨테이너'
-    test: 'InventoryConcurrencyTest의 Redis 테스트 두 개'
+    test: 'InventoryConcurrencyTest.redisDecrGoesNegative, redisLuaIsExact'
   - claim: '`@Modifying` 쿼리 뒤 같은 트랜잭션에서 앞서 읽은 엔티티는 옛 수량이다'
-    how: '새 테스트'
+    how: '`TransactionTemplate` 안에서 읽고, 줄이고, 다시 읽고, JDBC로 DB 값을 본다'
+    test: 'InventoryPracticeTest.modifyingQueryLeavesStaleEntity'
   - claim: '트랜잭션 없이 `@Lock` 쿼리를 부르면 오류가 난다'
-    how: '새 테스트. 예외 종류를 보고 본문을 맞춘다'
+    how: '예외 종류를 실제 출력으로 남긴다'
+    test: 'InventoryPracticeTest.lockQueryWithoutTransaction'
 sources:
   - 'PostgreSQL의 UPDATE와 행 락: https://www.postgresql.org/docs/16/explicit-locking.html'
   - 'Redis 스크립트의 원자성: https://redis.io/docs/latest/develop/interact/programmability/eval-intro/'
