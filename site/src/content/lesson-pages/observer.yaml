@@ -189,7 +189,7 @@ questions:
       - p: '**옵저버 패턴**은 알리는 쪽(주제)이 듣는 쪽(옵저버)의 목록을 인터페이스로 들고 있다가, 일이 생기면 목록을 돌며 알리는 패턴이에요.'
       - code: observerMark
         notes:
-          - mark: for (var l : listeners)
+          - mark: 'for (var l : listeners)'
             as: code
             text: '가입 서비스는 `SignupListener` 목록만 알아요. 메일인지 쿠폰인지 몰라요.'
           - mark: l.on(event)
