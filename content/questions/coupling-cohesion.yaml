@@ -1,0 +1,205 @@
+# 결합도와 응집도 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/coupling-cohesion.yaml의 says).
+# 깨지는 파일과 고칠 파일은 verification의 CouplingCohesionTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: coupling-cohesion
+  title: 결합도와 응집도
+  unit: 객체지향 설계와 패턴
+  order: 302
+concepts:
+  - key: core
+    name: 결합도와 응집도
+coreQuestions:
+  - key: q1
+    text: "결합도는 무엇이고, 어떻게 알아보나요?"
+  - key: q2
+    text: "결합도를 높이는 코드는 어떤 모양이고, 어떻게 낮추나요?"
+  - key: q3
+    text: "응집도는 무엇이고, 낮으면 어떤 문제가 생기나요?"
+  - key: q4
+    text: "결합도는 낮게, 응집도는 높게 하라는 말은 왜 함께 나오나요?"
+questions:
+  # ── 질문 1 ──
+  - key: cc-rename-chain
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 화면 다섯 곳이 String zip = order.getMember().getAddress().getZipCode();로 우편번호를 꺼내요. Address의 getZipCode()를 getPostalCode()로 바꾸면 컴파일 오류가 나는 화면 파일은 몇 개일까요? 화면들이 order.isRemote()만 부르게 바꿨다면 몇 개일까요?
+    choices:
+      - 5개, 5개
+      - 5개, 0개 (Order 한 파일만 고친다)
+      - 1개, 0개
+      - 0개, 0개
+    answer: "2"
+    explanation: |-
+      **줄줄이 꺼내는 코드는 화면 다섯 파일이, isRemote()를 쓰는 코드는 화면이 하나도 깨지지 않아요.** 그때는 Order 한 파일만 고쳐요.
+
+      - 화면이 주소 클래스의 메서드까지 알면 그 메서드가 바뀔 때 함께 깨져요
+      - 클래스 하나를 바꿨을 때 깨지는 파일 수가 결합도를 보여 줘요
+  - key: cc-public-fields
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"클래스 A가 클래스 B의 public 필드 셋을 직접 읽는다. B가 그 필드 하나를 둘로 나눠도 A는 고치지 않아도 된다\""
+    answer: X
+    explanation: |-
+      **A도 고쳐야 해요.** A가 B의 내부(필드)를 알고 있어서 B의 구조가 바뀌면 A가 깨져요.
+
+      - 상대의 내부를 직접 아는 것은 결합도가 높은 모양이에요
+      - B가 메서드로 필요한 값을 주게 하면 필드를 나눠도 A는 그대로예요
+  # ── 질문 2 ──
+  - key: cc-multi-address
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 회원이 주소를 하나만 갖다가 여러 개(기본 배송지 포함) 갖게 바뀌었어요. 화면 코드가 아래 둘 가운데 어느 모양일 때 화면을 고치지 않아도 될까요?
+    choices:
+      - order.getMember().getAddress().getZipCode()로 꺼내서 판단한다
+      - order.isRemote()를 부른다
+      - 둘 다 화면을 고쳐야 한다
+    answer: "2"
+    explanation: |-
+      **order.isRemote()를 부르는 쪽이에요.** 회원과 주소의 구조는 Order 안에만 있어서 Order만 고치면 돼요.
+
+      - 줄줄이 꺼내는 코드는 화면이 주문, 회원, 주소의 구조를 모두 알아요
+      - 판단을 정보를 가진 객체에게 시키는 것이 디미터 법칙이에요
+    source: https://www2.ccs.neu.edu/research/demeter/demeter-method/LawOfDemeter/general-formulation.html
+  - key: cc-demeter-which
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 다음 가운데 디미터 법칙(직접 아는 객체에게만 말한다)을 어긴 코드는 무엇일까요?
+    choices:
+      - report.getCompany().getCeo().getEmail()
+      - builder.name("a").price(100).build()
+      - list.stream().filter(x -> x > 0).count()
+      - order.isRemote()
+    answer: "1"
+    explanation: |-
+      **report.getCompany().getCeo().getEmail()이에요.** 보고서가 돌려준 회사, 회사가 돌려준 대표의 구조까지 알아야 해요.
+
+      - 빌더와 스트림은 같은 객체에게 이어 말하는 것이라 다른 객체의 구조를 아는 것이 아니에요
+    source: https://www2.ccs.neu.edu/research/demeter/demeter-method/LawOfDemeter/general-formulation.html
+  # ── 질문 3 ──
+  - key: cc-scattered-free
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 배송비 계산(5만 원 이상 무료, 아니면 3000원)이 주문 화면, 결제, 영수증 세 클래스에 똑같이 들어 있어요. 무료 기준을 7만 원으로 바꿀 때 고칠 파일 수는? 같은 계산을 Order.shippingFee() 한 곳에 모으고 세 클래스가 그것을 부르게 했다면?
+    choices:
+      - 3개, 1개
+      - 1개, 1개
+      - 3개, 4개
+      - 1개, 3개
+    answer: "1"
+    explanation: |-
+      **흩어진 코드는 3개, 모은 코드는 1개예요.** 같은 규칙이 세 곳에 있으면 세 곳을 고쳐야 해요.
+
+      - 하나를 빠뜨리면 결제와 영수증의 금액이 어긋나요
+      - 같은 이유로 바뀌는 것을 데이터를 가진 클래스 곁에 모아요
+  - key: cc-password-rule
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 비밀번호 규칙(8자 이상)을 회원가입, 비밀번호 변경, 관리자 화면이 각자 검사해요. 규칙을 10자 이상으로 바꾸면서 관리자 화면만 고치지 않았어요. 어떻게 될까요?
+    choices:
+      - 컴파일 오류로 빠뜨린 것을 알게 된다
+      - 관리자 화면에서는 8자 비밀번호가 여전히 통과한다
+      - 세 곳 모두 10자 규칙으로 동작한다
+    answer: "2"
+    explanation: |-
+      **관리자 화면만 옛 규칙으로 동작해요.** 컴파일러는 같은 규칙이 여러 곳에 있다는 것을 모르니 빠뜨려도 알려 주지 않아요.
+
+      - 응집도가 낮으면 규칙 하나를 바꿀 때 여러 파일을 고쳐야 하고, 빠뜨리기 쉬워요
+  - key: cc-coupon-service
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 서비스가 CouponRepository로 쿠폰을 찾아 "만료됐거나 주문 금액이 1만 원 미만이면 예외"를 확인한 뒤 coupon.setUsed(true)를 해요. 선물하기 서비스도 같은 코드를 갖고 있어요. 최소 주문 금액을 2만 원으로 바꿀 때 한 파일만 고치려면 쿠폰을 쓰는 규칙을 어디에 둬야 할까요?
+    choices:
+      - 주문 서비스
+      - 선물하기 서비스
+      - Coupon의 use(orderTotal) 메서드
+      - CouponRepository
+    answer: "3"
+    explanation: |-
+      **Coupon.use(orderTotal)에 둬요.** 쿠폰을 쓰는 규칙이 쿠폰 쪽 한 곳에 모이고, 서비스들은 use()를 부르기만 해요.
+
+      - 그러면 쿠폰 규칙이 바뀌어도 주문 서비스와 선물하기 서비스는 그대로예요
+  # ── 질문 4 ──
+  - key: cc-cohesive-remote
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 배송비를 Order.shippingFee()에 모으고 주문 화면, 결제, 영수증이 그것만 부르게 했어요. 도서산간을 판단하는 방법을 우편번호에서 주소의 시도로 바꾸면 세 클래스 가운데 몇 개를 고칠까요?
+    choices:
+      - 0개
+      - 1개
+      - 3개
+    answer: "1"
+    explanation: |-
+      **0개예요.** 세 클래스는 shippingFee()만 알고, 도서산간 판단은 Order 안에 있어요.
+
+      - 응집도를 높이자 밖에서 알아야 할 것이 줄어 결합도도 낮아졌어요
+  - key: cc-zero-coupling
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 결합도와 응집도에 대해 맞는 말은 무엇일까요?
+    choices:
+      - 좋은 설계는 클래스 사이의 결합도를 0으로 만든다
+      - 응집도를 높이면 대개 결합도도 낮아진다
+      - 결합도와 응집도는 서로 상관이 없다
+      - 응집도를 높이려면 관련 없는 기능도 한 클래스에 모은다
+    answer: "2"
+    explanation: |-
+      **응집도를 높이면 대개 결합도도 낮아져요.** 규칙을 데이터 곁에 모으면 밖에서 알아야 할 것이 줄어요.
+
+      - 객체들이 함께 일하려면 서로를 알아야 해서 결합도는 0이 될 수 없어요
+      - 줄일 것은 바뀌기 쉬운 내부 구조에 기대는 결합이에요
+  # ── 네 질문을 하나로 ──
+  - key: cc-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "결합도와 응집도가 무엇이고, 좋은 설계에서 왜 함께 말하는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **결합도는 한 곳을 고칠 때 다른 곳도 고쳐야 하는 정도, 응집도는 관련된 것이 모여 있는 정도이고, 응집도를 높이면 결합도가 함께 낮아져요.**
+
+      - **결합도:** 클래스 하나를 바꿨을 때 깨지는 파일 수로 본다. 줄줄이 호출이 높인다
+      - **낮추는 법:** 디미터 법칙. 정보를 가진 객체에게 시킨다(order.isRemote())
+      - **응집도:** 같은 규칙이 흩어지면 여러 파일을 고치고 빠뜨리면 결과가 어긋난다
+      - **관계:** 규칙을 데이터 곁에 모으면 밖에서 알 것이 줄어 결합도도 낮아진다. 결합도는 0이 될 수 없다
+    checklist:
+      - 결합도를 한 모듈을 고칠 때 다른 모듈도 고쳐야 하는 정도라고 말했다
+      - 줄줄이 호출이나 내부 구조를 아는 코드가 결합도를 높인다고 말했다
+      - 응집도를 관련된 것이 한 모듈에 모여 있는 정도라고 말했다
+      - 흩어진 규칙은 여러 파일을 고치게 하고 빠뜨리면 결과가 어긋난다고 말했다
+      - 응집도를 높이면 결합도가 함께 낮아진다고 말했다

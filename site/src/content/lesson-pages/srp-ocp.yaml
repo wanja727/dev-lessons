@@ -8,9 +8,8 @@ unit: 객체지향 설계와 패턴
 minutes: 20
 roadmap: O3
 type: 설계
-# O2 결합도와 응집도는 아직 없는 레슨이다. 링크가 깨지지 않게 비워 두었다. O2를 만들면 아래 줄을 되살린다 (슬러그는 임시다)
-#   - {slug: coupling-cohesion, title: 결합도와 응집도}
-prerequisites: []
+prerequisites:
+  - {slug: coupling-cohesion, title: 결합도와 응집도}
 assume: >-
   자바 21. 인터페이스를 선언하고 클래스가 구현하는 문법(`interface`, `implements`)과 `enum`, `List`를 for 문으로 도는 방법.
   `record Order(...)`는 `order.grade()`처럼 값을 꺼내는 메서드가 있는 클래스라고만 알면 돼요.

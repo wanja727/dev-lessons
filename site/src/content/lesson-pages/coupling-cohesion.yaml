@@ -1,7 +1,9 @@
-# 결합도와 응집도 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 결합도와 응집도
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/coupling-cohesion.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 결합도와 응집도
+description: 결합도가 무엇이고 어떻게 세는지, 결합도를 높이는 줄줄이 호출과 디미터 법칙, 응집도가 낮으면 생기는 일, 둘이 함께 나오는 이유. 네 가지 질문에 스스로 답할 수 있게 배송비 계산 코드로 배우는 대화형 레슨.
+minutes: 18
 unit: 객체지향 설계와 패턴
 roadmap: O2
 type: 설계
@@ -40,6 +42,10 @@ covers:
     where: '다루지 않음: 의존 역전 원칙과 의존성 주입(O5)'
   - topic: '모듈과 패키지 사이의 의존 방향'
     where: '다루지 않음: 계층형 아키텍처(A1)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
+  demeter: https://www2.ccs.neu.edu/research/demeter/demeter-method/LawOfDemeter/general-formulation.html
+  structured: https://doi.org/10.1147/sj.132.0115
 codes:
   scattered: |-
     // 주문 화면
@@ -79,9 +85,77 @@ codes:
       static int shippingFee(Order o) {...}
       static String maskPhone(String s) {...}
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  chainMark: |-
+    String zip = order.getMember()
+        .getAddress().[[getZipCode()]];
+    boolean remote = zip.startsWith("63");
+  demeterOrder: |-
+    class Order {
+      private final Member member;
+
+      boolean isRemote() {
+        return member.getAddress()
+            .getZipCode().startsWith("63");
+      }
+    }
+
+    // 화면 다섯 곳
+    boolean remote = [[order.isRemote()]];
+  scatteredMark: |-
+    // 주문 화면
+    int fee = order.total() >= 50000
+        ? 0 : [[3000]];
+
+    // 결제
+    int fee = order.total() >= 50000
+        ? 0 : [[3000]];
+    if (order.isRemote()) fee += 3000;
+
+    // 영수증
+    int fee = order.total() >= 50000
+        ? 0 : [[3000]];
+  couponBad: |-
+    class OrderService {
+      private final⤶
+          CouponRepository coupons;
+
+      void order(long couponId, int total) {
+        Coupon c = coupons.find(couponId);
+        if (c.isExpired()
+            || total < 10000) {
+          throw new IllegalStateException();
+        }
+        c.setUsed(true);
+      }
+    }
+  couponGood: |-
+    class Coupon {
+      void use(int orderTotal) {
+        if (expired || orderTotal < 10000) {
+          throw new IllegalStateException();
+        }
+        used = true;
+      }
+    }
+
+    // 주문 서비스
+    coupons.find(couponId).use(total);
 predict:
-  text: '배송비 3000원을 3500원으로 올려요. 코드 scattered와 코드 cohesive에서 각각 몇 개의 파일을 고쳐야 할까요? 보기: 둘 다 1개, 3개와 1개, 3개와 3개.'
-  answer: '3개와 1개. 같은 계산이 세 곳에 있으면 세 곳을, 한 곳에 모으면 한 곳을 고친다. 질문 3에서 밝힌다.'
+  title: 배송비를 올리면 몇 파일을 고칠까요?
+  text: '배송비 3000원을 3500원으로 올려요. 같은 배송비 계산이 주문 화면, 결제, 영수증 세 곳에 흩어진 코드와 `Order` 한 곳에 모은 코드에서 각각 몇 개의 파일을 고쳐야 할까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: scattered
+  label: 내 예측 (흩어진 코드와 모은 코드)
+  options:
+    - value: one-one
+      label: 둘 다 1개
+    - value: three-one
+      label: 3개와 1개
+    - value: three-three
+      label: 3개와 3개
+  answer: three-one
+  storageKey: coupling-cohesion-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 결합도는 무엇이고, 어떻게 알아보나요?
@@ -96,6 +170,38 @@ questions:
     asks:
       - '본문의 예시: 코드 chain을 쓰는 화면이 다섯 곳일 때 `getZipCode()`를 `getPostalCode()`로 바꾸면 깨지는 파일은 몇 개인가. 코드 demeter로 바꾼 뒤에는 (화면 다섯 파일. 바꾼 뒤에는 `Order` 하나만 고친다)'
       - '옮긴 상황: 클래스 A가 B의 public 필드 셋을 직접 읽는다. B가 필드 하나를 둘로 나누면 A는 고쳐야 하나 (그렇다. A가 B의 내부를 알아서 결합도가 높다)'
+    body:
+      - p: '**결합도**는 한 모듈을 고칠 때 다른 모듈도 함께 고쳐야 하는 정도예요. 두 클래스가 서로에 대해 많이 알수록 한쪽이 바뀔 때 다른 쪽도 바뀌어요.'
+      - p: '말로는 막연하니 숫자로 세어 볼게요. **클래스 하나를 바꾸고, 다른 파일이 몇 개 깨지는지** 세면 돼요. 아래 줄은 회원의 우편번호로 도서산간인지 판단해요. 주문 화면, 결제 화면, 영수증, 배송, 관리자 화면 다섯 곳에 이 줄이 있어요.'
+      - code: chainMark
+        notes:
+          - mark: getZipCode()
+            as: code
+            text: '`Address`의 메서드예요. 화면 코드가 주문 안의 회원, 회원 안의 주소까지 알아야 이 줄을 쓸 수 있어요.'
+      - p: '이제 `Address.getZipCode()`의 이름을 `getPostalCode()`로 바꿔 볼게요. 같은 변경을, 화면이 `order.isRemote()`만 부르는 코드에도 해 봤어요.'
+      - code: demeterOrder
+        notes:
+          - mark: order.isRemote()
+            as: code
+            text: '화면은 주문에게 묻기만 해요. 회원과 주소의 구조는 `Order` 안에만 있어요.'
+      - ci:
+          key: rename
+          label: 두 코드를 컴파일한 결과 보기
+          source: CouplingCohesionTest.renameBreaksChainCallers
+      - p: '줄줄이 꺼내는 코드는 **화면 다섯 파일**이 깨지고, 주문에게 묻는 코드는 **`Order` 한 파일**만 깨져요. 같은 변경인데 고칠 파일 수가 다섯 배예요. 화면 다섯 곳이 주소 클래스와 강하게 묶여 있었던 거예요.'
+      - more:
+          summary: 결합에도 종류가 있나요?
+          body:
+            - p: '구조적 설계에서는 결합을 강도 순으로 나눠요. 필요한 값만 주고받는 **데이터 결합**이 가장 느슨하고, 객체를 통째로 넘기는 스탬프 결합, 플래그로 상대의 흐름을 정하는 제어 결합, 전역 변수를 함께 쓰는 공통 결합, 상대의 내부를 직접 건드리는 **내용 결합** 순으로 강해져요([Stevens 외, 1974](link:structured)).'
+      - quiz:
+          q: '클래스 A가 클래스 B의 public 필드 셋을 직접 읽어요. B가 필드 하나를 둘로 나누면 A를 고쳐야 할까요?'
+          options:
+            - 고쳐야 한다
+            - 고치지 않아도 된다
+          answer: 1
+          explanation: 'A가 B의 내부(필드)를 알고 있어서 B의 구조가 바뀌면 A가 깨져요. 결합도가 높은 모양이에요.'
+      - next: '어떤 코드가 결합도를 높이고, 어떻게 낮출까요?'
+    recall: '한 모듈을 고칠 때 다른 모듈도 함께 고쳐야 하는 정도예요. 클래스 하나를 바꾸고 깨지는 다른 파일을 세면 알 수 있어요. 화면 다섯 곳이 `order.getMember().getAddress().getZipCode()`를 쓰면 주소의 메서드 이름 하나를 바꿀 때 다섯 파일이 깨지고, `order.isRemote()`만 쓰면 `Order` 하나만 깨져요.'
   - id: q2
     title: 결합도를 높이는 코드는 어떤 모양이고, 어떻게 낮추나요?
     conclusion:
@@ -110,6 +216,27 @@ questions:
     asks:
       - '본문의 예시: 코드 chain에서 회원이 주소를 여러 개(기본 배송지 포함) 갖게 바뀌면 이 줄과 코드 demeter 가운데 무엇을 고쳐야 하나 (chain을 쓰는 모든 곳. demeter는 `Order` 안만)'
       - '옮긴 상황: `report.getCompany().getCeo().getEmail()`과 `builder.name("a").price(100).build()` 가운데 디미터 법칙을 어긴 것은 (앞의 것. 뒤는 같은 빌더에게 이어 말한다)'
+    body:
+      - p: '결합도를 높이는 코드는 대개 **다른 객체의 내부 구조를 아는 코드**예요. 세 가지가 자주 보여요.'
+      - ul:
+          - '다른 객체의 필드를 직접 읽고 쓰기'
+          - '객체가 돌려준 객체에서 또 꺼내는 줄줄이 호출'
+          - '바뀌기 쉬운 구체 클래스를 직접 만들기'
+      - p: '질문 1의 `order.getMember().getAddress().getZipCode()`는 "주문은 회원을, 회원은 주소를 가진다"는 구조를 화면 코드가 알아요. 회원이 주소를 여러 개(기본 배송지 포함) 갖게 바뀌면 이 줄들이 모두 깨져요.'
+      - h3: 디미터 법칙
+      - p: '이런 줄을 줄이는 규칙이 **디미터 법칙**이에요. 메서드는 자기 자신, 받은 인자, 자기 필드, 자기가 만든 객체에게만 말해요. 받은 객체가 돌려준 객체에게 또 말하지 않아요([Law of Demeter](link:demeter)).'
+      - p: '고치는 법은 질문을 그 정보를 가진 객체에게 넘기는 거예요. 화면은 `order.isRemote()`만 부르고, 판단은 `Order`가 해요. [객체지향의 네 가지 특징](lesson:oop-four-pillars)에서 본 "꺼내지 말고 시킨다"와 같은 생각이에요.'
+      - callout: '**점이 여러 개라고 다 어긴 것은 아니에요.** `list.stream().filter(...).map(...)`이나 `builder.name("a").price(100)`은 같은 객체(스트림, 빌더)에게 이어 말하는 것이라 다른 객체의 구조를 아는 것이 아니에요.'
+      - quiz:
+          q: '`report.getCompany().getCeo().getEmail()`과 `builder.name("a").price(100).build()` 가운데 디미터 법칙을 어긴 것은 무엇일까요?'
+          options:
+            - 앞의 것
+            - 뒤의 것
+            - 둘 다
+          answer: 1
+          explanation: '앞의 것은 보고서가 돌려준 회사, 회사가 돌려준 대표의 구조를 알아야 해요. 뒤의 것은 같은 빌더에게 이어 말해요.'
+      - next: '결합도는 클래스 사이의 이야기예요. 한 클래스 안은 어떻게 봐야 할까요?'
+    recall: '다른 객체의 내부 구조를 아는 코드가 결합도를 높여요. 필드를 직접 쓰거나, `order.getMember().getAddress().getZipCode()`처럼 돌려받은 객체에서 또 꺼내는 코드예요. 디미터 법칙대로 직접 아는 객체에게만 말하고, 판단을 정보를 가진 객체에게 시켜(`order.isRemote()`) 낮춰요.'
   - id: q3
     title: 응집도는 무엇이고, 낮으면 어떤 문제가 생기나요?
     conclusion:
@@ -128,6 +255,93 @@ questions:
       - '본문의 예시: 코드 scattered에서 무료 배송 기준을 7만 원으로 바꿀 때 고칠 파일 수와 코드 cohesive에서 고칠 파일 수 (3개, 1개)'
       - '옮긴 상황: 회원 비밀번호 규칙(8자 이상, 숫자 포함)을 회원가입 컨트롤러, 비밀번호 변경 서비스, 관리자 화면이 각자 검사한다. 규칙을 10자 이상으로 바꾸고 관리자 화면만 빠뜨리면 무슨 일이 생기나 (관리자 화면에서는 8자 비밀번호가 통과한다)'
       - '실무 구역: 서비스가 다른 도메인의 리포지토리를 직접 불러 쿠폰을 차감하는 코드에서 "쿠폰은 만료되면 쓸 수 없다"는 규칙이 어디에 있어야 하나 (쿠폰 쪽 한 곳)'
+    body:
+      - p: '**응집도**는 한 모듈 안의 것들이 같은 목적으로 모여 있는 정도예요. 응집도가 낮은 코드는 두 모양으로 나타나요. 한 규칙이 여러 클래스에 흩어진 것, 상관없는 일이 한 클래스에 모인 것이에요.'
+      - p: '먼저 흩어진 모양이에요. 배송비 계산이 세 클래스에 있어요.'
+      - code: scatteredMark
+        notes:
+          - mark: '3000'
+            as: code
+            text: '같은 숫자가 세 곳에 있어요. 배송비를 올리면 세 곳을 모두 고쳐야 해요.'
+      - p: '같은 계산을 `Order` 한 곳에 모은 코드와 비교해 볼게요. 기본 배송비를 3500원으로 올렸을 때 고친 파일을 세었어요.'
+      - code: cohesive
+      - ci:
+          key: fee-change
+          label: 두 코드에서 고친 파일 보기
+          source: CouplingCohesionTest.changingFeeRule
+      - p: '처음에 예측한 답은 **3개와 1개**예요. {{predict-result}}'
+      - p: '흩어진 코드에서는 하나를 빠뜨리기 쉬워요. 결제만 고치고 영수증을 빠뜨린 코드를 돌려 봤어요.'
+      - ci:
+          key: forgot
+          label: 영수증을 빠뜨린 코드의 결과 보기
+          source: CouplingCohesionTest.forgottenReceipt
+      - p: '결제는 3500원을 받았는데 영수증에는 3000원이 찍혀요. 도서산간 주문은 더 벌어져요. 흩어진 코드에서는 결제만 도서산간 추가금을 더하고 있어서, **같은 규칙인데 세 곳의 결과가 처음부터 달랐어요.**'
+      - p: '아래에서 요구를 골라 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 바뀐 요구
+            options:
+              - {value: fee, label: 기본 배송비 3500원으로}
+              - {value: free, label: 무료 기준 7만 원으로}
+              - {value: remote, label: 도서산간 추가금 5000원으로}
+          sides:
+            - label: 흩어진 코드
+              items:
+                - {name: 주문 화면, note: 배송비 계산}
+                - {name: 결제, note: 배송비 계산과 도서산간}
+                - {name: 영수증, note: 배송비 계산}
+            - label: 모은 코드
+              items:
+                - {name: Order, note: shippingFee()}
+                - {name: 주문 화면, note: order.shippingFee()}
+                - {name: 결제, note: order.shippingFee()}
+                - {name: 영수증, note: order.shippingFee()}
+          scenes:
+            fee:
+              sides:
+                - marks:
+                    - {name: 주문 화면, tag: 고침}
+                    - {name: 결제, tag: 고침}
+                    - {name: 영수증, tag: 고침}
+                  result: [{k: 고칠 파일, v: '3', mark: bad}]
+                - marks: [{name: Order, tag: 고침}]
+                  result: [{k: 고칠 파일, v: '1'}]
+              verdict: 같은 숫자가 세 곳에 있으면 세 곳을 고쳐요.
+            free:
+              sides:
+                - marks:
+                    - {name: 주문 화면, tag: 고침}
+                    - {name: 결제, tag: 고침}
+                    - {name: 영수증, tag: 고침}
+                  result: [{k: 고칠 파일, v: '3', mark: bad}]
+                - marks: [{name: Order, tag: 고침}]
+                  result: [{k: 고칠 파일, v: '1'}]
+              verdict: 무료 기준도 세 곳에 있어요.
+            remote:
+              sides:
+                - marks:
+                    - {name: 결제, tag: 고침}
+                    - {name: 주문 화면, tag: 규칙 없음, mark: bad}
+                    - {name: 영수증, tag: 규칙 없음, mark: bad}
+                  result: [{k: 고칠 파일, v: '1 (그런데 둘은 이미 틀림)', mark: bad}]
+                - marks: [{name: Order, tag: 고침}]
+                  result: [{k: 고칠 파일, v: '1'}]
+              verdict: 흩어진 코드에서는 도서산간 규칙이 결제에만 있어서, 화면과 영수증은 처음부터 다른 금액을 보여 줘요.
+      - h3: 상관없는 일이 한 클래스에 모인 모양
+      - code: utils
+      - p: '가격 형식, 이메일 검사, 배송비, 전화번호 가리기는 서로 상관이 없어요. 어느 이유로든 이 파일을 열게 되고, 배송비 계산을 찾는 사람은 여기를 떠올리지 못해요. 응집도를 높이는 기준은 **같은 이유로 함께 바뀌는 것을 모으고, 그 데이터를 가진 클래스 곁에 두는 것**이에요. 배송비는 주문 금액과 주소를 가진 `Order` 곁에 둬요.'
+      - quiz:
+          q: '회원 비밀번호 규칙(8자 이상)을 회원가입, 비밀번호 변경, 관리자 화면이 각자 검사해요. 규칙을 10자 이상으로 바꾸면서 관리자 화면만 빠뜨렸어요. 무슨 일이 생길까요?'
+          options:
+            - 아무 일도 없다
+            - 관리자 화면에서는 8자 비밀번호가 통과한다
+            - 컴파일 오류가 난다
+          answer: 2
+          explanation: '같은 규칙이 세 곳에 흩어져 있으면 하나를 빠뜨려도 컴파일러는 모르고, 그곳만 옛 규칙으로 동작해요.'
+      - next: '규칙을 한 곳에 모으자 화면들이 알아야 할 것도 줄었어요. 둘은 어떤 관계일까요?'
+    recall: '한 모듈 안의 것들이 같은 목적으로 모여 있는 정도예요. 응집도가 낮으면 규칙 하나를 바꿀 때 여러 파일을 고쳐야 해요. 배송비 계산이 세 클래스에 흩어지면 배송비를 올릴 때 세 파일을 고치고, 하나를 빠뜨리면 결제와 영수증의 금액이 어긋나요. `Order.shippingFee()` 한 곳에 모으면 한 파일만 고쳐요.'
   - id: q4
     title: 결합도는 낮게, 응집도는 높게 하라는 말은 왜 함께 나오나요?
     conclusion:
@@ -141,19 +355,67 @@ questions:
     asks:
       - '본문의 예시: 코드 cohesive에서 도서산간 판단 방법을 우편번호에서 주소의 시도로 바꾸면 주문 화면, 결제, 영수증 가운데 고칠 것은 (없다. `Order` 안만)'
       - '옮긴 상황: 다음 가운데 결합도와 응집도에 대해 맞는 말은? 보기: 결합도를 0으로 만드는 것이 목표다 / 응집도를 높이면 대개 결합도도 낮아진다 / 둘은 서로 상관이 없다 (둘째)'
+    body:
+      - p: '질문 3에서 배송비 규칙을 `Order`에 모으자, 주문 화면과 결제와 영수증은 `order.shippingFee()` 하나만 알면 되게 됐어요. 금액 기준이 얼마인지, 도서산간을 어떻게 판단하는지 몰라도 돼요. **응집도를 높였더니 결합도도 낮아진 거예요.**'
+      - p: '반대도 같아요. 규칙이 흩어지면 각 클래스가 그 규칙에 필요한 데이터를 꺼내야 하고(`order.total()`, `order.isRemote()`), 그만큼 주문의 구조를 알아야 해요. 그래서 두 말은 늘 함께 나와요. **"결합도는 낮게, 응집도는 높게."**'
+      - h3: 결합도를 0으로 만들 수는 없어요
+      - p: '세 클래스는 여전히 `Order`를 알아요. 객체들이 함께 일하려면 서로를 알아야 해요. 줄일 것은 **바뀌기 쉬운 것에 기대는 결합**이에요. `shippingFee()`라는 메서드 이름은 잘 바뀌지 않지만, 회원과 주소가 어떻게 이어져 있는지는 자주 바뀌어요.'
+      - p: '두 말을 이루는 구체적인 방법이 뒤의 레슨들이에요. 바뀌는 이유마다 나누기는 [단일 책임과 개방 폐쇄 원칙](lesson:srp-ocp), 구현 대신 인터페이스에 기대기는 의존 역전 원칙과 의존성 주입 레슨에서 다뤄요.'
+      - quiz:
+          q: '다음 가운데 결합도와 응집도에 대해 맞는 말은 무엇일까요?'
+          options:
+            - 결합도를 0으로 만드는 것이 목표다
+            - 응집도를 높이면 대개 결합도도 낮아진다
+            - 둘은 서로 상관이 없다
+          answer: 2
+          explanation: '규칙을 데이터 곁에 모으면 밖에서 알아야 할 것이 줄어서 결합도도 낮아져요. 결합은 없앨 수 없고, 바뀌기 쉬운 것에 기대는 결합을 줄여요.'
+    recall: '응집도를 높이면 결합도가 함께 낮아지기 때문이에요. 배송비 규칙을 `Order`에 모으면 화면, 결제, 영수증은 `order.shippingFee()`만 알면 돼서 주문의 내부 구조를 몰라도 돼요. 결합도를 없앨 수는 없고, 줄일 것은 바뀌기 쉬운 내부 구조에 기대는 결합이에요.'
 practice:
+  title: 다른 도메인의 데이터를 직접 다루지 마세요
   says:
     - '흔한 실수: `OrderService`가 쿠폰 도메인의 `CouponRepository`를 직접 받아 쿠폰을 찾고 `coupon.setUsed(true)`를 한다. 쿠폰을 쓰는 규칙(만료, 최소 주문 금액)이 주문 서비스에 들어오고, 쿠폰 쪽 규칙이 바뀌면 주문 서비스를 고친다. 고친 코드: 쿠폰 쪽에 `coupon.use(orderTotal)`나 `CouponService.use(couponId, orderTotal)`를 두고 주문 서비스는 그것만 부른다. 엔티티 없는 같은 모양의 클래스로 고칠 파일 수를 테스트로 센다'
     - '엔티티 줄줄이 호출(`order.getMember().getGrade()`)은 JPA에서 지연 로딩 쿼리까지 숨긴다. 줄이는 방법은 질문 2와 같고, 쿼리 문제는 프록시와 지연 로딩(P4)에서 다룬다'
+  body:
+    - p: '스프링 서비스에서 결합도가 높아지는 흔한 모양은, 한 도메인의 서비스가 **다른 도메인의 리포지토리를 직접 받아 그 데이터를 다루는 것**이에요. 주문 서비스가 쿠폰을 쓰는 코드를 볼게요.'
+    - code: couponBad
+      notes:
+        - mark: c.setUsed(true);
+          as: code
+          text: '쿠폰을 쓰는 규칙(만료, 최소 주문 금액)이 주문 서비스에 들어와 있어요. 쿠폰 규칙이 바뀌면 주문 서비스를 고쳐요.'
+    - p: '쿠폰을 쓰는 규칙은 쿠폰 쪽 한 곳에 둬요. 주문 서비스는 쿠폰에게 "이 금액으로 써 줘"라고 시키기만 해요.'
+    - code: couponGood
+    - ci:
+        key: coupon
+        label: 최소 주문 금액을 바꿀 때 고친 파일 보기
+        source: CouplingCohesionTest.couponRule
+    - p: '최소 주문 금액을 1만 원에서 2만 원으로 바꿀 때, 앞의 코드는 `OrderService`를, 뒤의 코드는 `Coupon`을 고쳐요. 쿠폰을 쓰는 곳이 주문 말고 선물하기, 정기 결제로 늘어나도 뒤의 코드는 여전히 `Coupon` 하나만 고쳐요. 쿠폰 쪽에 `CouponService.use(couponId, total)`를 두고 주문 서비스가 그것을 부르게 해도 같아요.'
+    - muted: 'JPA 엔티티의 줄줄이 호출(`order.getMember().getGrade()`)은 결합도 문제에 더해, 지연 로딩 때문에 SELECT를 숨기기도 해요. 그 이야기는 프록시와 지연 로딩 레슨에서 다뤄요.'
+interview:
+  question: 결합도와 응집도가 무엇이고, 좋은 설계에서 왜 함께 말하는지 설명해 주세요
+  model:
+    - label: 정의
+      text: 결합도는 한 모듈을 고칠 때 다른 모듈도 함께 고쳐야 하는 정도이고, 응집도는 한 모듈 안의 것들이 같은 목적으로 모여 있는 정도입니다.
+    - label: 원리
+      text: 결합도는 다른 객체의 내부 구조를 알수록 높아집니다. 줄줄이 호출로 주소의 우편번호를 꺼내는 화면이 다섯이면 주소 메서드 하나를 바꿀 때 다섯 파일이 깨집니다. 같은 규칙이 여러 클래스에 흩어지면 응집도가 낮아서 규칙 하나에 여러 파일을 고치고, 빠뜨리면 결과가 어긋납니다. 규칙을 데이터를 가진 객체에 모으면 밖에서 알 것이 줄어 결합도도 함께 낮아집니다.
+    - label: 주의할 점
+      text: 결합도를 0으로 만들 수는 없습니다. 줄일 것은 바뀌기 쉬운 내부 구조에 기대는 결합입니다. 점이 여러 개인 호출이 모두 디미터 법칙 위반은 아니고, 같은 스트림이나 빌더에 이어 말하는 것은 괜찮습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문 서비스가 쿠폰 리포지토리를 직접 써서 쿠폰 규칙이 흩어져 있던 것을 Coupon.use()로 모아, 쿠폰 규칙을 바꿀 때 한 파일만 고치게 했습니다.'
+verified: '이 레슨의 "깨지는 파일"과 "고친 파일", 배송비는 짐작이 아니라 자바 21에서 소스를 컴파일하고 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([CouplingCohesionTest](link:test))가 다시 돌아요.'
+footer: '근거: 결합도와 응집도의 정의는 [Stevens, Myers, Constantine의 Structured Design(1974)](link:structured), 디미터 법칙은 [Law of Demeter](link:demeter). 깨지는 파일과 고친 파일은 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 chain을 쓰는 화면 다섯 곳이 있을 때 `getZipCode()`의 이름을 바꾸면 다섯 파일에서 컴파일 오류가 나고, 코드 demeter로 바꾸면 `Order` 한 파일만 깨진다'
     how: '`JavaSource`로 두 모양을 컴파일하고 오류가 난 파일을 센다'
+    test: CouplingCohesionTest.renameBreaksChainCallers
   - claim: '코드 scattered에서 배송비를 바꾸면 세 파일이, 코드 cohesive에서는 한 파일이 바뀐다'
     how: '바꾸기 전후 패키지를 비교한다'
+    test: CouplingCohesionTest.changingFeeRule
   - claim: '영수증만 빠뜨리면 결제의 배송비는 3500, 영수증은 3000이다'
     how: '빠뜨린 패키지를 돌린다'
+    test: CouplingCohesionTest.forgottenReceipt
   - claim: '쿠폰 규칙을 바꿀 때 주문 서비스가 쿠폰을 직접 다루는 코드는 주문 서비스를 고치고, 쿠폰에 시키는 코드는 쿠폰만 고친다'
     how: '바꾸기 전후 패키지를 비교한다'
+    test: CouplingCohesionTest.couponRule
 sources:
   - '디미터 법칙: Lieberherr, Holland, Assessing the Law of Demeter (1989) 소개 https://www2.ccs.neu.edu/research/demeter/demeter-method/LawOfDemeter/general-formulation.html'
   - '결합도와 응집도의 정의: Stevens, Myers, Constantine, Structured Design (IBM Systems Journal, 1974) https://doi.org/10.1147/sj.132.0115'
