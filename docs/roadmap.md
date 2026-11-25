@@ -329,3 +329,4 @@ flowchart LR
 - 2026-11-25: DB 과정의 핵심 레슨 10개(D1~D4, D7~D12)의 본문을 쓰고 문제를 검수했다. D7, D9, D10은 예전 .astro를 지우고 자료 파일로 다시 썼고, D8은 rest-api의 페이지네이션을 가져왔다(rest-api.astro는 N5가 지운다)
 - 2026-11-25: 테스트와 운영 과정의 핵심 레슨 6개(T1~T6)의 설계서와 본문을 쓰고 문제 63개(판정 57, 설명형 6)를 검수해 reviewed로 바꿨다. 사용자가 설계서 승인을 미리 맡겼다. 레슨 목록의 order는 901~906이다
 - 2026-11-25: 운영체제와 동시성 과정의 핵심 레슨 9개(C1~C9)의 설계서와 본문을 쓰고 문제 90개를 검수해 reviewed로 바꿨다. 예전 레슨 넷(process-and-thread, synchronization, thread-pool, completable-future)을 같은 슬러그로 다시 쓰고, future-and-callable은 C8에 합쳐 지웠다. 순서 번호는 과정 번호 방식 401~409를 쓴다
+- 2026-11-25: 네트워크와 웹 과정의 심화 레슨 N11 HTTP 캐시(`http-cache`), N12 웹소켓과 SSE(`websocket-sse`)를 쓰고 문제를 검수했다. 네트워크와 웹 과정 12개가 모두 본문을 갖췄다
