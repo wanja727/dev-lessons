@@ -1,0 +1,196 @@
+# 프록시와 지연 로딩 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 프록시와 지연 로딩
+unit: JPA
+roadmap: P4
+type: 동작 확인
+prerequisites:
+  - {slug: jpa-persistence-context, title: 영속성 컨텍스트}
+assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16. 영속성 컨텍스트가 트랜잭션 하나 동안 열려 있다는 것과 준영속 상태(영속성 컨텍스트 레슨), `@ManyToOne`과 외래 키(연관관계 매핑 레슨), 자식 클래스가 부모 메서드를 오버라이드한다는 것(상속과 다형성 레슨).'
+example: '선수 `Player`가 팀 `Team`을 `@ManyToOne(fetch = LAZY)`로 가리킨다. 선수를 조회한 뒤 팀의 id와 이름을 읽는 순간 SQL이 나가는지, 트랜잭션이 끝난 뒤에는 어떻게 되는지 본다.'
+intro:
+  - '선수 목록 API가 잘 돌다가, 응답에 팀 이름을 더했더니 `LazyInitializationException: could not initialize proxy - no Session`이 나요. 같은 코드를 테스트에서 돌리면 멀쩡하기도 해요. 예외 메시지의 "proxy"와 "Session"이 무엇인지 알아야 고칠 수 있어요.'
+  - 'JPA로 연관관계를 다루는 스프링 개발자는 지연 로딩을 기본으로 써요. 그러면 연관 필드에는 진짜 엔티티 대신 프록시가 들어가고, 개발자는 어디서 그 프록시를 초기화할지 정해야 해요. 면접에서는 "지연 로딩은 어떻게 동작하나요"와 "LazyInitializationException은 왜 나나요"를 함께 물어요.'
+  - '이 레슨에서는 선수 하나를 조회하고 팀 필드를 한 줄씩 건드리며, 프록시의 실제 클래스와 SELECT가 나가는 순간, 트랜잭션이 끝난 뒤의 예외를 확인해요.'
+covers:
+  - topic: '지연 로딩(LAZY)이면 연관 필드에는 진짜 엔티티 대신 프록시가 들어간다. 프록시는 엔티티 클래스를 상속해 Hibernate가 실행 중에 만든 클래스다'
+    where: '질문 1'
+  - topic: '프록시는 id만 알고 나머지는 비어 있다. 진짜 엔티티를 가리킬 자리가 있다'
+    where: '질문 1'
+  - topic: '`em.find`는 바로 SELECT해서 진짜 엔티티를, `em.getReference`는 SELECT 없이 프록시를 돌려준다. 리포지토리의 `getReferenceById`가 뒤의 것이다'
+    where: '질문 1'
+  - topic: '프록시는 id가 아닌 값을 처음 읽을 때 SELECT를 한 번 보내 초기화한다. id를 읽을 때는 SELECT가 없다. 두 번째부터는 SELECT가 없다'
+    where: '질문 2'
+  - topic: '반복문이든 스트림의 `map`이든, 프록시를 건드리는 순간 SELECT가 나간다. 목록에서 하나씩 건드리면 쿼리가 늘어난다'
+    where: '질문 2. 쿼리가 늘어나는 문제는 JPA N+1 문제(P5)'
+  - topic: '같은 영속성 컨텍스트 안에서 같은 id는 같은 객체다. 먼저 받은 것이 프록시면 `find`도 그 프록시를, 진짜면 `getReference`도 진짜를 돌려준다'
+    where: '질문 2의 더 알아보기'
+  - topic: '`LazyInitializationException`은 영속성 컨텍스트가 닫힌 뒤(준영속) 초기화되지 않은 프록시를 읽을 때 난다'
+    where: '질문 3'
+  - topic: '없는 id로 만든 프록시는 초기화할 때 `EntityNotFoundException`이 난다'
+    where: '질문 3의 더 알아보기'
+  - topic: '막는 방법: 트랜잭션 안에서 필요한 연관을 미리 가져온다. fetch join, `@EntityGraph`, `Hibernate.initialize`, 서비스에서 DTO로 바꿔 돌려주기'
+    where: '질문 4'
+  - topic: 'EAGER로 바꾸는 것은 해결이 아니다'
+    where: '질문 4에서 한 줄. 이유는 JPA N+1 문제(P5)'
+  - topic: '영속성 컨텍스트를 요청 끝까지 열어 두는 방법'
+    where: '다루지 않음: OSIV(P6)'
+  - topic: '`@ManyToOne`, `@OneToOne`의 기본 로딩은 EAGER이고 `@OneToMany`, `@ManyToMany`는 LAZY다. 그래서 `@ManyToOne`에 LAZY를 직접 적는다'
+    where: '실무에서는'
+  - topic: '프록시라서 생기는 일: `getClass()`가 다르다, `==` 대신 `instanceof`, `equals`에서 `getClass()`를 비교하면 틀린다. final 클래스와 final 메서드는 프록시로 만들 수 없다'
+    where: '실무에서는'
+  - topic: '`getReferenceById`로 외래 키만 채워 저장하면 팀 SELECT 없이 저장한다'
+    where: '실무에서는'
+  - topic: '스프링 빈의 프록시(AOP)와 같은 방식이다'
+    where: '다루지 않음: AOP(S9)'
+codes:
+  predict: |-
+    Player player = tx.execute(s ->
+        em.find(Player.class, id));
+
+    Long teamId =
+        player.getTeam().getId(); // ①
+    String name =
+        player.getTeam().getName(); // ②
+  player: |-
+    @Entity
+    public class Player {
+      @Id @GeneratedValue
+      private Long id;
+      private String name;
+
+      @ManyToOne([[fetch = FetchType.LAZY]])
+      @JoinColumn(name = "team_id")
+      private Team team;
+    }
+  fetchJoin: |-
+    @Query("""
+        select p from Player p
+        join fetch p.team
+        where p.id = :id
+        """)
+    Optional<Player> findWithTeam(Long id);
+  dto: |-
+    public record PlayerView(
+        String name, String teamName) {}
+
+    @Transactional(readOnly = true)
+    public PlayerView find(Long id) {
+      Player p = players
+          .findById(id).orElseThrow();
+      return new PlayerView(p.getName(),
+          p.getTeam().getName());
+    }
+  equalsBad: |-
+    @Override
+    public boolean equals(Object o) {
+      if (o == null
+          || [[getClass() != o.getClass()]]) {
+        return false;
+      }
+      return id.equals(((Team) o).id);
+    }
+predict:
+  text: '코드 predict는 트랜잭션 안에서 선수를 조회하고, 트랜잭션이 끝난 뒤 팀의 id(①)와 이름(②)을 읽어요. 팀은 LAZY예요. 예외는 어디서 날까요? 보기: ①에서, ②에서, 둘 다 나지 않는다.'
+  answer: '②에서. 프록시는 id를 이미 알아서 ①은 SELECT 없이 답한다. ②는 이름을 가져오려고 초기화해야 하는데 영속성 컨텍스트가 닫혀 `LazyInitializationException`이 난다. 질문 2와 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 지연 로딩이면 연관 필드에는 무엇이 들어 있나요?
+    conclusion:
+      lead: '진짜 팀 대신, 팀 클래스를 상속한 가짜 객체(프록시)가 들어 있어요.'
+      sub: '프록시는 외래 키로 읽은 팀의 id만 알고 나머지 값은 비어 있어요. 그래서 선수를 조회할 때 팀 테이블은 조회하지 않아요.'
+    says:
+      - '코드 player. `fetch = FetchType.LAZY`는 연관 엔티티를 필요할 때 가져오라는 설정이다. 선수를 `find`하면 SELECT는 선수 테이블만 한 번이다. 테스트로 팀 SELECT 0번을 보인다'
+      - '그 자리에 든 객체의 클래스 이름을 실제 출력으로 보인다. `Team$HibernateProxy$...`처럼 Hibernate가 실행 중에 만든 `Team`의 자식 클래스다. 자식이라 `Team` 타입 필드에 들어갈 수 있다(상속과 다형성 레슨)'
+      - '프록시가 가진 것: 팀의 id(선수 행의 `team_id`에서 왔다), 아직 초기화되지 않았다는 표시, 나중에 진짜 팀을 가리킬 자리'
+      - '`em.getReference(Team.class, id)`로 프록시를 직접 받을 수 있다. SELECT가 없다. `em.find`는 바로 SELECT하고 진짜 엔티티를 준다. 리포지토리에서는 `getReferenceById`와 `findById`다'
+    asks:
+      - '본문의 예시: 팀이 LAZY인 선수를 `em.find`로 조회한 직후, 나간 SELECT의 수와 `player.getTeam().getClass() == Team.class`의 값은 (SELECT 1번(선수만), false. 팀 자리는 프록시다)'
+      - '옮긴 상황: 주문(`Order`)이 회원(`User`)을 `@ManyToOne(fetch = LAZY)`로 가리킨다. 주문 10개를 JPQL로 조회했다. 이 시점에 회원 테이블 SELECT는 몇 번인가 (0번. 회원 자리는 모두 프록시다)'
+  - id: q2
+    title: 프록시는 언제 SELECT를 보내나요?
+    conclusion:
+      lead: 'id가 아닌 값을 처음 읽을 때 한 번 보내요.'
+      sub: 'id는 프록시가 이미 알아서 SELECT 없이 답해요. 한 번 초기화되면 그다음부터는 진짜 엔티티에 넘겨줄 뿐 SELECT가 없어요.'
+    says:
+      - '프록시의 `getName()`은 진짜 팀이 없으면 영속성 컨텍스트에 부탁해 SELECT로 가져온 뒤, 진짜 팀의 `getName()`을 부른다. 이것을 프록시 초기화라고 한다'
+      - '테스트로 한 줄씩 센다: `getReference` 뒤 0번, `getId()` 뒤 0번, `getName()` 뒤 1번, 다시 `getName()` 뒤 1번. 예측의 ①을 밝힌다'
+      - '선수 목록을 돌며 팀 이름을 읽으면 팀마다 SELECT가 하나씩 나간다. 반복문이든 `players.stream().map(p -> p.getTeam().getName())`이든 같다. 스트림 안이라서 감춰질 뿐이다. 이렇게 늘어나는 쿼리가 P5의 N+1이다'
+      - '더 알아보기: 같은 영속성 컨텍스트에서 같은 id는 같은 객체다. 먼저 `find`했으면 `getReference`도 진짜 엔티티를, 먼저 `getReference`했으면 `find`도 그 프록시를 준다(초기화는 된다). 테스트로 보인다'
+    widget:
+      kind: steps
+      note: '코드 한 줄씩 실행한다: `find(Player)`, `getTeam()`, `getTeam().getId()`, `getTeam().getName()`, 다시 `getName()`. 왼쪽은 프록시 상자(id, 초기화 여부, 진짜 팀을 가리키는 자리), 오른쪽은 나간 SQL. `getName()`에서만 팀 SELECT가 생기고 상자가 채워진다'
+    asks:
+      - '본문의 예시: 트랜잭션 안에서 `Team t = em.getReference(Team.class, 1L)` 뒤에 `t.getId()`, `t.getName()`, `t.getName()`을 차례로 불렀다. 팀 SELECT는 모두 몇 번인가 (1번. 첫 `getName()`에서만)'
+      - '옮긴 상황: 한 트랜잭션에서 주문 20개를 조회하고(회원은 LAZY), `orders.stream().map(o -> o.getUser().getEmail()).toList()`를 했다. 주문 20개의 회원은 모두 다르다. 회원 SELECT는 몇 번인가 (20번. 회원 프록시마다 처음 읽을 때 초기화한다)'
+  - id: q3
+    title: LazyInitializationException은 왜 나나요?
+    conclusion:
+      lead: '영속성 컨텍스트가 닫힌 뒤에 초기화되지 않은 프록시를 읽으면, SELECT를 부탁할 곳이 없어서 나요.'
+      sub: '스프링에서는 트랜잭션이 끝나면 영속성 컨텍스트도 닫혀요. 그래서 서비스가 돌려준 엔티티의 LAZY 연관을 컨트롤러에서 읽을 때 흔히 나요.'
+    says:
+      - '프록시는 초기화할 때 자신을 만든 영속성 컨텍스트(Hibernate의 Session)를 쓴다. 트랜잭션이 끝나 그것이 닫혔으면 예외를 던진다. 메시지의 "no Session"이 그 뜻이다'
+      - '예측 코드를 돌린 테스트: ①은 id라 괜찮고 ②에서 예외가 난다. 실제 예외 메시지를 실제 출력으로 보인다. 예측의 답을 밝힌다'
+      - '흔한 장면: 서비스의 `@Transactional` 메서드가 엔티티를 돌려주고, 컨트롤러가 그 엔티티의 LAZY 연관을 읽는다. 이 저장소처럼 OSIV를 끈 설정에서 난다(P6)'
+      - '더 알아보기: 없는 id로 `getReference`를 하면 바로는 예외가 없다. SELECT를 안 했으니 없는지 모른다. 초기화할 때 `EntityNotFoundException`이 난다. 테스트로 보인다'
+    asks:
+      - '본문의 예시: 트랜잭션이 끝난 뒤 LAZY 팀 프록시의 `getId()`를 불렀다. 예외가 나나 (나지 않는다. id는 프록시가 이미 안다)'
+      - '옮긴 상황: 서비스 메서드(`@Transactional`) 안에서 주문의 회원 이메일을 한 번 읽은 뒤 주문을 돌려줬다. 컨트롤러에서 같은 주문의 `getUser().getEmail()`을 읽으면 예외가 나나 (나지 않는다. 트랜잭션 안에서 이미 초기화됐다)'
+  - id: q4
+    title: LazyInitializationException은 어떻게 막나요?
+    conclusion:
+      lead: '트랜잭션이 끝나기 전에, 밖에서 쓸 연관을 미리 가져와요.'
+      sub: '조회할 때 fetch join으로 함께 가져오거나, 서비스 안에서 필요한 값만 DTO로 옮겨 돌려줘요. EAGER로 바꾸는 것은 해결이 아니에요.'
+    says:
+      - '코드 fetchJoin. `join fetch p.team`은 선수와 팀을 한 SQL로 조인해 가져와 팀 자리에 진짜 엔티티를 넣는다. 트랜잭션 밖에서도 읽힌다. 테스트로 보인다. 스프링 데이터의 `@EntityGraph(attributePaths = "team")`도 같은 일을 한다'
+      - '`Hibernate.initialize(player.getTeam())`은 트랜잭션 안에서 프록시를 강제로 초기화한다. SELECT가 하나 더 나간다'
+      - '코드 dto. 서비스가 트랜잭션 안에서 필요한 값만 record에 담아 돌려준다. 컨트롤러는 엔티티를 만지지 않으니 프록시를 걱정하지 않는다. 가장 흔히 권하는 방법이다'
+      - 'EAGER는 언제나 함께 가져오라는 설정이라, 필요 없는 화면에서도 팀을 가져오고 목록 조회에서는 쿼리가 늘어난다. 이유는 P5에서 다룬다. 요청 끝까지 컨텍스트를 열어 두는 OSIV는 P6에서 다룬다'
+    asks:
+      - '본문의 예시: 트랜잭션 안에서 `select p from Player p join fetch p.team where p.id = :id`로 받은 선수의 팀 이름을 트랜잭션 밖에서 읽었다. 예외가 나나 (나지 않는다. 팀이 진짜 엔티티로 채워져 있다)'
+      - '옮긴 상황: 게시글 상세 API가 게시글 엔티티를 돌려주고, 응답 JSON을 만들 때 LAZY인 작성자의 이름을 읽다가 예외가 난다. 엔티티의 작성자를 EAGER로 바꾸는 것과, 서비스에서 작성자 이름까지 DTO에 담아 돌려주는 것 가운데 권하는 것은 (DTO. EAGER는 다른 조회에도 늘 함께 가져와 쿼리를 늘린다)'
+practice:
+  says:
+    - '`@ManyToOne`과 `@OneToOne`의 기본값은 EAGER다(JPA 명세 근거). 그래서 실무 엔티티는 코드 player처럼 LAZY를 직접 적는다. 적지 않은 `@ManyToOne`을 가진 엔티티를 조회하면 팀까지 조인하거나 따로 SELECT하는 것을 테스트로 보인다'
+    - '`getReferenceById`로 외래 키만 채우기: 선수를 저장할 때 팀 id만 알면 `teamRepository.getReferenceById(teamId)`로 프록시를 넣는다. 팀 SELECT 없이 INSERT만 나간다. 테스트로 센다'
+    - '흔한 실수: 코드 equalsBad처럼 엔티티의 `equals`에서 `getClass()`를 비교한다. 프록시와 진짜 엔티티는 클래스가 달라 같은 팀인데도 false가 된다. 고친 코드: `o instanceof Team t`로 비교하고 필드 대신 `getId()`를 부른다(프록시의 필드는 비어 있다). 테스트로 두 `equals`의 결과를 보인다. equals 규약은 J6'
+    - '프록시는 상속으로 만들기 때문에 엔티티 클래스와 메서드를 `final`로 두지 않는다. Hibernate 문서 근거'
+claims:
+  - claim: '`find`는 바로 SELECT하고 진짜 엔티티를 돌려준다'
+    how: '`SqlCapture`로 센다'
+    test: 'ProxyLazyLoadingTest.findSelectsImmediately'
+  - claim: '`getReference`는 SELECT 없이 프록시를 주고, `getId()`는 SELECT 없음, `getName()`에서 1번, 다시 읽어도 1번'
+    how: '같은 방법'
+    test: 'ProxyLazyLoadingTest.getReferenceDefersSelect'
+  - claim: 'LAZY 연관을 가진 엔티티를 조회하면 연관 필드는 초기화되지 않은 프록시이고, 읽을 때 SELECT 1번'
+    how: '같은 방법'
+    test: 'ProxyLazyLoadingTest.lazyAssociationIsProxy'
+  - claim: '먼저 `find`했으면 `getReference`도 진짜, 먼저 `getReference`했으면 `find`도 같은 프록시'
+    how: '같은 방법'
+    test: 'ProxyLazyLoadingTest.referenceAfterFindIsRealEntity, findAfterReferenceIsSameProxy'
+  - claim: '트랜잭션이 끝난 뒤 id는 읽히고 이름은 `LazyInitializationException`'
+    how: '`TransactionTemplate` 밖에서 읽는다. 예외 메시지를 실제 출력으로 남긴다'
+    test: 'ProxyLazyLoadingTest.lazyInitializationAfterTransaction'
+  - claim: 'fetch join과 `Hibernate.initialize`로 미리 가져오면 트랜잭션 밖에서도 읽힌다'
+    how: '같은 방법'
+    test: 'ProxyLazyLoadingTest.fetchJoinInitializes, explicitInitialize'
+  - claim: '없는 id의 프록시는 초기화할 때 `EntityNotFoundException`'
+    how: '같은 방법'
+    test: 'ProxyLazyLoadingTest.referenceToMissingRow'
+  - claim: '프록시의 클래스 이름은 엔티티 이름 뒤에 `$HibernateProxy`가 붙은 자식 클래스다'
+    how: '클래스 이름과 상위 클래스를 실제 출력으로 남긴다'
+  - claim: '스트림의 `map`에서 서로 다른 팀 프록시를 건드리면 팀 수만큼 SELECT가 나간다'
+    how: '선수 3명(팀 3개)을 조회해 스트림으로 팀 이름을 모으고 센다'
+  - claim: '서비스가 DTO로 바꿔 돌려주면 트랜잭션 밖에서 예외 없이 쓴다'
+    how: '`TransactionTemplate` 안에서 record를 만들어 돌려준다'
+  - claim: 'fetch를 적지 않은 `@ManyToOne`은 선수를 조회할 때 팀도 함께 가져온다'
+    how: '기본값 그대로인 엔티티를 더해 SQL을 본다'
+  - claim: '`getReference`로 외래 키를 채워 저장하면 팀 SELECT 없이 INSERT만 나간다'
+    how: '`SqlCapture`로 센다'
+  - claim: '`getClass()`로 비교하는 `equals`는 프록시와 진짜 엔티티를 다르다고 하고, `instanceof`와 `getId()`로 비교하면 같다고 한다'
+    how: '두 비교 방식을 테스트 안에서 직접 적용한다'
+sources:
+  - '`@ManyToOne`의 기본 fetch가 EAGER: Jakarta Persistence 3.1 API https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/manytoone'
+  - '프록시와 final 클래스, `getReference`: Hibernate 6.6 문서 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching'
+  - '`getReferenceById`, `@EntityGraph`: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html#jpa.entity-graph'

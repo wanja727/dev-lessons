@@ -1,0 +1,193 @@
+# 연관관계 매핑 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 연관관계 매핑
+unit: JPA
+roadmap: P3
+type: 동작 확인
+prerequisites:
+  - {slug: jpa-persistence-context, title: 영속성 컨텍스트}
+  - {slug: join, title: 조인}
+assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16. 외래 키와 조인(키와 제약 조건, 조인 레슨), 영속 상태와 flush, 변경 감지(영속성 컨텍스트 레슨).'
+example: '팀 `Team`과 멤버 `Member`. 멤버 테이블의 `team_id`가 팀을 가리킨다. 멤버를 팀에 넣고 빼면서 DB의 `team_id`에 무엇이 저장되는지 직접 읽는다.'
+intro:
+  - '팀 화면에서 멤버를 추가하는 코드를 `team.getMembers().add(member)`로 썼어요. 에러도 없고 화면에도 잘 나왔는데, 다음 날 DB를 보니 그 멤버의 `team_id`가 비어 있어요. 객체에서는 분명히 연결했는데 테이블에는 저장되지 않았어요.'
+  - '자바 스프링 개발자는 엔티티끼리의 관계를 `@ManyToOne`, `@OneToMany`로 적어요. 어느 쪽 필드가 외래 키를 바꾸는지 모르면 저장이 빠지고, 양쪽을 다 이어 두면 JSON으로 바꿀 때 끝없이 돌아요. 면접에서는 "연관관계의 주인과 mappedBy"를 꼭 물어요.'
+  - '이 레슨에서는 같은 저장 코드를 어느 쪽 필드를 바꾸느냐만 달리해 돌리고, DB의 `team_id`를 직접 읽어 무엇이 반영되는지 확인해요.'
+covers:
+  - topic: '객체는 참조로, 테이블은 외래 키로 관계를 잇는다. 외래 키 하나로 테이블은 양쪽으로 조인할 수 있지만, 객체의 참조는 한쪽 방향이다. 양쪽으로 가려면 필드가 둘 필요하다'
+    where: '질문 1'
+  - topic: '`@ManyToOne`과 `@JoinColumn`으로 외래 키 컬럼을 가진 쪽(다 쪽)을 매핑한다. 다대일 단방향이 가장 기본이다'
+    where: '질문 1'
+  - topic: '양방향 매핑: 팀 쪽에 `@OneToMany(mappedBy = "team")`을 더한다. 테이블은 바뀌지 않는다'
+    where: '질문 1'
+  - topic: '연관관계의 주인: 외래 키를 바꾸는 필드는 하나다. 외래 키를 가진 테이블 쪽(`Member.team`)이 주인이고, `mappedBy` 쪽은 읽기만 하는 거울이다'
+    where: '질문 2'
+  - topic: '주인이 아닌 쪽 컬렉션에만 넣으면 외래 키가 null로 저장되고, 거기서 빼도 외래 키는 그대로다'
+    where: '질문 2'
+  - topic: '주인만 바꾸면 DB는 맞지만, 같은 트랜잭션 안의 반대쪽 컬렉션은 그대로라 메모리의 객체가 DB와 어긋난다'
+    where: '질문 3'
+  - topic: '연관관계 편의 메서드로 양쪽을 함께 맞춘다'
+    where: '질문 3'
+  - topic: '일대다 단방향(`@OneToMany` + `@JoinColumn`)은 다른 테이블의 외래 키를 바꾸느라 INSERT 뒤에 UPDATE가 더 나간다'
+    where: '질문 4'
+  - topic: '설계는 다대일 단방향으로 시작하고, 반대쪽으로 가야 할 일이 생길 때 양방향을 더한다'
+    where: '질문 4'
+  - topic: '다대다(`@ManyToMany`)는 연결 테이블에 컬럼을 더할 수 없어서, 연결 엔티티와 다대일 둘로 푼다'
+    where: '질문 4의 더 알아보기'
+  - topic: '일대일(`@OneToOne`)은 외래 키를 어느 테이블에 둘지 고른다'
+    where: '질문 4의 더 알아보기'
+  - topic: '양방향 엔티티를 그대로 JSON으로 바꾸거나 `toString`에 넣으면 서로를 부르며 끝없이 돈다'
+    where: '실무에서는'
+  - topic: '`@ManyToOne`의 기본 로딩은 즉시 로딩이다. 지연 로딩과 프록시'
+    where: '다루지 않음: 프록시와 지연 로딩(P4)'
+  - topic: '부모를 저장하거나 지울 때 자식에게 함께 일어나는 일(cascade, orphanRemoval)'
+    where: '다루지 않음: cascade와 orphanRemoval(P7)'
+  - topic: '팀 목록에서 멤버를 꺼낼 때 쿼리가 늘어나는 문제'
+    where: '다루지 않음: JPA N+1 문제(P5)'
+codes:
+  predict: |-
+    @Transactional
+    public void join(Long teamId) {
+      Team team = teamRepository
+          .findById(teamId).orElseThrow();
+      Member kim = new Member("kim");
+      team.getMembers().add(kim);
+      memberRepository.save(kim);
+    }
+  member: |-
+    @Entity
+    public class Member {
+      @Id @GeneratedValue
+      private Long id;
+      private String name;
+
+      @ManyToOne(fetch = FetchType.LAZY)
+      @JoinColumn(name = "team_id")
+      private Team team;
+    }
+  team: |-
+    @Entity
+    public class Team {
+      @Id @GeneratedValue
+      private Long id;
+      private String name;
+
+      @OneToMany([[mappedBy = "team"]])
+      private List<Member> members =
+          new ArrayList<>();
+    }
+  convenience: |-
+    // Member
+    public void changeTeam(Team team) {
+      if (this.team != null) {
+        this.team.getMembers().remove(this);
+      }
+      this.team = team;
+      if (team != null) {
+        team.getMembers().add(this);
+      }
+    }
+  uni: |-
+    @Entity
+    public class Team {
+      @OneToMany
+      @JoinColumn(name = "team_id")
+      private List<Member> members =
+          new ArrayList<>();
+    }
+  json: |-
+    @GetMapping("/teams/{id}")
+    Team team(@PathVariable Long id) {
+      return teamService.find(id);
+    }
+predict:
+  text: '코드 predict는 새 멤버를 팀의 멤버 목록에 넣고 저장해요. `Member.team`은 `@ManyToOne`, `Team.members`는 `@OneToMany(mappedBy = "team")`이에요. 커밋한 뒤 멤버 테이블의 `team_id`에는 무엇이 들어 있을까요? 보기: 팀의 id, null, 저장이 실패한다.'
+  answer: 'null. 외래 키는 주인인 `Member.team`만 바꾼다. `mappedBy` 쪽 컬렉션에 넣은 것은 DB에 반영되지 않는다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 객체의 참조와 테이블의 외래 키는 무엇이 다른가요?
+    conclusion:
+      lead: '테이블은 외래 키 하나로 양쪽 어디서든 조인하지만, 객체의 참조는 한쪽으로만 가요.'
+      sub: '그래서 멤버에서 팀으로도, 팀에서 멤버로도 가려면 객체에는 필드가 둘 필요해요. JPA에서는 `@ManyToOne`과 `@OneToMany`로 적어요.'
+    says:
+      - '테이블 `member`에는 `team_id` 컬럼 하나가 있다. 이 컬럼으로 "멤버의 팀"도, "팀의 멤버들"도 조인으로 찾는다. 테이블에는 방향이 없다'
+      - '객체에서 `member.getTeam()`은 멤버가 팀을 참조할 때만 된다. 팀에서 멤버를 찾으려면 팀이 멤버 목록을 따로 가져야 한다. 참조는 한쪽 방향이다'
+      - '코드 member. 외래 키 컬럼은 멤버 테이블에 있으니 멤버 쪽에 `@ManyToOne`(멤버 여럿이 팀 하나)과 `@JoinColumn(name = "team_id")`을 둔다. 이것만 있는 것을 다대일 단방향이라고 한다. 만들어진 테이블에 `team_id` 외래 키가 생긴 것을 실제 출력으로 보인다'
+      - '코드 team. 팀에서도 멤버로 가고 싶으면 `@OneToMany(mappedBy = "team")`을 더한다. 이것을 양방향이라고 한다. 테이블은 하나도 바뀌지 않는다. 필드만 하나 는다'
+    asks:
+      - '본문의 예시: 코드 member와 team으로 테이블을 만들면 `team` 테이블에 멤버를 가리키는 컬럼이 생기나 (생기지 않는다. 외래 키는 `member.team_id` 하나다)'
+      - '옮긴 상황: 주문(`Order`)과 주문한 회원(`User`)이 있다. 회원 한 명이 주문 여러 개를 한다. `@ManyToOne`과 `@JoinColumn`은 어느 엔티티에 두나 (`Order`. 외래 키 `user_id`가 주문 테이블에 있다)'
+  - id: q2
+    title: 양방향일 때 DB에 반영되는 쪽은 어디인가요?
+    conclusion:
+      lead: '외래 키를 가진 테이블 쪽 필드, 곧 `Member.team`만 반영돼요. 이 필드를 연관관계의 주인이라고 해요.'
+      sub: '`mappedBy`를 적은 `Team.members`는 주인을 비추는 거울이라 읽기만 해요. 거기에 넣거나 빼도 외래 키는 바뀌지 않아요.'
+    says:
+      - '양방향이면 관계가 필드 둘에 있다. 둘이 다르면 JPA는 무엇을 저장할지 하나만 믿는다. `mappedBy = "team"`은 "이 관계는 `Member.team` 필드가 관리한다"는 뜻이다'
+      - '코드 predict를 돌린 테스트로 DB의 `team_id`를 읽어 null인 것을 보인다. 예측의 답을 밝힌다'
+      - '같은 코드에서 `kim.changeTeamOnly(team)`처럼 주인만 바꾸면 `team_id`에 팀 id가 저장된다'
+      - '주인이 아닌 쪽에서 빼는 것도 같다. `team.getMembers().clear()`를 해도 `team_id`는 그대로다. 관계를 끊으려면 `member`의 팀을 null로 바꾼다. 테스트로 보인다'
+    widget:
+      kind: toggle
+      note: '바꾸는 곳을 고른다: "team.members에만 추가", "member.team만 설정", "편의 메서드로 양쪽". 고를 때마다 메모리의 두 필드 상태(team.members 목록, member.team)와 커밋 뒤 DB의 `team_id`를 나란히 보여 준다. 질문 3에서도 이 위젯을 가리킨다'
+    asks:
+      - '본문의 예시: 팀에 속한 멤버를 `team.getMembers().remove(member)`로 뺐다. 커밋 뒤 그 멤버의 `team_id`는 (그대로 팀의 id다. 주인이 아닌 쪽은 반영되지 않는다)'
+      - '옮긴 상황: `Post`(게시글)와 `Comment`(댓글)가 양방향이고 `comment` 테이블에 `post_id`가 있다. `Post.comments`는 `mappedBy = "post"`다. 댓글을 저장할 때 `post_id`가 채워지게 하려면 어느 필드를 설정해야 하나 (`Comment.post`. 외래 키를 가진 쪽이 주인이다)'
+  - id: q3
+    title: 주인만 바꾸면 무엇이 어긋나나요?
+    conclusion:
+      lead: 'DB에는 맞게 저장되지만, 같은 트랜잭션 안에서 반대쪽 컬렉션은 그대로라 메모리의 객체가 DB와 달라요.'
+      sub: 'JPA는 거울 쪽 컬렉션을 대신 채워 주지 않아요. 그래서 편의 메서드 하나로 양쪽 필드를 함께 맞춰요.'
+    says:
+      - '주인 `member.team`만 설정하고 flush해도, 같은 트랜잭션 안에서 `team.getMembers()`는 비어 있다. 영속성 컨텍스트가 그 팀 객체를 담고 있어서 다시 조회해도 같은 객체가 나온다(P2의 1차 캐시). 테스트로 보인다'
+      - '이 상태에서 팀의 멤버 수로 화면을 만들거나 검사하면 틀린 값이 나온다. 새 트랜잭션에서 다시 읽으면 보인다'
+      - '코드 convenience. 멤버가 팀을 바꿀 때 예전 팀 목록에서 빼고, 새 팀을 설정하고, 새 팀 목록에 넣는다. 한 곳에서 양쪽을 바꾸므로 빠뜨리지 않는다. 테스트로 DB와 메모리가 모두 맞는 것을 보인다'
+      - '편의 메서드는 한쪽에만 둔다. 양쪽에 두면 서로를 부르다 끝나지 않거나 무엇을 써야 할지 헷갈린다'
+    asks:
+      - '본문의 예시: 한 트랜잭션에서 `member.changeTeamOnly(team)`(주인만 설정)을 하고 flush한 뒤 `team.getMembers().size()`를 읽었다. 값은 (0. 거울 쪽 컬렉션은 JPA가 채우지 않는다)'
+      - '옮긴 상황: 편의 메서드 `changeTeam`으로 멤버를 팀 A에서 팀 B로 옮겼다. 같은 트랜잭션에서 팀 A의 멤버 목록에 그 멤버가 남아 있나 (남지 않는다. 편의 메서드가 예전 팀 목록에서 뺀다)'
+  - id: q4
+    title: 양방향은 언제 쓰고, 일대다 단방향은 왜 피하나요?
+    conclusion:
+      lead: '다대일 단방향으로 시작하고, 팀에서 멤버로 가야 할 일이 생길 때 양방향을 더해요. 일대다 단방향은 쓰지 않아요.'
+      sub: '일대다 단방향은 팀이 멤버 테이블의 외래 키를 관리해서, 멤버를 INSERT한 뒤 외래 키를 채우는 UPDATE가 멤버 수만큼 더 나가요.'
+    says:
+      - '"팀에서만 멤버를 알면 되는데요?" 하고 코드 uni처럼 팀에만 `@OneToMany`와 `@JoinColumn`을 두면, 팀이 다른 테이블의 외래 키를 바꾼다. 멤버를 INSERT할 때는 팀을 모르니 외래 키를 비워 두고, 그 뒤에 UPDATE로 채운다. 멤버 둘을 저장할 때 INSERT 2번과 UPDATE 2번이 나간 것을 실제 출력으로 보인다'
+      - '같은 저장을 다대일 양방향으로 하면 UPDATE는 0번이다. 테스트로 보인다'
+      - '양방향은 필드가 하나 늘고 편의 메서드를 지켜야 하는 비용이 있다. 그래서 다대일 단방향만으로 시작한다. 팀의 멤버 목록이 자주 필요하면(JPQL로 조회해도 되지만 객체로 따라가고 싶으면) 그때 `mappedBy` 쪽을 더한다. 테이블은 바뀌지 않으니 나중에 더해도 된다'
+      - '더 알아보기: `@ManyToMany`는 연결 테이블을 숨겨서 거기에 가입일 같은 컬럼을 더할 수 없다. 연결 엔티티(`TeamMembership`)를 만들고 다대일 둘로 푼다. `@OneToOne`은 외래 키를 어느 테이블에 둘지 고르고, 그 쪽이 주인이다'
+    asks:
+      - '본문의 예시: 코드 uni 방식으로 팀 하나와 멤버 3명을 함께 저장했다. 멤버 테이블에 나가는 UPDATE는 몇 번인가 (3번. 외래 키를 INSERT 뒤에 따로 채운다)'
+      - '옮긴 상황: 주문(`Order`)과 주문 상품(`OrderItem`)을 설계한다. `order_item.order_id` 외래 키가 있고, 주문 화면에서 상품 목록을 자주 따라간다. 어떤 매핑을 고르나 (`OrderItem.order`에 `@ManyToOne`을 두고, `Order.items`에 `mappedBy`를 더한 양방향. 일대다 단방향은 UPDATE가 더 나간다)'
+practice:
+  says:
+    - '실제로 쓰는 엔티티의 모양: 코드 member와 team, 편의 메서드 convenience. `@ManyToOne`에는 `fetch = FetchType.LAZY`를 붙인다. 이유는 P4에서 다룬다'
+    - '흔한 실수: 코드 json처럼 양방향 엔티티를 컨트롤러에서 그대로 돌려준다. 잭슨이 팀의 멤버 목록을 쓰고, 멤버의 팀을 쓰고, 다시 그 팀의 멤버 목록을 쓰며 끝나지 않아 응답이 실패한다. `toString`에 서로를 넣어도 같은 일이 생긴다. 테스트로 `ObjectMapper`에 양방향 객체를 넣어 나는 예외를 실제 출력으로 보인다'
+    - '고친 코드: 응답 전용 record(DTO)를 만들어 필요한 필드만 담는다. 엔티티의 모양이 API 응답의 모양을 정하지 않게 된다. 같은 테스트에서 DTO는 잘 바뀌는 것을 보인다'
+claims:
+  - claim: '주인이 아닌 쪽(`team.members`)에만 넣으면 `team_id`는 null로 저장된다'
+    how: 'DB에서 `team_id`를 네이티브 쿼리로 읽는다'
+    test: 'AssociationOwnerTest.nonOwnerSideOnlyIsIgnored'
+  - claim: '주인만 설정하면 `team_id`는 저장되지만 같은 트랜잭션의 `team.members`는 비어 있다'
+    how: '같은 방법'
+    test: 'AssociationOwnerTest.ownerSideOnlySavesButMemoryIsStale'
+  - claim: '편의 메서드로 양쪽을 맞추면 DB와 메모리가 모두 맞다'
+    how: '같은 방법'
+    test: 'AssociationOwnerTest.convenienceMethodKeepsBothSides'
+  - claim: '주인이 아닌 쪽에서 빼도 `team_id`는 그대로이고, 주인을 null로 바꿔야 끊긴다'
+    how: '같은 방법'
+    test: 'AssociationOwnerTest.removingFromNonOwnerDoesNothing'
+  - claim: '일대다 단방향은 멤버 INSERT 뒤에 UPDATE가 멤버 수만큼 나간다'
+    how: '`SqlCapture`로 센다'
+    test: 'AssociationOwnerTest.unidirectionalOneToManyIssuesExtraUpdates'
+  - claim: '다대일 양방향은 같은 저장에 UPDATE가 없다'
+    how: '같은 방법'
+    test: 'AssociationOwnerTest.bidirectionalManyToOneNoExtraUpdates'
+  - claim: '`@ManyToOne` + `@JoinColumn`으로 `member` 테이블에 `team_id` 외래 키가 생기고 팀 테이블에는 멤버 컬럼이 없다'
+    how: '`information_schema`에서 컬럼과 외래 키를 읽는다'
+  - claim: '양방향 엔티티를 `ObjectMapper`로 바꾸면 실패하고, DTO는 바뀐다'
+    how: 'DB 없이 객체만 만들어 `writeValueAsString`의 예외를 본다'
+sources:
+  - '연관관계의 주인과 mappedBy: Jakarta Persistence 3.1 명세 2.9 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
+  - '일대다 단방향의 추가 UPDATE와 연관관계 매핑: Hibernate 6.6 문서 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#associations'

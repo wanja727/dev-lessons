@@ -1,0 +1,180 @@
+# OSIV (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: OSIV
+unit: JPA
+roadmap: P6
+type: 동작 확인
+prerequisites:
+  - {slug: proxy-lazy-loading, title: 프록시와 지연 로딩}
+  - {slug: transactional-proxy, title: '@Transactional 동작 원리'}
+  - {slug: connection-pool, title: DB 커넥션과 커넥션 풀}
+assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16, HikariCP. 영속성 컨텍스트가 닫히면 LAZY 프록시를 초기화할 수 없다는 것(프록시와 지연 로딩 레슨), `@Transactional`은 서비스 메서드를 감싼다는 것(@Transactional 동작 원리 레슨), 커넥션은 풀에서 빌려 쓰고 돌려준다는 것(커넥션 풀 레슨).'
+example: '선수 `OsivPlayer`가 팀을 LAZY로 가리킨다. 컨트롤러는 서비스에서 선수를 받아 팀 이름을 돌려준다. `spring.jpa.open-in-view`를 켜고 끄며 같은 요청을 보낸다.'
+intro:
+  - '스프링 부트로 만든 API를 처음 띄우면 로그에 `spring.jpa.open-in-view is enabled by default`라는 경고가 나와요. 그대로 두면 컨트롤러에서 지연 로딩이 잘 되는데, 트래픽이 몰리는 날 커넥션 풀이 바닥나 요청이 줄줄이 실패해요. 둘은 같은 설정 하나 때문이에요.'
+  - 'OSIV는 스프링 부트에서 기본으로 켜져 있어요. 개발자는 켜 둘지 끌지 정하고, 끄면 지연 로딩을 어디서 끝낼지 코드 구조로 정해야 해요. 면접에서는 "OSIV가 무엇이고 왜 끄라고 하나요"를 물어요.'
+  - '이 레슨에서는 같은 컨트롤러를 OSIV를 켠 앱과 끈 앱에서 불러, 지연 로딩이 되는지, 서비스가 끝난 뒤에도 커넥션을 쥐고 있는지, 컨트롤러에서 바꾼 값이 저장되는지 확인해요.'
+covers:
+  - topic: 'OSIV(Open Session In View)는 영속성 컨텍스트를 요청이 시작될 때 열어 응답이 끝날 때 닫는다. 스프링 부트에서는 `OpenEntityManagerInViewInterceptor`가 한다'
+    where: '질문 1'
+  - topic: 'OSIV를 켜도 트랜잭션의 범위는 그대로 서비스 메서드다. 열려 있는 것은 영속성 컨텍스트다'
+    where: '질문 1'
+  - topic: '스프링 부트는 `spring.jpa.open-in-view`의 기본값이 true이고, 직접 적지 않으면 시작할 때 경고 로그를 남긴다'
+    where: '질문 1, 실무에서는'
+  - topic: 'OSIV를 켜면 트랜잭션이 끝난 뒤에도 컨트롤러와 뷰에서 지연 로딩이 된다. 끄면 `LazyInitializationException`이 난다'
+    where: '질문 2'
+  - topic: 'OSIV를 켜면 영속성 컨텍스트가 DB 커넥션을 요청이 끝날 때까지 쥔다. 서비스가 끝난 뒤 외부 API를 부르거나 응답이 느리면 그동안 커넥션이 풀로 돌아가지 않는다'
+    where: '질문 3'
+  - topic: '요청이 몰리면 커넥션 풀이 바닥나고 다른 요청이 커넥션을 기다리다 실패한다'
+    where: '질문 3. 풀의 동작은 DB 커넥션과 커넥션 풀(D6)'
+  - topic: 'OSIV를 켜면 컨트롤러에서 바꾼 엔티티가 영속 상태로 남아, 같은 요청의 다른 쓰기 트랜잭션이 커밋될 때 함께 저장된다'
+    where: '질문 4'
+  - topic: 'OSIV를 끄면 지연 로딩은 서비스의 트랜잭션 안에서 끝낸다. 서비스가 DTO를 돌려주거나 fetch join으로 가져온다'
+    where: '질문 5'
+  - topic: '조회를 맡는 서비스(쿼리 서비스)를 따로 두어 화면에 맞는 조회를 모은다'
+    where: '질문 5의 더 알아보기'
+  - topic: '켜 둘 때와 끌 때를 고르는 기준: 관리자 화면처럼 트래픽이 적고 뷰 템플릿이 엔티티를 그리면 켜 두기도 한다. API 서버는 끈다'
+    where: '실무에서는'
+  - topic: '트랜잭션 전파와 다른 트랜잭션의 커밋'
+    where: '다루지 않음: 트랜잭션 전파와 롤백 규칙(S11)'
+  - topic: '외부 API 호출의 타임아웃'
+    where: '다루지 않음: 타임아웃과 재시도 (시스템 설계와 아키텍처 과정)'
+codes:
+  predict: |-
+    @GetMapping("/players/{id}/team-name")
+    String teamName(@PathVariable Long id) {
+      Player player =
+          service.findPlayer(id);
+      return player.getTeam().getName();
+    }
+  service: |-
+    @Transactional
+    public Player findPlayer(Long id) {
+      return players
+          .findById(id).orElseThrow();
+    }
+  slow: |-
+    @GetMapping("/players/{id}")
+    PlayerView show(@PathVariable Long id) {
+      Player p = service.findPlayer(id);
+      String photo =
+          photoApi.fetch(p.getName());
+      return new PlayerView(p, photo);
+    }
+  rename: |-
+    @PostMapping("/players/{id}/preview")
+    String preview(@PathVariable Long id,
+        @RequestParam String name) {
+      Player p = service.findPlayer(id);
+      p.rename(name); // 화면에만 보이려고
+      service.recordVisit();
+      return "ok";
+    }
+  yml: |-
+    spring:
+      jpa:
+        open-in-view: false
+  dto: |-
+    @Transactional(readOnly = true)
+    public PlayerView findView(Long id) {
+      Player p = players
+          .findById(id).orElseThrow();
+      return new PlayerView(p.getName(),
+          p.getTeam().getName());
+    }
+predict:
+  text: '코드 predict의 컨트롤러는 서비스(코드 service)에서 선수를 받아 LAZY인 팀의 이름을 돌려줘요. 컨트롤러에는 `@Transactional`이 없어요. 설정을 바꾸지 않은 스프링 부트 앱에서 이 요청은 어떻게 될까요? 보기: 팀 이름을 돌려준다, `LazyInitializationException`이 난다, 팀 이름 대신 null을 돌려준다.'
+  answer: '팀 이름을 돌려준다. 스프링 부트는 OSIV가 기본으로 켜져 있어 영속성 컨텍스트가 요청 끝까지 열려 있다. 질문 1과 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: OSIV는 무엇을 요청 끝까지 열어 두나요?
+    conclusion:
+      lead: '영속성 컨텍스트를 요청이 들어올 때 열고 응답이 끝날 때 닫아요.'
+      sub: '트랜잭션은 그대로 서비스 메서드 안에서만 열리고 닫혀요. 트랜잭션이 끝난 뒤에도 남아 있는 것은 영속성 컨텍스트와 그것이 쥔 커넥션이에요.'
+    says:
+      - 'OSIV를 끄면 영속성 컨텍스트는 트랜잭션과 함께 열리고 닫힌다(P2). 켜면 스프링 MVC의 인터셉터(`OpenEntityManagerInViewInterceptor`)가 요청 시작에 미리 열고, 서비스의 트랜잭션은 그것을 받아 쓴다. 트랜잭션이 커밋돼도 컨텍스트는 닫히지 않는다'
+      - '시간 축 그림으로 비교한다: 요청 시작, 서비스 트랜잭션 시작과 끝, 컨트롤러로 돌아옴, 응답 끝. 켰을 때와 껐을 때 컨텍스트가 열린 구간이 다르다'
+      - '스프링 부트는 `spring.jpa.open-in-view`를 적지 않으면 true로 두고 시작 로그에 경고를 남긴다. 이 저장소의 테스트 앱은 false로 적어 두었다'
+      - '이름의 "View"는 서버가 HTML을 그리던 시절, 뷰 템플릿에서 엔티티의 연관을 읽게 하려고 만들어졌다는 뜻이다'
+    widget:
+      kind: toggle
+      note: 'OSIV 켜짐과 꺼짐을 고른다. 요청의 시간 축(필터, 컨트롤러 진입, 서비스 트랜잭션, 컨트롤러로 복귀, 응답) 위에 영속성 컨텍스트와 커넥션이 열린 구간을 막대로 보인다. `gantt` 조각을 쓴다. 질문 2와 3에서 이 위젯을 가리킨다'
+    asks:
+      - '본문의 예시: OSIV를 켠 앱에서 서비스의 `@Transactional` 메서드가 끝났다. 이 순간 트랜잭션과 영속성 컨텍스트는 각각 어떤 상태인가 (트랜잭션은 커밋되어 끝났고 영속성 컨텍스트는 열려 있다)'
+      - '옮긴 상황: `application.yml`에 `open-in-view`를 적지 않은 스프링 부트 3 앱을 띄웠다. OSIV는 켜져 있나, 꺼져 있나 (켜져 있다. 기본값이 true이고 시작할 때 경고를 남긴다)'
+  - id: q2
+    title: OSIV를 켜면 컨트롤러에서 무엇이 되나요?
+    conclusion:
+      lead: '트랜잭션이 끝난 뒤에도 컨트롤러에서 지연 로딩이 돼요.'
+      sub: '프록시를 초기화할 영속성 컨텍스트가 아직 열려 있기 때문이에요. 끄면 같은 코드에서 `LazyInitializationException`이 나요.'
+    says:
+      - '코드 predict를 OSIV를 켠 앱에서 부르면 "레드"가 돌아온다. 끈 앱에서 부르면 `LazyInitializationException`이 난다. 테스트 둘의 결과를 실제 출력으로 나란히 보인다. 예측의 답을 밝힌다'
+      - '켠 앱에서 팀 SELECT는 컨트롤러에서 나간다. 트랜잭션 밖이므로 자동 커밋 모드로 실행된다'
+      - '그래서 OSIV를 켜면 엔티티를 컨트롤러와 응답 JSON까지 넘겨도 동작한다. 편하지만, 어디서 SQL이 나갈지 서비스 코드만 봐서는 모르게 된다'
+    asks:
+      - '본문의 예시: OSIV를 끈 앱에서 코드 predict를 부르면 어떻게 되나 (`LazyInitializationException`. 서비스가 끝날 때 영속성 컨텍스트도 닫혔다)'
+      - '옮긴 상황: OSIV를 켠 앱의 주문 상세 컨트롤러가 서비스에서 받은 주문 엔티티를 그대로 JSON으로 돌려준다. 주문의 회원은 LAZY다. 응답에 회원 정보가 들어가나 (들어간다. 잭슨이 회원을 읽을 때 열린 영속성 컨텍스트로 초기화한다)'
+  - id: q3
+    title: OSIV를 켜 두면 무엇을 잃나요?
+    conclusion:
+      lead: '영속성 컨텍스트가 요청이 끝날 때까지 DB 커넥션을 쥐고 있어서, 동시에 처리할 수 있는 요청 수가 줄어요.'
+      sub: '서비스가 끝난 뒤 외부 API를 부르거나 응답이 느리면 그동안 커넥션이 놀아요. 요청이 몰리면 풀이 바닥나 다른 요청이 커넥션을 기다리다 실패해요.'
+    says:
+      - '영속성 컨텍스트는 처음 DB를 쓸 때 커넥션을 빌리고 닫힐 때 돌려준다. OSIV를 켜면 닫히는 때가 응답 끝이다. 서비스가 끝난 직후 풀의 사용 중 커넥션 수를 읽은 테스트: 켜면 1, 끄면 0. 실제 출력으로 보인다'
+      - '코드 slow. 서비스가 끝난 뒤 사진 API를 2초 부르면, 켠 앱에서는 그 2초 동안 커넥션이 DB 일을 하지 않으면서 풀에서 빠져 있다'
+      - '계산으로 보인다: 풀 크기 10, 요청 하나가 서비스 50ms와 외부 호출 2초를 쓴다. 끄면 커넥션을 50ms씩만 쓰니 초당 200개까지 처리하고, 켜면 2초 넘게 쥐니 초당 5개 남짓이다. 나머지는 커넥션을 기다리다 시간 초과로 실패한다(D6)'
+    asks:
+      - '본문의 예시: OSIV를 끈 앱에서 서비스의 `@Transactional` 메서드가 끝난 직후, 그 요청이 쥔 커넥션 수는 (0. 트랜잭션과 함께 영속성 컨텍스트가 닫히며 돌려준다)'
+      - '옮긴 상황: 커넥션 풀 크기가 10이고 OSIV가 켜진 API가 있다. 요청마다 서비스가 끝난 뒤 결제사 API를 3초 동안 부른다. 같은 순간 요청 30개가 들어오면 무슨 일이 생기나 (10개만 커넥션을 쥐고 나머지 20개는 커넥션을 기다린다. 서비스는 금방 끝나도 응답이 끝날 때까지 커넥션이 돌아오지 않는다)'
+  - id: q4
+    title: OSIV를 켜면 컨트롤러에서 바꾼 엔티티는 어떻게 되나요?
+    conclusion:
+      lead: '영속 상태로 남아 있어서, 같은 요청에서 다른 쓰기 트랜잭션이 커밋될 때 함께 저장돼요.'
+      sub: '트랜잭션은 커밋할 때 영속성 컨텍스트 전체를 flush하기 때문이에요. 저장할 생각이 없던 변경이 DB에 들어가요.'
+    says:
+      - '코드 rename. 컨트롤러가 화면에만 보이려고 선수 이름을 바꾸고, 그다음 상관없는 쓰기 트랜잭션(`recordVisit`)을 부른다. OSIV를 켜면 그 커밋이 컨텍스트 전체를 flush해 바뀐 이름이 저장된다. 끄면 선수는 준영속이라 저장되지 않는다. 테스트 둘의 결과를 보인다'
+      - '변경 감지는 영속 상태 엔티티를 모두 본다(P2). OSIV는 영속 상태를 요청 끝까지 늘리므로, 변경 감지가 미치는 범위도 늘어난다'
+      - '트랜잭션 밖에서만 바꾸고 쓰기 트랜잭션을 부르지 않으면 저장되지 않는다. 그래서 같은 코드가 어떤 요청에서는 저장되고 어떤 요청에서는 안 되어 찾기 어렵다'
+    asks:
+      - '본문의 예시: OSIV를 켠 앱에서 코드 rename의 `service.recordVisit()` 줄을 지우면 바꾼 이름이 저장되나 (저장되지 않는다. 컨트롤러에는 트랜잭션이 없어 flush하는 곳이 없다)'
+      - '옮긴 상황: OSIV를 켠 앱에서 컨트롤러가 주문 엔티티의 금액을 할인 표시용으로 바꾼 뒤, 로그를 남기는 서비스(`@Transactional`, 로그 엔티티 저장)를 불렀다. 주문 금액은 어떻게 되나 (바꾼 금액이 저장된다. 로그 저장 트랜잭션의 커밋이 영속성 컨텍스트 전체를 flush한다)'
+  - id: q5
+    title: OSIV를 끄면 지연 로딩은 어디서 끝내나요?
+    conclusion:
+      lead: '서비스의 트랜잭션 안에서 끝내고, 밖으로는 필요한 값만 담은 DTO를 돌려줘요.'
+      sub: '목록처럼 연관을 여럿 읽는 조회는 fetch join으로 한 번에 가져와요. 컨트롤러는 엔티티를 만지지 않아요.'
+    says:
+      - '코드 dto. 서비스가 트랜잭션 안에서 팀 이름까지 읽어 record에 담는다. OSIV를 끈 앱에서 이 서비스를 부르는 컨트롤러는 예외 없이 동작한다. 테스트로 보인다'
+      - '연관을 여럿 읽으면 서비스 안에서도 쿼리가 늘어날 수 있다. 그때는 fetch join으로 함께 가져온다(P4, P5)'
+      - '엔티티를 컨트롤러 밖으로 내보내지 않으면 질문 4의 의도치 않은 저장도 생기지 않는다'
+      - '더 알아보기: 화면에 맞춘 조회가 많아지면, 조회만 맡는 서비스(`PlayerQueryService`)를 따로 두고 `readOnly` 트랜잭션에서 DTO를 만든다. 바꾸는 서비스와 나누면 각 서비스가 단순해진다'
+    asks:
+      - '본문의 예시: OSIV를 끈 앱에서 컨트롤러가 코드 dto의 `findView`를 불러 `PlayerView`를 돌려준다. 예외가 나나 (나지 않는다. 팀 이름은 트랜잭션 안에서 이미 읽었다)'
+      - '옮긴 상황: OSIV를 끄자 게시글 목록 API에서 `LazyInitializationException`이 난다. 목록의 게시글마다 작성자 이름이 필요하다. 서비스에서 어떻게 고치나 (게시글과 작성자를 fetch join으로 함께 조회하고, 트랜잭션 안에서 DTO 목록으로 바꿔 돌려준다)'
+practice:
+  says:
+    - 'API 서버는 코드 yml처럼 `open-in-view: false`를 적는다. 적으면 시작 경고도 사라진다. 기본값과 경고는 스프링 부트 문서와 `JpaBaseConfiguration`의 소스가 근거'
+    - '흔한 실수: OSIV를 끈 뒤 생긴 `LazyInitializationException`을 엔티티 연관을 EAGER로 바꿔 막는다. 모든 조회가 팀을 끌고 와 쿼리가 늘어난다(P5). 고친 코드는 질문 5의 DTO와 fetch join이다'
+    - '켜 둘 수 있는 경우: 관리자 화면처럼 사용자가 적고, 서버가 뷰 템플릿으로 엔티티를 그리는 앱. 그래도 컨트롤러에서 엔티티를 바꾸지 않는다'
+    - '켰는지 확인하는 법: 시작 로그의 경고, 또는 요청 중 풀의 사용 중 커넥션 수(HikariCP 지표)를 본다'
+claims:
+  - claim: 'OSIV를 켜면 컨트롤러에서 LAZY 연관을 읽을 수 있다'
+    how: '`@SpringBootTest(properties = "spring.jpa.open-in-view=true")`와 MockMvc'
+    test: 'OsivOnTest.lazyLoadingInControllerWorks'
+  - claim: 'OSIV를 끄면 같은 컨트롤러에서 `LazyInitializationException`'
+    how: '같은 방법, 기본 설정 false'
+    test: 'OsivOffTest.lazyLoadingInControllerFails'
+  - claim: '서비스가 끝난 직후 사용 중 커넥션은 켜면 1, 끄면 0'
+    how: 'HikariCP의 `getActiveConnections`'
+    test: 'OsivOnTest.connectionHeldUntilRequestEnds, OsivOffTest.connectionReleasedAfterService'
+  - claim: '켜면 컨트롤러에서 바꾼 이름이 상관없는 쓰기 트랜잭션의 커밋에 저장되고, 끄면 저장되지 않는다'
+    how: '같은 방법'
+    test: 'OsivOnTest.controllerChangeFlushedByLaterTransaction, OsivOffTest.controllerChangeNotFlushed'
+  - claim: '켜도 컨트롤러에서 바꾸기만 하고 쓰기 트랜잭션을 부르지 않으면 저장되지 않는다'
+    how: '쓰기 트랜잭션을 부르지 않는 컨트롤러 메서드를 더한다'
+  - claim: 'OSIV를 끈 앱에서 서비스가 DTO를 돌려주면 예외 없이 팀 이름을 돌려준다'
+    how: '`OsivService`에 DTO 메서드를 더하고 컨트롤러로 부른다'
+sources:
+  - '`spring.jpa.open-in-view`의 기본값과 경고: 스프링 부트 문서 https://docs.spring.io/spring-boot/appendix/application-properties/index.html'
+  - '`OpenEntityManagerInViewInterceptor`: 스프링 프레임워크 API https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/orm/jpa/support/OpenEntityManagerInViewInterceptor.html'

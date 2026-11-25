@@ -1,0 +1,206 @@
+# 영속성 컨텍스트 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 영속성 컨텍스트
+unit: JPA
+roadmap: P2
+type: 동작 확인
+prerequisites:
+  - {slug: jpa-basics, title: ORM과 JPA}
+assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16. 엔티티와 리포지토리(ORM과 JPA 레슨), `@Transactional`이 메서드를 트랜잭션으로 감싸고 끝나면 커밋한다는 것(트랜잭션 기초 레슨), 변수에 객체가 아니라 객체를 가리키는 참조가 들어 있다는 것(값과 참조 레슨).'
+example: '책 `Book`(제목)의 제목을 바꾸는 서비스 메서드. 같은 책을 두 번 조회하고, 새 책을 넣고, 제목을 바꾸면서 SQL이 언제 몇 번 나가는지 센다.'
+intro:
+  - '책 제목을 바꾸는 서비스 메서드에서 `save()`를 깜빡했는데 DB에는 바뀐 제목이 들어가 있어요. 반대로 컨트롤러에서 제목을 바꾸고 `save()`를 부르지 않았더니 아무 일도 없어요. 둘의 차이는 그 객체가 영속성 컨텍스트 안에 있었는지예요.'
+  - 'JPA로 수정 기능을 만드는 스프링 개발자는 거의 모두 변경 감지에 기대요. 언제 SQL이 나가는지, 어떤 객체의 변경이 저장되는지 모르면 저장돼야 할 값이 사라지거나 바뀌면 안 되는 값이 저장돼요. 면접에서 JPA 질문의 첫째가 "영속성 컨텍스트가 무엇인가요"예요.'
+  - '이 레슨에서는 트랜잭션 하나 안에서 조회, 저장, 수정을 하며 나간 SQL을 세어, 1차 캐시, 쓰기 지연, 변경 감지가 실제로 일어나는 순간을 확인해요.'
+covers:
+  - topic: '영속성 컨텍스트는 엔티티를 id로 담아 두는 작업 공간이다. `EntityManager`가 그것을 다룬다. 스프링에서는 트랜잭션 하나에 하나가 생기고 트랜잭션이 끝나면 닫힌다'
+    where: '질문 1'
+  - topic: '엔티티의 상태: 비영속(new만 함), 영속(컨텍스트가 관리), 준영속(컨텍스트가 닫혔거나 detach), 삭제(remove)'
+    where: '질문 1'
+  - topic: '1차 캐시: 같은 id를 두 번 `find`하면 SELECT는 1번이고 같은 객체를 돌려준다'
+    where: '질문 2'
+  - topic: '같은 트랜잭션 안에서 같은 id의 엔티티는 늘 같은 객체다(==가 참)'
+    where: '질문 2'
+  - topic: 'JPQL은 1차 캐시를 먼저 보지 않고 늘 SQL을 보낸다. 그래도 이미 컨텍스트에 있는 엔티티는 그 객체를 돌려준다'
+    where: '질문 2'
+  - topic: '1차 캐시는 트랜잭션 하나의 것이라 요청 사이에 데이터를 아끼는 캐시가 아니다'
+    where: '질문 2. 여러 요청이 함께 쓰는 캐시는 다루지 않음: 캐시 전략(A4)'
+  - topic: '쓰기 지연: `persist`한 엔티티의 INSERT를 바로 보내지 않고 모아 두었다가 flush 때 보낸다'
+    where: '질문 3'
+  - topic: 'flush가 일어나는 때: 트랜잭션 커밋 직전, JPQL 실행 직전, `em.flush()`. flush는 SQL을 보내는 것이지 커밋이 아니다'
+    where: '질문 3'
+  - topic: 'IDENTITY 전략은 id를 INSERT해야 알 수 있어서 `persist` 즉시 INSERT가 나간다'
+    where: '질문 3의 더 알아보기. 자세한 차이는 다루지 않음: 식별자 생성 전략(P9)'
+  - topic: '변경 감지: 조회할 때 찍어 둔 스냅샷과 flush 때의 값을 비교해 바뀐 엔티티의 UPDATE를 만든다. `save()`를 부르지 않아도 된다'
+    where: '질문 4'
+  - topic: '변경 감지가 되는 이유는 내가 바꾼 객체와 컨텍스트가 담은 객체가 같은 객체를 가리키기 때문이다'
+    where: '질문 4 (자바 과정 J2에서 넘겨받음)'
+  - topic: '값이 그대로면 UPDATE도 없다. 기본 UPDATE는 바뀐 컬럼만이 아니라 모든 컬럼을 쓴다'
+    where: '질문 4'
+  - topic: '준영속 엔티티는 바꿔도 반영되지 않는다. 트랜잭션 밖에서 바꾼 값이 그렇다'
+    where: '질문 5'
+  - topic: '`@Transactional(readOnly = true)`에서는 변경 감지를 하지 않는다'
+    where: '질문 5'
+  - topic: '준영속 엔티티를 다시 반영하는 `merge`와 그 위험(모든 필드를 덮어씀)'
+    where: '질문 5의 더 알아보기'
+  - topic: '`save()`는 새 엔티티면 `persist`, id가 있으면 `merge`를 부른다'
+    where: '실무에서는'
+  - topic: '한 번에 많은 행을 고치는 쿼리가 1차 캐시와 어긋나는 것'
+    where: '다루지 않음: 벌크 연산과 영속성 컨텍스트(P8)'
+  - topic: '영속성 컨텍스트를 요청 끝까지 여는 설정'
+    where: '다루지 않음: OSIV(P6)'
+  - topic: '`@Transactional`이 프록시로 트랜잭션을 여는 원리, 내부 호출'
+    where: '다루지 않음: @Transactional 동작 원리(S10)'
+codes:
+  predict: |-
+    @Transactional
+    public void rename(Long id) {
+      Book a = repository
+          .findById(id).orElseThrow();
+      Book b = repository
+          .findById(id).orElseThrow();
+      b.changeTitle("JPA 입문 2판");
+    }
+  writeBehind: |-
+    em.persist(new Book("새 책 1"));
+    em.persist(new Book("새 책 2"));
+    em.persist(new Book("새 책 3"));
+    // 여기까지 INSERT는 몇 번?
+    em.flush();
+  service: |-
+    @Service
+    public class BookService {
+      @Transactional
+      public void rename(Long id,
+          String title) {
+        Book book = repository
+            .findById(id).orElseThrow();
+        book.changeTitle(title);
+      }
+    }
+  mistake: |-
+    // 컨트롤러: 트랜잭션이 없다
+    @PatchMapping("/books/{id}")
+    void rename(@PathVariable Long id,
+        @RequestParam String title) {
+      Book book = bookService.find(id);
+      book.changeTitle(title);
+    }
+predict:
+  text: '코드 predict는 같은 id의 책을 두 번 조회하고, 두 번째로 받은 객체의 제목을 바꿔요. `save()`는 부르지 않아요. 이 메서드가 끝날 때까지 나간 SELECT와 UPDATE는 몇 번일까요? 보기: SELECT 2번과 UPDATE 0번, SELECT 2번과 UPDATE 1번, SELECT 1번과 UPDATE 0번, SELECT 1번과 UPDATE 1번.'
+  answer: 'SELECT 1번과 UPDATE 1번. 두 번째 조회는 1차 캐시에서 같은 객체를 돌려주고(질문 2), 커밋 때 변경 감지가 UPDATE를 만든다(질문 4).'
+questions:
+  - id: q1
+    title: 영속성 컨텍스트는 무엇이고 언제 생기나요?
+    conclusion:
+      lead: '엔티티를 id로 담아 두는 작업 공간이고, 스프링에서는 트랜잭션이 시작될 때 생겨서 끝날 때 닫혀요.'
+      sub: '이 공간에 담긴 엔티티를 영속 상태라고 해요. 공간이 닫히면 그 엔티티는 준영속이 되어, 더는 JPA가 지켜보지 않아요.'
+    says:
+      - '영속성 컨텍스트는 `EntityManager`가 가진 맵이라고 보면 된다. 키는 엔티티 타입과 id, 값은 엔티티 객체다. 리포지토리의 `findById`, `save`도 안에서 `EntityManager`를 부른다'
+      - '스프링에서는 `@Transactional`이 붙은 메서드가 시작될 때 컨텍스트가 생기고 끝날 때 닫힌다. 그래서 같은 트랜잭션 안의 리포지토리 호출들은 같은 컨텍스트를 함께 쓴다'
+      - '엔티티의 네 상태를 그림으로 둔다: 비영속(`new`만 함), 영속(`persist`나 조회로 컨텍스트에 들어감), 준영속(컨텍스트가 닫히거나 `detach`), 삭제(`remove`). 상태마다 JPA가 하는 일이 다르다는 것만 이 질문에서 말한다'
+      - '아래 질문 셋(1차 캐시, 쓰기 지연, 변경 감지)이 모두 영속 상태의 엔티티에만 일어난다'
+    asks:
+      - '본문의 예시: `@Transactional` 메서드 안에서 `findById`로 받은 `Book`은 네 상태 가운데 무엇인가 (영속. 컨텍스트가 관리한다)'
+      - '옮긴 상황: `Member m = new Member("kim");`만 하고 `save`를 부르지 않았다. 이 객체의 상태와, 이 객체의 값을 바꿨을 때 DB에 반영되는지는 (비영속이고 반영되지 않는다. 컨텍스트에 들어간 적이 없다)'
+  - id: q2
+    title: 같은 id를 두 번 조회하면 왜 SELECT가 한 번인가요?
+    conclusion:
+      lead: '첫 조회의 결과를 영속성 컨텍스트에 담아 두고, 두 번째는 DB에 가지 않고 거기서 꺼내기 때문이에요.'
+      sub: '이것을 1차 캐시라고 해요. 같은 객체를 돌려주니 같은 트랜잭션 안에서 같은 id의 엔티티는 `==`로 비교해도 같아요.'
+    says:
+      - '`find`는 먼저 1차 캐시를 본다. 있으면 그 객체를 돌려주고, 없으면 SELECT를 보내 결과를 담은 뒤 돌려준다. 같은 id로 두 번 `find`한 테스트의 SELECT 수(1)와 `a == b`(true)를 실제 출력으로 보인다'
+      - '예측의 첫 부분(SELECT 1번)을 밝힌다'
+      - 'JPQL은 다르다. `select b from Book b where b.id = :id`는 1차 캐시를 보지 않고 SQL을 보낸다. 조건에 맞는 행이 몇 개인지 DB에 물어야 알기 때문이다. 그래도 결과의 id가 이미 컨텍스트에 있으면 새 객체를 만들지 않고 있던 객체를 돌려준다. SELECT 2번과 같은 객체임을 테스트로 보인다'
+      - '`em.clear()`로 컨텍스트를 비우면 다시 SELECT한다'
+      - '1차 캐시는 트랜잭션 하나 동안만 있다. 요청 두 개가 같은 책을 조회하면 SELECT는 두 번이다. 요청 사이에 아끼는 캐시는 A4에서 다룬다'
+    widget:
+      kind: steps
+      note: '코드 predict를 한 줄씩 실행한다. 왼쪽에는 영속성 컨텍스트(1차 캐시와 스냅샷), 오른쪽에는 나간 SQL을 둔다. 첫 `findById`에서 SELECT가 나가고 캐시에 Book#1이 생긴다. 둘째 `findById`는 SQL 없이 같은 객체. `changeTitle`은 객체만 바뀌고 SQL 없음. 커밋에서 스냅샷과 비교해 UPDATE가 나간다. 질문 3과 4에서도 이 위젯을 가리킨다'
+    asks:
+      - '본문의 예시: 한 트랜잭션에서 `em.find(Book.class, 1L)`을 두 번 하고 사이에 `em.clear()`를 했다. SELECT는 몇 번인가 (2번. 비운 뒤에는 캐시에 없다)'
+      - '옮긴 상황: 한 트랜잭션에서 `memberRepository.findById(7L)`을 한 뒤 JPQL `select m from Member m where m.id = 7`을 실행했다. SELECT 수와 두 결과를 `==`로 비교한 값은 (SELECT 2번, true. JPQL은 늘 SQL을 보내지만 이미 있는 엔티티는 같은 객체를 돌려준다)'
+  - id: q3
+    title: persist한 엔티티의 INSERT는 언제 나가나요?
+    conclusion:
+      lead: '바로 나가지 않고 모아 두었다가 flush할 때 한꺼번에 나가요.'
+      sub: 'flush는 트랜잭션이 커밋되기 직전, JPQL을 실행하기 직전, `flush()`를 부를 때 일어나요. 이것을 쓰기 지연이라고 해요.'
+    says:
+      - '코드 writeBehind. `persist` 세 번 뒤 INSERT는 0번, `flush` 뒤 3번이다. 테스트의 수를 실제 출력으로 보인다'
+      - 'flush는 모아 둔 SQL을 DB에 보내는 일이다. 커밋이 아니다. flush한 뒤에 롤백하면 INSERT도 없던 일이 된다'
+      - 'JPQL을 실행하기 직전에도 flush한다. 아직 보내지 않은 INSERT가 있으면 JPQL이 그 행을 못 보기 때문이다. 나간 순서가 INSERT 다음 SELECT인 것을 테스트로 보인다'
+      - '모아서 보내면 같은 SQL을 묶어 보내는 JDBC 배치를 쓸 수 있다는 것을 한 줄로 적는다(설정은 P9)'
+      - '더 알아보기: `@GeneratedValue(strategy = IDENTITY)`는 DB가 INSERT할 때 id를 만든다. 영속 상태가 되려면 id가 있어야 하므로 `persist` 즉시 INSERT가 나간다. 테스트로 보인다. 자세한 것은 P9'
+    asks:
+      - '본문의 예시: SEQUENCE 전략인 `Book`을 `persist`하고, 이어서 `select b from Book b`를 실행했다. INSERT와 SELECT 가운데 먼저 나간 것은 (INSERT. JPQL 실행 전에 자동으로 flush한다)'
+      - '옮긴 상황: 트랜잭션 안에서 SEQUENCE 전략인 주문 3개를 `persist`하고 `em.flush()`를 부른 뒤 예외가 나서 롤백됐다. DB에 주문은 몇 개 남나 (0개. flush는 SQL을 보냈을 뿐 커밋이 아니다)'
+  - id: q4
+    title: save()를 부르지 않았는데 왜 UPDATE가 나가나요?
+    conclusion:
+      lead: 'JPA가 조회할 때 찍어 둔 스냅샷과 flush할 때의 값을 비교해서, 바뀐 엔티티의 UPDATE를 직접 만들기 때문이에요.'
+      sub: '내가 바꾼 객체가 영속성 컨텍스트가 담고 있는 바로 그 객체라서 변경이 보여요. 이것을 변경 감지라고 해요.'
+    says:
+      - '조회할 때 엔티티와 함께 그때의 값 복사본(스냅샷)을 담는다. flush 때 엔티티마다 지금 값과 스냅샷을 비교한다. 다르면 UPDATE를 만든다. 예측의 둘째 부분(UPDATE 1번)을 밝힌다'
+      - '`findById`가 돌려준 `book` 변수와 컨텍스트의 맵이 같은 객체를 가리킨다(값과 참조 레슨). 그래서 `book.changeTitle`은 컨텍스트가 담은 객체를 바꾼 것이고, flush 때 비교에서 보인다'
+      - '값을 바꾸지 않았으면 UPDATE도 없다. 테스트로 0번을 보인다'
+      - '나간 UPDATE를 실제 출력으로 보인다. 바꾼 것은 제목뿐이어도 기본 UPDATE는 모든 컬럼을 쓴다. 문장이 늘 같아서 다시 쓰기 쉽다. 바뀐 컬럼만 쓰려면 Hibernate의 `@DynamicUpdate`가 있다'
+    asks:
+      - '본문의 예시: `@Transactional` 메서드에서 책을 조회해 제목을 "A"로 바꾼 뒤 다시 원래 제목으로 되돌렸다. 커밋 때 UPDATE는 나가나 (나가지 않는다. flush 때의 값이 스냅샷과 같다)'
+      - '옮긴 상황: 회원 엔티티에 이름, 이메일, 등급 컬럼이 있다. 트랜잭션 안에서 등급만 바꿨다. 기본 설정에서 나가는 UPDATE의 SET 절에 들어가는 컬럼은 (이름, 이메일, 등급 셋 다. 기본 UPDATE는 모든 컬럼을 쓴다)'
+  - id: q5
+    title: 트랜잭션 밖에서 바꾼 값은 왜 저장되지 않나요?
+    conclusion:
+      lead: '트랜잭션이 끝나면 영속성 컨텍스트가 닫혀서, 그 엔티티를 지켜보는 쪽이 없기 때문이에요.'
+      sub: '컨텍스트 밖의 엔티티를 준영속이라고 해요. 준영속 엔티티는 바꿔도 비교할 스냅샷이 없고 flush도 없어요. `readOnly = true` 트랜잭션도 변경 감지를 하지 않아요.'
+    says:
+      - '서비스의 `@Transactional(readOnly = true) find`가 돌려준 엔티티를 밖에서 바꾸면 DB는 그대로다. 테스트로 보인다'
+      - '`em.detach(book)`도 같다. 같은 트랜잭션 안이라도 떼어 낸 엔티티의 변경은 반영되지 않는다'
+      - '`readOnly = true`면 스프링이 Hibernate에 읽기 전용이라고 알려 스냅샷을 찍지 않고 flush도 하지 않는다. 그래서 바꿔도 반영되지 않는다. 테스트로 보인다. 스냅샷이 없어 메모리를 덜 쓰는 것이 이 설정의 쓸모다'
+      - '반영하려면 트랜잭션 안에서 id로 다시 조회해 바꾼다. 질문 4의 방법이다'
+      - '더 알아보기: `merge`는 준영속 객체의 값을 영속 엔티티에 모든 필드째 복사한다. 화면에서 받은 객체에 빈 필드가 있으면 그 필드도 null로 덮어쓴다. 그래서 수정은 다시 조회해서 바꾸는 쪽을 쓴다'
+    asks:
+      - '본문의 예시: `@Transactional(readOnly = true)` 메서드 안에서 책 제목을 바꿨다. 메서드가 끝난 뒤 DB의 제목은 (그대로다. 읽기 전용이면 변경 감지를 하지 않는다)'
+      - '옮긴 상황: 스케줄러가 트랜잭션 없이 `memberService.findAll()`로 받은 회원들의 등급을 바꾼 뒤 끝났다. `findAll`은 `@Transactional(readOnly = true)`다. 등급은 저장되나 (저장되지 않는다. 받은 회원들은 준영속이다)'
+practice:
+  says:
+    - '수정 서비스의 모양은 코드 service다. 트랜잭션 안에서 조회하고 바꾸면 끝이다. `save()`를 다시 부를 필요가 없다. 불러도 이미 영속 상태라 아무 일도 하지 않는다'
+    - '`save()`는 id가 없는 새 엔티티면 `persist`를, id가 있으면 `merge`를 부른다(Spring Data JPA 문서 근거). 그래서 화면에서 받은 객체를 `save()`하면 merge의 덮어쓰기가 일어난다'
+    - '흔한 실수: 코드 mistake처럼 트랜잭션이 없는 컨트롤러에서 조회한 엔티티를 바꾼다. 아무것도 저장되지 않고 예외도 없다. 고친 코드: 바꾸는 일을 서비스의 `@Transactional` 메서드로 옮긴다(코드 service). 테스트(트랜잭션이 끝난 뒤 바꾼 값)로 확인한다'
+    - '조회만 하는 서비스 메서드에는 `readOnly = true`를 붙인다. 스냅샷을 찍지 않는다'
+claims:
+  - claim: '같은 id로 두 번 `find`하면 SELECT는 1번이고 같은 객체다'
+    how: '`@DataJpaTest`에서 `SqlCapture`로 센다'
+    test: 'PersistenceContextTest.findTwice'
+  - claim: 'JPQL은 늘 SQL을 보내지만 이미 있는 엔티티는 같은 객체를 돌려준다'
+    how: '같은 방법'
+    test: 'PersistenceContextTest.jpqlAlwaysQueries'
+  - claim: '`clear()` 뒤에 `find`하면 다시 SELECT한다'
+    how: '같은 방법'
+    test: 'PersistenceContextTest.clearThenFind'
+  - claim: 'SEQUENCE 전략에서 `persist` 세 번 뒤 INSERT 0번, `flush` 뒤 3번'
+    how: '같은 방법'
+    test: 'PersistenceContextTest.writeBehind'
+  - claim: 'IDENTITY 전략은 `persist` 즉시 INSERT'
+    how: '같은 방법'
+    test: 'PersistenceContextTest.identityInsertsImmediately'
+  - claim: 'JPQL 전에 자동 flush해서 INSERT가 SELECT보다 먼저 나간다'
+    how: '나간 순서를 본다'
+    test: 'PersistenceContextTest.autoFlushBeforeJpql'
+  - claim: '값을 바꾸면 `save()` 없이 UPDATE 1번, 바꾸지 않으면 0번'
+    how: '같은 방법'
+    test: 'PersistenceContextTest.dirtyChecking, noChangeNoUpdate'
+  - claim: '기본 UPDATE는 바꾸지 않은 컬럼도 SET에 넣는다'
+    how: '나간 UPDATE 문을 실제 출력으로 남긴다. 컬럼이 둘 이상인 엔티티가 필요하다'
+  - claim: 'flush한 뒤 롤백하면 INSERT한 행이 남지 않는다'
+    how: '`TransactionTemplate`에서 flush 뒤 `setRollbackOnly`, 밖에서 행 수를 센다'
+  - claim: '준영속(detach, 트랜잭션이 끝난 뒤) 엔티티의 변경은 반영되지 않는다'
+    how: '같은 방법과 `@SpringBootTest`'
+    test: 'PersistenceContextTest.detachedChangeIgnored, PersistenceContextScopeTest.changeAfterTransactionIgnored'
+  - claim: '`readOnly = true` 트랜잭션에서는 바꿔도 반영되지 않는다'
+    how: '`@SpringBootTest`에서 서비스를 부른다'
+    test: 'PersistenceContextScopeTest.readOnlySkipsDirtyChecking'
+sources:
+  - '영속성 컨텍스트와 엔티티 상태, flush 시점: Jakarta Persistence 3.1 명세 3장 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
+  - '`save()`가 persist와 merge를 고르는 기준: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/entity-persistence.html'
+  - '`@DynamicUpdate`: Hibernate 6.6 문서 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html'
