@@ -1,30 +1,31 @@
-# 필터와 인터셉터 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 필터와 인터셉터
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/filter-interceptor.yaml에 있다.
 title: 필터와 인터셉터
+description: 필터와 인터셉터가 실행되는 위치, 등록하는 법과 여러 개일 때의 순서, 공통 기능을 어디에 둘지, 컨트롤러에서 예외가 났을 때 불리는 것. 네 가지 질문에 스스로 답할 수 있게 한 요청의 실행 순서를 출력으로 찍어 보는 대화형 레슨.
 unit: 스프링
+minutes: 18
 roadmap: S7
 type: 동작 확인
 prerequisites:
   - {slug: spring-mvc-flow, title: 스프링 MVC 요청 흐름}
 assume: '자바 21, 스프링 부트 3.5. 톰캣이 요청을 `DispatcherServlet`에 넘기고, `DispatcherServlet`이 핸들러 매핑으로 메서드를 찾아 부른다는 것(스프링 MVC 요청 흐름 레슨). 어노테이션을 실행 중에 읽을 수 있다는 것(리플렉션과 어노테이션 레슨).'
-example: '주문 API에 두 가지 공통 기능을 붙인다. 모든 요청의 처리 시간을 남기는 기록과, `@LoginRequired`가 붙은 메서드에만 로그인을 확인하는 검사. 둘을 필터와 인터셉터 가운데 어디에 둘지 정한다.'
+example: '주문 API에 두 가지 공통 기능을 붙인다. 모든 요청의 앞뒤를 남기는 기록과, `@LoginRequired`가 붙은 메서드에만 로그인을 확인하는 검사. 둘을 필터와 인터셉터 가운데 어디에 둘지 정한다.'
 intro:
   - '모든 API의 응답 시간을 남기려고 컨트롤러마다 시작 시각을 재는 코드를 복사했어요. 컨트롤러가 서른 개가 되자 빠진 곳이 생겨요. 로그인 확인도 메서드마다 첫 줄에 넣었다가 하나를 빠뜨려 아무나 주문 내역을 보게 됐어요.'
   - '여러 요청에 똑같이 할 일은 컨트롤러 밖에 한 번만 둬요. 스프링 웹 앱에는 그런 자리가 둘 있어요. 톰캣이 `DispatcherServlet`을 부르기 전후의 필터, `DispatcherServlet`이 컨트롤러를 부르기 전후의 인터셉터예요. 둘은 실행되는 위치가 달라서 볼 수 있는 것과 걸리는 요청이 달라요.'
-  - '이 레슨에서는 필터 둘과 인터셉터 둘을 등록하고 한 요청에서 실행 순서를 출력으로 봐요. 없는 경로와 예외가 난 요청에서 무엇이 불리고 무엇이 빠지는지도 확인해요.'
+  - '이 레슨에서는 필터와 인터셉터를 등록하고 한 요청에서 실행 순서를 출력으로 봐요. 없는 경로와 예외가 난 요청에서 무엇이 불리고 무엇이 빠지는지도 확인해요.'
 covers:
   - topic: '필터는 서블릿 규약의 기능이라 톰캣이 `DispatcherServlet`보다 먼저 부른다. 인터셉터는 스프링 MVC의 기능이라 `DispatcherServlet` 안에서 컨트롤러 전후에 불린다'
     where: '질문 1'
   - topic: '한 요청의 순서: 필터 앞 → 인터셉터 `preHandle` → 컨트롤러 → `postHandle` → `afterCompletion` → 필터 뒤'
     where: '질문 1'
   - topic: '필터는 `chain.doFilter`를 부르지 않으면 요청을 멈출 수 있다. 인터셉터는 `preHandle`이 `false`를 돌려주면 멈춘다'
-    where: '질문 1'
+    where: '질문 1과 질문 3'
   - topic: '필터를 등록하는 법: `Filter`를 빈으로 두거나 `FilterRegistrationBean`으로 경로와 순서를 정한다. 스프링 부트는 `Filter` 빈을 톰캣에 등록해 준다'
     where: '질문 2'
   - topic: '인터셉터를 등록하는 법: `WebMvcConfigurer.addInterceptors`에 `addPathPatterns`, `excludePathPatterns`와 함께 등록한다. 인터셉터는 빈으로 두기만 해서는 동작하지 않는다'
     where: '질문 2'
-  - topic: '여러 개일 때의 순서: 필터는 `@Order`나 등록 순서, 인터셉터는 등록한 순서. 뒤쪽 처리(`postHandle`, `afterCompletion`)는 반대 순서'
+  - topic: '여러 개일 때의 순서: 필터는 `setOrder`나 `@Order`, 인터셉터는 등록한 순서. 뒤쪽 처리(`postHandle`, `afterCompletion`)는 반대 순서'
     where: '질문 2'
   - topic: '인터셉터는 부를 메서드(`HandlerMethod`)를 알아서 메서드의 어노테이션을 읽을 수 있다. 필터는 모른다'
     where: '질문 3'
@@ -42,10 +43,16 @@ covers:
     where: '다루지 않음: 인증과 인가(S12)'
   - topic: 'AOP로 공통 기능을 넣는 것과의 차이'
     where: '다루지 않음: AOP(S9). 실무에서는에 웹 요청이 아닌 메서드 호출에 걸 때는 AOP라고 한 줄 적는다'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/filterinterceptor/FilterInterceptorTest.java
+  servletSpec: https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0
+  interceptor: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet/handlermapping-interceptor.html
+  interceptorConfig: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-config/interceptors.html
+  bootFilters: https://docs.spring.io/spring-boot/reference/web/servlet.html#web.servlet.embedded-container.servlets-filters-listeners
 codes:
   predict: |-
     @Component
-    class TimingFilter implements Filter {
+    class LogFilter implements Filter {
       public void doFilter(
           ServletRequest req,
           ServletResponse res,
@@ -56,7 +63,7 @@ codes:
       }
     }
 
-    class LoginInterceptor
+    class LogInterceptor
         implements HandlerInterceptor {
       public boolean preHandle(...) {
         log("preHandle");
@@ -64,32 +71,57 @@ codes:
       }
     }
     // GET /no-such-path
+  filter: |-
+    public void doFilter(
+        ServletRequest req,
+        ServletResponse res,
+        FilterChain chain) ... {
+      log("필터 앞");
+      [[chain.doFilter(req, res);]]
+      log("필터 뒤");
+    }
+  interceptor: |-
+    class LogInterceptor
+        implements HandlerInterceptor {
+      public boolean [[preHandle]](...) {
+        log("preHandle");
+        return true;
+      }
+      public void [[postHandle]](...) {
+        log("postHandle");
+      }
+      public void [[afterCompletion]](
+          ..., Exception ex) {
+        log("afterCompletion");
+      }
+    }
   register: |-
     @Configuration
-    class WebConfig implements WebMvcConfigurer {
+    class WebConfig
+        implements WebMvcConfigurer {
       @Override
-      public void addInterceptors(
+      public void [[addInterceptors]](
           InterceptorRegistry r) {
         r.addInterceptor(new LoginInterceptor())
             .addPathPatterns("/orders/**")
-            .excludePathPatterns("/orders/public");
+            .excludePathPatterns(
+                "/orders/public");
       }
     }
   filterBean: |-
     @Bean
-    FilterRegistrationBean<TimingFilter>
-        timing() {
+    FilterRegistrationBean<LogFilter> log() {
       var b = new FilterRegistrationBean<>(
-          new TimingFilter());
+          new LogFilter());
       b.addUrlPatterns("/*");
-      b.setOrder(1);
+      [[b.setOrder(1);]]
       return b;
     }
   annotation: |-
     public boolean preHandle(
         HttpServletRequest req,
         HttpServletResponse res,
-        Object handler) {
+        Object [[handler]]) {
       if (handler instanceof HandlerMethod m
           && m.hasMethodAnnotation(
               LoginRequired.class)
@@ -99,9 +131,41 @@ codes:
       }
       return true;
     }
+  timing: |-
+    @Component
+    class TimingFilter
+        extends [[OncePerRequestFilter]] {
+      @Override
+      protected void doFilterInternal(
+          HttpServletRequest req,
+          HttpServletResponse res,
+          FilterChain chain) ... {
+        long start = System.nanoTime();
+        try {
+          chain.doFilter(req, res);
+        } [[finally]] {
+          log.info("{} {} {} {}ms",
+              req.getMethod(),
+              req.getRequestURI(),
+              res.getStatus(),
+              (System.nanoTime() - start)
+                  / 1_000_000);
+        }
+      }
+    }
 predict:
-  text: '코드 predict의 필터와 인터셉터를 등록하고, 어떤 컨트롤러에도 없는 경로 `GET /no-such-path`를 보내요. 기록에 무엇이 남을까요? 보기: 아무것도 남지 않는다, 필터 앞과 필터 뒤만, preHandle만, 필터 앞, preHandle, 필터 뒤 모두.'
-  answer: '필터 앞과 필터 뒤만. 필터는 `DispatcherServlet`보다 앞이라 모든 요청에 걸리고, 인터셉터는 부를 컨트롤러가 정해진 요청에만 걸린다. 질문 3에서 밝힌다.'
+  title: 없는 경로에는 무엇이 기록될까요?
+  text: '코드 predict의 필터와 인터셉터(`/orders/**`에 등록)를 두고, 어떤 컨트롤러에도 없는 경로 `GET /no-such-path`를 보내요. 기록에 무엇이 남을까요? 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: a, label: 아무것도 남지 않는다}
+    - {value: b, label: 필터 앞과 필터 뒤만}
+    - {value: c, label: preHandle만}
+    - {value: d, label: '필터 앞, preHandle, 필터 뒤 모두'}
+  answer: b
+  storageKey: fi-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 필터와 인터셉터는 어디에서 실행되나요?
@@ -111,15 +175,66 @@ questions:
     says:
       - '정상 요청 하나에서 남은 기록을 실제 출력으로 보인다. 필터 앞, preHandle, 컨트롤러, postHandle, afterCompletion, 필터 뒤'
       - '필터는 서블릿 규약(`jakarta.servlet.Filter`)이다. 톰캣이 서블릿을 부르기 전에 필터 줄(`FilterChain`)을 차례로 지나게 한다. `chain.doFilter`를 부르는 곳이 다음 필터, 마지막에는 `DispatcherServlet`으로 넘어가는 지점이다. 그 앞이 "필터 앞", 그 뒤가 "필터 뒤"다'
-      - '인터셉터는 스프링 MVC의 `HandlerInterceptor`다. `DispatcherServlet`이 핸들러 매핑으로 메서드를 찾은 뒤, 부르기 전에 `preHandle`, 부른 뒤 뷰나 본문을 쓰기 전에 `postHandle`, 응답을 다 쓴 뒤 `afterCompletion`을 부른다'
-      - '요청을 멈추는 법: 필터는 `chain.doFilter`를 부르지 않고 응답을 쓰면 된다. 인터셉터는 `preHandle`이 `false`를 돌려준다. 둘 다 컨트롤러가 불리지 않는 것을 보인다'
+      - '인터셉터는 스프링 MVC의 `HandlerInterceptor`다. `DispatcherServlet`이 핸들러 매핑으로 메서드를 찾은 뒤, 부르기 전에 `preHandle`, 부른 뒤 `postHandle`, 응답을 다 쓴 뒤 `afterCompletion`을 부른다'
       - '필터, `DispatcherServlet`, 인터셉터, 컨트롤러는 모두 같은 요청 스레드에서 돈다(S1)'
     widget:
       kind: steps
-      note: '톰캣, 필터, `DispatcherServlet`, 인터셉터, 컨트롤러를 상자로 그리고 정상 요청이 안으로 들어갔다 나오는 길을 한 단계씩 밝힌다. 단계마다 남는 기록 한 줄을 로그에 더한다. 시나리오 선택으로 "없는 경로"와 "preHandle이 false"를 고르면 멈추는 곳이 바뀐다'
+      note: '톰캣, 필터, `DispatcherServlet`, 인터셉터, 컨트롤러를 상자로 그리고 정상 요청이 안으로 들어갔다 나오는 길을 한 단계씩 밝힌다. 단계마다 남는 기록 한 줄을 로그에 더한다'
     asks:
       - '본문의 예시: 정상 요청에서 `preHandle`과 "필터 앞" 가운데 무엇이 먼저 기록되나 ("필터 앞")'
-      - '옮긴 상황: 인터셉터의 `preHandle`이 `false`를 돌려주면 컨트롤러, `postHandle`, 필터 뒤 가운데 무엇이 실행되나 (필터 뒤만. 컨트롤러와 `postHandle`은 건너뛴다)'
+      - '옮긴 상황: 요청 처리 시간을 필터의 `chain.doFilter` 앞뒤에서 재면, 그 시간에 인터셉터의 `afterCompletion`이 걸린 시간도 들어가나 (들어간다. 인터셉터는 필터 안쪽에서 돈다)'
+    body:
+      - p: '[스프링 MVC 요청 흐름](lesson:spring-mvc-flow) 레슨에서 요청이 톰캣, `DispatcherServlet`, 컨트롤러 순서로 간다고 했어요. 공통 기능을 끼울 자리는 그 길에 두 군데 있어요. 한 단계씩 따라가 보세요.'
+      - widget:
+          kind: steps
+          layout: [log, buttons, verdict]
+          initial: {}
+          scenarios:
+            default:
+              - log: '톰캣: 요청을 받아 필터 줄에 넘김'
+              - log: '필터 앞 (chain.doFilter 전)'
+              - log: 'DispatcherServlet: 핸들러 매핑으로 메서드를 찾음'
+              - log: '인터셉터 preHandle (컨트롤러 전)'
+              - log: '컨트롤러 실행'
+              - log: '인터셉터 postHandle (컨트롤러 뒤)'
+              - log: '인터셉터 afterCompletion (응답을 다 쓴 뒤)'
+              - log: '필터 뒤 (chain.doFilter가 돌아온 뒤)'
+                verdict: '필터가 바깥, 인터셉터가 안쪽이에요. 컨트롤러는 가장 안쪽이에요.'
+      - p: '필터 하나와 인터셉터 하나를 등록하고 요청을 보낸 실제 기록이에요.'
+      - ci:
+          key: normal
+          label: 실제 기록 보기
+          source: FilterInterceptorTest.normalOrder
+      - h3: 필터는 서블릿의 기능이에요
+      - code: filter
+        notes:
+          - mark: chain.doFilter(req, res);
+            as: code
+            text: '다음 필터를 불러요. 마지막 필터라면 여기서 `DispatcherServlet`이 불려요. 이 줄의 앞과 뒤가 필터가 끼어드는 자리예요.'
+      - p: '필터는 자바 웹의 표준(서블릿 규약)이 정한 것이라 **톰캣**이 불러요. 요청이 `DispatcherServlet`에 닿기 전에 필터 줄을 차례로 지나요([근거](link:servletSpec)). `chain.doFilter`를 부르지 않고 응답을 쓰면 요청이 거기서 멈춰요.'
+      - h3: 인터셉터는 스프링 MVC의 기능이에요
+      - code: interceptor
+        notes:
+          - mark: preHandle
+            as: code
+            text: '컨트롤러를 부르기 전. `false`를 돌려주면 여기서 멈춰요.'
+          - mark: postHandle
+            as: code
+            text: '컨트롤러가 정상으로 끝난 뒤.'
+          - mark: afterCompletion
+            as: code
+            text: '응답을 다 쓴 뒤. 예외가 났으면 그 예외를 받아요.'
+      - p: '인터셉터는 **`DispatcherServlet`**이 불러요. 핸들러 매핑으로 부를 메서드를 찾은 다음, 그 메서드를 부르기 전후예요([근거](link:interceptor)). 그래서 필터 안쪽에 있어요. 모두 같은 요청 스레드에서 돌아요([서블릿과 톰캣](lesson:servlet-tomcat)).'
+      - quiz:
+          q: '처리 시간을 필터의 `chain.doFilter` 앞뒤에서 재요. 그 시간에 인터셉터의 `afterCompletion`이 걸린 시간도 들어갈까요?'
+          options:
+            - 들어간다
+            - 들어가지 않는다
+            - 인터셉터가 있으면 필터가 불리지 않는다
+          answer: 1
+          explain: '인터셉터는 `DispatcherServlet` 안에서, 즉 필터의 `chain.doFilter` 안쪽에서 돌아요. 그래서 필터가 재는 시간에 모두 들어가요.'
+      - next: '필터와 인터셉터는 어떻게 등록하고, 여러 개면 어떤 순서로 불릴까요?'
+    recall: '필터는 서블릿 규약의 기능이라 톰캣이 DispatcherServlet을 부르기 전후(chain.doFilter의 앞뒤)에 부르고, 인터셉터는 스프링 MVC의 기능이라 DispatcherServlet이 메서드를 찾은 뒤 컨트롤러 전후에 불러요. 한 요청에서 필터 앞, preHandle, 컨트롤러, postHandle, afterCompletion, 필터 뒤 순서예요. 모두 같은 요청 스레드에서 돌아요.'
   - id: q2
     title: 필터와 인터셉터는 어떻게 등록하고, 여러 개면 순서는 어떻게 되나요?
     conclusion:
@@ -129,11 +244,48 @@ questions:
       - '필터: `@Component`를 붙인 `Filter`는 스프링 부트가 모든 경로(`/*`)에 등록한다. 경로나 순서를 정하려면 코드 filterBean의 `FilterRegistrationBean`을 쓴다'
       - '인터셉터: 코드 register처럼 `WebMvcConfigurer`를 구현한 설정 클래스에서 `addInterceptors`로 등록하고 `addPathPatterns`, `excludePathPatterns`로 걸 경로를 정한다. 인터셉터 클래스에 `@Component`만 붙이고 등록하지 않으면 불리지 않는다. 테스트로 보인다'
       - '필터 A(순서 1)와 B(순서 2), 인터셉터 X와 Y(이 순서로 등록)를 두고 요청 하나의 기록을 보인다: A 앞, B 앞, X pre, Y pre, 컨트롤러, Y post, X post, Y after, X after, B 뒤, A 뒤. 실제 출력'
-      - '뒤쪽이 반대인 이유: 필터는 `chain.doFilter` 안에 다음 필터가 들어 있는 겹 구조다. 인터셉터도 같은 규칙을 따른다. 상자 안에 상자가 든 모양으로 그린다'
+      - '뒤쪽이 반대인 이유: 필터는 `chain.doFilter` 안에 다음 필터가 들어 있는 겹 구조다. 인터셉터도 같은 규칙을 따른다'
       - '`excludePathPatterns("/orders/public")`이면 그 경로에는 인터셉터가 불리지 않는다. 경로 패턴의 `**`는 아래 모든 경로다'
     asks:
       - '본문의 예시: 인터셉터 X, Y를 이 순서로 등록했다. `afterCompletion`은 어느 것이 먼저 불리나 (Y)'
       - '옮긴 상황: `AuthInterceptor`에 `@Component`를 붙였지만 `addInterceptors`에 등록하지 않았다. `/orders`에 요청하면 `preHandle`이 불리나 (불리지 않는다)'
+    body:
+      - h3: 필터 등록
+      - p: '`Filter`를 구현한 클래스에 `@Component`를 붙이면 스프링 부트가 톰캣에 모든 경로(`/*`)로 등록해 줘요. 걸 경로나 순서를 정하려면 `FilterRegistrationBean`으로 등록해요([근거](link:bootFilters)).'
+      - code: filterBean
+        notes:
+          - mark: b.setOrder(1);
+            as: code
+            text: '작은 수가 바깥(먼저)이에요.'
+      - h3: 인터셉터 등록
+      - code: register
+        notes:
+          - mark: addInterceptors
+            as: code
+            text: '여기에 넣어야 `DispatcherServlet`이 이 인터셉터를 불러요. 걸 경로와 뺄 경로도 여기서 정해요.'
+      - p: '인터셉터는 **반드시 `addInterceptors`에 등록**해야 해요. 인터셉터 클래스에 `@Component`만 붙이고 등록하지 않으면 어떻게 될까요?'
+      - ci:
+          key: forgotten
+          label: 실제 결과 보기
+          source: FilterInterceptorTest.forgottenInterceptor
+      - p: '빈은 만들어졌지만 한 번도 불리지 않았어요. 에러도 경고도 없어서 "검사가 돌고 있겠지" 하고 넘어가기 쉬워요([근거](link:interceptorConfig)).'
+      - h3: 여러 개면 감싸는 순서
+      - p: '필터 A(순서 1), B(순서 2), 인터셉터 X, Y(이 순서로 등록)를 두고 요청을 보냈어요.'
+      - ci:
+          key: two-of-each
+          label: 실제 기록 보기
+          source: FilterInterceptorTest.twoOfEachOrder
+      - p: '앞쪽은 A, B, X, Y 순서이고, 뒤쪽은 Y, X, B, A로 **반대**예요. 필터 A의 `chain.doFilter` 안에 필터 B가, 그 안에 `DispatcherServlet`이 들어 있는 겹 구조라서 그래요. 상자 안에 상자가 든 모양이에요. 인터셉터도 같은 규칙을 따라요.'
+      - quiz:
+          q: '인터셉터 X, Y를 이 순서로 등록했어요. `afterCompletion`은 어느 쪽이 먼저 불릴까요?'
+          options:
+            - X
+            - Y
+            - 동시에
+          answer: 2
+          explain: '앞쪽(`preHandle`)은 X, Y 순서이고 뒤쪽은 반대라서 Y가 먼저예요.'
+      - next: '그러면 같은 공통 기능을 필터와 인터셉터 가운데 어디에 두는 게 맞을까요?'
+    recall: '필터는 @Component를 붙인 Filter 빈이면 모든 경로에, FilterRegistrationBean이면 정한 경로와 순서로 등록돼요. 인터셉터는 WebMvcConfigurer.addInterceptors에서 addPathPatterns, excludePathPatterns와 함께 등록해야 하고, @Component만 붙이면 불리지 않아요. 여러 개면 앞쪽은 정한 순서, 뒤쪽은 반대 순서로 감싸요.'
   - id: q3
     title: 공통 기능은 필터와 인터셉터 가운데 어디에 두나요?
     conclusion:
@@ -142,51 +294,162 @@ questions:
     says:
       - '코드 predict의 없는 경로 요청을 보낸다. 필터 앞, 필터 뒤만 남는다. 예측의 답을 밝힌다. 인터셉터는 핸들러 매핑이 메서드를 찾은 뒤에 불리는데, 찾을 메서드가 없다'
       - '인터셉터의 `preHandle`은 세 번째 인자 `handler`로 부를 메서드(`HandlerMethod`)를 받는다. 코드 annotation처럼 메서드에 `@LoginRequired`가 있는지 보고 검사한다(J17에서 본 어노테이션 읽기). 필터는 아직 어느 메서드로 갈지 모른다'
+      - '`preHandle`이 `false`를 돌려주면 컨트롤러와 `postHandle`은 불리지 않고 필터 뒤는 불린다. 테스트로 보인다'
       - '필터는 `HttpServletRequestWrapper`로 요청을 감싸 다음으로 넘길 수 있다. 본문을 두 번 읽게 하거나 헤더를 더하는 일이다. 인터셉터는 받은 요청 객체를 바꿔 넘길 수 없다'
       - '정리 표: 처리 시간 기록(필터. 404까지 재야 한다), 요청 id 붙이기(필터), 인코딩(필터), 로그인 확인(메서드마다 다르면 인터셉터, 전부면 필터. 실제로는 시큐리티 필터, S12), 메서드별 권한 표시(인터셉터)'
     asks:
       - '본문의 예시: 응답 시간을 404와 405 응답까지 모두 남기고 싶다. 필터와 인터셉터 가운데 어디에 두나 (필터. 인터셉터는 매핑된 요청에만 걸린다)'
       - '옮긴 상황: 관리자 메서드에만 `@AdminOnly`를 붙이고 그 메서드를 부를 때만 관리자인지 보고 싶다. 어디에 두나 (인터셉터. `HandlerMethod`로 어노테이션을 읽는다)'
       - '실무 구역: 코드 annotation의 인터셉터가 `X-User` 헤더 없는 요청에 `false`를 돌려주면 응답 상태와 컨트롤러 실행 여부는 (401, 실행되지 않는다)'
+    body:
+      - p: '예측의 요청을 보냈어요.'
+      - ci:
+          key: not-found
+          label: 실제 기록 보기
+          source: FilterInterceptorTest.notFoundOnlyFilter
+          code: predict
+      - p: '**필터만 불렸어요.** {{predict-result}} 필터는 `DispatcherServlet`보다 바깥이라 경로가 있든 없든 모든 요청에 걸려요. 인터셉터는 핸들러 매핑이 **부를 메서드를 찾은 뒤에** 불리는데, `/no-such-path`에는 찾을 메서드가 없어요.'
+      - h3: 인터셉터는 부를 메서드를 알아요
+      - code: annotation
+        notes:
+          - mark: handler
+            as: code
+            text: '핸들러 매핑이 찾은 메서드(`HandlerMethod`)가 들어와요. 필터 단계에서는 아직 정해지지 않은 정보예요.'
+      - p: '메서드에 `@LoginRequired`가 붙었는지 보고, 붙었는데 로그인 정보가 없으면 401로 막아요. 어노테이션을 실행 중에 읽는 것은 [리플렉션과 어노테이션](lesson:reflection-annotation) 레슨에서 본 방법이에요. 세 가지 요청을 보냈어요.'
+      - ci:
+          key: login
+          label: 실제 기록 보기
+          source: FilterInterceptorTest.loginInterceptor
+      - p: '`@LoginRequired` 메서드에 헤더 없이 오면 `preHandle`이 `false`를 돌려줘요. 컨트롤러도, 뒤에 등록된 인터셉터 X도, `postHandle`도 불리지 않고, 필터 뒤는 불려요. 어노테이션이 없는 `/orders/1`은 헤더가 없어도 통과해요. `excludePathPatterns`로 뺀 경로에는 인터셉터가 아예 걸리지 않아요.'
+      - ci:
+          key: exclude
+          label: 뺀 경로의 기록 보기
+          source: FilterInterceptorTest.loginInterceptor
+      - h3: 필터는 요청을 감쌀 수 있어요
+      - p: '필터는 `HttpServletRequestWrapper`로 요청 객체를 감싸 다음으로 넘길 수 있어요. 본문을 한 번 읽고 다시 읽게 하거나, 헤더를 더해 넘기는 일이에요. 인터셉터는 받은 요청 객체를 바꿔 넘길 수 없어요.'
+      - h3: 어디에 둘까
+      - table:
+          head: [하는 일, 자리, 이유]
+          rows:
+            - ['모든 요청의 처리 시간 기록', '필터', '404, 405까지 재야 한다']
+            - ['요청마다 추적 id 붙이기', '필터', '모든 요청, 가장 바깥에서']
+            - ['문자 인코딩, 요청 감싸기', '필터', '요청 객체를 바꿔 넘긴다']
+            - ['특정 메서드만 로그인 확인', '인터셉터', '메서드의 어노테이션을 읽는다']
+            - ['모든 요청의 인증', '필터(스프링 시큐리티)', '컨트롤러 전에 모두 막는다']
+      - p: '실제 프로젝트의 인증과 인가는 스프링 시큐리티가 **필터**로 해요. [인증과 인가](lesson:spring-security) 레슨에서 다뤄요.'
+      - quiz:
+          q: '응답 시간을 404와 405 응답까지 모두 남기고 싶어요. 어디에 둘까요?'
+          options:
+            - 인터셉터의 `preHandle`과 `afterCompletion`
+            - 필터의 `chain.doFilter` 앞뒤
+            - 컨트롤러마다
+          answer: 2
+          explain: '404와 405는 부를 메서드를 찾지 못한 요청이라 인터셉터가 불리지 않아요. 필터는 모든 요청에 걸려요.'
+      - next: '정상 요청의 순서는 봤어요. 컨트롤러에서 예외가 나면 무엇이 불리고 무엇이 빠질까요?'
+    recall: '필터는 DispatcherServlet 바깥이라 없는 경로까지 모든 요청에 걸리고 요청 객체를 감쌀 수 있어서, 처리 시간 기록, 추적 id, 인코딩, 전체 인증을 둬요. 인터셉터는 핸들러 매핑이 메서드를 찾은 뒤에만 불리지만 preHandle의 handler로 부를 메서드와 어노테이션을 알아서, 메서드마다 다른 검사를 둬요. preHandle이 false면 컨트롤러와 postHandle은 건너뛰고 필터 뒤는 불려요.'
   - id: q4
     title: 컨트롤러에서 예외가 나면 무엇이 불리나요?
     conclusion:
       lead: '`postHandle`은 건너뛰고 `afterCompletion`은 예외를 받아 불려요. 필터는 예외가 응답으로 바뀌었는지에 따라 예외를 보거나 정상 응답을 봐요.'
       sub: '그래서 "끝나면 꼭 할 일"(기록 마무리, 정리)은 `postHandle`이 아니라 `afterCompletion`이나 필터의 `finally`에 둬요.'
     says:
-      - '컨트롤러가 예외를 던지는 요청의 기록을 보인다: 필터 앞, preHandle, 컨트롤러, afterCompletion(예외 있음), 필터 뒤. postHandle이 없다'
+      - '컨트롤러가 예외를 던지는 요청의 기록을 보인다: 필터 앞, preHandle, 컨트롤러, afterCompletion(예외 있음), 필터가 예외를 봄, 필터 뒤. postHandle이 없다'
       - '`postHandle`은 컨트롤러가 정상으로 끝났을 때만 불린다. `afterCompletion`은 성공이든 실패든 `preHandle`이 `true`를 돌려준 인터셉터에 한해 불린다. 네 번째 인자로 예외를 받는다'
-      - '`@ExceptionHandler`가 예외를 응답으로 바꾸면 `DispatcherServlet` 밖으로 예외가 나가지 않는다. 필터는 400이나 404 같은 응답을 볼 뿐 예외를 보지 못한다. 처리하지 못한 예외는 필터의 `chain.doFilter`에서 던져진다. 두 경우를 필터에서 잡은 것으로 보인다. `@ExceptionHandler` 자체는 S8에서 본다'
-      - '그래서 필터의 "필터 뒤" 기록은 `try`의 끝이 아니라 `finally`에 둔다. 예외가 올라와도 기록이 남는다. 코드로 보인다'
+      - '`@ExceptionHandler`가 예외를 응답으로 바꾸면 `DispatcherServlet` 밖으로 예외가 나가지 않는다. 필터는 404 같은 응답을 볼 뿐 예외를 보지 못한다. 이때 `afterCompletion`의 예외 인자도 비어 있다. 처리하지 못한 예외는 필터의 `chain.doFilter`에서 `ServletException`으로 던져진다. 두 경우를 필터에서 잡은 것으로 보인다. `@ExceptionHandler` 자체는 S8에서 본다'
+      - '그래서 필터의 "필터 뒤" 기록은 `try`의 끝이 아니라 `finally`에 둔다. 예외가 올라와도 기록이 남는다'
     asks:
       - '본문의 예시: 컨트롤러가 `IllegalStateException`을 던지고 처리하는 곳이 없다. `postHandle`과 `afterCompletion` 가운데 무엇이 불리나 (`afterCompletion`만)'
       - '옮긴 상황: 인터셉터의 `postHandle`에서 요청 처리 시간을 재 로그로 남긴다. 예외가 난 요청의 시간도 남나 (남지 않는다. `afterCompletion`으로 옮긴다)'
+    body:
+      - p: '컨트롤러가 예외를 던지는 요청과, 던진 예외를 `@ExceptionHandler`가 404 응답으로 바꾸는 요청을 보냈어요. 필터는 `chain.doFilter`를 `try`로 감싸 예외가 올라오면 기록해요.'
+      - ci:
+          key: exception
+          label: 실제 기록 보기
+          source: FilterInterceptorTest.exceptionPath
+      - h3: 처리하지 않은 예외
+      - ul:
+          - '**`postHandle`이 없어요.** 컨트롤러가 정상으로 끝났을 때만 불려요.'
+          - '**`afterCompletion`은 불렸고 예외를 받았어요.** 성공이든 실패든, `preHandle`이 `true`를 돌려준 인터셉터라면 불려요.'
+          - '**필터까지 예외가 올라왔어요.** `DispatcherServlet`이 처리하지 못한 예외를 `ServletException`으로 감싸 던졌고, 필터의 `chain.doFilter`에서 그 예외가 나왔어요. 응답은 500이에요.'
+      - h3: '@ExceptionHandler가 처리한 예외'
+      - p: '예외가 `DispatcherServlet` 안에서 404 응답으로 바뀌었어요. 필터는 예외를 보지 못하고 404 응답만 봐요. `afterCompletion`도 예외 없이 불렸어요. 예외를 응답으로 바꾸는 법은 [예외 처리와 검증](lesson:exception-validation) 레슨에서 다뤄요.'
+      - h3: 끝나면 꼭 할 일은 finally에
+      - p: '처리 시간 기록을 `postHandle`에 두면 실패한 요청이 기록에서 빠져요. 정작 알고 싶은 것이 실패한 요청인데도요. `afterCompletion`에 두거나, 필터라면 `chain.doFilter`를 `try`로 감싸고 `finally`에서 기록해요. 실무 구역의 코드가 그 모양이에요.'
+      - quiz:
+          q: '인터셉터의 `postHandle`에서 처리 시간을 로그로 남겨요. 컨트롤러에서 예외가 난 요청의 시간도 남을까요?'
+          options:
+            - 남는다
+            - 남지 않는다
+            - 예외가 `@ExceptionHandler`로 처리됐을 때만 남는다
+          answer: 2
+          explain: '`postHandle`은 컨트롤러가 정상으로 끝났을 때만 불려요. 예외가 나면 건너뛰어요. `afterCompletion`으로 옮겨요.'
+    recall: '컨트롤러에서 예외가 나면 postHandle은 건너뛰고 afterCompletion은 예외를 받아 불려요. 처리하지 못한 예외는 필터의 chain.doFilter에서 ServletException으로 던져지고 응답은 500이에요. @ExceptionHandler가 응답으로 바꾸면 필터는 예외 없이 그 응답만 봐요. 끝나면 꼭 할 일은 afterCompletion이나 필터의 finally에 둬요.'
 practice:
+  title: 스프링 부트에서는 이렇게 써요
   says:
-    - '실제 모양 두 가지: 요청마다 id를 붙이고 처리 시간을 남기는 필터(`OncePerRequestFilter`를 상속, `finally`에서 기록), `@LoginRequired` 메서드만 검사하는 인터셉터(코드 annotation과 register). 둘을 함께 띄워 기록을 테스트로 남긴다'
-    - '`OncePerRequestFilter`를 쓰는 이유: 요청이 에러 페이지(`/error`)로 다시 보내질 때 필터가 두 번 불리는 것을 막는다. 일반 `Filter`와 비교해 에러 요청에서 필터가 불린 횟수를 테스트로 보인다(결과에 맞춰 설명을 고친다)'
+    - '실제 모양 두 가지: 요청마다 처리 시간을 남기는 필터(`OncePerRequestFilter`를 상속, `finally`에서 기록), `@LoginRequired` 메서드만 검사하는 인터셉터(코드 annotation과 register)'
+    - '`OncePerRequestFilter`를 쓰는 이유: 요청이 에러 페이지(`/error`)로 다시 보내질 때 필터가 두 번 불리는 것을 막는다. 일반 `Filter`와 비교해 에러 요청에서 필터가 불린 횟수를 테스트로 보인다'
     - '흔한 실수: 인터셉터를 `@Component`로만 만들고 등록하지 않아 검사가 한 번도 돌지 않는다. 고친 코드: `addInterceptors`에 등록(질문 2)'
     - '흔한 실수 둘: 처리 시간 기록을 `postHandle`에 둬서 실패한 요청이 기록에서 빠진다. 고친 코드: `afterCompletion`이나 필터의 `finally`(질문 4)'
     - '웹 요청이 아니라 서비스 메서드 호출에 공통 기능을 걸 때는 AOP(S9)를 쓴다고 한 줄 적는다'
+  body:
+    - h3: 처리 시간 필터
+    - code: timing
+      notes:
+        - mark: OncePerRequestFilter
+          as: code
+          text: '스프링이 주는 필터의 바탕 클래스예요. 요청 하나에 한 번만 불리게 해 줘요.'
+        - mark: finally
+          as: code
+          text: '예외가 올라와도 기록이 남아요(질문 4).'
+    - p: '`Filter`를 바로 구현하지 않고 `OncePerRequestFilter`를 상속한 이유가 있어요. 처리하지 못한 예외가 나면 톰캣이 요청을 에러 페이지(`/error`)로 **다시 보내요**. 에러 디스패치에도 걸리게 등록한 필터는 그때 한 번 더 불려요. 두 필터를 똑같이 등록하고 예외가 나는 요청을 보냈어요.'
+    - ci:
+        key: once
+        label: 실제 결과 보기
+        source: FilterInterceptorTest.oncePerRequest
+    - p: '일반 `Filter`는 두 번, `OncePerRequestFilter`는 한 번이에요. 처리 시간 기록이 두 줄 남거나 추적 id가 두 번 붙는 일을 막아 줘요.'
+    - h3: 로그인 검사 인터셉터
+    - p: '질문 3의 코드 annotation과 질문 2의 코드 register가 그대로 프로젝트의 모양이에요. 검사할 메서드에 `@LoginRequired`를 붙이고, 인터셉터는 `addInterceptors`에서 `/orders/**`에 걸고 공개 경로는 `excludePathPatterns`로 빼요.'
+    - h3: '흔한 실수 1: 등록하지 않은 인터셉터'
+    - p: '인터셉터 클래스에 `@Component`만 붙이고 `addInterceptors`에 넣지 않아요. 질문 2에서 본 대로 빈은 있지만 한 번도 불리지 않아요. 새 인터셉터를 만들면 그 인터셉터가 막아야 할 요청을 하나 보내 정말 막는지 테스트해요.'
+    - h3: '흔한 실수 2: postHandle에 둔 기록'
+    - p: '처리 시간 기록을 `postHandle`에 두면 예외가 난 요청이 빠져요(질문 4). `afterCompletion`이나 필터의 `finally`로 옮겨요.'
+    - muted: '웹 요청이 아니라 서비스 메서드 호출에 공통 기능을 걸 때는 AOP를 써요. 배치나 메시지 처리에서 부른 서비스에도 걸려요. [AOP](lesson:aop-audit) 레슨에서 다뤄요.'
+interview:
+  question: 필터와 인터셉터의 차이를 설명해 주세요
+  model:
+    - label: 정의
+      text: 필터는 서블릿 규약의 기능으로 톰캣이 DispatcherServlet을 부르기 전후에 실행하고, 인터셉터는 스프링 MVC의 기능으로 DispatcherServlet이 컨트롤러를 부르기 전후(preHandle, postHandle, afterCompletion)에 실행합니다.
+    - label: 원리
+      text: 필터는 바깥이라 매핑이 없는 경로까지 모든 요청에 걸리고 요청 객체를 감쌀 수 있습니다. 인터셉터는 핸들러 매핑이 메서드를 찾은 뒤에만 불리지만 부를 메서드와 어노테이션을 압니다. 여러 개면 앞쪽은 정한 순서, 뒤쪽은 반대 순서입니다.
+    - label: 주의할 점
+      text: 인터셉터는 addInterceptors에 등록해야 동작합니다. 예외가 나면 postHandle은 불리지 않으므로 끝나면 꼭 할 일은 afterCompletion이나 필터의 finally에 둡니다. 에러 페이지로 다시 보내질 때 두 번 불리지 않게 OncePerRequestFilter를 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 처리 시간 기록을 인터셉터의 postHandle에서 필터의 finally로 옮겨 실패한 요청과 404까지 기록했습니다.'
+verified: 이 레슨의 실행 순서는 짐작이 아니라 스프링 부트 3.5의 작은 웹 앱에 요청을 보내 남은 기록이에요. 코드가 바뀔 때마다 테스트([FilterInterceptorTest](link:test))가 다시 돌아요.
+footer: '근거: 필터는 Jakarta Servlet 6.0 명세([링크](link:servletSpec)), 인터셉터는 스프링 프레임워크 문서([링크](link:interceptor)), 인터셉터 등록은 [링크](link:interceptorConfig), 스프링 부트의 필터 등록은 [링크](link:bootFilters). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '정상 요청의 기록은 필터 앞, preHandle, 컨트롤러, postHandle, afterCompletion, 필터 뒤 순서다'
-    how: '`MiniWeb`에 필터 빈, 인터셉터를 등록한 설정, 컨트롤러를 넣고 요청한다'
+    how: '`MiniWeb`에 필터 등록 빈, 인터셉터를 등록한 설정, 컨트롤러를 넣고 요청한다'
+    test: FilterInterceptorTest.normalOrder
   - claim: '필터 둘과 인터셉터 둘의 앞쪽은 정한 순서, 뒤쪽은 반대 순서다'
     how: '같은 방법으로 기록을 본다'
+    test: FilterInterceptorTest.twoOfEachOrder
   - claim: '없는 경로 요청에는 필터만 불리고 인터셉터는 불리지 않는다'
-    how: '없는 경로로 요청한다. 404 처리 중 `/error`로 다시 보내지는지도 기록에 남는지 보고 설명을 맞춘다'
+    how: '없는 경로로 요청한다. 인터셉터는 `/orders/**`에 걸었다'
+    test: FilterInterceptorTest.notFoundOnlyFilter
   - claim: '`@Component`만 붙이고 등록하지 않은 인터셉터는 불리지 않는다'
     how: '등록하지 않은 인터셉터의 호출 수를 센다'
-  - claim: '`preHandle`이 `false`면 컨트롤러와 `postHandle`이 불리지 않고, 필터 뒤는 불린다'
-    how: '헤더 없는 요청'
-  - claim: '`excludePathPatterns`의 경로에는 인터셉터가 불리지 않는다'
-    how: '그 경로로 요청한다'
-  - claim: '컨트롤러 예외에서 `postHandle`은 불리지 않고 `afterCompletion`은 예외를 받는다'
-    how: '예외를 던지는 컨트롤러'
-  - claim: '`@ExceptionHandler`가 처리한 예외는 필터에 올라오지 않고, 처리하지 않은 예외는 필터의 `chain.doFilter`에서 던져진다'
+    test: FilterInterceptorTest.forgottenInterceptor
+  - claim: '`preHandle`이 `false`면 컨트롤러, 뒤에 등록된 인터셉터, `postHandle`이 불리지 않고, 필터 뒤는 불린다. `excludePathPatterns`의 경로에는 인터셉터가 불리지 않는다'
+    how: '헤더 없는 요청과 뺀 경로로 요청한다'
+    test: FilterInterceptorTest.loginInterceptor
+  - claim: '컨트롤러 예외에서 `postHandle`은 불리지 않고 `afterCompletion`은 예외를 받는다. 처리하지 않은 예외는 필터의 `chain.doFilter`에서 `ServletException`으로 던져지고, `@ExceptionHandler`가 처리한 예외는 필터에 올라오지 않으며 `afterCompletion`의 예외 인자도 비어 있다'
     how: '필터에서 `catch`한 것을 기록한다'
-  - claim: '에러 요청에서 일반 필터와 `OncePerRequestFilter`가 불린 횟수'
-    how: '처리하지 않은 예외 요청을 보내 센다'
+    test: FilterInterceptorTest.exceptionPath
+  - claim: '처리하지 않은 예외로 `/error`에 다시 보내질 때, 에러 디스패치에도 건 일반 필터는 두 번, `OncePerRequestFilter`는 한 번 불린다'
+    how: '두 필터를 `DispatcherType.REQUEST, ERROR`로 등록하고 센다'
+    test: FilterInterceptorTest.oncePerRequest
 sources:
   - '서블릿 필터: Jakarta Servlet 6.0 명세 6장 https://jakarta.ee/specifications/servlet/6.0/jakarta-servlet-spec-6.0'
   - '인터셉터: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet/handlermapping-interceptor.html'
