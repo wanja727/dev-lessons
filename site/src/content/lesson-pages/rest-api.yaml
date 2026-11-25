@@ -1,9 +1,10 @@
-# REST API 설계 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-# 예전 레슨 rest-api(.astro, 2026-11-17)를 재료로 쓴다. 예전 레슨의 페이지네이션은 DB 과정의 D8로 넘긴다.
-stage: design
+# REST API 설계
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/rest-api.yaml에 있다.
+# 예전 레슨 rest-api(.astro, 2026-11-17)를 재료로 다시 썼다. 예전 레슨의 페이지네이션은 DB 과정의 D8(pagination)로 넘겼다.
 title: REST API 설계
+description: REST API에서 URL과 메서드를 나누는 법, 안전과 멱등을 따지는 이유, 상태 코드를 고르는 법, 에러 응답의 표준 모양(Problem Details). 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 20
 roadmap: N5
 type: 개념 설명
 prerequisites:
@@ -46,16 +47,30 @@ codes:
     GET    /products/7
     PUT    /products/7
     DELETE /products/7
+  listBody: |-
+    {
+      "items": [
+        {"id": 9, "name": "커피"},
+        {"id": 8, "name": "라떼"}
+      ],
+      "nextCursor": 8
+    }
+  wrongMethod: |-
+    # GET, PUT, DELETE만 있는 자원에
+    POST /products/1
   postTwice: |-
     POST /products
     {"name":"커피","price":4500}
 
     POST /products  (같은 본문 다시)
-  putTwice: |-
+
     PUT /products/7
     {"name":"커피","price":4500}
 
     PUT /products/7  (같은 본문 다시)
+  deleteTwice: |-
+    DELETE /products/7
+    DELETE /products/7  (다시)
   okButFailed: |-
     HTTP/1.1 200
     Content-Type: application/json
@@ -66,11 +81,15 @@ codes:
     HTTP/1.1 404
     Content-Type: application/problem+json
 
-    {"type":"about:blank",
-     "title":"Not Found",
-     "status":404,
-     "detail":"상품 99가 없어요",
-     "instance":"/products/99"}
+    {"type": "about:blank",
+     "title": "Not Found",
+     "status": 404,
+     "detail": "상품을 찾을 수 없어요: 99",
+     "instance": "/products/99",
+     "productId": 99}
+  problemRun: |-
+    # 없는 상품을 읽는다
+    GET /products/99
   created: |-
     @PostMapping("/products")
     ResponseEntity<Product> create(
@@ -82,30 +101,64 @@ codes:
           .[[created(location)]].body(p);
     }
   handler: |-
+    @GetMapping("/products/{id}")
+    Product get(@PathVariable long id) {
+      return products.find(id)
+          .orElseThrow(() ->
+              new ProductNotFound(id));
+    }
+
     @ExceptionHandler
-    ProblemDetail notFound(
+    [[ProblemDetail]] notFound(
         ProductNotFound e) {
-      ProblemDetail pd = [[ProblemDetail]]
+      ProblemDetail pd = ProblemDetail
           .forStatusAndDetail(
               HttpStatus.NOT_FOUND,
               e.getMessage());
-      pd.setProperty("productId", e.id());
+      pd.[[setProperty]]("productId", e.id());
       return pd;
     }
   mistake: |-
-    @GetMapping("/products/{id}")
+    @GetMapping("/v0/products/{id}")
     Map<String, Object> get(
         @PathVariable long id) {
-      Product p = products.find(id);
+      Product p = products.get(id);
       if (p == null) {
-        return Map.of("success", false);
+        return Map.of("success", [[false]],
+            "message", "상품이 없습니다");
       }
       return Map.of("success", true,
           "data", p);
     }
+  mistakeRun: |-
+    GET /v0/products/99  (실패를 200에 담음)
+    GET /products/99     (고친 코드)
+  problemYml: |-
+    spring:
+      mvc:
+        problemdetails:
+          [[enabled: true]]
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/restdesign/RestDesignTest.java
+  rfc9110: https://www.rfc-editor.org/rfc/rfc9110.html
+  rfc9457: https://www.rfc-editor.org/rfc/rfc9457.html
+  springProblem: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html
+  bootProblem: https://docs.spring.io/spring-boot/reference/web/servlet.html#web.servlet.spring-mvc.error-handling
 predict:
-  text: '상품 API에 코드 postTwice처럼 같은 POST를 두 번 보내고, 따로 코드 putTwice처럼 같은 PUT을 두 번 보냈어요. 각각 끝났을 때 서버에 있는 상품은 몇 개일까요? 보기: POST 1개와 PUT 1개, POST 2개와 PUT 1개, POST 2개와 PUT 2개.'
-  answer: 'POST 2개와 PUT 1개. POST는 보낼 때마다 새로 만들고, PUT은 7번 상품을 같은 내용으로 덮어써서 몇 번 보내도 결과가 같다. 질문 2에서 밝힌다.'
+  title: 같은 요청을 두 번 보내면?
+  text: '상품 API에 아래처럼 같은 POST를 두 번 보내고, 따로 같은 PUT을 두 번 보냈어요. 각각 끝났을 때 서버에 있는 상품은 몇 개일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: postTwice
+  label: 내 예측
+  options:
+    - value: one-one
+      label: POST 1개, PUT 1개
+    - value: two-one
+      label: POST 2개, PUT 1개
+    - value: two-two
+      label: POST 2개, PUT 2개
+  answer: two-one
+  storageKey: ra-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: REST API에서 URL과 메서드는 어떻게 나누나요?
@@ -122,6 +175,38 @@ questions:
     asks:
       - '본문의 예시: 7번 상품을 지우는 요청으로 REST에 맞는 것은 (`DELETE /products/7`)'
       - '옮긴 상황: 회원 3번의 주소 목록을 읽는 API의 URL과 메서드를 고른다 (`GET /members/3/addresses`)'
+    body:
+      - p: 'REST는 API를 짓는 방식이에요. 서버의 데이터를 **자원**으로 보고, 자원마다 URL로 이름을 붙여요. 그 자원에 무엇을 할지는 HTTP 메서드로 나타내요. URL이 명사, 메서드가 동사인 셈이에요.'
+      - p: 같은 상품 API를 두 가지로 지어 봤어요.
+      - code: badUrls
+      - code: goodUrls
+      - p: '첫째는 URL마다 동사를 넣었어요. `GET /deleteProduct`는 "읽기" 메서드로 지우는 일을 해서, 메서드와 URL의 뜻이 어긋나요. 둘째는 URL이 두 가지뿐이에요. 목록은 복수형 `/products`, 하나는 `/products/7`이고, 할 일은 메서드가 말해요.'
+      - ul:
+          - '**하위 자원은 경로로:** 7번 주문의 항목들은 `/orders/7/items`예요.'
+          - '**거르기와 정렬은 쿼리로:** 결제된 주문만 보려면 `/orders?status=PAID`예요. 자원은 그대로 `/orders`이고 조건을 붙인 거예요.'
+      - p: '메서드가 할 일을 말하니, 자원에 없는 메서드를 보내면 서버가 알려 줘요. GET, PUT, DELETE만 있는 `/products/1`에 POST를 보냈어요.'
+      - ci:
+          key: '405'
+          label: 실제 응답 보기
+          source: RestDesignTest.methodNotAllowed
+          code: wrongMethod
+      - p: '405와 함께 `Allow` 헤더가 이 자원에 쓸 수 있는 메서드를 알려 줘요. URL이 명사로 정리돼 있으면 클라이언트는 "이 자원에 무엇을 할 수 있나"를 이렇게 물어볼 수 있어요.'
+      - more:
+          summary: '더 알아보기: 목록 응답의 모양과, 메서드로 나타내기 어려운 동작'
+          body:
+            - p: '**목록은 객체로 감싸요.** `GET /products`가 배열 `[...]`을 그대로 돌려주면, 나중에 "다음 페이지는 어디부터"나 "전체 몇 개" 같은 정보를 더할 자리가 없어요. 처음부터 객체로 감싸 두면 칸을 더해도 클라이언트가 깨지지 않아요. 목록을 나눠 주는 방법은 페이지네이션 레슨에서 다뤄요.'
+            - code: listBody
+            - p: '**"주문 취소" 같은 동작.** 메서드 하나로 딱 맞지 않는 동작은 두 가지로 나타내요. 주문의 상태를 바꾸는 것으로 보면 `PATCH /orders/7`에 `{"status": "CANCELED"}`를 보내요. 취소를 하나의 자원으로 보면 `POST /orders/7/cancellation`이에요. 어느 쪽이든 URL은 명사예요.'
+      - quiz:
+          q: '회원 3번의 주소 목록을 읽는 API로 REST에 가장 맞는 것은 무엇일까요?'
+          options:
+            - '`POST /getAddresses?memberId=3`'
+            - '`GET /members/3/addresses`'
+            - '`GET /readMemberAddresses/3`'
+          answer: 2
+          explain: 주소는 회원 3번의 하위 자원이라 경로로 나타내고, 읽기는 GET이 말해요. URL에 동사를 넣지 않아요.
+      - next: 메서드가 할 일을 말한다면, 같은 메서드의 요청을 두 번 보내면 어떻게 될까요?
+    recall: URL은 자원(명사)을 가리키고, 그 자원에 무엇을 할지는 HTTP 메서드(동사)로 나타내요. 목록은 복수형(/products), 하나는 id(/products/7)이고, 하위 자원은 경로로, 거르기는 쿼리로 나타내요. URL에 동사를 넣지 않아요. 자원에 없는 메서드를 보내면 405와 Allow 헤더가 와요.
   - id: q2
     title: 안전과 멱등은 무엇이고 왜 따지나요?
     conclusion:
@@ -139,6 +224,70 @@ questions:
     asks:
       - '본문의 예시: `DELETE /products/7`을 두 번 보냈더니 204와 404가 왔다. DELETE가 멱등하다고 할 수 있나 (있다. 두 번 보낸 뒤에도 서버 상태는 7번 없음으로 같다)'
       - '옮긴 상황: "포인트 100점 적립"을 `POST /points`로 만들었다. 모바일 앱이 응답 시간 초과로 같은 요청을 다시 보내면 무슨 일이 생길 수 있나 (두 번 처리되어 200점이 쌓일 수 있다)'
+    body:
+      - p: 메서드를 고를 때 따지는 성질이 둘 있어요.
+      - ul:
+          - '**안전**(safe): 서버의 상태를 바꾸지 않아요. GET, HEAD, OPTIONS예요. 검색 로봇이 링크를 따라 GET을 마구 보내도, 브라우저가 미리 불러 둬도 괜찮아요. 그래서 GET으로 지우거나 바꾸면 안 돼요.'
+          - '**멱등**(idempotent): 같은 요청을 여러 번 보내도 **서버의 상태**가 한 번 보낸 것과 같아요. 안전한 메서드와 PUT, DELETE예요.'
+      - p: 처음 예측한 요청을 보내 봤어요. POST 두 번과 PUT 두 번의 결과예요.
+      - ci:
+          key: post-put
+          label: 네 요청의 응답과 상품 수 보기
+          source: RestDesignTest.postIsNotIdempotentPutIs
+          code: postTwice
+      - p: '**POST 2개, PUT 1개**가 정답이에요. {{predict-result}} POST는 "새로 하나 만들어라"라서 보낼 때마다 새 상품이 생겨요. `Location`이 `/products/1`, `/products/2`로 달라요. PUT은 "7번을 이 내용으로 둬라"라서 두 번째는 같은 내용으로 덮어쓸 뿐이에요. 첫 번째는 없던 것을 만들어 201, 두 번째는 바꿔서 200이지만, 서버에는 7번 상품 하나가 같은 내용으로 남아요.'
+      - p: DELETE는 어떨까요?
+      - ci:
+          key: delete
+          label: DELETE 두 번의 결과 보기
+          source: RestDesignTest.deleteTwice
+          code: deleteTwice
+      - p: '두 번째 응답은 404로 첫 번째와 달라요. 그래도 DELETE는 멱등해요. **멱등은 응답이 아니라 서버의 상태**를 말해요. 몇 번 보내든 "7번 상품 없음"이라는 상태는 같아요.'
+      - p: 메서드를 골라 두 번 보낸 결과를 비교해 보세요.
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 두 번 보낸 요청
+            options:
+              - {value: post, label: POST /products}
+              - {value: put, label: PUT /products/7}
+              - {value: delete, label: DELETE /products/7}
+              - {value: get, label: GET /products/7}
+          scenes:
+            post:
+              duo:
+                - {label: 두 응답, rows: [{k: 첫 번째, v: '201 (id 1)'}, {k: 두 번째, v: '201 (id 2)', mark: bad}]}
+                - {label: 서버의 상품, rows: [{k: 개수, v: '2', mark: bad}]}
+              verdict: 안전하지 않고 멱등하지 않아요. 보낼 때마다 새로 만들어요.
+            put:
+              duo:
+                - {label: 두 응답, rows: [{k: 첫 번째, v: '201'}, {k: 두 번째, v: '200'}]}
+                - {label: 서버의 상품, rows: [{k: 개수, v: '1', mark: changed}]}
+              verdict: 안전하지 않지만 멱등해요. 같은 내용으로 덮어써서 상태가 같아요.
+            delete:
+              duo:
+                - {label: 두 응답, rows: [{k: 첫 번째, v: '204'}, {k: 두 번째, v: '404'}]}
+                - {label: 서버의 상품, rows: [{k: 7번, v: '없음', mark: changed}]}
+              verdict: 안전하지 않지만 멱등해요. 응답은 달라도 상태(7번 없음)는 같아요.
+            get:
+              duo:
+                - {label: 두 응답, rows: [{k: 첫 번째, v: '200'}, {k: 두 번째, v: '200'}]}
+                - {label: 서버의 상품, rows: [{k: 변화, v: '없음', mark: changed}]}
+              verdict: 안전하고 멱등해요. 읽기만 해서 상태를 바꾸지 않아요.
+      - h3: 왜 따지나요
+      - p: '앱이 요청을 보냈는데 네트워크가 끊겨 응답을 못 받았어요. 요청은 서버에 닿았을까요? 앱은 알 수 없어요. 이때 **멱등한 요청은 그냥 다시 보내면 돼요**. 이미 처리됐어도 상태는 같으니까요. HTTP 클라이언트와 프록시도 연결이 끊기면 멱등한 요청만 알아서 다시 보내요.'
+      - p: 'POST는 다시 보내면 두 번 처리될 수 있어요. 결제 버튼을 두 번 눌러 주문이 둘 생기는 일이 이것이에요. PATCH도 멱등을 약속하지 않아요. "재고를 1 줄여라"는 두 번 보내면 두 번 줄어요. POST를 안전하게 다시 보내려면 요청에 고유한 키를 붙여 서버가 중복을 거르게 해요(멱등성과 중복 요청 방지 레슨).'
+      - quiz:
+          q: '`DELETE /products/7`을 두 번 보냈더니 204와 404가 왔어요. DELETE는 멱등할까요?'
+          options:
+            - 아니다. 두 응답의 상태 코드가 다르다
+            - 그렇다. 두 번 보낸 뒤에도 서버 상태는 7번 없음으로 같다
+            - 알 수 없다. 세 번 보내 봐야 한다
+          answer: 2
+          explain: 멱등은 응답이 아니라 서버의 상태를 말해요. 몇 번 보내도 7번 상품이 없는 상태는 같아요.
+      - next: 같은 요청에도 응답 코드가 201, 200, 204, 404로 달랐어요. 상태 코드는 어떤 기준으로 골라야 할까요?
+    recall: 안전한 메서드(GET, HEAD, OPTIONS)는 서버의 상태를 바꾸지 않고, 멱등한 메서드(안전한 메서드와 PUT, DELETE)는 여러 번 보내도 한 번 보낸 것과 서버의 상태가 같아요. 멱등은 응답이 아니라 상태를 말해요. 응답을 못 받으면 클라이언트가 다시 보내는데, 멱등한 요청은 괜찮고 POST는 두 번 처리될 수 있어요.
   - id: q3
     title: 어떤 상태 코드를 돌려줘야 하나요?
     conclusion:
@@ -152,6 +301,38 @@ questions:
     asks:
       - '본문의 예시: `POST /products`로 상품을 만들었을 때 상태 코드와 함께 주면 좋은 헤더는 (201, Location)'
       - '옮긴 상황: 이미 취소된 주문에 다시 취소 요청이 왔다. 요청의 형식은 맞다. 400, 404, 409 가운데 무엇이 맞나 (409. 자원의 지금 상태와 충돌한다)'
+    body:
+      - p: 상태 코드는 결과를 클라이언트에게 알리는 첫 번째 신호예요. 자주 쓰는 것을 상황으로 정리했어요.
+      - table:
+          head: [상황, 상태 코드]
+          rows:
+            - ['읽기 성공', '200']
+            - ['만들기 성공', '201과 `Location`(새 자원의 주소)']
+            - ['지우기 성공, 돌려줄 본문 없음', '204']
+            - ['요청의 형식이 틀림(필드 누락, 숫자 자리에 글자)', '400']
+            - ['그런 자원이 없음', '404']
+            - ['그 자원에 없는 메서드', '405']
+            - ['자원의 지금 상태와 충돌(이미 취소된 주문을 다시 취소)', '409']
+      - p: 'POST의 응답을 다시 보면 201과 함께 `Location: /products/1`이 있었어요(질문 2의 실제 출력). 클라이언트는 이 주소로 새 상품을 바로 읽을 수 있어요.'
+      - h3: 실패를 200에 담지 않아요
+      - p: '이런 응답을 만드는 API가 꽤 있어요.'
+      - code: okButFailed
+      - p: '본문에는 실패라고 적었지만 상태 코드는 200이에요. 누가 곤란해질까요?'
+      - ul:
+          - '**클라이언트:** HTTP 라이브러리는 2xx를 성공으로 처리해요. 앱이 본문의 `success`를 빠뜨리고 읽으면 성공 화면을 띄워요.'
+          - '**모니터링:** 에러율은 보통 4xx, 5xx의 비율로 재요. 실패가 늘어도 그래프는 조용해요.'
+          - '**다시 보낼지:** 4xx는 요청을 고쳐야 하고 5xx는 나중에 다시 보내 볼 수 있어요(HTTP 요청과 응답 레슨). 200에 담으면 이 구분이 사라져요.'
+      - p: 그래서 실패는 실패의 상태 코드로 알려요. 본문에는 무엇이 잘못됐는지 설명을 담아요. 그 본문의 모양이 질문 4예요.
+      - quiz:
+          q: '이미 취소된 주문에 다시 취소 요청이 왔어요. 요청의 형식은 맞고 주문도 있어요. 가장 알맞은 상태 코드는 무엇일까요?'
+          options:
+            - '400'
+            - '404'
+            - '409'
+          answer: 3
+          explain: 형식이 맞고 주문도 있으니 400과 404는 아니에요. 자원의 지금 상태(취소됨)와 충돌해서 409예요.
+      - next: 실패를 실패의 상태 코드로 알렸어요. 그러면 본문에는 무엇을 어떤 모양으로 담아야 할까요?
+    recall: 결과에 맞는 상태 코드를 돌려줘요. 읽기 200, 만들기 201과 Location, 본문 없는 성공 204, 형식이 틀림 400, 없음 404, 메서드가 맞지 않음 405, 지금 상태와 충돌 409예요. 실패를 200에 담으면 클라이언트가 성공으로 처리하고, 모니터링에 잡히지 않고, 다시 보낼지도 알 수 없어요.
   - id: q4
     title: 에러 응답의 본문은 어떤 모양으로 주나요?
     conclusion:
@@ -165,28 +346,123 @@ questions:
     asks:
       - '본문의 예시: Problem Details 본문의 Content-Type은 (`application/problem+json`)'
       - '옮긴 상황: 결제 API가 실패하면 본문에 자바 예외의 스택 트레이스를 그대로 담아 준다. 무엇이 문제인가 (내부 구조가 드러나고, 모양이 정해지지 않아 클라이언트가 처리하기 어렵다)'
+    body:
+      - p: '어떤 주소는 `{"error": "..."}`, 어떤 주소는 `{"message": "...", "code": 3}`으로 에러를 준다면, 클라이언트는 주소마다 에러를 읽는 코드를 따로 짜야 해요. 그래서 **API 전체에서 에러 본문의 모양을 하나로** 정해요.'
+      - p: 'HTTP API의 에러 본문에는 표준이 있어요. **RFC 9457 Problem Details**예요. Content-Type은 `application/problem+json`이고 칸은 이래요.'
+      - table:
+          head: [칸, 뜻]
+          rows:
+            - ['`type`', '에러 종류를 가리키는 URI. 따로 정하지 않으면 `about:blank`']
+            - ['`title`', '에러 종류의 짧은 이름']
+            - ['`status`', '상태 코드']
+            - ['`detail`', '이번 일에 대한 설명']
+            - ['`instance`', '이번 일이 일어난 곳(요청 경로)']
+      - p: '필요한 칸은 더해도 돼요. 아래는 없는 상품을 읽었을 때 스프링 서버가 실제로 돌려준 응답이에요. 클라이언트가 쓸 수 있게 `productId`를 더했어요.'
+      - ci:
+          key: problem-404
+          label: 실제 에러 응답 보기
+          source: RestDesignTest.problemDetail
+          code: problemRun
+      - p: '클라이언트는 어느 주소에서 온 에러든 `status`와 `detail`을 같은 코드로 읽어요. 사람에게 보여 줄 문장은 `detail`, 프로그램이 나눠 처리할 종류는 `type`이나 더한 칸을 봐요.'
+      - h3: 서버 내부는 담지 않아요
+      - p: '에러 본문에 자바 예외의 스택 트레이스나 실패한 SQL을 그대로 넣으면, 공격자에게 쓰는 프레임워크와 테이블 구조를 알려 주는 셈이에요. 본문에는 클라이언트가 할 일을 알 만큼만 적고, 자세한 원인은 **서버 로그**에 남겨요.'
+      - quiz:
+          q: 'Problem Details로 된 에러 응답의 Content-Type은 무엇일까요?'
+          options:
+            - '`text/plain`'
+            - '`application/json`'
+            - '`application/problem+json`'
+          answer: 3
+          explain: RFC 9457이 정한 미디어 타입이에요. 클라이언트는 이것을 보고 에러 본문이라는 것을 알아요.
+    recall: API 전체에서 같은 모양으로 줘요. 표준은 RFC 9457 Problem Details이고, application/problem+json에 type, title, status, detail, instance를 담고 필요한 칸을 더해요. 모양이 같으면 클라이언트가 에러를 한 가지 코드로 처리해요. 스택 트레이스나 SQL은 담지 않고 서버 로그에 남겨요.
 practice:
+  title: 스프링 컨트롤러로 만들기
   says:
     - '`ResponseEntity.created(location)`으로 201과 Location을 함께 준다(코드 created)'
     - '스프링 6부터 `ProblemDetail`이 RFC 9457의 본문이다. `@ExceptionHandler`가 `ProblemDetail`을 돌려주면 Content-Type이 `application/problem+json`이 된다(코드 handler). `setProperty`로 칸을 더한다. 테스트로 확인한다'
     - '`spring.mvc.problemdetails.enabled=true`를 켜면 스프링이 직접 던지는 예외(405, 415, 타입 변환 실패)도 같은 모양으로 나온다 (스프링 부트 문서 근거)'
     - '흔한 실수: 코드 mistake처럼 없는 상품에 200과 `success:false`를 준다. 고친 코드는 예외를 던지고 핸들러가 404 Problem Details를 준다. 두 응답을 테스트로 남긴다'
     - '더 알아보기: 이미 쓰는 클라이언트가 있으면 응답의 칸을 지우거나 이름을 바꾸지 않는다. 칸을 더하는 것은 괜찮다. 깨는 바꾸기가 필요하면 `/v2/` 같은 새 버전을 함께 둔다'
+  body:
+    - p: 스프링 부트 3.5에서 질문 넷을 코드로 옮겨요.
+    - h3: 201과 Location
+    - code: created
+      notes:
+        - mark: created(location)
+          as: code
+          text: '상태 코드 201과 `Location` 헤더를 한 번에 정해요. 질문 2의 실제 출력이 이 코드의 응답이에요.'
+    - h3: 에러는 ProblemDetail로
+    - p: '스프링 6부터 `ProblemDetail` 클래스가 RFC 9457의 본문이에요. 서비스가 예외를 던지고, `@ExceptionHandler`가 그 예외를 받아 `ProblemDetail`을 돌려주면 돼요. 질문 4의 실제 출력이 이 코드의 응답이에요.'
+    - code: handler
+      notes:
+        - mark: ProblemDetail
+          as: code
+          text: '이 타입을 돌려주면 스프링이 Content-Type을 `application/problem+json`으로, 상태 코드를 `status`로 정해요.'
+        - mark: setProperty
+          as: code
+          text: 표준 칸 말고 칸을 더해요. 본문에 `"productId":99`로 나와요.
+    - p: '`@ExceptionHandler`를 여러 컨트롤러에서 함께 쓰려면 `@RestControllerAdvice`에 모아요. 입력 검증의 에러를 같은 모양으로 만드는 일과 함께 예외 처리와 검증 레슨에서 다뤄요.'
+    - h3: 스프링이 내는 에러도 같은 모양으로
+    - p: '405처럼 컨트롤러에 닿기 전에 스프링이 내는 에러는 기본 설정에서 다른 모양(`timestamp`, `error`, `path`)이에요. 설정 하나를 켜면 이것도 Problem Details로 나와요.'
+    - code: problemYml
+    - ci:
+        key: problem-enabled
+        label: 설정 전후의 405 응답 보기
+        source: RestDesignTest.frameworkErrorsAsProblemDetails
+        code: wrongMethod
+    - h3: '흔한 실수: 실패를 200에 담기'
+    - code: mistake
+      notes:
+        - mark: 'false'
+          as: code
+          text: 실패인데 상태 코드는 기본값 200으로 나가요.
+    - p: 같은 없는 상품을 이 코드와 고친 코드(위의 `handler`)로 읽어 봤어요.
+    - ci:
+        key: mistake
+        label: 두 응답 비교하기
+        source: RestDesignTest.okButFailedVsProblem
+        code: mistakeRun
+    - p: '첫 응답은 200이라 앱과 모니터링이 성공으로 봐요(질문 3). 고친 응답은 404와 표준 본문이에요. 컨트롤러는 "없다"를 예외로 알리고, 상태 코드와 본문은 핸들러 한 곳이 정해요.'
+    - more:
+        summary: '더 알아보기: 이미 쓰는 클라이언트를 깨지 않으려면'
+        body:
+          - p: '앱은 사용자가 업데이트하기 전까지 옛 버전이 계속 돌아요. 그래서 응답의 **칸을 지우거나 이름을 바꾸면** 옛 앱이 깨져요. 칸을 **더하는 것**은 괜찮아요. 옛 앱은 모르는 칸을 무시하니까요. 꼭 깨는 바꾸기가 필요하면 `/v2/products`처럼 새 버전을 만들어 옛 버전과 함께 두고, 옛 앱이 줄어든 뒤에 옛 버전을 내려요.'
+    - muted: '근거: [RFC 9457](link:rfc9457), [스프링 문서의 REST 에러 응답](link:springProblem), [스프링 부트 문서의 에러 처리](link:bootProblem). 응답은 테스트로 확인했어요.'
+interview:
+  question: REST API를 설계할 때 무엇을 신경 쓰나요?
+  model:
+    - label: 정의
+      text: REST는 서버의 데이터를 자원으로 보고 URL로 가리키며, 그 자원에 할 일을 HTTP 메서드로 나타내는 방식입니다. URL은 /products/7처럼 명사로 짓고 동사는 메서드가 말합니다.
+    - label: 원리
+      text: 메서드의 안전과 멱등을 따집니다. GET은 상태를 바꾸지 않고, PUT과 DELETE는 여러 번 보내도 서버의 상태가 같아서 응답을 못 받았을 때 다시 보내도 됩니다. POST는 멱등하지 않아 두 번 처리될 수 있습니다. 결과는 상태 코드로 알려 만들기는 201과 Location, 없음은 404, 상태 충돌은 409를 주고, 에러 본문은 RFC 9457 Problem Details로 통일합니다.
+    - label: 주의할 점
+      text: 실패를 200에 담으면 클라이언트와 모니터링이 성공으로 봅니다. 에러 본문에 스택 트레이스를 넣지 않고, 이미 쓰는 클라이언트가 있으면 칸을 지우지 않고 더하기만 하며 깨는 바꾸기는 새 버전으로 냅니다. POST 중복은 멱등 키로 막습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주소마다 달랐던 에러 응답을 @ExceptionHandler와 ProblemDetail로 하나의 모양으로 맞췄습니다.'
+verified: 이 레슨의 응답은 짐작이 아니라, 상품 API를 스프링 부트 3.5로 띄우고 자바 21 HttpClient로 요청해 받은 값이에요. 코드가 바뀔 때마다 테스트([RestDesignTest](link:test))가 다시 돌아요.
+footer: '근거: 안전과 멱등, 상태 코드, Location과 Allow는 RFC 9110, 에러 본문은 RFC 9457, REST는 Fielding의 논문 5장, ProblemDetail은 스프링 프레임워크 문서, problemdetails.enabled는 스프링 부트 문서. 예전 레슨 HTTP와 REST API 설계(2026-11-17)를 다시 썼고, 그 레슨의 페이지네이션은 페이지네이션 레슨으로 옮겼어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '같은 POST를 두 번 보내면 상품이 2개, 같은 PUT을 두 번 보내면 1개다. 두 PUT의 응답 본문이 같다'
     how: 'MiniWeb으로 상품 컨트롤러를 띄워 요청하고 개수를 센다'
+    test: RestDesignTest.postIsNotIdempotentPutIs
   - claim: 'DELETE를 두 번 보내면 204와 404이고, 두 번 뒤에도 상품이 없다'
     how: '같은 방법'
+    test: RestDesignTest.deleteTwice
   - claim: 'POST로 만들면 201과 Location 헤더가 온다'
     how: '응답 헤더를 본다'
+    test: RestDesignTest.postIsNotIdempotentPutIs
   - claim: '자원에 없는 메서드를 보내면 405와 Allow 헤더가 온다'
     how: '`POST /products/1`을 보낸다'
+    test: RestDesignTest.methodNotAllowed
   - claim: '`@ExceptionHandler`가 ProblemDetail을 돌려주면 404와 application/problem+json, 더한 칸이 온다'
     how: '없는 상품을 읽는다'
+    test: RestDesignTest.problemDetail
   - claim: '실패를 200에 담은 응답과 404 Problem Details를 비교한다'
     how: '두 컨트롤러를 부른다'
+    test: RestDesignTest.okButFailedVsProblem
   - claim: 'spring.mvc.problemdetails.enabled를 켜면 405도 Problem Details로 나온다'
     how: '속성을 켠 앱에서 405를 만든다'
+    test: RestDesignTest.frameworkErrorsAsProblemDetails
 sources:
   - '안전과 멱등한 메서드, 상태 코드, Location, Allow: RFC 9110 https://www.rfc-editor.org/rfc/rfc9110.html'
   - 'Problem Details: RFC 9457 https://www.rfc-editor.org/rfc/rfc9457.html'

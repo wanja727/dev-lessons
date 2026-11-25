@@ -1,115 +1,239 @@
-# HTTP와 REST API 설계 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# REST API 설계 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 2026-11-25에 레슨을 핵심 질문 구조로 다시 쓰며 문제도 새로 만들었다. 예전 문제(키 q-xxxxxxxx, 노션에서 옮김)는
+# 지웠다. 예전 문제 가운데 페이지네이션 문제는 페이지네이션 레슨(D8)이 맡는다.
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/rest-api.yaml의 says).
+# 동작에 관한 정답은 verification의 RestDesignTest로 확인했다 (스프링 부트 3.5, 자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: rest-api
-  title: HTTP와 REST API 설계
+  title: REST API 설계
   unit: 네트워크와 웹
-  order: 30
+  order: 59
 concepts:
   - key: core
-    name: HTTP와 REST API 설계
+    name: REST API 설계
+coreQuestions:
+  - key: q1
+    text: "REST API에서 URL과 메서드는 어떻게 나누나요?"
+  - key: q2
+    text: "안전과 멱등은 무엇이고 왜 따지나요?"
+  - key: q3
+    text: "어떤 상태 코드를 돌려줘야 하나요?"
+  - key: q4
+    text: "에러 응답의 본문은 어떤 모양으로 주나요?"
 questions:
-  - key: q-52138e9b
+  # ── 질문 1 ──
+  - key: ra-delete-url
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: HTTP 메서드의 안전성과 멱등성을 설명하고, GET·POST·PUT·PATCH·DELETE를 분류해 보세요
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: RestApiTest
-    checklist:
-      - 안전 = 서버 상태를 바꾸지 않음 (GET)이라고 말했다
-      - 멱등 = 여러 번 보내도 서버 상태가 같음이라고 말했다
-      - PUT, DELETE는 멱등, POST는 아님을 말했다
-      - PATCH는 멱등이 보장되지 않는다고 말했다
-      - "멱등은 응답이 아니라 상태에 대한 약속(DELETE 두 번: 204, 404)이라고 말했다"
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-3cf05dc4
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: offset 페이지네이션과 cursor 페이지네이션을 비교해 보세요
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: RestApiTest (offsetDuplicatesCursorDoesNot)
-    checklist:
-      - offset은 앞에서 n개 건너뛰기, cursor는 마지막 항목 다음부터라고 말했다
-      - offset은 중간 변경에 밀려 중복·누락이 생긴다고 말했다
-      - offset은 깊은 페이지일수록 느려진다고 말했다
-      - cursor는 임의 페이지 이동이 어렵다고 말했다
-      - 정렬 키가 유일해야 한다고 말했다
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-ca3804ba
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: "모든 API가 200을 돌려주고 본문에 {\"success\": false}를 담는 기존 서비스를 맡았습니다. 무엇이 문제이고 어떻게 바꾸겠어요?"
-    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
-    checklist:
-      - 모니터링·재시도 도구가 오류를 모른다고 말했다
-      - 400/404/409/500 등 알맞은 상태 코드를 쓴다고 말했다
-      - 에러 본문을 RFC 9457 Problem Details로 통일한다고 말했다
-      - 기존 클라이언트가 깨지지 않게 새 버전(/v2)으로 낸다고 말했다
-      - 4xx는 재시도하지 않고 5xx는 재시도할 만하다는 구분을 말했다
-    source: https://www.rfc-editor.org/rfc/rfc9457.html
-  - key: q-ccc7695f
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 2
-    body: DELETE를 두 번 보냈더니 204 다음 404가 왔다. 응답이 다르므로 DELETE는 멱등이 아니다
-    answer: X
-    explanation: |-
-      - 멱등은 서버 상태에 대한 약속이다. 상품은 여전히 없다
-      - 검증: RestApiTest (deleteTwice)
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-23ed94d8
-    concept: core
-    type: code_predict
-    status: reviewed
-    difficulty: 1
-    body: 같은 본문으로 POST /products를 두 번, PUT /products/7을 두 번 보냈다. 각각 상품 수는?
-    choices:
-      - 1, 1
-      - 2, 1
-      - 2, 2
-    answer: "2"
-    explanation: |-
-      - POST는 201 두 번(Location 1, 2), PUT은 201 다음 200
-      - 검증: RestApiTest (postIsNotIdempotentButPutIs)
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-9a5b1da6
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: 새 자원을 만든 POST의 알맞은 응답은?
+    body: "상품 API에서 7번 상품을 지우는 요청으로 REST에 가장 맞는 것은 무엇일까요?"
     choices:
-      - 200 OK
-      - 201 Created + Location 헤더
-      - 204 No Content
-    answer: "2"
-    explanation: "- Location에 새 자원의 주소를 담는다"
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-788da7f6
+      - "GET /deleteProduct?id=7"
+      - "POST /products/7/delete"
+      - "DELETE /products/7"
+      - "POST /deleteProduct"
+    answer: "3"
+    explanation: |-
+      **DELETE /products/7이에요.** URL은 자원(명사)을 가리키고, 할 일은 메서드가 말해요.
+
+      - GET /deleteProduct는 읽기 메서드로 지워서 메서드와 뜻이 어긋나요
+      - URL에 동사(delete)를 넣지 않아요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-9.3.5
+  - key: ra-sub-resource
     concept: core
-    type: code_predict
-    status: reviewed
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
     difficulty: 2
-    body: 최신순 3개씩 offset 페이지네이션. 1페이지 [6, 5, 4]를 본 뒤 새 글(7)이 생겼다. 2페이지는?
+    body: "회원 3번이 등록한 배송지 목록을 읽는 API를 만들려고 해요. REST에 가장 맞는 것은 무엇일까요?"
     choices:
-      - "[3, 2, 1]"
-      - "[4, 3, 2]"
-      - "[7, 6, 5]"
+      - "GET /members/3/addresses"
+      - "POST /getAddresses?memberId=3"
+      - "GET /readMemberAddresses/3"
+      - "GET /addresses/getByMember/3"
+    answer: "1"
+    explanation: |-
+      **GET /members/3/addresses예요.** 배송지는 회원 3번의 하위 자원이라 경로로 나타내고, 읽기는 GET이 말해요.
+
+      - 나머지는 URL에 동사(get, read)가 들어 있어요
+      - 거르기나 정렬처럼 조건을 붙일 때는 쿼리를 써요
+    source: https://ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm
+  # ── 질문 2 ──
+  - key: ra-delete-idempotent
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "`DELETE /products/7`을 두 번 보냈더니 첫 번째는 204, 두 번째는 404가 왔어요. DELETE에 대해 맞는 말은 무엇일까요?"
+    choices:
+      - 응답이 다르니 멱등하지 않다
+      - 두 번 뒤에도 서버 상태(7번 없음)가 같으니 멱등하다
+      - DELETE는 안전한 메서드라 상태를 바꾸지 않는다
+      - 두 번째 요청이 7번 상품을 다시 만들었다
     answer: "2"
     explanation: |-
-      - 한 칸씩 밀려 4번이 또 나온다. cursor(id &lt; 4)면 [3, 2, 1]
-      - 검증: RestApiTest (offsetDuplicatesCursorDoesNot)
+      **멱등해요.** 멱등은 응답이 아니라 서버의 상태를 말해요.
+
+      - 몇 번 보내도 7번 상품이 없는 상태는 같아요
+      - DELETE는 상태를 바꾸니 안전한 메서드는 아니에요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2.2
+  - key: ra-post-retry
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "포인트 100점 적립을 `POST /points`로 만들었어요. 모바일 앱이 요청을 보냈는데 응답을 기다리다 시간 초과가 나서 같은 요청을 다시 보냈어요. 사실 첫 요청은 서버에서 처리됐어요. 어떻게 될까요?"
+    choices:
+      - 서버가 같은 요청인 것을 알고 무시한다
+      - 두 번 처리되어 200점이 쌓일 수 있다
+      - POST는 멱등해서 100점만 쌓인다
+      - 두 번째 요청은 405를 받는다
+    answer: "2"
+    explanation: |-
+      **두 번 처리될 수 있어요.** POST는 멱등을 약속하지 않아요.
+
+      - 응답을 못 받은 클라이언트는 요청이 처리됐는지 몰라 다시 보내요
+      - 막으려면 요청에 고유한 키를 붙여 서버가 중복을 거르게 해요(멱등성과 중복 요청 방지 레슨)
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2.2
+  # ── 질문 3 ──
+  - key: ra-201-location
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "`POST /products`로 새 상품을 만들었어요. 응답의 상태 코드와 함께 주면 좋은 헤더로 가장 알맞은 것은 무엇일까요?"
+    choices:
+      - "200과 Allow"
+      - "201과 Location"
+      - "204와 Content-Length"
+      - "302와 Location"
+    answer: "2"
+    explanation: |-
+      **201과 Location이에요.** 201은 새로 만들었다는 뜻이고, Location은 새 자원의 주소예요.
+
+      - 클라이언트는 Location의 주소(/products/1)로 새 상품을 바로 읽어요
+      - 스프링에서는 ResponseEntity.created(location)이 둘을 한 번에 정해요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-15.3.2
+  - key: ra-409
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "이미 취소된 주문에 다시 취소 요청이 왔어요. 요청의 형식은 맞고 주문도 있어요. 가장 알맞은 상태 코드는 무엇일까요?"
+    choices:
+      - "200, 본문에 실패를 적는다"
+      - "400"
+      - "404"
+      - "409"
+    answer: "4"
+    explanation: |-
+      **409예요.** 자원의 지금 상태(취소됨)와 요청이 충돌해요.
+
+      - 형식이 맞으니 400이 아니고, 주문이 있으니 404도 아니에요
+      - 실패를 200에 담으면 클라이언트와 모니터링이 성공으로 봐요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-15.5.10
+  - key: ra-ok-but-failed
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: "아래 컨트롤러에 없는 상품 99번을 요청하면 응답의 상태 코드는 무엇이고, 무엇이 문제일까요? (스프링 부트 3.5)"
+    code: |-
+      @GetMapping("/products/{id}")
+      Map<String, Object> get(
+          @PathVariable long id) {
+        Product p = products.get(id);
+        if (p == null) {
+          return Map.of("success", false);
+        }
+        return Map.of("success", true,
+            "data", p);
+      }
+    choices:
+      - 404라서 문제없다
+      - 200이라서, 클라이언트와 모니터링이 실패를 성공으로 본다
+      - 500이라서 서버 오류로 보인다
+      - 204라서 본문이 사라진다
+    answer: "2"
+    explanation: |-
+      **200이 나가요.** 실패를 본문에만 적어서 상태 코드는 성공이에요.
+
+      - HTTP 라이브러리와 모니터링은 상태 코드로 성공을 판단해요
+      - 고친 코드는 예외를 던지고 @ExceptionHandler가 404 Problem Details를 돌려줘요
+    source: https://www.rfc-editor.org/rfc/rfc9110.html#section-15
+  # ── 질문 4 ──
+  - key: ra-problem-type
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "스프링 부트 3.5에서 @ExceptionHandler가 ProblemDetail을 돌려줬어요. 에러 응답의 Content-Type은 무엇일까요?"
+    choices:
+      - "application/json"
+      - "application/problem+json"
+      - "text/plain"
+      - "application/error+json"
+    answer: "2"
+    explanation: |-
+      **application/problem+json이에요.** RFC 9457의 Problem Details가 정한 미디어 타입이에요.
+
+      - 본문에는 type, title, status, detail, instance가 들어가요
+      - 테스트에서 없는 상품을 읽었을 때 이 Content-Type으로 404가 왔어요
+    source: https://www.rfc-editor.org/rfc/rfc9457.html
+  - key: ra-stack-trace
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "결제 API는 실패하면 본문에 자바 예외의 스택 트레이스와 실패한 SQL을 그대로 담아 줘요. 주소마다 본문 모양도 달라요. 무엇이 문제일까요?"
+    choices:
+      - 문제없다. 자세할수록 클라이언트에 좋다
+      - 내부 구조가 드러나고, 모양이 달라 클라이언트가 에러를 한 가지로 처리하지 못한다
+      - 상태 코드가 자동으로 200이 된다
+      - 스택 트레이스가 길어서 HTTP가 보낼 수 없다
+    answer: "2"
+    explanation: |-
+      **내부가 드러나고 모양이 제각각이에요.** 에러 본문은 같은 모양(Problem Details)으로, 필요한 만큼만 담아요.
+
+      - 스택 트레이스와 SQL은 공격자에게 프레임워크와 테이블 구조를 알려 줘요
+      - 자세한 원인은 서버 로그에 남겨요
+    source: https://www.rfc-editor.org/rfc/rfc9457.html#section-5
+  # ── 전체 ──
+  - key: ra-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "REST API를 설계할 때 무엇을 신경 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **URL은 자원, 할 일은 메서드로 나누고, 멱등을 따지고, 상태 코드와 에러 본문을 표준대로 줘요.**
+
+      - **URL과 메서드:** /products/7처럼 명사로 짓고, GET, POST, PUT, DELETE로 할 일을 말한다
+      - **안전과 멱등:** GET은 상태를 바꾸지 않고, PUT과 DELETE는 다시 보내도 상태가 같다. POST는 두 번 처리될 수 있다
+      - **상태 코드:** 201과 Location, 204, 404, 409처럼 결과에 맞게 주고, 실패를 200에 담지 않는다
+      - **에러 본문:** RFC 9457 Problem Details로 통일하고 내부 정보는 담지 않는다
+    checklist:
+      - URL은 명사(자원), 할 일은 HTTP 메서드로 나타낸다고 말했다
+      - 안전과 멱등의 뜻과 POST가 멱등하지 않다는 것을 말했다
+      - 결과에 맞는 상태 코드(201과 Location 등)를 고르고 실패를 200에 담지 않는다고 말했다
+      - 에러 본문을 Problem Details 같은 하나의 모양으로 준다고 말했다
+      - 이미 쓰는 클라이언트를 깨지 않게 바꾸는 법이나 멱등 키를 말했다
     source: https://www.rfc-editor.org/rfc/rfc9110.html
