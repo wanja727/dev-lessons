@@ -1,0 +1,232 @@
+# 서버를 늘리는 방법 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/scale-out.yaml의 says).
+# 동작에 관한 정답은 verification의 ScaleOutTest로 확인했다 (스프링 부트 3.5, Redis 7).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: scale-out
+  title: 서버를 늘리는 방법
+  unit: 시스템 설계와 아키텍처
+  order: 903
+concepts:
+  - key: core
+    name: 서버를 늘리는 방법
+coreQuestions:
+  - key: q1
+    text: "서버가 버거우면 어떤 방법으로 늘리나요?"
+  - key: q2
+    text: "로드 밸런서는 요청을 어떻게 나눠 주나요?"
+  - key: q3
+    text: "서버를 두 대로 늘리면 로그인이 왜 풀리나요?"
+  - key: q4
+    text: "세션 말고도 서버 메모리에 두면 안 되는 것은 무엇인가요?"
+questions:
+  # ── 질문 1 ──
+  - key: so-scale-up-down
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 쇼핑몰 API 서버 한 대를 메모리와 CPU가 두 배인 서버로 바꿨어요. 이 방법의 이름과, 이 서버가 죽었을 때 서비스는 어떻게 되나요?
+    choices:
+      - 스케일 업. 서비스가 멈춘다
+      - 스케일 아웃. 서비스가 멈춘다
+      - 스케일 업. 다른 서버가 이어받는다
+      - 스케일 아웃. 다른 서버가 이어받는다
+    answer: "1"
+    explanation: |-
+      **스케일 업이고, 한 대뿐이라 죽으면 서비스가 멈춰요.**
+
+      - 한 대를 더 크게 만드는 것이 스케일 업(수직 확장)이에요
+      - 같은 서버를 여러 대 두는 스케일 아웃이라야 한 대가 죽어도 나머지가 받아요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  - key: so-one-of-four-dies
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 4대가 로드 밸런서 뒤에서 요청을 나눠 받다가 1대가 죽었어요. 로드 밸런서가 헬스 체크로 그 서버를 빼면 서비스는 어떻게 되나요?
+    choices:
+      - 모든 요청이 실패한다
+      - 나머지 3대가 받는다. 처리할 수 있는 양만 줄어든다
+      - 죽은 서버가 살아날 때까지 요청이 기다린다
+      - 로드 밸런서가 서버를 새로 산다
+    answer: "2"
+    explanation: |-
+      **나머지 3대가 받아요.** 스케일 아웃은 한 대가 죽어도 서비스가 이어져요(가용성).
+
+      - 처리할 수 있는 요청의 양은 4분의 3으로 줄어요
+      - 한 대짜리 스케일 업이었다면 서비스가 멈췄을 거예요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  # ── 질문 2 ──
+  - key: so-round-robin-five
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서버 두 대 앞의 로드 밸런서가 라운드 로빈으로 나눠요. 요청 5개를 차례로 보내면 서버 1과 서버 2는 각각 몇 개를 받나요?
+    choices:
+      - 3개와 2개
+      - 5개와 0개
+      - 2개와 3개
+      - 정해지지 않는다
+    answer: "1"
+    explanation: |-
+      **서버 1이 3개, 서버 2가 2개예요.** 라운드 로빈은 서버 1, 2, 1, 2, 1 차례로 보내요.
+
+      - 요청마다 일의 크기가 비슷하면 고르게 나뉘어요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  - key: so-least-conn
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 대부분의 요청은 10ms에 끝나는데, 가끔 3초 걸리는 리포트 요청이 섞여요. 느린 요청을 처리 중인 서버 뒤에 다른 요청이 줄 서는 일이 더 적은 방식은 무엇일까요?
+    choices:
+      - 라운드 로빈
+      - 가장 적은 연결
+      - 둘이 같다
+      - 로드 밸런서를 빼는 것
+    answer: "2"
+    explanation: |-
+      **가장 적은 연결이에요.** 처리 중인 요청이 적은 서버로 보내서 바쁜 서버를 피해 가요.
+
+      - 라운드 로빈은 서버가 바빠도 차례가 오면 요청을 보내요
+      - 요청마다 걸리는 시간이 들쭉날쭉할 때 가장 적은 연결이 나아요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  # ── 질문 3 ──
+  - key: so-redis-session-me
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 세션을 Redis에 두고 서버 두 대를 라운드 로빈으로 돌려요. 서버 1에서 로그인한 뒤 서버 2로 간 `GET /me`는 무엇을 받나요? (로그인하면 minji, 아니면 guest를 돌려줘요)
+    choices:
+      - minji. 두 서버가 같은 Redis에서 세션을 읽는다
+      - guest. 세션은 서버 1에만 있다
+      - 오류. 서버 2는 쿠키를 읽을 수 없다
+      - guest. Redis는 서버마다 따로 있다
+    answer: "1"
+    explanation: |-
+      **minji예요.** 세션이 서버 메모리가 아니라 두 서버가 함께 보는 Redis에 있어요.
+
+      - 테스트에서 /login 뒤 /me 두 번이 minji, minji였어요
+      - 서버 메모리의 세션이면 guest가 나와요
+    source: https://docs.spring.io/spring-session/reference/guides/boot-redis.html
+  - key: so-sticky-redeploy
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 세션은 서버 메모리에 두고, 로드 밸런서가 스티키 세션으로 같은 사용자를 같은 서버에 붙여요. 서버 1을 배포하려고 내렸어요. 서버 1에 붙어 있던 사용자의 다음 요청은 어떻게 되나요?
+    choices:
+      - 서버 2로 가고 로그인이 이어진다
+      - 서버 2로 가고 세션이 없어 다시 로그인해야 한다
+      - 서버 1이 다시 뜰 때까지 기다린다
+      - 서버 1의 세션이 서버 2로 저절로 옮겨진다
+    answer: "2"
+    explanation: |-
+      **다시 로그인해야 해요.** 세션은 서버 1의 메모리에만 있었고, 서버 1이 내려가며 사라졌어요.
+
+      - 스티키 세션은 고치기 쉽지만 서버가 내려가면 그 서버의 세션을 모두 잃어요
+      - 세션을 Redis 같은 공유 저장소에 두면 이 문제가 없어요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  # ── 질문 4 ──
+  - key: so-counter-three
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 컨트롤러를 서버 세 대에 띄우고, 라운드 로빈 로드 밸런서로 `POST /views`를 여섯 번 보냈어요. 여섯 번째 응답은 무엇일까요?
+    code: |-
+      private final AtomicLong views =
+          new AtomicLong();
+
+      @PostMapping("/views")
+      long view() {
+        return views.incrementAndGet();
+      }
+    choices:
+      - "6"
+      - "2"
+      - "3"
+      - "1"
+    answer: "2"
+    explanation: |-
+      **2예요.** 조회수가 서버마다 따로 세져서 서버마다 두 번씩 올라요.
+
+      - 응답은 1, 1, 1, 2, 2, 2예요. 실제 조회수 6은 어디에도 없어요
+      - 테스트에서 서버 두 대로 네 번 올리니 1, 1, 2, 2였어요
+    source: https://nginx.org/en/docs/http/load_balancing.html
+  - key: so-scheduled-mail
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 매시 정각에 쿠폰 만료 안내 메일을 보내는 `@Scheduled` 메서드가 있어요. 설정을 바꾸지 않고 서버를 세 대로 늘리면, 회원 한 명은 매시 메일을 몇 통 받나요?
+    choices:
+      - 한 통
+      - 세 통
+      - 받지 못한다
+      - 서버마다 무작위로 한 대만 보낸다
+    answer: "2"
+    explanation: |-
+      **세 통이에요.** @Scheduled는 서버마다 돌아요.
+
+      - 테스트에서 100ms마다 도는 작업이 서버 두 대에서 1초에 20번쯤 돌았어요(한 대면 10번쯤)
+      - 한 서버에서만 켜거나 분산 락으로 한 번만 돌게 해요
+    source: https://docs.spring.io/spring-framework/reference/integration/scheduling.html
+  - key: so-spring-session-code
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버를 두 대로 늘리면서 `spring-session-data-redis` 의존성과 Redis 주소를 넣었어요. 컨트롤러는 `session.setAttribute("user", ...)`로 `HttpSession`에 사용자를 넣고 있어요. 이 컨트롤러 코드는 어떻게 해야 하나요?
+    choices:
+      - Redis 명령으로 직접 저장하게 모두 고친다
+      - 그대로 둔다. 같은 HttpSession이 Redis에 저장된다
+      - HttpSession을 쓰지 않게 토큰으로 바꿔야만 한다
+      - 서버마다 다른 코드로 나눈다
+    answer: "2"
+    explanation: |-
+      **그대로 둬요.** 스프링 세션이 HttpSession의 저장소를 Redis로 바꿔 줘요.
+
+      - 세션에 넣는 객체는 Redis에 쓰려고 직렬화되니 Serializable이어야 해요
+      - 근거는 스프링 세션 문서예요
+    source: https://docs.spring.io/spring-session/reference/guides/boot-redis.html
+  # ── 네 질문을 하나로 ──
+  - key: so-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "서버를 여러 대로 늘리면 무엇이 문제가 되고, 어떻게 푸나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **서버 메모리에 둔 상태가 서버마다 따로라 어긋나고, 상태를 공유 저장소로 옮겨 무상태 서버로 만들어 풀어요.**
+
+      - **늘리는 방법:** 한 대를 키우는 스케일 업과 여러 대로 늘리는 스케일 아웃. 로드 밸런서가 나누고 헬스 체크로 죽은 서버를 뺀다
+      - **세션:** 다른 서버로 간 요청은 세션을 못 찾는다. 스티키 세션, Redis 세션 저장소, 토큰으로 푼다
+      - **다른 상태:** 메모리 카운터, 로컬 캐시, 로컬 파일은 공유 저장소로 옮긴다
+      - **스케줄:** @Scheduled는 서버마다 돈다. 한 서버에서만 켜거나 분산 락
+    checklist:
+      - 스케일 업과 스케일 아웃의 차이를 말했다
+      - 로드 밸런서가 요청을 나눈다고 말했다
+      - 서버 메모리의 세션이 다른 서버에 없다는 문제를 말했다
+      - 스티키 세션, 세션 저장소, 토큰 가운데 둘 이상을 말했다
+      - 세션 말고 다른 상태나 @Scheduled가 서버마다 도는 것을 말했다
+    source: https://docs.spring.io/spring-session/reference/guides/boot-redis.html
