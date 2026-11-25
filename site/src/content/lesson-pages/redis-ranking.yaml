@@ -1,0 +1,165 @@
+# Redis (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: Redis
+unit: 시스템 설계와 아키텍처
+roadmap: A5
+type: 동작 확인
+prerequisites:
+  - {slug: cache-strategy, title: 캐시 전략과 무효화}
+assume: 'Redis 7, 자바 클라이언트 Lettuce. 캐시를 Redis에 두는 cache-aside와 TTL(캐시 전략과 무효화 레슨). 해시 테이블과 정렬, 시간 복잡도 O(1), O(log n)의 뜻(자료구조와 알고리즘 과정).'
+example: '게임 이벤트의 점수 랭킹. 사용자가 점수를 얻을 때마다 더하고, 상위 3명과 내 순위를 보여 준다. 조회수 카운터, 최근 본 상품, 오늘 방문자도 같은 Redis에 둔다.'
+intro:
+  - '이벤트 랭킹 페이지를 DB로 만들었더니, 참여자가 10만 명이 넘자 "상위 10명과 내 순위" 쿼리가 요청마다 전체를 정렬해서 느려졌어요. 같은 일을 Redis의 Sorted Set으로 바꾸면 점수를 더하는 순간 순위가 이미 정리돼 있어요.'
+  - '스프링 서비스에서 Redis는 캐시만이 아니라 세션 저장소, 카운터, 랭킹, 요청 수 제한, 재고 차감에 두루 쓰여요. 개발자는 값의 모양에 맞는 자료구조를 고르고, 여러 서버가 동시에 바꿔도 값이 맞는지를 알아야 해요. 면접에서는 "Redis가 왜 빠른가요", "싱글 스레드인데 어떻게 동시 요청을 처리하나요"를 물어요.'
+  - '이 레슨에서는 Redis 컨테이너에 자료구조 다섯 가지를 직접 넣어 보고, 10만 명 랭킹에서 상위 10명과 내 순위를 구하는 시간을 재고, 스레드 50개가 동시에 점수를 더해도 하나도 잃지 않는 것을 확인해요.'
+covers:
+  - topic: 'Redis는 데이터를 메모리에 두는 키-값 저장소다. 디스크를 거치지 않아 빠르고, 값에 여러 자료구조를 쓸 수 있다'
+    where: '질문 1'
+  - topic: '자료구조 다섯 가지와 쓰임: String(카운터, 캐시), Hash(객체의 필드), List(최근 본 목록, 큐), Set(중복 없는 모음), Sorted Set(점수 순서)'
+    where: '질문 1'
+  - topic: '키에 만료 시간(EXPIRE, TTL)을 줄 수 있다'
+    where: '질문 1'
+  - topic: 'Sorted Set은 멤버마다 점수를 두고 점수 순서를 늘 유지한다. ZINCRBY, ZREVRANGE, ZREVRANK'
+    where: '질문 2'
+  - topic: 'Sorted Set의 더하기와 순위 구하기는 O(log n)이라 멤버가 많아도 빠르다'
+    where: '질문 2'
+  - topic: '점수가 같으면 멤버 이름의 사전 순서로 놓인다. 먼저 달성한 사람을 앞에 두려면 점수에 시간을 섞는다'
+    where: '질문 2의 더 알아보기'
+  - topic: 'Redis는 명령을 한 스레드에서 하나씩 실행한다. 그래서 INCR, ZINCRBY 같은 명령 하나는 다른 명령과 섞이지 않는다(원자적)'
+    where: '질문 3'
+  - topic: '명령 하나는 원자적이지만, GET 뒤 SET처럼 명령 둘로 나눈 읽고-바꾸기는 사이에 다른 명령이 끼어든다'
+    where: '질문 3'
+  - topic: '여러 명령을 한 번에 실행하려면 Lua 스크립트나 MULTI/EXEC를 쓴다'
+    where: '질문 3. 재고 차감에 쓰는 것은 동시 요청에서 재고 지키기(A7)'
+  - topic: 'KEYS처럼 오래 걸리는 명령 하나가 다른 모든 명령을 기다리게 한다'
+    where: '질문 3의 더 알아보기'
+  - topic: '메모리 저장소라 원본 데이터는 DB에 둔다. 영속화(RDB 스냅샷, AOF)가 있어도 마지막 몇 초는 잃을 수 있다'
+    where: '질문 4'
+  - topic: '일간, 주간 랭킹은 날짜별 키에 쌓고 ZUNIONSTORE로 합친다. 날짜별 키에는 만료를 준다'
+    where: '질문 4'
+  - topic: '스프링에서 쓰기: spring-boot-starter-data-redis, StringRedisTemplate, opsForZSet'
+    where: '실무에서는'
+  - topic: '분산 락과 요청 수 제한에 Redis 쓰기'
+    where: '다루지 않음: 분산 락(A12), 요청 수 제한(A13)'
+  - topic: '세션을 Redis에 두기'
+    where: '다루지 않음: 서버를 늘리는 방법(A3)'
+codes:
+  predict: |-
+    ZADD ranking 100 minji
+    ZADD ranking 100 alice
+    ZADD ranking 90 junho
+    ZREVRANGE ranking 0 2
+  rank: |-
+    redis.zincrby("ranking", 30, "minji");
+    List<ScoredValue<String>> top =
+        redis.zrevrangeWithScores(
+            "ranking", 0, 2);
+    Long myRank =
+        redis.zrevrank("ranking", "junho");
+  getSet: |-
+    String v = redis.get("views");
+    long n = Long.parseLong(v) + 1;
+    redis.set("views", String.valueOf(n));
+  template: |-
+    redis.opsForZSet()
+        .incrementScore(key, user, score);
+    Set<TypedTuple<String>> top =
+        redis.opsForZSet()
+            .reverseRangeWithScores(
+                key, 0, 9);
+predict:
+  text: '코드 predict처럼 minji와 alice가 둘 다 100점이고 junho가 90점이에요. 점수가 높은 순서로 세 명을 꺼내면 어떤 순서일까요? 보기: minji, alice, junho / alice, minji, junho / 넣은 순서와 상관없이 매번 다르다.'
+  answer: 'minji, alice, junho. 점수가 같으면 ZREVRANGE는 멤버 이름의 사전 역순으로 놓는다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: Redis는 무엇이고 어떤 자료구조를 쓰나요?
+    conclusion:
+      lead: '데이터를 메모리에 두는 키-값 저장소이고, 값에 String, Hash, List, Set, Sorted Set 같은 자료구조를 담아요.'
+      sub: '메모리라 디스크를 읽는 DB보다 빠르고, 값의 모양에 맞는 자료구조를 고르면 서버가 할 계산을 Redis 명령 하나로 끝내요.'
+    says:
+      - 'Redis는 키 하나에 값 하나를 둔다. 값이 문자열만이 아니라 자료구조일 수 있다는 것이 메모리 맵과 다르다'
+      - '다섯 가지를 쓰임과 함께 표로 보인다. String: 조회수(`INCR`), 캐시. Hash: 상품 하나의 필드(`HSET`). List: 최근 본 상품 5개(`LPUSH`와 `LTRIM`). Set: 오늘 방문자(`SADD`, 중복 없음). Sorted Set: 랭킹(`ZADD`)'
+      - '테스트로 다섯 가지에 넣고 읽은 실제 출력을 보인다. 같은 사용자가 두 번 방문해도 Set의 크기는 1이고, List는 6번째를 넣으면 가장 오래된 것이 빠진다'
+      - '키에 만료를 줄 수 있다(`EXPIRE`). A4의 캐시 TTL이 이것이다'
+    asks:
+      - '본문의 예시: 오늘 방문한 사용자 수를 중복 없이 세려면 다섯 자료구조 가운데 무엇을 쓰나 (Set. `SADD`와 `SCARD`)'
+      - '옮긴 상황: 채팅방마다 마지막 메시지 50개만 보여 준다. 새 메시지를 넣을 때마다 오래된 것을 버리려면 무엇을 쓰나 (List. `LPUSH` 뒤 `LTRIM 0 49`)'
+  - id: q2
+    title: Sorted Set으로 랭킹을 어떻게 만드나요?
+    conclusion:
+      lead: '사용자를 멤버로, 점수를 점수로 넣으면 Redis가 늘 점수 순서를 유지해서, 상위 N명과 내 순위를 명령 하나로 꺼내요.'
+      sub: '점수 더하기와 순위 구하기는 O(log n)이라 10만 명이어도 바로 나와요. 점수가 같으면 멤버 이름 순서로 놓여요.'
+    says:
+      - '코드 rank: `ZINCRBY`로 점수를 더하고, `ZREVRANGE ... WITHSCORES`로 높은 점수부터 세 명을, `ZREVRANK`로 내 순위를 구한다. 순위는 0부터 센다. 실제 출력을 보인다'
+      - 'DB로 같은 일을 하면 요청마다 점수로 정렬하거나 내 점수보다 높은 사람을 센다. Sorted Set은 넣을 때 자리를 잡아 두므로 꺼낼 때 정렬하지 않는다'
+      - '10만 명을 넣고 상위 10명과 5만 번째 사람의 순위를 구한 시간을 실제 출력으로 보인다(마이크로초 단위)'
+      - '점수가 같으면 멤버 이름의 사전 순서다. `ZREVRANGE`는 그 역순이라 minji가 alice보다 앞이다. 예측의 답을 밝힌다'
+      - '더 알아보기: 먼저 100점을 달성한 사람을 앞에 두려면 점수에 시간을 섞는다. 예: 점수 × 10^10 + (아주 큰 수 - 달성 시각). 실제 출력으로 순서를 보인다'
+    widget:
+      kind: steps
+      note: '빈 랭킹에 ZINCRBY를 하나씩 실행한다. 단계마다 Sorted Set의 멤버와 점수가 점수 순서로 다시 놓이고, 마지막 단계에서 ZREVRANGE 0 2와 ZREVRANK의 결과가 나온다. 동점 단계에서 이름 순서로 놓이는 것을 강조한다'
+    asks:
+      - '본문의 예시: 랭킹에 minji 100, junho 90, alice 120이 있다. `ZREVRANK ranking junho`의 결과는 (2. 0부터 센다)'
+      - '옮긴 상황: 상품 판매량 순위를 보여 준다. 주문이 들어올 때마다 `ZINCRBY sales 1 상품id`를 하고 많이 팔린 10개를 보여 주는 명령은 (`ZREVRANGE sales 0 9`)'
+  - id: q3
+    title: 여러 서버가 동시에 점수를 더해도 왜 값이 맞나요?
+    conclusion:
+      lead: 'Redis는 명령을 한 줄로 세워 하나씩 실행해서, `ZINCRBY`나 `INCR` 같은 명령 하나는 다른 명령과 섞이지 않아요.'
+      sub: '하지만 `GET`으로 읽고 `SET`으로 쓰는 것처럼 명령 둘로 나누면 그 사이에 다른 명령이 끼어들어 값을 잃어요. 여러 명령을 한 번에 하려면 Lua 스크립트를 써요.'
+    says:
+      - '스레드 50개가 `ZINCRBY`를 합해 1,000번 해도 점수가 정확히 1,000이다. 테스트로 보인다'
+      - 'Redis는 명령 실행을 한 스레드가 한다. 요청은 여럿이 동시에 와도 실행은 차례로 한다. 그래서 명령 하나 안에서는 경쟁 상태가 없다(C3의 원자성)'
+      - '코드 getSet: 조회수를 `GET`으로 읽어 1을 더하고 `SET`으로 쓴다. 스레드 50개가 1,000번 하면 1,000보다 작다. 두 요청이 같은 값을 읽고 같은 값을 쓰기 때문이다. 테스트로 보인다'
+      - '고치는 법: `INCR` 하나로 바꾸거나, 읽고 바꾸는 여러 명령을 Lua 스크립트로 묶어 한 번에 실행한다. 재고처럼 "확인하고 줄이기"가 필요한 경우는 A7에서 다룬다'
+      - '더 알아보기: 한 스레드라서 오래 걸리는 명령 하나가 모두를 기다리게 한다. 키 전체를 훑는 `KEYS *`를 운영에서 쓰지 않고 `SCAN`을 쓴다'
+    widget:
+      kind: toggle
+      note: 'GET과 SET으로 나눈 방식과 INCR 하나를 고르고 실행을 누르면, 두 서버의 명령이 Redis의 한 줄에 어떤 순서로 쌓이는지 로그로 보인다. 나눈 방식은 GET, GET, SET 11, SET 11로 하나를 잃는다'
+    asks:
+      - '본문의 예시: 서버 두 대가 동시에 `INCR views`를 한 번씩 했다. 처음 값이 10이면 끝난 뒤 값은 (12)'
+      - '옮긴 상황: 쿠폰 남은 수량을 `GET coupon`으로 읽어 0보다 크면 `DECR coupon`을 한다. 서버 여러 대에서 동시에 하면 생길 수 있는 일은 (둘 다 1을 읽고 둘 다 줄여 -1이 된다. 확인과 차감 사이가 원자적이지 않다)'
+  - id: q4
+    title: Redis에 둔 데이터는 믿어도 되나요?
+    conclusion:
+      lead: '메모리 저장소라 원본은 DB에 두고, Redis에는 잃어도 다시 만들 수 있는 것을 둬요.'
+      sub: '디스크에 저장하는 설정(RDB, AOF)이 있어도 마지막 몇 초는 잃을 수 있어요. 랭킹은 점수의 원본을 DB에 남기고, Redis가 비면 DB에서 다시 쌓아요.'
+    says:
+      - 'RDB는 정해진 때마다 전체를 파일로 찍는다. 찍은 뒤의 변경은 잃는다. AOF는 명령을 파일에 이어 쓰고 기본 설정(`everysec`)은 1초마다 디스크에 맞춘다. 공식 문서가 근거다'
+      - '그래서 결제나 잔액 같은 원본은 DB에 둔다. Redis에는 캐시, 카운터, 랭킹처럼 DB에서 다시 만들 수 있는 것을 둔다'
+      - '날짜별 랭킹: `ranking:2026-11-25` 같은 키에 하루치를 쌓고, 주간 랭킹은 `ZUNIONSTORE`로 이레를 합친다. 점수가 더해지는 것을 실제 출력으로 보인다. 날짜별 키에는 `EXPIRE`로 수명을 줘서 메모리가 쌓이지 않게 한다'
+      - '메모리가 다 차면 `maxmemory-policy`에 따라 키를 지우거나 쓰기를 거절한다. 캐시와 랭킹을 한 Redis에 두면 캐시를 지우려다 랭킹이 지워질 수 있다(공식 문서 근거)'
+    asks:
+      - '본문의 예시: day1에 민지 100점, day2에 민지 50점을 넣고 두 키를 `ZUNIONSTORE`로 합치면 민지의 점수는 (150)'
+      - '옮긴 상황: 포인트 잔액을 Redis에만 두고 `INCRBY`로 바꾸는 설계를 제안받았다. AOF `everysec`로 운영하다 Redis 서버가 갑자기 꺼지면 생길 수 있는 일은 (마지막 1초쯤의 변경을 잃는다. 잔액의 원본은 DB에 둔다)'
+practice:
+  says:
+    - '스프링 부트에서 쓰기: `spring-boot-starter-data-redis`를 넣으면 Lettuce 연결과 `StringRedisTemplate`이 빈으로 생긴다. 코드 template처럼 `opsForZSet()`으로 Sorted Set 명령을 쓴다. 명령과 메서드의 짝(`ZINCRBY`↔`incrementScore`)을 표로 보인다. 검증 프로젝트는 스타터 대신 Lettuce만 쓰므로 템플릿 동작은 스프링 데이터 Redis 문서가 근거라고 밝힌다'
+    - '흔한 실수: `RedisTemplate<Object, Object>`를 그대로 쓰면 기본 직렬화(JDK 직렬화)로 키가 `\xac\xed...`처럼 저장되어 redis-cli에서 읽을 수 없다. 고친 코드: 문자열이면 `StringRedisTemplate`을 쓴다. 문서 근거'
+    - '흔한 실수 둘: 랭킹 키에 만료를 주지 않아 날짜별 키가 끝없이 쌓인다. 고친 코드: 키를 만들 때 `expire`를 함께 준다'
+claims:
+  - claim: '자료구조 다섯 가지의 동작: INCR 카운터, Hash 필드, List 5개 유지, Set 중복 없음, Sorted Set 순서'
+    how: 'Redis 컨테이너와 Lettuce'
+    test: 'RedisRankingTest.dataStructures'
+  - claim: 'ZINCRBY로 더하고 ZREVRANGE로 상위 N명, ZREVRANK로 0부터 센 순위를 구한다'
+    how: '같은 구성'
+    test: 'RedisRankingTest.sortedSetRanking'
+  - claim: '점수가 같으면 ZREVRANGE는 이름의 사전 역순이고, 시간을 섞으면 먼저 달성한 사람이 앞이다'
+    how: '같은 구성'
+    test: 'RedisRankingTest.tieBreak'
+  - claim: '스레드 50개가 ZINCRBY 1,000번을 해도 점수가 1,000이다'
+    how: '같은 구성'
+    test: 'RedisRankingTest.concurrentIncrements'
+  - claim: 'GET과 SET으로 나눈 증가는 동시에 하면 값을 잃는다'
+    how: '스레드 50개가 1,000번 하고 결과가 1,000보다 작은 것을 본다'
+  - claim: 'ZUNIONSTORE로 날짜별 키를 합치면 점수가 더해진다'
+    how: '같은 구성'
+    test: 'RedisRankingTest.weeklyRanking'
+  - claim: '10만 명에서도 상위 10명과 내 순위를 바로 구한다'
+    how: '시간을 재서 남긴다. 시간은 단정하지 않고 실측을 보인다'
+    test: 'RedisRankingTest.largeRanking'
+sources:
+  - 'Redis 자료구조: https://redis.io/docs/latest/develop/data-types/'
+  - 'Sorted Set의 시간 복잡도와 동점 순서: https://redis.io/docs/latest/develop/data-types/sorted-sets/'
+  - 'Redis 영속화(RDB, AOF): https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/'
+  - '스프링 데이터 Redis: https://docs.spring.io/spring-data/redis/reference/redis/template.html'

@@ -1,0 +1,176 @@
+# 멱등성과 중복 요청 방지 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 멱등성과 중복 요청 방지
+unit: 시스템 설계와 아키텍처
+roadmap: A6
+type: 동작 확인
+prerequisites:
+  - {slug: transactional-proxy, title: '@Transactional 동작 원리'}
+  - {slug: rest-api, title: REST API 설계}
+assume: '스프링 부트 3.5, 스프링 데이터 JPA, PostgreSQL 16. HTTP 메서드의 안전과 멱등의 정의(REST API 설계 레슨). `@Transactional` 메서드가 끝날 때 커밋된다는 것(@Transactional 동작 원리 레슨). 유니크 제약은 키와 제약 조건 레슨에서 다뤄요.'
+example: '주문 결제 API `POST /payments`. 클라이언트가 결제 요청을 보냈는데 응답을 받기 전에 연결이 끊겨 같은 요청을 다시 보낸다. 결제가 두 번 저장되는지 본다.'
+intro:
+  - '고객이 결제 버튼을 눌렀는데 화면이 멈춰서 한 번 더 눌렀어요. 카드 내역에 같은 금액이 두 번 찍혔어요. 서버 로그를 보면 첫 요청도 성공했어요. 응답만 고객에게 닿지 못했을 뿐이에요.'
+  - '네트워크는 응답을 잃을 수 있고, 클라이언트와 게이트웨이와 메시지 큐는 실패하면 다시 보내요. 그래서 스프링 개발자는 "같은 요청이 두 번 오면 어떻게 되나"를 API마다 정해야 해요. 결제, 주문, 포인트 적립처럼 두 번 되면 안 되는 일에서 면접관이 꼭 묻는 질문이에요.'
+  - '이 레슨에서는 실제 PostgreSQL에서 같은 결제 요청을 두 번, 그리고 동시에 열 번 보내요. "먼저 조회하고 없으면 저장"이 왜 뚫리는지 보고, 멱등 키와 유니크 제약으로 한 건만 남는 것을 확인해요.'
+covers:
+  - topic: '같은 요청이 두 번 오는 이유: 응답을 잃은 클라이언트의 재시도, 사용자의 두 번 클릭, 게이트웨이와 메시지 큐의 재전송'
+    where: '질문 1'
+  - topic: '클라이언트는 응답을 받지 못하면 서버가 처리했는지 알 수 없다. 그래서 다시 보내는 것이 맞는 행동이다'
+    where: '질문 1'
+  - topic: '멱등성: 같은 요청을 여러 번 해도 한 번 한 것과 결과가 같다. GET, PUT, DELETE는 멱등이고 POST는 아니다'
+    where: '질문 1. 메서드의 정의는 REST API 설계(N5)'
+  - topic: '먼저 조회하고 없으면 저장하는 코드는 순차 재시도는 막지만, 동시에 온 두 요청은 둘 다 조회를 통과한다'
+    where: '질문 2'
+  - topic: '마지막 판단은 DB의 유니크 제약에 맡긴다. 두 번째 INSERT는 DB가 거절한다'
+    where: '질문 2'
+  - topic: '멱등 키: 클라이언트가 요청마다 고유한 값을 만들어 헤더(Idempotency-Key)로 보내고, 재시도에는 같은 값을 쓴다'
+    where: '질문 3'
+  - topic: '같은 키로 다시 오면 새로 처리하지 않고 처음 결과를 돌려준다. 클라이언트는 성공 응답을 받는다'
+    where: '질문 3'
+  - topic: '같은 키인데 내용이 다르면(금액이 다르면) 거절한다'
+    where: '질문 3'
+  - topic: '처리 중에 같은 키가 또 오면: 처리 중이라고 답하거나 끝날 때까지 기다린다'
+    where: '질문 3의 더 알아보기'
+  - topic: '멱등 키를 언제까지 기억하나: 보관 기간을 정한다'
+    where: '질문 4'
+  - topic: '업무 키로 막기: 주문 하나에 결제는 하나라면 주문 id에 유니크 제약을 건다. 멱등 키가 없어도 막힌다'
+    where: '질문 4'
+  - topic: '외부 결제 API를 부른 뒤 저장에 실패하면 우리 DB만 보고는 중복을 알 수 없다. 외부에도 멱등 키를 넘긴다'
+    where: '질문 4'
+  - topic: '스프링에서 유니크 위반은 DataIntegrityViolationException으로 온다. 같은 트랜잭션 안에서 잡으면 트랜잭션이 이미 롤백으로 표시돼 있다'
+    where: '실무에서는'
+  - topic: '메시지 큐에서 같은 메시지를 두 번 받는 경우'
+    where: '다루지 않음: 메시지 큐(A8)'
+  - topic: '재시도를 언제 얼마나 하나'
+    where: '다루지 않음: 타임아웃, 재시도, 서킷 브레이커(A10)'
+  - topic: '결제 승인, 취소의 흐름 전체'
+    where: '다루지 않음: 결제 시스템 흐름(A20)'
+codes:
+  predict: |-
+    @Transactional
+    boolean pay(String key, long orderId,
+        long amount) {
+      if (repo.existsByIdempotencyKey(key)) {
+        return false;
+      }
+      repo.save(new Payment(key, orderId,
+          amount));
+      return true;
+    }
+  unique: |-
+    @Entity
+    @Table(uniqueConstraints =
+        @UniqueConstraint(columnNames =
+            "idempotency_key"))
+    class Payment { ... }
+  idempotent: |-
+    Payment pay(String key, long orderId,
+        long amount) {
+      try {
+        return tx.execute(s -> repo
+            .saveAndFlush(new Payment(
+                key, orderId, amount)));
+      } catch (
+          DataIntegrityViolationException e) {
+        Payment first =
+            repo.findByIdempotencyKey(key);
+        if (first.getAmount() != amount) {
+          throw new IllegalStateException();
+        }
+        return first;
+      }
+    }
+predict:
+  text: '코드 predict는 같은 멱등 키의 결제가 이미 있으면 저장하지 않아요. 같은 키의 결제 요청 두 개가 정확히 같은 순간에 들어와 둘 다 `existsByIdempotencyKey`를 먼저 실행한 뒤 저장으로 넘어가요. 결제는 몇 건 저장될까요? 보기: 1건, 2건, 0건.'
+  answer: '2건. 두 요청 모두 조회할 때는 결제가 없었기 때문이다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 같은 요청은 왜 두 번 오나요?
+    conclusion:
+      lead: '응답을 받지 못한 클라이언트는 서버가 처리했는지 알 수 없어서 다시 보내요.'
+      sub: '사용자의 두 번 클릭, 앱과 게이트웨이의 자동 재시도, 메시지 큐의 재전송도 같은 요청을 다시 보내요. 그래서 두 번 와도 한 번 한 것과 같은 결과가 되게(멱등하게) 만들어야 해요.'
+    says:
+      - '결제 요청은 세 군데에서 실패할 수 있다: 요청이 서버에 닿기 전, 서버가 처리하는 중, 처리한 뒤 응답이 돌아오는 길. 클라이언트에게는 셋 다 "응답 없음"이다'
+      - '셋째 경우에 다시 보내면 결제가 두 번 된다. 대책 없는 서비스에 같은 요청을 두 번 보내면 결제가 두 건 저장되는 것을 테스트로 보인다'
+      - '다시 보내지 않으면 첫째 경우에 결제가 안 된다. 그래서 재시도는 맞는 행동이고, 막을 곳은 서버다'
+      - '멱등성의 정의: 같은 요청을 여러 번 해도 한 번 한 것과 결과가 같다. `PUT /members/1`(이름을 민지로)은 몇 번 해도 같고, `POST /payments`는 할 때마다 새로 생긴다(N5)'
+    widget:
+      kind: timeline
+      note: '클라이언트와 서버 두 칸. 결제 요청, 서버가 저장, 응답이 도중에 사라짐, 클라이언트의 재시도, 서버가 또 저장. duo에 서버 DB의 결제 건수가 1에서 2로 바뀐다'
+    asks:
+      - '본문의 예시: 서버가 결제를 저장하고 응답을 보냈는데 응답이 클라이언트에 닿지 않았다. 클라이언트가 보는 것과 다시 보냈을 때 대책 없는 서버의 결과는 (응답 없음. 결제가 두 건이 된다)'
+      - '옮긴 상황: 다음 중 같은 요청을 여러 번 보내도 결과가 한 번과 같은 것은: `POST /orders`, `PUT /members/1/nickname`, `POST /points/earn` (`PUT /members/1/nickname`)'
+  - id: q2
+    title: 먼저 조회하고 없으면 저장하면 왜 막지 못하나요?
+    conclusion:
+      lead: '두 요청이 동시에 오면 둘 다 조회할 때는 결제가 없어서, 둘 다 저장으로 넘어가요.'
+      sub: '확인과 저장 사이에 틈이 있기 때문이에요. 마지막 판단은 DB의 유니크 제약에 맡겨요. 두 번째 INSERT는 DB가 거절해요.'
+    says:
+      - '코드 predict는 차례로 온 재시도는 막는다. 첫 요청이 저장한 뒤라 둘째 요청의 조회가 결제를 찾는다. 테스트로 보인다'
+      - '동시에 온 두 요청은 둘 다 조회에서 "없음"을 보고 둘 다 저장한다. 두 요청이 조회를 마친 뒤에 저장하도록 순서를 맞춰 재현하고, 결제가 2건인 것을 보인다. 예측의 답을 밝힌다'
+      - '`@Transactional`이 있어도 막지 못한다. 트랜잭션은 각자의 일을 묶을 뿐이고, 기본 격리 수준(READ COMMITTED)에서 아직 없는 행을 서로 막지 않는다(D9)'
+      - '코드 unique: 멱등 키 칸에 유니크 제약을 건다. 같은 키로 두 번째 INSERT를 하면 DB가 거절하고 스프링은 `DataIntegrityViolationException`을 던진다. 테스트로 보인다'
+      - 'DB는 유니크 인덱스로 같은 값이 들어오는 것을 막는다. 동시에 와도 하나만 성공한다. 이것이 "확인 후 저장"과 다르게 틈이 없는 이유다'
+    asks:
+      - '본문의 예시: 멱등 키에 유니크 제약을 건 테이블에 같은 키의 결제 두 건을 동시에 INSERT하면 결과는 (한 건만 저장되고 다른 하나는 유니크 위반으로 실패한다)'
+      - '옮긴 상황: 회원 가입에서 `existsByEmail`로 확인한 뒤 저장한다. 같은 이메일로 가입 버튼을 아주 빠르게 두 번 눌렀더니 회원이 둘 생겼다. 고치는 방법은 (이메일 칸에 유니크 제약을 걸고 위반을 잡아 응답한다)'
+  - id: q3
+    title: 멱등 키로 재시도에 어떻게 답하나요?
+    conclusion:
+      lead: '클라이언트가 요청마다 고유한 키를 만들어 재시도에도 같은 키를 보내고, 서버는 같은 키를 다시 받으면 새로 처리하지 않고 처음 결과를 돌려줘요.'
+      sub: '재시도한 클라이언트는 오류가 아니라 성공 응답(같은 결제 id)을 받아요. 같은 키인데 금액이 다르면 다른 요청이니 거절해요.'
+    says:
+      - '멱등 키는 클라이언트가 결제 시도마다 만드는 UUID다. HTTP 헤더 `Idempotency-Key`로 보낸다. 재시도할 때는 새로 만들지 않고 같은 값을 보낸다'
+      - '코드 idempotent: 저장을 먼저 시도하고, 유니크 위반이 나면 처음 결제를 찾아 돌려준다. 같은 키로 다시 요청하면 같은 결제 id가 나오는 것을 테스트로 보인다'
+      - '같은 키로 동시에 열 번 보내도 결제는 1건이고 열 요청 모두 같은 결제 id를 받는다. 실제 출력을 보인다'
+      - '같은 키로 금액이 다른 요청이 오면 클라이언트의 실수다. 처음 결과를 돌려주면 클라이언트가 99000원 결제가 됐다고 착각한다. 거절한다'
+      - '저장을 따로 트랜잭션으로 묶는 이유: 유니크 위반이 난 트랜잭션은 롤백되어야 한다. 그 뒤의 조회는 새 트랜잭션에서 한다(실무에서는에서 다시 본다)'
+      - '더 알아보기: 첫 요청이 아직 처리 중인데 같은 키가 또 오면 돌려줄 결과가 없다. 키를 "처리 중" 상태로 먼저 저장해 두고, 둘째 요청에는 409(처리 중)로 답하거나 잠시 기다린다'
+    asks:
+      - '본문의 예시: 멱등 키 `abc`로 결제해 id 7을 받았다. 응답을 못 받은 클라이언트가 같은 키 `abc`로 다시 보내면 받는 것은 (id 7인 같은 결제. 새로 저장하지 않는다)'
+      - '옮긴 상황: 앱이 재시도할 때마다 새 UUID를 만들어 `Idempotency-Key`로 보낸다. 서버가 멱등 키로 막고 있어도 이중 결제가 생기나 (생긴다. 서버에게는 다른 요청이다)'
+  - id: q4
+    title: 멱등 키만으로 충분하지 않은 곳은 어디인가요?
+    conclusion:
+      lead: '키를 언제까지 기억할지, 키 없이 들어오는 중복, 그리고 외부 시스템에 이미 보낸 요청이에요.'
+      sub: '보관 기간을 정해 오래된 키를 지우고, "주문 하나에 결제 하나" 같은 업무 규칙은 업무 키에 유니크 제약으로 막고, 외부 결제 API에도 같은 멱등 키를 넘겨요.'
+    says:
+      - '키를 영원히 둘 수는 없다. 재시도가 오는 기간(보통 하루)보다 길게 두고 지운다. 그 뒤에 같은 키가 오면 새 요청으로 처리된다'
+      - '업무 키: 주문 하나에 결제가 하나라면 `order_id`에 유니크 제약을 건다. 클라이언트가 키를 바꿔 보내도 같은 주문의 두 번째 결제는 막힌다. 테스트로 보인다'
+      - '외부 결제 API를 부른 뒤 우리 DB 저장이 실패하면, 다시 처리할 때 외부에 또 결제를 요청하게 된다. 외부 API도 멱등 키를 받는다면 같은 키를 넘겨 외부에서 막게 한다. 흐름은 A20'
+      - '메시지 컨슈머도 같은 메시지를 두 번 받는다. 메시지 id로 처리한 것을 기록해 거른다(A8)'
+    asks:
+      - '본문의 예시: 결제 테이블에 `order_id` 유니크 제약이 있다. 클라이언트가 같은 주문을 키 `a`로 결제한 뒤 키 `b`로 또 결제하면 (두 번째는 `order_id` 유니크 위반으로 거절된다)'
+      - '옮긴 상황: 멱등 키를 1시간 보관한다. 모바일 앱이 비행기 모드에서 쌓아 둔 요청을 3시간 뒤에 같은 키로 다시 보냈다. 업무 키 제약이 없으면 무슨 일이 생기나 (키를 잊었으므로 새 요청으로 처리되어 중복 결제가 생긴다)'
+practice:
+  says:
+    - '컨트롤러에서 `@RequestHeader("Idempotency-Key") String key`로 받고 없으면 400으로 답한다'
+    - '엔티티에 `@Table(uniqueConstraints = ...)`로 제약을 선언한다. 운영 DB는 마이그레이션 스크립트의 `UNIQUE` 제약이 실제 근거다'
+    - '흔한 실수: `@Transactional` 메서드 안에서 `save` 뒤 `DataIntegrityViolationException`을 잡고 같은 트랜잭션에서 처음 결과를 조회해 돌려준다. PostgreSQL은 오류가 난 트랜잭션의 다음 SQL을 거절하고("current transaction is aborted"), 스프링은 커밋할 때 `UnexpectedRollbackException`을 던진다. 테스트로 보인다. 고친 코드: 저장을 `TransactionTemplate`이나 `REQUIRES_NEW`의 짧은 트랜잭션으로 떼고, 바깥에서 잡아 조회한다'
+    - '`save`는 커밋 때까지 INSERT를 미룰 수 있어 예외가 메서드 밖(커밋 시점)에서 난다. 잡으려면 `saveAndFlush`로 그 자리에서 보낸다'
+claims:
+  - claim: '대책이 없으면 같은 결제 요청 두 번에 결제가 두 건 저장된다'
+    how: 'PostgreSQL 컨테이너, 테스트에 트랜잭션 없음'
+    test: 'IdempotencyTest.naiveDoublePays'
+  - claim: '먼저 조회 후 저장은 순차 재시도는 막고 동시 요청은 막지 못한다'
+    how: '`CyclicBarrier`로 두 요청이 조회를 마친 뒤 저장하게 맞춘다'
+    test: 'IdempotencyTest.checkThenInsertStopsSequentialRetry, checkThenInsertFailsUnderConcurrency'
+  - claim: '유니크 제약이 두 번째 INSERT를 `DataIntegrityViolationException`으로 막는다'
+    how: '같은 구성'
+    test: 'IdempotencyTest.uniqueConstraintRejectsSecondInsert'
+  - claim: '멱등 처리는 재시도에 처음 결과를 돌려주고, 동시 10건에도 결제 1건과 같은 id를 준다'
+    how: '같은 구성'
+    test: 'IdempotencyTest.idempotentRetryReturnsFirstResult, idempotentUnderConcurrency'
+  - claim: '같은 키에 금액이 다르면 거절한다'
+    how: '같은 구성'
+    test: 'IdempotencyTest.sameKeyDifferentBodyRejected'
+  - claim: '`order_id` 유니크 제약은 멱등 키가 달라도 같은 주문의 두 번째 결제를 막는다'
+    how: '새 테스트. 별도 테이블에 업무 키 제약을 건다'
+  - claim: '같은 트랜잭션에서 유니크 위반을 잡고 조회하면 PostgreSQL이 다음 SQL을 거절하거나, 커밋 때 `UnexpectedRollbackException`이 난다'
+    how: '새 테스트. 결과를 보고 본문의 문장을 맞춘다'
+sources:
+  - 'HTTP 메서드의 멱등성: RFC 9110 9.2.2절 https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2'
+  - 'Idempotency-Key 헤더 초안: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/'
+  - '스프링의 데이터 접근 예외: https://docs.spring.io/spring-framework/reference/data-access/dao.html'
