@@ -1,0 +1,113 @@
+# HTTP 캐시 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: HTTP 캐시
+unit: 네트워크와 웹
+roadmap: N11
+type: 개념 설명
+prerequisites:
+  - {slug: http-basics, title: HTTP 요청과 응답}
+assume: 'HTTP 요청과 응답의 헤더와 상태 코드(HTTP 요청과 응답 레슨). 스프링 부트 3.5. 브라우저와 CDN이 응답을 저장하고 꺼내 쓰는 모습은 테스트로 돌릴 수 없어서, 서버가 보내는 헤더와 조건부 요청의 응답은 테스트로 확인하고 캐시의 동작은 RFC 9111을 근거로 적어요.'
+example: '쇼핑몰의 상품 목록 API(`/products`), 상품 하나(`/products/7`), 내 정보(`/me`), 그리고 화면의 `app.js`. 무엇을 얼마나 저장하게 할지 정해 봐요.'
+intro:
+  - '상품 목록은 하루에 몇 번 바뀌지 않는데 사용자가 화면을 열 때마다 서버가 같은 JSON을 만들어 보내요. 반대로 배포를 했는데 사용자 화면에는 옛 `app.js`가 계속 돌아요. 둘 다 HTTP 캐시를 어떻게 정했느냐의 문제예요.'
+  - '스프링 개발자는 응답 헤더 몇 줄로 캐시를 정해요. `Cache-Control`의 값 하나를 잘못 고르면 CDN이 kim의 내 정보 응답을 lee에게 내주는 사고가 나요. 면접에서는 "ETag와 304를 설명해 주세요", "no-cache와 no-store의 차이는요?"를 물어요.'
+  - '이 레슨에서는 스프링 서버가 보내는 캐시 헤더와 조건부 요청의 304 응답을 실제로 확인하고, 응답마다 어떤 값을 골라야 하는지 정리해요.'
+covers:
+  - {topic: 'HTTP 캐시는 받은 응답을 저장했다가 같은 요청에 다시 쓴다. 브라우저(개인 캐시)와 프록시, CDN(공유 캐시)', where: 질문 1}
+  - {topic: 'Cache-Control: max-age 동안은 신선해서 서버에 묻지 않고 쓴다', where: 질문 1}
+  - {topic: 'Expires 헤더와 max-age의 관계', where: 질문 1의 더 알아보기}
+  - {topic: '조건부 요청: ETag와 If-None-Match, Last-Modified와 If-Modified-Since. 바뀌지 않았으면 304와 빈 본문', where: 질문 2}
+  - {topic: '304는 본문을 보내지 않아 전송량을 줄인다. 서버의 일은 ETag를 어떻게 만드느냐에 따라 다르다', where: '질문 2, 실무에서는'}
+  - {topic: 'no-store(저장하지 않음), no-cache(저장하되 쓸 때마다 확인), private(브라우저만), public(공유 캐시도), s-maxage(공유 캐시의 시간)', where: 질문 3}
+  - {topic: '파일 이름에 내용의 해시를 넣고 오래 캐시하기(immutable)', where: 질문 3}
+  - {topic: 'CDN: 사용자 가까운 곳의 공유 캐시. 원 서버의 부하와 거리를 줄인다', where: 질문 4}
+  - {topic: 'CDN의 캐시를 비우는 법: 무효화(purge)와 버전이 붙은 주소', where: 질문 4}
+  - {topic: 'Vary: 요청 헤더에 따라 응답이 다르면 캐시가 나눠 저장하게 한다', where: 질문 4}
+  - {topic: '스프링에서 캐시 헤더 주기: ResponseEntity.cacheControl, CacheControl, eTag, WebRequest.checkNotModified', where: 실무에서는}
+  - {topic: 'ShallowEtagHeaderFilter: 응답을 다 만든 뒤 ETag를 계산해 전송량만 줄인다', where: 실무에서는}
+  - {topic: '흔한 실수: 사용자마다 다른 응답에 public, max-age를 붙여 공유 캐시가 남의 응답을 내준다', where: 실무에서는}
+  - {topic: '서버 안의 캐시(@Cacheable, Redis)', where: '다루지 않음: 캐시 전략(A 과정)'}
+  - {topic: '정적 파일을 스프링 부트가 내보낼 때의 캐시 설정', where: 실무에서는의 더 알아보기}
+predict:
+  text: '상품 `/products/7`을 한 번 받아 `ETag: "v3"`를 기억해 둔 클라이언트가, 다시 요청하며 `If-None-Match: "v3"`를 보냈어요. 상품은 그동안 바뀌지 않았어요. 스프링 서버의 응답은? 보기: 200과 같은 본문, 304와 빈 본문, 404.'
+  answer: '304와 빈 본문. 바뀌지 않았으니 가진 것을 그대로 쓰라고 알린다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: HTTP 캐시는 무엇을 언제 다시 쓰나요?
+    conclusion:
+      lead: '받은 응답을 브라우저나 CDN이 저장해 두고, `Cache-Control: max-age`가 정한 시간 동안은 서버에 묻지 않고 그대로 다시 써요.'
+      sub: '그 시간 동안은 요청이 서버까지 가지 않아서 빠르고 서버의 일도 줄어요. 대신 그동안 바뀐 내용은 보이지 않아요.'
+    says:
+      - '캐시는 응답을 저장했다가 같은 요청(같은 주소와 메서드)에 다시 쓴다. 브라우저의 캐시는 그 사용자만 쓰는 개인 캐시, 프록시와 CDN은 여러 사용자가 함께 쓰는 공유 캐시다'
+      - '서버는 `Cache-Control: max-age=60`으로 "60초 동안 신선하다"고 알린다. 신선한 동안 캐시는 서버에 묻지 않는다. 스프링이 보낸 헤더를 실제 출력으로 보인다'
+      - '신선한 동안에는 서버에서 바뀌어도 사용자는 옛 응답을 본다. max-age는 "이만큼은 옛것을 봐도 된다"는 약속이다'
+      - '더 알아보기: 예전에는 `Expires: 날짜`로 정했다. 둘 다 있으면 max-age를 따른다'
+    asks:
+      - '본문의 예시: `Cache-Control: max-age=60`인 상품 목록을 받은 브라우저가 30초 뒤 같은 주소를 다시 열면 서버로 요청이 가나 (가지 않는다. 신선하다)'
+      - '옮긴 상황: 공지 API에 max-age=3600을 줬다. 10분 뒤 공지를 고쳤다. 이미 받아 간 사용자는 언제 새 공지를 보나 (받은 때부터 한 시간이 지난 뒤)'
+  - id: q2
+    title: 시간이 지난 캐시는 어떻게 다시 확인하나요?
+    conclusion:
+      lead: '가진 응답의 표시(ETag나 Last-Modified)를 실어 "이것에서 바뀌었나요"를 묻고, 바뀌지 않았으면 서버가 본문 없이 304로 답해요.'
+      sub: '조건부 요청이라고 해요. 바뀌지 않았을 때 본문을 다시 받지 않아 전송량이 줄어요.'
+    says:
+      - '서버는 응답에 `ETag`(내용의 판 번호)나 `Last-Modified`(마지막 수정 시각)를 붙인다. 캐시는 다시 물을 때 `If-None-Match`나 `If-Modified-Since`에 그 값을 싣는다'
+      - '바뀌지 않았으면 서버는 `304 Not Modified`와 빈 본문으로 답하고, 캐시는 가진 응답을 다시 신선하게 쓴다. 바뀌었으면 200과 새 본문, 새 ETag다. 예측의 답을 밝힌다. 세 요청을 실제 출력으로 보인다'
+      - 'Last-Modified도 같은 일을 한다. 초 단위라 1초 안에 두 번 바뀌면 구별하지 못한다. 그래서 ETag를 더 많이 쓴다'
+    widget:
+      kind: timeline
+      note: '브라우저와 서버 레인에 첫 요청과 200(ETag "v3", max-age=60), 60초 뒤 If-None-Match "v3"와 304, 상품이 바뀐 뒤 If-None-Match "v3"와 200(ETag "v4")를 차례로 넘긴다. 위쪽 칸에 브라우저의 캐시에 든 것과 그 신선한 정도를 둔다'
+    asks:
+      - '본문의 예시: `If-None-Match: "v3"`로 다시 물었는데 상품이 바뀌어 ETag가 "v4"가 됐다. 서버의 응답은 (200과 새 본문, ETag "v4")'
+      - '옮긴 상황: 1MB짜리 상품 이미지 목록 응답이 바뀌지 않았을 때 304를 받으면 무엇이 줄어드나 (본문 1MB의 전송. 요청과 응답의 왕복은 그대로)'
+  - id: q3
+    title: Cache-Control의 값은 어떻게 고르나요?
+    conclusion:
+      lead: '응답이 누구의 것이고 얼마나 자주 바뀌는지로 골라요. 남에게 보이면 안 되면 `no-store`나 `private`, 바뀌면 바로 보여야 하면 `no-cache`, 바뀌지 않는 파일은 긴 `max-age`예요.'
+      sub: '`no-cache`는 "저장하지 마"가 아니라 "쓸 때마다 확인해"예요. 저장하지 말라는 것은 `no-store`예요.'
+    says:
+      - '표 하나로 값과 뜻을 정리한다: no-store(어디에도 저장하지 않음), no-cache(저장하되 쓸 때마다 조건부 요청으로 확인), private(브라우저만 저장, 공유 캐시는 저장 안 함), public(공유 캐시도 저장), max-age(신선한 시간), s-maxage(공유 캐시에만 쓰는 시간)'
+      - 'no-cache와 no-store를 헷갈린다. no-cache는 저장하고 304로 확인하니 전송량이 준다. 결제 내역처럼 남으면 안 되는 응답은 no-store다'
+      - '바뀌지 않는 파일은 이름에 내용의 해시를 넣고(`app.3f9a1c.js`) 1년 max-age와 immutable을 준다. 내용이 바뀌면 이름이 바뀌니 새 파일을 받는다. HTML은 no-cache로 두어 새 이름을 바로 가리키게 한다'
+    widget:
+      kind: classify
+      note: '응답(내 주문 내역, 상품 목록, 이름에 해시가 든 app.3f9a1c.js, index.html, 결제 카드 정보, 로그인한 사용자의 장바구니)을 Cache-Control 값(no-store, private과 no-cache, public과 max-age, public과 1년 max-age와 immutable)으로 고른다'
+    asks:
+      - '본문의 예시: `Cache-Control: no-cache`를 받은 브라우저는 응답을 저장하나 (저장한다. 쓸 때마다 서버에 확인한다)'
+      - '옮긴 상황: 배포 뒤에도 사용자 화면에 옛 app.js가 돈다. app.js는 이름이 늘 같고 max-age=86400이다. 어떻게 고치나 (이름에 내용의 해시를 넣고, HTML은 no-cache로 둔다)'
+  - id: q4
+    title: CDN은 무엇을 캐시하고 어떻게 비우나요?
+    conclusion:
+      lead: 'CDN은 사용자 가까이에 둔 공유 캐시예요. public으로 허락한 응답을 저장해 원 서버 대신 답하고, 바꿀 때는 무효화 요청을 보내거나 주소에 버전을 붙여요.'
+      sub: '여러 사용자가 함께 쓰니, 사용자마다 다른 응답은 저장하게 두면 안 돼요. 요청 헤더에 따라 다르면 Vary로 나눠 저장하게 해요.'
+    says:
+      - 'CDN은 세계 곳곳에 서버를 두고 사용자에게 가까운 곳에서 답한다. 원 서버까지 가는 거리와 원 서버의 부하가 준다. 이미지, JS, CSS 같은 정적 파일과 public으로 허락한 API 응답을 저장한다'
+      - '공유 캐시는 주소가 같으면 같은 응답을 여러 사용자에게 준다. 로그인한 사용자의 응답은 private이나 no-store로 둔다'
+      - '비우는 법 둘: CDN에 무효화(purge)를 요청하거나, 주소에 버전을 붙여(`?v=42`, 해시 이름) 새 주소로 바꾼다. 무효화는 퍼지는 데 시간이 걸리고 비용이 드는 경우가 있다'
+      - '`Vary: Accept-Encoding`이면 gzip을 받는 요청과 안 받는 요청을 따로 저장한다. CORS 레슨의 `Vary: Origin`도 같은 뜻이다'
+    asks:
+      - '본문의 예시: CDN 뒤에 있는 `/me`(로그인한 사용자의 정보)에 `Cache-Control: public, max-age=60`을 주면 무슨 일이 생길 수 있나 (CDN이 kim의 응답을 저장해 60초 동안 다른 사용자에게도 준다)'
+      - '옮긴 상황: 출처마다 Access-Control-Allow-Origin이 다른 응답을 CDN이 캐시한다. 응답에 무엇이 있어야 섞이지 않나 (Vary: Origin)'
+practice:
+  says:
+    - '스프링은 `ResponseEntity.ok().cacheControl(CacheControl.maxAge(...))`로 Cache-Control을, `.eTag(...)`로 ETag를 준다. 조건부 요청은 `WebRequest.checkNotModified(etag)`가 If-None-Match와 비교해 true면 304를 만든다. 테스트로 확인한다'
+    - '`ShallowEtagHeaderFilter`는 응답을 다 만든 뒤 본문의 해시로 ETag를 붙이고 304를 만든다. 전송량은 줄지만 컨트롤러는 매번 실행된다. 컨트롤러가 불린 횟수로 테스트한다'
+    - '흔한 실수: `/me`에 `CacheControl.maxAge(60).cachePublic()`을 붙인다. 고친 코드는 `CacheControl.noStore()`나 `cachePrivate()`다. 두 응답의 헤더를 테스트로 남긴다'
+    - '더 알아보기: 스프링 부트의 정적 파일은 `spring.web.resources.cache.cachecontrol.max-age`와 `spring.web.resources.chain.strategy.content.enabled`(이름에 해시)로 정한다 (문서 근거)'
+claims:
+  - claim: 'CacheControl.maxAge(60초)를 주면 응답에 Cache-Control: max-age=60이 붙는다'
+    how: 'MiniWeb에 컨트롤러를 띄워 응답 헤더를 본다'
+  - claim: 'ETag가 같은 If-None-Match에는 304와 빈 본문, 상품이 바뀐 뒤에는 200과 새 ETag다'
+    how: 'checkNotModified를 쓰는 컨트롤러에 세 번 요청한다'
+  - claim: 'If-Modified-Since가 Last-Modified와 같거나 뒤면 304다'
+    how: 'checkNotModified(long)으로 확인한다'
+  - claim: 'ShallowEtagHeaderFilter는 304를 주면서도 컨트롤러를 매번 실행한다'
+    how: '컨트롤러가 불린 횟수를 센다'
+  - claim: '흔한 실수와 고친 코드의 Cache-Control 값'
+    how: '두 주소의 응답 헤더를 본다'
+sources:
+  - 'HTTP 캐시, Cache-Control, 신선도, Vary: RFC 9111 https://www.rfc-editor.org/rfc/rfc9111.html'
+  - '조건부 요청, ETag, 304: RFC 9110 13장 https://www.rfc-editor.org/rfc/rfc9110.html#section-13'
+  - 'immutable: RFC 8246 https://www.rfc-editor.org/rfc/rfc8246.html'
+  - '스프링의 HTTP 캐시: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-caching.html'
