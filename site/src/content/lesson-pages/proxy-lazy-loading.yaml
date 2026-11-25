@@ -192,5 +192,5 @@ claims:
     how: '두 비교 방식을 테스트 안에서 직접 적용한다'
 sources:
   - '`@ManyToOne`의 기본 fetch가 EAGER: Jakarta Persistence 3.1 API https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/manytoone'
-  - '프록시와 final 클래스, `getReference`: Hibernate 6.6 문서 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching'
+  - '프록시와 final 클래스, `getReference`: Hibernate 6.6 문서 https://docs.hibernate.org/orm/6.6/userguide/html_single/#fetching'
   - '`getReferenceById`, `@EntityGraph`: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html#jpa.entity-graph'

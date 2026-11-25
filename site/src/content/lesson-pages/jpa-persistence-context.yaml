@@ -420,7 +420,7 @@ claims:
 sources:
   - '영속성 컨텍스트와 엔티티 상태, flush 시점: Jakarta Persistence 3.1 명세 3장 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
   - '`save()`가 persist와 merge를 고르는 기준: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/entity-persistence.html'
-  - '`@DynamicUpdate`: Hibernate 6.6 문서 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html'
+  - '`@DynamicUpdate`: Hibernate 6.6 문서 https://docs.hibernate.org/orm/6.6/userguide/html_single/'
 interview:
   question: 영속성 컨텍스트가 무엇이고, 어떤 이점이 있나요?
   model:

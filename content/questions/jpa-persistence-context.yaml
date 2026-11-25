@@ -202,7 +202,7 @@ questions:
 
       - 바뀐 컬럼만 쓰려면 @DynamicUpdate를 붙여요
       - 레슨의 책도 제목만 바꿨는데 set author=?,title=?였어요
-    source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/
   # ── 질문 5 ──
   - key: pc-readonly-change
     concept: core

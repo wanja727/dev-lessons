@@ -12,7 +12,7 @@ verifiedBy:
 sources:
   - https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
   - https://docs.spring.io/spring-data/jpa/reference/jpa/entity-persistence.html
-  - https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#flushing
+  - https://docs.hibernate.org/orm/6.6/userguide/html_single/#flushing
 updated: 2026-11-25
 ---
 

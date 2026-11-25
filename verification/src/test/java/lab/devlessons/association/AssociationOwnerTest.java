@@ -3,6 +3,7 @@ package lab.devlessons.association;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.persistence.EntityManager;
+import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import lab.devlessons.support.SqlCapture;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,6 +55,8 @@ class AssociationOwnerTest {
         });
 
         assertThat(teamIdInDb(memberId)).isNull();
+        CiOutput.record("association-owner", "non-owner",
+                "team.getMembers().add(kim) 뒤 커밋\nassoc_member.team_id = " + teamIdInDb(memberId));
     }
 
     @Test
@@ -131,6 +134,8 @@ class AssociationOwnerTest {
             long updates = SqlCapture.sqls().stream().filter(q -> q.toLowerCase().startsWith("update uni_member")).count();
             assertThat(inserts).isEqualTo(2);
             assertThat(updates).isEqualTo(2);
+            CiOutput.record("association-owner", "uni", "나간 SQL:\n" + String.join("\n",
+                    SqlCapture.sqls().stream().filter(q -> q.toLowerCase().contains("uni_")).toList()));
         });
     }
 
@@ -151,6 +156,61 @@ class AssociationOwnerTest {
 
             long updates = SqlCapture.sqls().stream().filter(q -> q.toLowerCase().startsWith("update assoc_member")).count();
             assertThat(updates).isZero();
+            CiOutput.record("association-owner", "bi", "나간 SQL:\n" + String.join("\n",
+                    SqlCapture.sqls().stream().filter(q -> q.toLowerCase().contains("assoc_")).toList()));
         });
+    }
+
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    @DisplayName("@ManyToOne + @JoinColumn으로 assoc_member에 team_id 외래 키가 생기고, assoc_team에는 멤버를 가리키는 컬럼이 없다 (출력 공개)")
+    void foreignKeyLivesOnManySide() {
+        java.util.List<String> memberCols = jdbc.queryForList(
+                "select column_name from information_schema.columns where table_name = 'assoc_member' order by column_name",
+                String.class);
+        java.util.List<String> teamCols = jdbc.queryForList(
+                "select column_name from information_schema.columns where table_name = 'assoc_team' order by column_name",
+                String.class);
+        java.util.List<String> fks = jdbc.queryForList(
+                "select kcu.table_name || '.' || kcu.column_name || ' -> ' || ccu.table_name || '.' || ccu.column_name"
+                        + " from information_schema.table_constraints tc"
+                        + " join information_schema.key_column_usage kcu on tc.constraint_name = kcu.constraint_name"
+                        + " join information_schema.constraint_column_usage ccu on tc.constraint_name = ccu.constraint_name"
+                        + " where tc.constraint_type = 'FOREIGN KEY' and kcu.table_name in ('assoc_member', 'assoc_team')",
+                String.class);
+
+        assertThat(memberCols).contains("team_id");
+        assertThat(teamCols).containsExactlyInAnyOrder("id", "name");
+        assertThat(fks).containsExactly("assoc_member.team_id -> assoc_team.id");
+        CiOutput.record("association-owner", "schema", String.join("\n",
+                "assoc_member의 컬럼: " + memberCols,
+                "assoc_team의 컬럼: " + teamCols,
+                "외래 키: " + fks.get(0)));
+    }
+
+    /** 응답 전용 DTO */
+    record TeamResponse(String name, java.util.List<String> members) {
+    }
+
+    @Test
+    @DisplayName("양방향 엔티티를 그대로 JSON으로 바꾸면 서로를 부르며 끝나지 않아 실패하고, DTO는 바뀐다 (출력 공개)")
+    void bidirectionalEntityToJsonLoops() throws Exception {
+        AssocTeam team = new AssocTeam("레드");
+        AssocMember kim = new AssocMember("kim");
+        kim.changeTeam(team);
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(() -> mapper.writeValueAsString(team));
+        String dto = mapper.writeValueAsString(new TeamResponse(team.getName(),
+                team.getMembers().stream().map(AssocMember::getName).toList()));
+
+        assertThat(thrown).isInstanceOf(com.fasterxml.jackson.databind.JsonMappingException.class);
+        assertThat(dto).isEqualTo("{\"name\":\"레드\",\"members\":[\"kim\"]}");
+        String message = thrown.getMessage();
+        CiOutput.record("association-owner", "json", String.join("\n",
+                "엔티티 Team을 그대로: " + thrown.getClass().getSimpleName() + ": "
+                        + message.split(" \\(through reference chain")[0],
+                "DTO TeamResponse: " + dto));
     }
 }
