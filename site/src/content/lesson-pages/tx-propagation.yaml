@@ -1,0 +1,205 @@
+# 트랜잭션 전파와 롤백 규칙 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+# 예전 레슨 site/src/pages/lessons/tx-propagation.astro와 propagation/PropagationTest를 재료로 다시 쓴다.
+stage: design
+title: 트랜잭션 전파와 롤백 규칙
+unit: 스프링
+roadmap: S11
+type: 동작 확인
+prerequisites:
+  - {slug: transactional-proxy, title: '@Transactional 동작 원리'}
+assume: '자바 21, 스프링 부트 3.5, PostgreSQL 16. 프록시가 트랜잭션을 열고 커넥션을 스레드에 묶어 두며, 런타임 예외가 나면 롤백한다는 것(@Transactional 동작 원리 레슨). 체크 예외와 언체크 예외의 차이, 예외를 잡아 다시 던지기(예외 레슨).'
+example: '주문 서비스 `OrderService.place`가 주문을 저장하고, 다른 빈의 `PointService.add`로 포인트를 적립하고, `AuditService.record`로 감사 기록을 남긴다. 적립이 실패할 때 주문과 기록이 어떻게 되는지를 전파 설정마다 비교한다.'
+intro:
+  - '"포인트 적립이 실패해도 주문은 성공시켜 주세요." 그래서 적립 호출을 `try-catch`로 감쌌는데, 주문까지 사라지고 처음 보는 `UnexpectedRollbackException`이 나요. 반대로 결제 실패 기록을 남기려고 했더니 결제가 롤백될 때 기록도 함께 사라져요.'
+  - '`@Transactional` 메서드가 다른 `@Transactional` 메서드를 부르면, 안쪽은 바깥의 트랜잭션에 합류할지 따로 열지 정해야 해요. 이것을 전파라고 해요. 또 어떤 예외에 롤백할지도 규칙이 있어요. 스프링 개발자는 이 두 규칙으로 "무엇이 함께 성공하고 함께 실패하는가"를 정해요. 잘못 고르면 남아야 할 데이터가 사라지거나 사라져야 할 데이터가 남아요.'
+  - '이 레슨에서는 바깥과 안쪽 트랜잭션의 조합마다 DB에 남은 행을 확인하고, 체크 예외와 런타임 예외, 잡아서 삼킨 예외가 각각 커밋되는지 롤백되는지 돌려 봐요.'
+covers:
+  - topic: '전파는 이미 트랜잭션이 있을 때 새로 부른 `@Transactional` 메서드가 어떻게 할지 정하는 설정이다'
+    where: '질문 1'
+  - topic: '`REQUIRED`(기본): 있으면 합류하고 없으면 새로 연다. 합류하면 바깥과 안쪽이 커넥션 하나, 트랜잭션 하나다. 커밋은 가장 바깥이 끝날 때 한 번이다'
+    where: '질문 1'
+  - topic: '합류한 안쪽에서 런타임 예외가 프록시를 지나가면 트랜잭션 전체가 롤백 전용(rollback-only)으로 표시된다. 바깥에서 예외를 잡아도 커밋할 때 `UnexpectedRollbackException`이 나고 모두 롤백된다'
+    where: '질문 1'
+  - topic: '`REQUIRES_NEW`: 바깥 트랜잭션을 잠시 멈추고 새 커넥션으로 따로 연다. 안쪽이 롤백돼도 바깥은 커밋할 수 있고, 안쪽이 먼저 커밋되면 바깥이 롤백돼도 남는다'
+    where: '질문 2'
+  - topic: '`REQUIRES_NEW`는 커넥션을 하나 더 쓴다. 바깥이 아직 커밋하지 않은 행은 안쪽에서 보이지 않는다. 풀이 작으면 서로 기다리다 멈출 수 있다'
+    where: '질문 2'
+  - topic: '실패한 시도의 감사 기록처럼 본 작업과 운명이 달라야 하는 것에 `REQUIRES_NEW`를 쓴다'
+    where: '질문 2와 실무에서는'
+  - topic: '그 밖의 전파(`SUPPORTS`, `MANDATORY`, `NOT_SUPPORTED`, `NEVER`, `NESTED`)의 뜻'
+    where: '질문 2의 더 알아보기'
+  - topic: '기본 롤백 규칙: 런타임 예외(`RuntimeException`)와 `Error`는 롤백, 체크 예외는 커밋. `rollbackFor`, `noRollbackFor`로 바꾼다'
+    where: '질문 3'
+  - topic: '체크 예외에 커밋하는 이유는 EJB 때부터 이어진 관례다. 체크 예외로 실패를 알리는 메서드라면 `rollbackFor`를 꼭 적는다'
+    where: '질문 3'
+  - topic: '`@Transactional` 메서드 안에서 예외를 잡고 다시 던지지 않으면, 프록시는 정상 종료로 보고 커밋한다. 반쯤 된 변경이 남는다'
+    where: '질문 4'
+  - topic: '예외를 잡되 롤백하고 싶으면 다시 던지거나 `TransactionAspectSupport.currentTransactionStatus().setRollbackOnly()`'
+    where: '질문 4'
+  - topic: '리포지토리 호출 하나만 `try-catch`로 감싸도, 그 리포지토리 메서드가 합류한 트랜잭션에서 예외를 던졌으면 이미 롤백 전용이다'
+    where: '질문 4'
+  - topic: '전파가 동작하려면 안쪽 메서드를 다른 빈에서 프록시를 거쳐 불러야 한다. 내부 호출이면 전파 설정도 무시된다'
+    where: '질문 1. 내부 호출은 @Transactional 동작 원리(S10)'
+  - topic: '격리 수준(`isolation`)'
+    where: '다루지 않음: 격리 수준(D9)'
+  - topic: '커밋된 뒤에 실행하기(`@TransactionalEventListener`)'
+    where: '다루지 않음: 스프링 이벤트(S13)'
+codes:
+  predict: |-
+    @Transactional
+    public void place(Order o) {
+      orders.save(o);
+      try {
+        pointService.add(o.userId(), 100);
+      } catch (RuntimeException e) {
+        log.warn("적립 실패", e);
+      }
+    }
+
+    // PointService
+    @Transactional
+    public void add(long userId, int n) {
+      throw new IllegalStateException();
+    }
+  requiresNew: |-
+    // PointService
+    @Transactional(propagation =
+        Propagation.REQUIRES_NEW)
+    public void add(long userId, int n) {
+      ...
+    }
+  audit: |-
+    // AuditService
+    @Transactional(propagation =
+        Propagation.REQUIRES_NEW)
+    public void record(String action,
+        String result) {
+      audits.save(new Audit(action, result));
+    }
+  checked: |-
+    @Transactional
+    public void importFile(Path file)
+        throws IOException {
+      rows.save(new Row("header"));
+      Files.readAllLines(file); // IOException
+    }
+  rollbackFor: |-
+    @Transactional(
+        rollbackFor = Exception.class)
+    public void importFile(Path file)
+        throws IOException { ... }
+  swallow: |-
+    @Transactional
+    public void transfer(long from,
+        long to, int n) {
+      try {
+        accounts.withdraw(from, n);
+        accounts.deposit(to, n);
+      } catch (Exception e) {
+        log.error("이체 실패", e);
+      }
+    }
+predict:
+  text: '코드 predict의 `place`는 적립 실패를 `try-catch`로 잡고 로그만 남겨요. 두 메서드 모두 기본 설정의 `@Transactional`이고 서로 다른 빈이에요. `place`가 끝나면 어떻게 될까요? 보기: 주문이 커밋된다, 주문이 롤백되고 예외 없음, 주문이 롤백되고 `UnexpectedRollbackException`, 적립만 롤백되고 주문은 커밋.'
+  answer: '주문이 롤백되고 `UnexpectedRollbackException`. 안쪽이 바깥 트랜잭션에 합류했고, 안쪽 프록시를 예외가 지나갈 때 트랜잭션 전체를 롤백 전용으로 표시했다. 바깥이 예외를 잡아도 커밋할 수 없다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: '@Transactional 메서드가 다른 @Transactional 메서드를 부르면 트랜잭션은 몇 개인가요?'
+    conclusion:
+      lead: '기본 설정(`REQUIRED`)에서는 하나예요. 안쪽 메서드는 새로 열지 않고 바깥 트랜잭션에 합류해요.'
+      sub: '그래서 안쪽에서 예외가 프록시를 지나가면 트랜잭션 전체가 "롤백만 가능"으로 표시돼요. 바깥에서 예외를 잡아도 커밋할 때 `UnexpectedRollbackException`이 나고 모두 롤백돼요.'
+    says:
+      - '전파는 "이미 트랜잭션이 있으면 어떻게 할까"의 설정이다. 기본값 `REQUIRED`는 있으면 합류, 없으면 새로 연다'
+      - '합류한 안쪽 메서드 안에서 커넥션을 확인하면 바깥과 같다(같은 `pg_backend_pid()`). 커밋은 안쪽이 끝날 때가 아니라 바깥이 끝날 때 한 번이다'
+      - '코드 predict를 돌린다. `UnexpectedRollbackException`이 나고 주문이 없다. 예측의 답을 밝힌다. 실제 예외 메시지를 보인다'
+      - '왜인가. 안쪽 프록시는 예외를 보고 롤백하려 하지만, 트랜잭션의 주인은 바깥이라 직접 롤백하지 않고 "롤백 전용" 표시만 한다. 바깥이 예외를 잡고 정상으로 끝나면 프록시가 커밋하려는데 표시가 있어 롤백하고, 바깥을 부른 쪽이 "커밋한 줄 알았다"고 착각하지 않게 예외를 던진다'
+      - '이 규칙은 안쪽을 다른 빈에서 프록시를 거쳐 부를 때의 이야기다. 같은 클래스 안이면 S10의 내부 호출이라 안쪽의 어노테이션 자체가 읽히지 않는다. 그때는 예외를 잡으면 그냥 커밋된다'
+    widget:
+      kind: steps
+      note: '바깥 트랜잭션 상자 하나 안에 `place`와 `add`를 놓고 코드 predict를 한 단계씩 넘긴다: 트랜잭션 시작, 주문 저장(아직 커밋 전), `add`가 합류, 예외 발생, 안쪽 프록시가 롤백 전용 표시, 바깥이 예외를 잡음, 바깥 프록시가 커밋 시도, 표시를 보고 롤백, `UnexpectedRollbackException`. 상태 칸에 rollback-only 값과 DB의 주문 행을 보인다'
+    asks:
+      - '본문의 예시: 코드 predict에서 `PointService.add`의 `@Transactional`을 지우면(다른 빈, 어노테이션 없음) `place`는 어떻게 끝나나 (주문이 커밋된다. 안쪽 프록시가 없어 롤백 전용 표시를 하지 않는다)'
+      - '옮긴 상황: `@Transactional OrderService.place`가 다른 빈의 `@Transactional CouponService.use`를 부르고, `use`는 예외 없이 끝났다. 그 뒤 `place`에서 런타임 예외가 났다. 쿠폰 사용 기록은 남나 (남지 않는다. 같은 트랜잭션이다)'
+  - id: q2
+    title: 안쪽만 따로 커밋하거나 롤백하려면 어떻게 하나요?
+    conclusion:
+      lead: '안쪽에 `propagation = REQUIRES_NEW`를 줘요. 바깥을 잠시 멈추고 새 커넥션으로 따로 트랜잭션을 열어요.'
+      sub: '안쪽이 롤백돼도 바깥은 커밋할 수 있고, 안쪽이 먼저 커밋되면 바깥이 롤백돼도 남아요. 대신 커넥션을 하나 더 써요.'
+    says:
+      - '`PointService.add`에 코드 requiresNew를 주고 코드 predict를 다시 돌린다. 적립은 롤백되고 주문은 커밋된다. 테스트로 보인다'
+      - '반대 방향: 코드 audit의 감사 기록이 `REQUIRES_NEW`이고 기록 뒤에 바깥에서 예외가 나면 주문은 롤백되고 기록은 남는다. 실패한 결제 시도의 기록을 남길 때 쓰는 모양이다. S9에서 넘긴 "실패 기록이 본 작업과 함께 사라지는 문제"의 답이다'
+      - '따로라는 증거: 안쪽 커넥션의 `pg_backend_pid()`가 바깥과 다르다. 바깥이 저장만 하고 아직 커밋하지 않은 행은 안쪽에서 조회해도 보이지 않는다. 테스트로 보인다'
+      - '비용: 바깥 커넥션을 쥔 채로 하나를 더 빌린다. 풀 크기가 10이고 요청 10개가 동시에 바깥 트랜잭션을 연 채 `REQUIRES_NEW`를 부르면, 모두 두 번째 커넥션을 기다리다 풀의 대기 시간이 지나 실패한다. 풀 크기 2에서 이 상황을 만든 결과를 보인다'
+      - '더 알아보기: 다른 전파 값 한 줄씩. `SUPPORTS`(있으면 합류, 없으면 없이), `MANDATORY`(없으면 예외), `NOT_SUPPORTED`(있으면 멈추고 없이), `NEVER`(있으면 예외), `NESTED`(같은 커넥션에서 세이브포인트로 안쪽만 되돌리기. JDBC 트랜잭션 매니저에서만 된다)'
+    widget:
+      kind: compare
+      note: '두 칸은 "REQUIRED(합류)"와 "REQUIRES_NEW(따로)". 버튼으로 "안쪽에서 예외, 바깥이 잡음", "안쪽 성공 뒤 바깥에서 예외"를 고른다. 칸마다 커넥션 수와 끝난 뒤 바깥 행과 안쪽 행이 남았는지, 나는 예외를 결과 줄에 보인다'
+    asks:
+      - '본문의 예시: 코드 audit의 `record`(REQUIRES_NEW)를 부른 뒤 바깥 `place`에서 런타임 예외가 났다. 주문과 감사 기록은 각각 남나 (주문은 롤백, 기록은 남는다)'
+      - '옮긴 상황: 바깥 트랜잭션이 회원을 저장(아직 커밋 전)한 뒤 `REQUIRES_NEW` 메서드가 그 회원을 id로 조회한다. 찾을 수 있나 (없다. 다른 트랜잭션이라 커밋 전 행이 보이지 않는다)'
+  - id: q3
+    title: 어떤 예외가 나면 롤백되나요?
+    conclusion:
+      lead: '기본으로 런타임 예외와 `Error`만 롤백하고, 체크 예외는 예외가 나도 커밋해요.'
+      sub: '체크 예외에도 롤백하려면 `rollbackFor = Exception.class`처럼 적어요. 반대로 롤백하지 않을 런타임 예외는 `noRollbackFor`로 적어요.'
+    says:
+      - '코드 checked를 없는 파일로 부른다. `IOException`이 호출한 쪽까지 나가지만 `header` 행은 커밋되어 남는다. 테스트로 보인다'
+      - '코드 rollbackFor로 바꾸면 같은 상황에서 롤백된다'
+      - '규칙을 표로: `RuntimeException`과 그 하위(`IllegalStateException`, `NullPointerException`, `DataAccessException`) 롤백, `Error` 롤백, `Exception`의 하위 가운데 런타임이 아닌 것(`IOException`, 내가 만든 체크 예외) 커밋'
+      - '왜 체크 예외는 커밋하나. 체크 예외를 "호출한 쪽이 처리할 수 있는 정상적인 다른 결과"로 보던 EJB의 관례를 스프링이 따랐다고 문서가 설명한다. 그래서 체크 예외로 실패를 알리는 코드라면 `rollbackFor`를 빼먹지 않는다. 요즘은 서비스에서 체크 예외를 런타임 예외로 감싸 던지는 경우가 많다(J10)'
+      - '`noRollbackFor = DuplicateCouponException.class`처럼 롤백하지 않을 런타임 예외를 정할 수 있다. 다만 질문 1의 합류 상황에서 안쪽이 이 예외로 롤백 전용을 표시하지 않게 되는지도 함께 확인한 결과를 보인다'
+    asks:
+      - '본문의 예시: `@Transactional` 메서드가 행을 저장한 뒤 내가 만든 `class SoldOutException extends Exception`을 던진다. 행은 남나 (남는다. 체크 예외라 커밋한다)'
+      - '옮긴 상황: 같은 메서드가 `class SoldOutException extends RuntimeException`을 던지면 행은 남나 (남지 않는다. 런타임 예외라 롤백한다)'
+  - id: q4
+    title: '@Transactional 메서드 안에서 예외를 잡으면 어떻게 되나요?'
+    conclusion:
+      lead: '잡고 다시 던지지 않으면 프록시는 정상으로 끝난 것으로 보고 커밋해요. 실패하기 전까지 한 변경이 그대로 남아요.'
+      sub: '프록시는 메서드 밖으로 나온 예외만 봐요. 잡은 뒤에도 롤백하려면 다시 던지거나 롤백 전용으로 직접 표시해요.'
+    says:
+      - '코드 swallow에서 `deposit`이 실패하게 한다. 출금은 됐고 입금은 없는데 커밋된다. 돈이 사라졌다. 테스트로 보인다'
+      - '프록시가 롤백을 정하는 근거는 "메서드 밖으로 예외가 나왔나"뿐이다(S10의 코드 interceptor). 메서드 안에서 잡으면 프록시는 모른다'
+      - '고친 코드 하나: 로그를 남긴 뒤 `throw e`(또는 의미 있는 런타임 예외로 감싸 던지기). 고친 코드 둘: `TransactionAspectSupport.currentTransactionStatus().setRollbackOnly()`로 표시하고 정상 값을 돌려준다. 둘 다 롤백되는 것을 보인다'
+      - '질문 1과의 차이를 짚는다. 같은 메서드 안에서 잡으면 커밋, 합류한 다른 빈의 `@Transactional` 메서드에서 난 예외를 잡으면 `UnexpectedRollbackException`. 차이는 예외가 안쪽 프록시를 지나갔는지다'
+      - '리포지토리 호출 하나를 `try-catch`로 감싼 경우: Spring Data 리포지토리 메서드도 `@Transactional`이라 합류한 상태에서 예외를 던지면 이미 롤백 전용이다. 중복 키 예외를 잡고 계속 가려다 `UnexpectedRollbackException`을 만나는 흔한 경우다. 테스트로 보인다'
+    asks:
+      - '본문의 예시: 코드 swallow의 `catch` 블록 끝에 `throw e;`를 더하면(메서드 선언에 맞게 런타임 예외로 감싼다고 하자) 출금은 남나 (남지 않는다. 예외가 프록시까지 나가 롤백한다)'
+      - '옮긴 상황: `@Transactional` 메서드에서 쿠폰 발급을 `try { coupons.save(c); } catch (DataIntegrityViolationException e) { }`로 감싸 중복이면 넘어가려 한다. `coupons`는 Spring Data 리포지토리다. 메서드가 끝나면 어떻게 되나 (`UnexpectedRollbackException`. 리포지토리 메서드가 합류한 트랜잭션을 롤백 전용으로 표시했다)'
+      - '실무 구역: 실패한 결제 시도를 감사 기록으로 남기는 `record`를 `REQUIRES_NEW`가 아니라 기본 전파로 두면, 결제가 런타임 예외로 롤백될 때 기록은 남나 (남지 않는다. 같은 트랜잭션이라 함께 롤백된다)'
+practice:
+  says:
+    - '실무의 모양: 결제 서비스는 기본 전파, 실패 기록은 코드 audit의 `REQUIRES_NEW`. 결제 실패에서 결제는 롤백되고 실패 기록은 남는 것을 테스트로 남긴다. S9의 감사 로그 애스펙트와 이으면 "실패해도 남는 감사 로그"가 된다'
+    - '흔한 실수 하나: 질문 4의 예외 삼키기. 코드 리뷰에서 `@Transactional` 메서드 안의 `catch` 블록이 다시 던지는지 본다'
+    - '흔한 실수 둘: 체크 예외를 던지는 서비스에 `rollbackFor`를 빠뜨린다. 파일 업로드 처리, 외부 API 클라이언트의 체크 예외가 흔한 곳이다'
+    - '흔한 실수 셋: `REQUIRES_NEW`를 반복문 안에서 많이 부르거나 모든 곳에 쓴다. 커넥션을 두 배로 쓰고 풀이 바닥날 수 있다. 꼭 따로여야 하는 것에만 쓴다'
+    - '트랜잭션 로그로 합류와 새 트랜잭션을 구분하는 법: `org.springframework.orm.jpa.JpaTransactionManager` 로그 레벨을 DEBUG로 두면 "Participating in existing transaction", "Suspending current transaction, creating new transaction" 줄이 나온다. 실제 줄을 실제 출력으로 보인다'
+claims:
+  - claim: 'REQUIRED 안쪽의 예외를 바깥에서 잡으면 `UnexpectedRollbackException`이 나고 전부 롤백된다'
+    how: 'DB의 행'
+    test: 'propagation/PropagationTest#requiredFailureMarksRollbackOnly'
+  - claim: '합류한 안쪽은 바깥과 같은 커넥션, REQUIRES_NEW 안쪽은 다른 커넥션을 쓴다'
+    how: '`select pg_backend_pid()`'
+  - claim: 'REQUIRES_NEW 안쪽만 롤백되고 바깥은 커밋된다. 안쪽이 먼저 커밋되면 바깥이 롤백돼도 남는다'
+    how: 'DB의 행'
+    test: 'propagation/PropagationTest#requiresNewFailureRollsBackOnlyInner, requiresNewCommitSurvivesOuterRollback'
+  - claim: 'REQUIRES_NEW 안쪽에서는 바깥이 커밋하지 않은 행이 보이지 않는다'
+    how: '바깥이 flush만 한 뒤 안쪽에서 센다'
+    test: 'propagation/PropagationTest#requiresNewIsSeparateTransaction'
+  - claim: '풀 크기 2에서 바깥 트랜잭션 둘이 동시에 REQUIRES_NEW를 부르면 커넥션을 기다리다 실패한다'
+    how: '히카리 `maximum-pool-size=2`, `connection-timeout`을 짧게 준 작은 컨텍스트에서 두 스레드가 `CountDownLatch`로 맞춰 부른다'
+  - claim: '체크 예외는 커밋, `rollbackFor`면 롤백, 런타임 예외는 롤백'
+    how: 'DB의 행'
+    test: 'propagation/PropagationTest#checkedExceptionCommitsByDefault, rollbackForMakesCheckedRollback, runtimeExceptionRollsBack'
+  - claim: '`noRollbackFor`에 적은 런타임 예외는 커밋되고, 합류한 안쪽에서 그 예외가 나도 롤백 전용을 표시하지 않는다(확인 후 결과대로 쓴다)'
+    how: 'DB의 행과 예외'
+  - claim: '같은 메서드 안에서 예외를 잡고 삼키면 커밋되어 반쯤 된 변경이 남는다. 다시 던지거나 `setRollbackOnly()`면 롤백된다'
+    how: 'DB의 행'
+  - claim: '합류한 트랜잭션에서 Spring Data 리포지토리의 `save`가 던진 예외를 잡아도 `UnexpectedRollbackException`이 난다'
+    how: '유니크 제약을 어기는 `saveAndFlush`를 `try-catch`로 감싼다'
+  - claim: '트랜잭션 매니저의 DEBUG 로그에 합류와 새 트랜잭션의 줄이 나온다'
+    how: '로그를 잡아 남긴다(`OutputCaptureExtension`)'
+sources:
+  - '전파와 롤백 전용, `UnexpectedRollbackException`: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html'
+  - '기본 롤백 규칙과 `rollbackFor`: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/rolling-back.html'
+  - '`Propagation` 값의 뜻: API 문서 https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/annotation/Propagation.html'

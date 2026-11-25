@@ -1,0 +1,180 @@
+# 설정과 프로파일 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 설정과 프로파일
+unit: 스프링
+roadmap: S5
+type: 동작 확인
+prerequisites:
+  - {slug: spring-boot-auto-config, title: 스프링 부트의 자동 설정}
+assume: '자바 21, 스프링 부트 3.5. 자동 설정의 빈이 `spring.*` 설정 값을 읽어 동작을 바꾼다는 것(스프링 부트의 자동 설정 레슨). record와 불변 객체(불변 객체 레슨). 환경 변수가 운영체제가 프로세스에 넘기는 이름과 값이라는 것은 이 레슨에서 한 번 설명해요.'
+example: '결제 대행사(PG) 연동 설정 `payment.pg.url`, `payment.pg.timeout`, `payment.pg.secret`. 로컬에서는 테스트 서버, 운영에서는 실제 서버를 쓰고, 비밀 키는 파일이 아니라 환경 변수로 넣는다.'
+intro:
+  - '로컬에서는 잘 되던 결제가 운영에 올리자 테스트 PG 서버로 나가요. `application.yml`에 운영 주소를 적은 줄이 있는데도요. 알고 보니 서버를 띄우는 스크립트의 실행 인자에 예전 주소가 남아 있었어요.'
+  - '스프링 부트는 설정 값을 파일, 환경 변수, 실행 인자 등 여러 곳에서 모아요. 같은 이름이 여러 곳에 있으면 정해진 순서로 하나가 이겨요. 환경마다 다른 값은 프로파일로 나누고, 비밀번호 같은 값은 저장소에 넣지 않고 밖에서 넣어요. 이 순서를 모르면 "분명히 바꿨는데 안 바뀌는" 설정을 붙잡고 하루를 보내요.'
+  - '이 레슨에서는 같은 키를 파일, 프로파일 파일, 환경 변수, 실행 인자에 다르게 적고 무엇이 이기는지 확인해요. 설정을 record로 받아 잘못된 값이면 앱이 뜨지 않는 것까지 봐요.'
+covers:
+  - topic: '설정 값을 읽는 곳: `application.yml`(또는 `.properties`), 프로파일 파일 `application-{프로파일}.yml`, 환경 변수, 자바 시스템 속성(`-D`), 실행 인자(`--`)'
+    where: '질문 1'
+  - topic: '스프링은 이 값들을 `Environment` 하나로 모아 `@Value`, `@ConfigurationProperties`, 자동 설정이 읽게 한다'
+    where: '질문 1'
+  - topic: '느슨한 바인딩: 환경 변수 `PAYMENT_PG_URL`이 `payment.pg.url`로 읽힌다. 점은 밑줄, 대문자로'
+    where: '질문 1'
+  - topic: '같은 키가 여러 곳에 있으면 이기는 순서: 실행 인자 > 시스템 속성 > 환경 변수 > 프로파일 파일 > `application.yml`. jar 밖의 파일이 jar 안의 파일을 이긴다'
+    where: '질문 2'
+  - topic: '여러 곳의 값은 합쳐진다. 이기는 쪽에 없는 키는 아래쪽 값이 남는다'
+    where: '질문 2'
+  - topic: '프로파일: `spring.profiles.active`로 켠다. 켜진 프로파일의 파일이 기본 파일을 덮어쓴다'
+    where: '질문 3'
+  - topic: '`@Profile("local")` 빈은 그 프로파일이 켜졌을 때만 만들어진다'
+    where: '질문 3'
+  - topic: '프로파일을 여럿 켜면 나중에 적은 것이 이긴다'
+    where: '질문 3의 더 알아보기'
+  - topic: '`@ConfigurationProperties`는 접두사 아래 값을 한 객체(record)로 받는다. 타입을 바꿀 수 없으면 앱이 뜨지 않는다. `@Validated`로 값 검증'
+    where: '질문 4'
+  - topic: '`@Value`는 값 하나씩 받는다. 키 이름이 틀리면 앱이 뜨지 않고, 기본값(`${a:b}`)을 주면 틀려도 조용히 넘어간다'
+    where: '질문 4'
+  - topic: '`Duration`, `DataSize` 같은 타입으로 받으면 `2s`, `10MB`처럼 적는다'
+    where: '질문 4'
+  - topic: '불변 설정 객체(record)로 받는 이유: 한 번 읽은 설정이 실행 중에 바뀌지 않는다'
+    where: '질문 4. 불변은 불변 객체(J9)'
+  - topic: '비밀 값(DB 비밀번호, API 키)은 저장소의 파일에 두지 않고 환경 변수나 비밀 저장소로 넣는다'
+    where: '실무에서는'
+  - topic: '실행 중에 설정을 바꾸는 것(설정 서버, 새로 고침)'
+    where: '다루지 않음: 이 과정에서 다루지 않는다. 실무에서는에 이름만 적는다'
+  - topic: '컨테이너와 쿠버네티스에서 설정을 넣는 법'
+    where: '다루지 않음: 테스트와 운영 과정(T5)'
+codes:
+  predict: |-
+    # application.yml
+    payment.pg.url: https://pg.example.com
+
+    # application-local.yml
+    payment.pg.url: http://localhost:9000
+
+    # 띄우는 명령
+    PAYMENT_PG_URL=https://env.example.com \
+    java -jar shop.jar \
+      --spring.profiles.active=local \
+      --payment.pg.url=https://arg.example.com
+  props: |-
+    @ConfigurationProperties("payment.pg")
+    @Validated
+    public record PgProperties(
+        @NotBlank String url,
+        Duration timeout,
+        String secret) {
+    }
+  enable: |-
+    @SpringBootApplication
+    @ConfigurationPropertiesScan
+    public class ShopApplication { ... }
+  value: |-
+    @Value("${payment.pg.timout:3s}")
+    Duration timeout;
+  yml: |-
+    payment:
+      pg:
+        url: https://pg.example.com
+        timeout: 2s
+        secret: ${PG_SECRET}
+  profile: |-
+    @Configuration
+    @Profile("local")
+    class LocalPgConfig {
+      @Bean
+      PgClient pgClient() {
+        return new FakePgClient();
+      }
+    }
+predict:
+  text: '코드 predict처럼 같은 키 `payment.pg.url`을 네 곳에 다르게 두고 앱을 띄워요. 앱이 읽는 값은 무엇일까요? 보기: `pg.example.com`(application.yml), `localhost:9000`(local 프로파일), `env.example.com`(환경 변수), `arg.example.com`(실행 인자).'
+  answer: '`arg.example.com`. 실행 인자가 가장 먼저다. 그다음이 환경 변수, 프로파일 파일, 기본 파일 순이다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 스프링 부트는 설정 값을 어디서 읽나요?
+    conclusion:
+      lead: '`application.yml`과 프로파일 파일, 환경 변수, 시스템 속성, 실행 인자를 모두 읽어 `Environment` 하나로 모아요.'
+      sub: '코드는 어디서 왔는지 모른 채 키 이름으로 값을 꺼내요. 그래서 코드를 고치지 않고 띄우는 방법만 바꿔 값을 바꿀 수 있어요.'
+    says:
+      - '설정 값이 들어오는 곳 다섯을 한 줄씩: jar 안의 `application.yml`, 프로파일 파일, 환경 변수, 시스템 속성(`java -Dpayment.pg.url=...`), 실행 인자(`--payment.pg.url=...`)'
+      - '환경 변수는 운영체제가 프로세스를 띄울 때 넘기는 이름과 값이다. 서버, 도커, 쿠버네티스가 모두 이 방법으로 값을 넘긴다'
+      - '스프링은 이 값들을 `Environment`에 출처별로 쌓아 둔다(`PropertySource`). 앱을 띄우고 출처 목록을 순서대로 출력해 실제 출력으로 보인다'
+      - '느슨한 바인딩: 환경 변수 이름에는 점을 쓸 수 없어서 `PAYMENT_PG_URL`로 적는다. 스프링이 `payment.pg.url`로 맞춰 읽는다. 규칙은 점을 밑줄로, 하이픈은 지우고, 대문자로'
+      - '코드에서 꺼내는 방법은 `@Value("${payment.pg.url}")`와 `@ConfigurationProperties`다. 질문 4에서 비교한다'
+    asks:
+      - '본문의 예시: 환경 변수로 `payment.pg.timeout`을 주려면 이름을 무엇으로 적나 (`PAYMENT_PG_TIMEOUT`)'
+      - '옮긴 상황: 같은 jar를 개발 서버와 운영 서버에 올리고 DB 주소만 다르게 하고 싶다. jar를 다시 빌드하지 않고 바꾸는 방법을 하나 고르면 (서버마다 환경 변수 `SPRING_DATASOURCE_URL`이나 실행 인자 `--spring.datasource.url`로 넣는다)'
+  - id: q2
+    title: 같은 키가 여러 곳에 있으면 무엇이 이기나요?
+    conclusion:
+      lead: '실행 인자, 시스템 속성, 환경 변수, 프로파일 파일, 기본 파일 순서로 앞의 것이 이겨요.'
+      sub: '밖에서 넣는 값일수록 이겨요. 이기는 곳에 없는 키는 아래쪽 값이 그대로 쓰여서, 파일에 기본값을 두고 필요한 것만 밖에서 덮어써요.'
+    says:
+      - '코드 predict를 띄운다. 값은 `arg.example.com`이다. 예측의 답을 밝힌다. 실행 인자를 빼면 환경 변수, 그것도 빼면 local 파일, 그것도 빼면 기본 파일 값이 나오는 것을 차례로 보인다'
+      - '순서를 표로: 1 실행 인자, 2 시스템 속성, 3 환경 변수, 4 jar 밖의 프로파일 파일, 5 jar 안의 프로파일 파일, 6 jar 밖의 `application.yml`, 7 jar 안의 `application.yml`. 스프링 부트 문서의 전체 목록은 더 길고 이 레슨은 자주 쓰는 것만 적는다고 밝힌다'
+      - '이기는 규칙은 키 하나씩 적용된다. 실행 인자로 `url`만 주면 `timeout`은 파일 값이 그대로 남는다. 통째로 바뀌지 않는다'
+      - '왜 이 순서인가. jar 안의 파일은 빌드할 때 굳는 기본값이고, 밖에서 넣는 값은 띄우는 곳마다 다를 수 있는 값이다. 가까운 쪽이 이긴다'
+    widget:
+      kind: toggle
+      note: '값을 넣는 곳 네 개(기본 파일, local 프로파일 파일, 환경 변수, 실행 인자)를 켜고 끄는 버튼을 둔다. 켠 조합마다 `payment.pg.url`과 `payment.pg.timeout`의 최종 값과, 그 값이 어디서 왔는지를 보인다'
+    asks:
+      - '본문의 예시: 코드 predict에서 실행 인자만 빼고 띄우면 값은 무엇인가 (`env.example.com`. 환경 변수가 프로파일 파일을 이긴다)'
+      - '옮긴 상황: `application.yml`에 `server.port: 8080`, `logging.level.root: INFO`가 있고 `java -jar app.jar --server.port=9090`으로 띄웠다. 포트와 로그 레벨은 각각 무엇인가 (9090, INFO. 키마다 따로 이긴다)'
+  - id: q3
+    title: 환경마다 다른 설정은 어떻게 나누나요?
+    conclusion:
+      lead: '프로파일로 나눠요. `spring.profiles.active=local`로 켜면 `application-local.yml`이 기본 파일 위에 덮어써져요.'
+      sub: '`@Profile("local")`이 붙은 빈은 그 프로파일이 켜졌을 때만 만들어져서, 환경마다 다른 구현을 넣을 수도 있어요.'
+    says:
+      - '`application.yml`에 모든 환경의 공통 값을, `application-local.yml`과 `application-prod.yml`에 다른 값만 둔다. 프로파일을 켜지 않으면 기본 파일만 읽는다'
+      - '프로파일을 켜는 방법은 설정 값 `spring.profiles.active`이고, 이것도 질문 2의 순서를 따른다. 그래서 환경 변수 `SPRING_PROFILES_ACTIVE=prod`로 켤 수 있다'
+      - '코드 profile처럼 `@Profile("local")` 설정 클래스에 가짜 PG 클라이언트를 둔다. local로 띄우면 가짜가, 아니면 진짜가 들어간다. 진짜 쪽에는 `@Profile("!local")`을 붙인다. 테스트로 보인다'
+      - '프로파일 파일 안의 값이 기본 파일 값을 이기는 것은 키 하나씩이다. 질문 2와 같은 규칙이다'
+      - '더 알아보기: `spring.profiles.active=local,debug`처럼 여럿을 켜면 둘 다 읽고 같은 키는 나중에 적은 쪽이 이긴다. 한 파일 안에서 `---`로 문서를 나누고 `spring.config.activate.on-profile`로 프로파일마다 값을 둘 수도 있다'
+    asks:
+      - '본문의 예시: `application-prod.yml`에만 `payment.pg.url`이 있고 프로파일을 켜지 않고 띄웠다. 앱은 prod 값을 읽나 (읽지 않는다. 프로파일 파일은 그 프로파일이 켜졌을 때만 읽는다)'
+      - '옮긴 상황: 메일 발송 빈이 둘이다. `@Profile("prod")`가 붙은 `SmtpMailSender`와 `@Profile("!prod")`가 붙은 `LogMailSender`. 프로파일 없이 띄우면 어느 것이 빈이 되나 (`LogMailSender`)'
+  - id: q4
+    title: 설정 값을 코드에서 안전하게 받으려면 어떻게 하나요?
+    conclusion:
+      lead: '`@ConfigurationProperties`로 접두사 아래 값을 record 하나에 받아요. 타입이 안 맞거나 검증에 걸리면 앱이 뜰 때 바로 실패해요.'
+      sub: '`@Value`는 값을 하나씩 받아요. 기본값을 붙이면 키 이름이 틀려도 조용히 기본값이 들어가서, 틀린 것을 늦게 알아채요.'
+    says:
+      - '코드 props처럼 `payment.pg` 아래 값을 record로 받는다. 코드 enable의 `@ConfigurationPropertiesScan`이 찾아 빈으로 만든다. `timeout: 2s`는 `Duration`으로 바뀐다'
+      - 'record라 한 번 만든 뒤 바뀌지 않는다(J9). 실행 중에 누가 설정 객체를 고쳐 다른 코드가 놀라는 일이 없다'
+      - '`timeout: abc`처럼 바꿀 수 없는 값을 주면 앱이 뜨지 않고 어느 키가 왜 틀렸는지 알려 준다. `@Validated`와 `@NotBlank`를 붙이면 `url`이 비었을 때도 뜨지 않는다. 두 메시지를 실제 출력으로 보인다. 검증 어노테이션은 S8에서 자세히 본다'
+      - '코드 value는 `timeout`을 `timout`으로 잘못 적었다. 기본값 `3s`가 있어서 앱은 뜨고 늘 3초다. 기본값이 없으면 "Could not resolve placeholder"로 뜨지 않는다. 둘을 테스트로 보인다'
+      - '값 하나를 빠르게 받을 때는 `@Value`, 묶음으로 받을 때와 검증이 필요할 때는 `@ConfigurationProperties`라고 정리한다'
+    asks:
+      - '본문의 예시: 코드 props에서 `payment.pg.timeout: 2초`라고 적으면 앱은 어떻게 되나 (뜨지 않는다. `Duration`으로 바꿀 수 없다)'
+      - '옮긴 상황: `@Value("${mail.retry-count:3}") int retry`로 받는데 설정 파일에는 `mail.retryCount: 5`라고 적었다. 앱이 쓰는 값은 무엇인가 (5. 느슨한 바인딩으로 같은 키로 본다)'
+      - '실무 구역: `application.yml`에 `secret: ${PG_SECRET}`만 두고 환경 변수 `PG_SECRET`을 주지 않으면 앱은 어떻게 되나 (그 값을 쓰는 곳에서 자리 표시자를 풀지 못한다. `@ConfigurationProperties`라면 문자열 그대로 들어간다)'
+practice:
+  says:
+    - '프로젝트의 모양: 공통 값은 `application.yml`, 환경마다 다른 값은 `application-local.yml`과 `application-prod.yml`, 비밀 값은 코드 yml처럼 `${PG_SECRET}` 자리 표시자로 두고 서버의 환경 변수로 넣는다. `.env`나 비밀 파일은 저장소에 올리지 않는다'
+    - '흔한 실수: 운영 DB 비밀번호를 `application-prod.yml`에 적어 저장소에 올린다. 저장소를 볼 수 있는 모든 사람과 빌드 산출물에 비밀번호가 남는다. 고친 코드: 자리 표시자와 환경 변수. 이 부분은 테스트가 아니라 스프링 부트 문서의 외부 설정 장을 근거로 단다'
+    - '흔한 실수 둘: 질문 4의 코드 value처럼 기본값이 키 이름 실수를 숨긴다. 고친 코드: 설정 묶음은 `@ConfigurationProperties` record로 받는다'
+    - '실행 중에 설정을 바꾸고 싶어지면 설정 서버(Spring Cloud Config) 같은 도구가 있다고 이름만 적는다. 이 과정에서 다루지 않는다'
+    - '`@ConfigurationProperties` 클래스가 있으면 IDE가 설정 파일에서 키를 자동 완성해 준다(`spring-boot-configuration-processor`, 스프링 부트 문서 근거)'
+claims:
+  - claim: '같은 키를 기본 파일, 프로파일 파일, 환경 변수, 실행 인자에 두면 실행 인자, 환경 변수, 프로파일 파일, 기본 파일 순으로 이긴다'
+    how: '`SpringApplicationBuilder`로 작은 앱을 띄운다. 이 테스트만의 설정 파일 이름(`spring.config.name`)을 써서 다른 테스트의 `application.yml`과 섞이지 않게 한다. 환경 변수는 `StandardEnvironment`를 상속해 `systemEnvironment` 자리에 맵을 넣는 방법으로 흉내 내고, 그렇다고 레슨에 밝힌다'
+  - claim: '환경 변수 `PAYMENT_PG_URL`은 `payment.pg.url`로 읽힌다'
+    how: '같은 방법'
+  - claim: '이기는 곳에 없는 키는 아래쪽 값이 남는다'
+    how: '실행 인자로 `url`만 주고 `timeout`을 읽는다'
+  - claim: '`Environment`의 출처 목록에 실행 인자, 시스템 속성, 환경 변수, 설정 파일이 이 순서로 있다'
+    how: '`ConfigurableEnvironment.getPropertySources()`의 이름을 출력한다'
+  - claim: '프로파일을 켜지 않으면 프로파일 파일을 읽지 않고, `@Profile("!local")` 빈이 들어간다'
+    how: '프로파일을 바꿔 두 번 띄운다'
+  - claim: '`@ConfigurationProperties` record는 `2s`를 `Duration`으로 받고, 바꿀 수 없는 값이나 `@NotBlank` 위반이면 앱이 뜨지 않는다'
+    how: '값을 바꿔 띄우고 원인 예외의 메시지를 본다. 검증에는 `spring-boot-starter-validation`이 필요해 testImplementation으로 넣는다(S8과 같이 쓴다)'
+  - claim: '`@Value`의 키 이름이 틀리면 기본값이 있으면 기본값이, 없으면 "Could not resolve placeholder"로 실패한다'
+    how: '두 빈을 각각 띄운다'
+  - claim: '`@Value("${mail.retry-count:3}")`는 파일의 `mail.retryCount: 5`를 읽지 못한다(또는 읽는다)'
+    how: '`@Value`의 느슨한 바인딩은 제한적이라 확인해서 결과대로 문제를 고친다'
+sources:
+  - '외부 설정과 우선순위, 느슨한 바인딩: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/features/external-config.html'
+  - '프로파일: https://docs.spring.io/spring-boot/reference/features/profiles.html'
+  - '설정 메타데이터와 자동 완성: https://docs.spring.io/spring-boot/specification/configuration-metadata/annotation-processor.html'

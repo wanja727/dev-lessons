@@ -1,0 +1,181 @@
+# 스프링 부트의 자동 설정 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 스프링 부트의 자동 설정
+unit: 스프링
+roadmap: S4
+type: 동작 확인
+prerequisites:
+  - {slug: spring-beans, title: 스프링 빈과 의존성 주입}
+assume: '자바 21, 스프링 부트 3.5. 빈은 컴포넌트 스캔이나 `@Configuration`의 `@Bean`으로 만들어진다는 것과, 같은 타입의 빈이 둘이면 앱이 뜨지 않는다는 것(스프링 빈과 의존성 주입 레슨). Gradle에 의존성 한 줄을 더해 본 적이 있으면 돼요.'
+example: '컨트롤러가 주문을 JSON으로 돌려주는 작은 앱. 어디에도 `ObjectMapper`를 만든 코드가 없는데 JSON이 나오는 이유를 찾고, 날짜 형식을 바꾸려고 내 `ObjectMapper`를 만들었을 때와 설정 한 줄로 바꿨을 때를 비교한다.'
+intro:
+  - '`build.gradle`에 `spring-boot-starter-web` 한 줄을 넣었을 뿐인데 톰캣이 뜨고, 컨트롤러가 돌려준 객체가 JSON이 돼요. `spring-boot-starter-data-jpa`를 넣으면 DB 연결 설정을 적으라는 에러가 나요. 내가 만들지 않은 빈들이 어디서 왔는지 모르면, 동작을 바꾸고 싶을 때 어디를 고쳐야 할지 몰라요.'
+  - '스프링 부트는 라이브러리마다 "이런 조건이면 이런 빈을 만든다"는 설정 클래스를 미리 들고 있어요. 이것을 자동 설정이라고 해요. 스프링 개발자는 대부분 자동 설정이 만든 빈을 그대로 쓰고, 필요한 곳만 설정 값이나 내 빈으로 바꿔요. 그 경계를 알아야 덮어쓴다고 생각한 설정이 무시되거나, 자동 설정 전체를 꺼 버리는 일을 피해요.'
+  - '이 레슨에서는 작은 앱을 띄워 자동 설정이 만든 빈을 세고, 조건이 맞지 않아 빠진 설정의 이유를 보고서로 읽고, 내 빈을 만들었을 때 자동 설정이 물러나는 것을 확인해요.'
+covers:
+  - topic: '`@SpringBootApplication`은 `@SpringBootConfiguration`, `@EnableAutoConfiguration`, `@ComponentScan` 셋을 합친 것이다'
+    where: '질문 1'
+  - topic: '스타터는 함께 쓰는 라이브러리 묶음이다. `spring-boot-starter-web`은 스프링 MVC, 톰캣, 잭슨을 가져온다. 스타터 자체에는 설정 코드가 없다'
+    where: '질문 1'
+  - topic: '자동 설정 클래스 목록은 `spring-boot-autoconfigure` jar의 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`에 있다. `@EnableAutoConfiguration`이 이 목록을 읽는다'
+    where: '질문 1'
+  - topic: '자동 설정은 조건이 맞을 때만 빈을 만든다: `@ConditionalOnClass`(클래스가 클래스패스에 있을 때), `@ConditionalOnMissingBean`(같은 빈이 없을 때), `@ConditionalOnProperty`(설정 값이 있을 때)'
+    where: '질문 2'
+  - topic: '어느 자동 설정이 켜지고 왜 빠졌는지는 조건 평가 보고서(`--debug`, `ConditionEvaluationReport`)로 본다'
+    where: '질문 2와 실무에서는'
+  - topic: '내가 같은 타입의 빈을 만들면 `@ConditionalOnMissingBean` 때문에 자동 설정의 빈이 만들어지지 않는다. 내 빈이 이긴다'
+    where: '질문 3'
+  - topic: '내 빈으로 바꾸면 자동 설정이 그 빈에 해 주던 설정(`spring.jackson.*` 값 적용, 모듈 등록)도 함께 사라진다'
+    where: '질문 3'
+  - topic: '자동 설정은 내 설정(컴포넌트 스캔과 `@Configuration`)을 다 읽은 뒤에 처리된다. 그래서 내 빈이 있는지 보고 물러날 수 있다'
+    where: '질문 3의 더 알아보기'
+  - topic: '대부분은 빈을 만들지 않고 설정 값(`spring.jackson.*`, `server.port`)으로 바꾼다. 자동 설정의 빈이 그 값을 읽는다'
+    where: '질문 4'
+  - topic: '빈 하나를 조금 고칠 때는 커스터마이저(`Jackson2ObjectMapperBuilderCustomizer`)를 쓴다'
+    where: '질문 4'
+  - topic: '자동 설정 하나를 통째로 끄는 법: `@SpringBootApplication(exclude = ...)`, `spring.autoconfigure.exclude`'
+    where: '질문 4'
+  - topic: '스타터를 넣었는데 필요한 설정 값이 없으면 앱이 뜨지 않는다(예: JPA 스타터와 DB 주소)'
+    where: '실무에서는'
+  - topic: '설정 값을 어디서 읽고 어느 것이 이기는지, 프로파일'
+    where: '다루지 않음: 설정과 프로파일(S5)'
+  - topic: '자동 설정을 직접 만드는 법(라이브러리 제작자의 일)'
+    where: '질문 1의 더 알아보기에 목록 파일에 한 줄 더하면 된다는 것만 적는다'
+codes:
+  predict: |-
+    @Configuration
+    class JsonConfig {
+      @Bean
+      ObjectMapper objectMapper() {
+        return new ObjectMapper();
+      }
+    }
+    // application.yml
+    // spring.jackson.property-naming-strategy:
+    //   SNAKE_CASE
+  app: |-
+    @SpringBootApplication
+    public class ShopApplication {
+      public static void main(String[] a) {
+        SpringApplication.run(
+            ShopApplication.class, a);
+      }
+    }
+  jackson: |-
+    @AutoConfiguration
+    [[@ConditionalOnClass(ObjectMapper.class)]]
+    public class JacksonAutoConfiguration {
+
+      @Bean
+      @Primary
+      [[@ConditionalOnMissingBean]]
+      ObjectMapper jacksonObjectMapper(
+          Jackson2ObjectMapperBuilder b) {
+        return b.createXmlMapper(false)
+            .build();
+      }
+    }
+  customizer: |-
+    @Bean
+    Jackson2ObjectMapperBuilderCustomizer
+        snakeCase() {
+      return b -> b.propertyNamingStrategy(
+          PropertyNamingStrategies.SNAKE_CASE);
+    }
+  yml: |-
+    spring:
+      jackson:
+        property-naming-strategy: SNAKE_CASE
+        serialization:
+          write-dates-as-timestamps: false
+predict:
+  text: '컨트롤러가 `new Order(1, "latte", 2)`를 돌려줘요. 필드 이름은 `orderId`, `menuName`, `quantity`예요. `application.yml`에 `spring.jackson.property-naming-strategy: SNAKE_CASE`를 적고, 코드 predict처럼 내 `ObjectMapper` 빈도 만들었어요. 응답 JSON의 키는 어떻게 나올까요? 보기: `order_id`처럼 밑줄, `orderId`처럼 그대로, 앱이 뜨지 않는다(빈 둘).'
+  answer: '`orderId`처럼 그대로. 내 `ObjectMapper`가 있으면 자동 설정의 `ObjectMapper`가 만들어지지 않고, `spring.jackson.*` 값은 자동 설정의 빈에만 적용되기 때문이다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 의존성만 넣었는데 왜 빈이 생기나요?
+    conclusion:
+      lead: '스프링 부트가 미리 들고 있는 자동 설정 클래스들을 `@EnableAutoConfiguration`이 읽어서, 조건이 맞는 것의 빈을 만들어 주기 때문이에요.'
+      sub: '`@SpringBootApplication` 안에 `@EnableAutoConfiguration`이 들어 있어요. 스타터는 라이브러리를 가져올 뿐이고, 빈을 만드는 것은 `spring-boot-autoconfigure` 안의 설정 클래스예요.'
+    says:
+      - '코드 app의 `@SpringBootApplication`을 풀면 셋이다: `@SpringBootConfiguration`(이 클래스도 설정 클래스), `@ComponentScan`(이 패키지 아래 스캔, S2), `@EnableAutoConfiguration`(자동 설정 켜기)'
+      - '스타터는 의존성 묶음이다. `spring-boot-starter-web`을 넣으면 스프링 MVC, 내장 톰캣, 잭슨 라이브러리가 들어온다. 스타터 jar에는 클래스가 거의 없다'
+      - '`spring-boot-autoconfigure` jar 안의 `AutoConfiguration.imports` 파일에 자동 설정 클래스 이름이 줄마다 적혀 있다. 스프링 부트 3.5에서 몇 개인지 세어 실제 출력으로 보인다. `@EnableAutoConfiguration`이 이 목록을 읽는다'
+      - '컨트롤러만 둔 작은 앱을 띄워, 내가 만든 빈과 자동 설정이 만든 빈의 수를 나눠 센다. 내가 만든 것은 몇 개, 자동 설정이 만든 것은 백 개가 넘는다. `ObjectMapper`, `DispatcherServlet`, 톰캣 팩토리가 그 안에 있다'
+      - '더 알아보기: 회사 공통 라이브러리가 자동 설정을 갖고 싶으면 자기 jar에 같은 이름의 목록 파일을 두고 설정 클래스 이름을 적는다. 그 jar를 넣은 앱은 그 설정을 읽는다'
+    asks:
+      - '본문의 예시: `@SpringBootApplication`에서 `@EnableAutoConfiguration`이 빠지면 컨트롤러만 둔 웹 앱에 `ObjectMapper` 빈이 생기나 (생기지 않는다. 자동 설정을 읽지 않는다)'
+      - '옮긴 상황: 팀원이 "`spring-boot-starter-data-redis` jar 안에 Redis 설정 코드가 들어 있다"고 말한다. 맞나 (아니다. 스타터는 라이브러리를 가져오고, Redis 자동 설정 클래스는 `spring-boot-autoconfigure`에 있다)'
+  - id: q2
+    title: 자동 설정은 언제 빈을 만들고 언제 만들지 않나요?
+    conclusion:
+      lead: '자동 설정 클래스마다 조건이 붙어 있어서, 조건이 모두 맞을 때만 빈을 만들어요.'
+      sub: '필요한 라이브러리가 클래스패스에 있는지(`@ConditionalOnClass`), 같은 빈이 이미 있는지(`@ConditionalOnMissingBean`), 설정 값이 켜져 있는지(`@ConditionalOnProperty`)를 봐요.'
+    says:
+      - '코드 jackson은 `JacksonAutoConfiguration`을 줄인 모양이다. 클래스에 `@ConditionalOnClass(ObjectMapper.class)`가 있어 잭슨 라이브러리가 없으면 통째로 건너뛴다. 메서드에 `@ConditionalOnMissingBean`이 있어 `ObjectMapper` 빈이 이미 있으면 만들지 않는다'
+      - '조건 평가 보고서를 읽는다. 앱을 `--debug`로 띄우거나 `ConditionEvaluationReport`를 꺼내면 켜진 설정(positive matches)과 빠진 설정(negative matches)이 이유와 함께 나온다. 이 앱에서 `RedisAutoConfiguration`이 "required class not found"로 빠진 줄과 `JacksonAutoConfiguration`이 켜진 줄을 실제 출력으로 보인다'
+      - '`@ConditionalOnProperty`의 예: 어떤 설정 값을 `false`로 두면 그 자동 설정이 꺼진다. 예로 `spring.jackson`이 아닌 다른 하나를 보인다(테스트에서 고른다)'
+      - '그래서 같은 스프링 부트라도 어떤 라이브러리를 넣었는지, 어떤 빈을 만들었는지, 어떤 값을 적었는지에 따라 만들어지는 빈이 다르다'
+    widget:
+      kind: classify
+      note: '상황 여섯 가지(잭슨이 있고 내 `ObjectMapper` 없음, 잭슨이 있고 내 `ObjectMapper` 있음, Redis 라이브러리 없음, 조건의 설정 값이 false 등)를 주고, 자동 설정이 그 빈을 만드는지(만든다, 만들지 않는다)를 고르게 한다. 해설에 어느 조건 때문인지 적는다'
+    asks:
+      - '본문의 예시: 클래스패스에 잭슨이 있고 내가 만든 `ObjectMapper` 빈이 없다. 자동 설정이 `ObjectMapper`를 만드나 (만든다. 두 조건이 모두 맞는다)'
+      - '옮긴 상황: 어떤 자동 설정 클래스에 `@ConditionalOnClass(name = "io.lettuce.core.RedisClient")`가 붙어 있다. 앱에 Lettuce 라이브러리가 없으면 그 클래스 안의 `@Bean`은 몇 개 만들어지나 (하나도. 클래스 전체를 건너뛴다)'
+  - id: q3
+    title: 내가 같은 빈을 만들면 무엇이 쓰이나요?
+    conclusion:
+      lead: '내 빈이 쓰여요. 자동 설정은 같은 타입의 빈이 이미 있으면 물러나도록 만들어져 있어서, 빈이 둘이 되지 않아요.'
+      sub: '대신 자동 설정이 그 빈에 해 주던 일(설정 값 적용, 모듈 등록)도 함께 사라져요. 내 빈은 처음부터 내가 다 설정해야 해요.'
+    says:
+      - '코드 predict를 띄운다. 앱은 뜨고 `ObjectMapper` 빈은 하나이고 내가 만든 것이다. 앱이 뜨는 이유는 질문 2의 `@ConditionalOnMissingBean`이다'
+      - '응답의 키는 `orderId` 그대로다. 예측의 답을 밝힌다. `spring.jackson.property-naming-strategy`는 자동 설정의 `Jackson2ObjectMapperBuilder`가 읽어 자동 설정의 `ObjectMapper`에 넣는 값이다. 내 `new ObjectMapper()`는 그 값을 모른다'
+      - '사라지는 것은 하나 더 있다. 자동 설정의 `ObjectMapper`는 `LocalDateTime` 같은 자바 시간 타입 모듈을 등록하고 날짜를 숫자 배열이 아닌 문자열로 쓴다. 내 `new ObjectMapper()`로 `LocalDate`를 쓰면 예외가 나거나 다른 모양이 된다. 두 경우의 출력을 보인다'
+      - '이 규칙이 자동 설정의 기본 모양이다. `DataSource`, `RestClient.Builder`, `PasswordEncoder` 등 대부분의 자동 설정 빈이 "없을 때만 만든다"이다'
+      - '더 알아보기: 자동 설정은 내 `@Configuration`과 스캔한 빈을 다 등록한 뒤에 처리된다. 그래서 내 빈이 있는지 보고 물러날 수 있다. 내 설정이 자동 설정보다 나중에 처리되면 이 판단이 틀리므로 일반 `@Configuration`에는 `@ConditionalOnMissingBean`을 쓰지 말라고 스프링 부트 문서가 권한다'
+    asks:
+      - '본문의 예시: 내 `ObjectMapper` 빈을 만들고 `application.yml`에 `spring.jackson.serialization.indent-output: true`를 적었다. 응답 JSON이 줄을 바꿔 나오나 (나오지 않는다. 그 값은 자동 설정의 빈에만 적용된다)'
+      - '옮긴 상황: `DataSourceAutoConfiguration`은 `DataSource` 빈이 없을 때만 커넥션 풀을 만든다. 내가 `@Bean DataSource`를 만들고 `spring.datasource.hikari.maximum-pool-size: 30`을 적으면 풀 크기는 30이 되나 (되지 않는다. 내 빈은 그 값을 읽지 않는다)'
+  - id: q4
+    title: 자동 설정의 동작을 바꾸려면 어떻게 하나요?
+    conclusion:
+      lead: '먼저 설정 값으로 바꾸고, 값이 없으면 커스터마이저로 조금 고치고, 그래도 안 될 때만 내 빈을 만들어요.'
+      sub: '자동 설정 하나가 아예 필요 없으면 `exclude`로 꺼요.'
+    says:
+      - '설정 값: 코드 yml처럼 `spring.jackson.*`을 적는다. 내 빈을 만들지 않았으니 자동 설정의 `ObjectMapper`가 이 값을 읽는다. 응답 키가 `order_id`로 바뀐 것을 실제 출력으로 보인다'
+      - '어떤 값이 있는지는 스프링 부트 문서의 설정 목록에서 찾는다. 자동 설정 클래스는 `@ConfigurationProperties` 클래스(`JacksonProperties`)로 이 값을 받는다'
+      - '커스터마이저: 설정 값에 없는 것을 바꿀 때 코드 customizer처럼 `Jackson2ObjectMapperBuilderCustomizer` 빈을 만든다. 자동 설정은 물러나지 않고, 빈을 만들 때 내 커스터마이저를 함께 적용한다. 설정 값과 모듈이 그대로 남는다'
+      - '끄기: `@SpringBootApplication(exclude = RedisAutoConfiguration.class)` 또는 `spring.autoconfigure.exclude`. 끈 설정이 보고서의 exclusions에 나오는 것을 보인다'
+      - '고르는 순서를 표로 정리한다: 설정 값 → 커스터마이저 → 내 빈 → exclude. 아래로 갈수록 자동 설정이 해 주던 일을 내가 떠맡는다'
+    asks:
+      - '본문의 예시: 응답 JSON의 키를 밑줄 모양으로 바꾸면서 날짜 모듈은 그대로 두고 싶다. 내 `ObjectMapper` 빈을 만드는 것과 `spring.jackson.property-naming-strategy` 값을 적는 것 가운데 무엇이 맞나 (값을 적는다. 내 빈은 날짜 모듈까지 사라지게 한다)'
+      - '옮긴 상황: 설정 값에 없는 잭슨 기능 하나를 켜고 싶다. 자동 설정의 다른 설정은 모두 유지하고 싶다. 무엇을 만드나 (`Jackson2ObjectMapperBuilderCustomizer` 빈)'
+      - '실무 구역: `spring-boot-starter-data-jpa`를 넣고 `spring.datasource.url`을 적지 않은 채 앱을 띄우면 어떻게 되나 (내장 DB가 없으면 `DataSource`를 만들지 못해 앱이 뜨지 않는다)'
+practice:
+  says:
+    - '스타터를 넣으면 그 스타터가 기대하는 설정 값도 따라온다. JPA 스타터를 넣고 DB 주소를 적지 않으면 "Failed to configure a DataSource" 메시지로 뜨지 않는다. 메시지와 고치는 법(주소를 적거나 그 자동 설정을 끈다)을 보인다. 메시지는 테스트로 남긴다'
+    - '자동 설정이 왜 그렇게 동작했는지 볼 때: `application.yml`에 `debug: true`를 적거나 `--debug`로 띄우면 시작 로그에 조건 평가 보고서가 나온다. 운영에서는 액추에이터의 `/actuator/conditions`로 본다(스프링 부트 문서 근거)'
+    - '흔한 실수: 날짜 형식 하나를 바꾸려고 `@Bean ObjectMapper`를 새로 만든다. 그 뒤 다른 사람이 `spring.jackson.*` 값을 고쳐도 반영되지 않고, `LocalDateTime` 응답이 깨진다. 고친 코드: 빈을 지우고 설정 값이나 커스터마이저로 바꾼다(질문 3, 4를 가리킨다)'
+claims:
+  - claim: '스프링 부트 3.5의 `AutoConfiguration.imports`에 적힌 자동 설정 클래스는 백 개가 넘는다'
+    how: '클래스패스의 목록 파일을 읽어 센다(`ImportCandidates.load`)'
+  - claim: '컨트롤러만 둔 작은 앱에서 자동 설정이 만든 빈이 내가 만든 빈보다 훨씬 많고, 그 안에 `ObjectMapper`와 `dispatcherServlet`이 있다'
+    how: '`@EnableAutoConfiguration`을 켠 작은 앱을 띄우고 빈 정의의 출처(내 패키지인지)로 나눠 센다. 이 저장소의 DB와 배치 자동 설정은 `exclude`로 끄고 그렇다고 적는다'
+  - claim: '조건 평가 보고서에서 `RedisAutoConfiguration`은 필요한 클래스가 없어 빠지고, `JacksonAutoConfiguration`은 켜진다'
+    how: '`ConditionEvaluationReport.get(beanFactory)`를 읽는다'
+  - claim: '내 `ObjectMapper` 빈이 있으면 앱이 뜨고 `ObjectMapper`는 하나이며, `spring.jackson.property-naming-strategy`가 응답에 적용되지 않는다'
+    how: '작은 웹 앱에서 응답 JSON을 본다'
+  - claim: '내 `new ObjectMapper()`는 `LocalDate`를 자동 설정의 것과 다르게 쓴다(또는 예외)'
+    how: '두 `ObjectMapper`로 같은 객체를 써서 비교한다'
+  - claim: '설정 값만 적으면 응답 키가 `order_id`가 되고, 커스터마이저를 쓰면 설정 값과 날짜 모듈이 남는다'
+    how: '작은 웹 앱의 응답'
+  - claim: '`exclude`로 끈 자동 설정은 보고서의 exclusions에 나온다'
+    how: '`ConditionEvaluationReport.getExclusions()`'
+  - claim: 'DB 주소 없이 `DataSourceAutoConfiguration`을 켜면 "Failed to configure a DataSource"로 뜨지 않는다'
+    how: '`spring.datasource.url`을 비운 작은 앱을 띄워 예외 메시지를 본다. 이 저장소에 내장 DB 라이브러리가 없어 실패하는 것이 맞는지 함께 확인한다'
+sources:
+  - '자동 설정의 원리와 조건, 내 빈이 이기는 것: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/using/auto-configuration.html'
+  - '자동 설정 만들기와 목록 파일: https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html'
+  - '`spring.jackson.*`과 커스터마이저: https://docs.spring.io/spring-boot/how-to/spring-mvc.html#howto.spring-mvc.customize-jackson-objectmapper'
+  - '액추에이터 conditions 엔드포인트: https://docs.spring.io/spring-boot/api/rest/actuator/conditions.html'

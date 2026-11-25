@@ -1,0 +1,220 @@
+# 예외 처리와 검증 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 예외 처리와 검증
+unit: 스프링
+roadmap: S8
+type: 동작 확인
+prerequisites:
+  - {slug: spring-mvc-flow, title: 스프링 MVC 요청 흐름}
+  - {slug: rest-api, title: REST API 설계}
+assume: '자바 21, 스프링 부트 3.5. 인자를 바꾸지 못하면 컨트롤러 전에 400이 난다는 것(스프링 MVC 요청 흐름 레슨). 상태 코드 400, 404, 409, 500을 고르는 기준(REST API 설계 레슨). 체크 예외와 언체크 예외, 예외를 감싸는 원인(예외 레슨). `Optional.orElseThrow`(스트림과 Optional 레슨).'
+example: '회원 API. `GET /members/{id}`는 없는 회원이면 404를, `POST /members`는 이메일이 비었거나 나이가 음수면 400을 같은 모양의 JSON으로 돌려준다. 회원 등급은 enum `Grade`다.'
+intro:
+  - '프런트엔드 개발자가 물어요. "없는 회원을 조회하면 500이 오고, 이메일이 비면 400인데 응답 모양이 매번 달라요. 어떤 건 `message`, 어떤 건 `error`예요." 서버 로그에는 자바 예외의 긴 줄이 찍혀 있고, 응답 본문에는 그 예외의 클래스 이름이 그대로 나가 있어요.'
+  - '스프링 개발자는 컨트롤러마다 `try-catch`를 쓰지 않아요. 예외는 던지게 두고, `@RestControllerAdvice` 한 곳에서 예외 종류마다 상태 코드와 응답 본문을 정해요. 입력 검증도 어노테이션으로 선언하고, 검증에 걸린 예외를 같은 곳에서 같은 모양으로 바꿔요. 이렇게 해야 API 전체의 에러 응답이 한 모양이 돼요.'
+  - '이 레슨에서는 처리하지 않은 예외가 어떤 응답이 되는지 먼저 보고, `@ExceptionHandler`와 검증 어노테이션을 더해 가며 응답이 바뀌는 것을 실제 요청으로 확인해요.'
+covers:
+  - topic: '처리하지 않은 예외는 500이 되고, 스프링 부트의 기본 에러 응답(`/error`의 `timestamp`, `status`, `error`, `path`)으로 나간다'
+    where: '질문 1'
+  - topic: '스프링이 아는 예외(타입 변환 실패, 매핑 없음, 본문을 읽지 못함)는 알맞은 4xx로 바뀐다'
+    where: '질문 1'
+  - topic: '예외 클래스에 `@ResponseStatus(HttpStatus.NOT_FOUND)`를 붙이면 그 상태 코드가 된다'
+    where: '질문 1의 더 알아보기'
+  - topic: '`@ExceptionHandler`는 예외 종류마다 응답을 정한다. `@RestControllerAdvice`에 두면 모든 컨트롤러에 적용된다'
+    where: '질문 2'
+  - topic: '여러 핸들러 가운데 던진 예외와 가장 가까운 타입의 핸들러가 고른다. 컨트롤러 안의 핸들러가 어드바이스보다 먼저다'
+    where: '질문 2'
+  - topic: '없는 회원: 서비스가 `Optional.orElseThrow`로 `MemberNotFoundException`을 던지고 어드바이스가 404로 바꾼다'
+    where: '질문 2'
+  - topic: '`@Valid`와 검증 어노테이션(`@NotNull`, `@NotBlank`, `@Email`, `@Min`, `@Size`)으로 요청 본문을 검증한다. 걸리면 `MethodArgumentNotValidException`이 나고 400이다. `spring-boot-starter-validation`이 있어야 한다'
+    where: '질문 3'
+  - topic: '`@NotNull`, `@NotEmpty`, `@NotBlank`의 차이: null, 빈 문자열, 공백만 있는 문자열을 각각 막는지'
+    where: '질문 3'
+  - topic: '`@Valid`를 빠뜨리면 검증 어노테이션이 있어도 검사하지 않는다'
+    where: '질문 3'
+  - topic: '`int` 필드에 `@NotNull`은 의미가 없다. 값이 없으면 0이 되기 때문이다. 없는 것을 막으려면 `Integer`'
+    where: '질문 3의 더 알아보기. 래퍼 타입은 J3'
+  - topic: '`@RequestParam`과 `@PathVariable`의 검증은 스프링 6.1부터 메서드 검증으로 `HandlerMethodValidationException`이 된다'
+    where: '질문 3의 더 알아보기'
+  - topic: '에러 응답 형식을 하나로 정한다. 스프링이 지원하는 표준 형식 `ProblemDetail`(RFC 9457)의 `type`, `title`, `status`, `detail`, `instance`'
+    where: '질문 4'
+  - topic: 'enum 변환 실패(`"grade":"VIPP"`)는 `HttpMessageNotReadableException`이고, 어드바이스에서 같은 형식의 400으로 바꾼다'
+    where: '질문 4'
+  - topic: '응답에 예외 메시지와 스택 트레이스를 그대로 내보내지 않는다. 500의 본문은 일반 문구로, 자세한 것은 로그로'
+    where: '질문 4와 실무에서는'
+  - topic: '`ResponseEntityExceptionHandler`를 상속하면 스프링 MVC의 예외를 모두 `ProblemDetail`로 바꾼다'
+    where: '실무에서는'
+  - topic: '필터에서 난 예외는 `@ControllerAdvice`가 잡지 못한다'
+    where: '질문 2의 더 알아보기. 필터는 필터와 인터셉터(S7)'
+  - topic: '상태 코드를 고르는 기준(409, 422)'
+    where: '다루지 않음: REST API 설계(N5)'
+  - topic: '서비스 계층의 예외 설계(체크 예외를 감쌀지)'
+    where: '다루지 않음: 예외(J10)'
+codes:
+  predict: |-
+    @GetMapping("/members/{id}")
+    Member find(@PathVariable long id) {
+      return members.findById(id)
+          .orElseThrow(() ->
+              new MemberNotFoundException(id));
+    }
+
+    class MemberNotFoundException
+        extends RuntimeException { ... }
+    // GET /members/999 (없는 회원)
+  advice: |-
+    @RestControllerAdvice
+    class ApiExceptionHandler {
+
+      @ExceptionHandler(
+          MemberNotFoundException.class)
+      ProblemDetail notFound(
+          MemberNotFoundException e) {
+        return ProblemDetail.forStatusAndDetail(
+            HttpStatus.NOT_FOUND,
+            e.getMessage());
+      }
+    }
+  request: |-
+    public record SignUp(
+        @NotBlank @Email String email,
+        @NotNull @Min(0) Integer age,
+        Grade grade) {
+    }
+
+    @PostMapping("/members")
+    Member create(
+        @RequestBody @Valid SignUp req) {
+      return members.create(req);
+    }
+  invalid: |-
+    @ExceptionHandler(
+        MethodArgumentNotValidException.class)
+    ProblemDetail invalid(
+        MethodArgumentNotValidException e) {
+      ProblemDetail p = ProblemDetail
+          .forStatusAndDetail(
+              HttpStatus.BAD_REQUEST,
+              "입력 값이 올바르지 않아요");
+      p.setProperty("errors", e
+          .getBindingResult()
+          .getFieldErrors().stream()
+          .map(f -> f.getField() + ": "
+              + f.getDefaultMessage())
+          .toList());
+      return p;
+    }
+  problem: |-
+    {
+      "type": "about:blank",
+      "title": "Not Found",
+      "status": 404,
+      "detail": "회원 999를 찾을 수 없어요",
+      "instance": "/members/999"
+    }
+  fallback: |-
+    @ExceptionHandler(Exception.class)
+    ProblemDetail unknown(Exception e) {
+      log.error("처리하지 못한 예외", e);
+      return ProblemDetail.forStatusAndDetail(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "잠시 후 다시 시도해 주세요");
+    }
+predict:
+  text: '코드 predict는 없는 회원이면 `MemberNotFoundException`(언체크 예외)을 던지고, 이 예외를 처리하는 곳은 아직 없어요. `GET /members/999`의 응답 상태 코드는 몇일까요? 보기: 200(빈 본문), 400, 404, 500.'
+  answer: '500. 스프링은 이 예외가 "없음"이라는 뜻인지 모른다. 처리하지 않은 예외는 모두 500이 된다. 질문 1에서 밝히고, 질문 2에서 404로 바꾼다.'
+questions:
+  - id: q1
+    title: 컨트롤러에서 예외가 나면 응답은 어떻게 되나요?
+    conclusion:
+      lead: '스프링이 아는 예외는 알맞은 4xx가 되고, 그 밖의 예외는 모두 500이 돼요. 본문은 스프링 부트의 기본 에러 응답이에요.'
+      sub: '`MemberNotFoundException`처럼 내가 만든 예외는 스프링이 뜻을 몰라서, 없는 회원이어도 500이에요. 뜻을 알려 주는 것이 예외 처리예요.'
+    says:
+      - '코드 predict를 보낸다. 500이다. 예측의 답을 밝힌다. 본문은 `{"timestamp":..., "status":500, "error":"Internal Server Error", "path":"/members/999"}`다. 실제 출력을 보인다'
+      - '이 본문은 스프링 부트가 만든다. 처리하지 못한 예외가 나면 서블릿 컨테이너가 `/error`로 요청을 다시 보내고, 스프링 부트의 `BasicErrorController`가 이 JSON을 쓴다'
+      - '스프링이 아는 예외는 다르다. `GET /members/abc`(타입 변환 실패)는 400, 없는 경로는 404, JSON 문법 오류는 400이다. 스프링 MVC 안의 `DefaultHandlerExceptionResolver`가 이런 예외를 상태 코드로 바꾼다. S6에서 본 400이 여기서 온다'
+      - '기본 에러 응답에 예외 메시지가 들어가는지는 `server.error.include-message` 설정에 달렸다. 기본은 넣지 않는다. 내부 정보가 새지 않게 하려는 것이다'
+      - '더 알아보기: 예외 클래스에 `@ResponseStatus(HttpStatus.NOT_FOUND)`를 붙이면 그 예외는 404가 된다. 간단하지만 본문 모양은 바꿀 수 없어서, 이 레슨은 질문 2의 방법을 쓴다'
+    asks:
+      - '본문의 예시: 처리하는 곳이 없는 상태에서 서비스가 `IllegalArgumentException("수량은 1 이상")`을 던지면 응답은 몇인가 (500)'
+      - '옮긴 상황: 상품 API `GET /products/{id}`의 `id`가 `long`이다. `GET /products/12a`를 보내면 응답은 몇이고, 그 상태 코드는 누가 정했나 (400. 스프링이 타입 변환 실패를 400으로 바꾼다)'
+  - id: q2
+    title: 예외를 원하는 응답으로 바꾸려면 어떻게 하나요?
+    conclusion:
+      lead: '`@RestControllerAdvice` 클래스에 예외 종류마다 `@ExceptionHandler` 메서드를 두고, 그 메서드가 돌려준 값을 응답으로 써요.'
+      sub: '컨트롤러는 예외를 던지기만 하고, 상태 코드와 본문은 한 곳에서 정해요. 핸들러가 여럿이면 던진 예외와 가장 가까운 타입의 것이 골라져요.'
+    says:
+      - '코드 advice를 더하고 같은 요청을 보낸다. 404이고 본문은 코드 problem이다. 실제 출력을 보인다'
+      - '`@ExceptionHandler(X.class)` 메서드는 컨트롤러가 X를 던졌을 때 불린다. 돌려준 값은 컨트롤러의 반환 값처럼 메시지 컨버터가 본문에 쓴다(S6). `ProblemDetail`이나 `ResponseEntity`를 돌려주면 상태 코드도 정해진다'
+      - '`@RestControllerAdvice`에 두면 모든 컨트롤러에 걸린다. 컨트롤러 안에 둔 `@ExceptionHandler`는 그 컨트롤러에만 걸리고, 어드바이스보다 먼저 고른다'
+      - '핸들러가 `RuntimeException`용과 `MemberNotFoundException`용 둘이면 후자가 골라진다. 던진 예외의 상속 거리로 가장 가까운 것이다. 테스트로 보인다'
+      - '없는 회원의 흐름을 정리한다: 리포지토리는 `Optional`을 돌려주고(J13), 서비스가 `orElseThrow`로 뜻이 있는 예외를 던지고, 어드바이스가 404로 바꾼다. 컨트롤러에는 `if`도 `try`도 없다'
+      - '더 알아보기: 필터에서 난 예외는 `DispatcherServlet` 밖이라 `@ControllerAdvice`가 잡지 못한다(S7). 필터 안에서 직접 응답을 쓰거나 기본 에러 응답으로 간다'
+    widget:
+      kind: toggle
+      note: '같은 요청 셋(`GET /members/999`, `GET /members/abc`, 잘못된 회원 가입 본문)을 놓고 "어드바이스 없음, `MemberNotFoundException` 핸들러, 검증 핸들러까지, 모든 예외 한 형식" 네 단계를 고르는 버튼을 둔다. 단계마다 세 요청의 상태 코드와 본문을 보인다'
+    asks:
+      - '본문의 예시: 어드바이스에 `RuntimeException` 핸들러(500)와 `MemberNotFoundException` 핸들러(404)가 함께 있다. 없는 회원 조회는 몇인가 (404. 더 가까운 타입이 골라진다)'
+      - '옮긴 상황: 주문 컨트롤러 안에 `@ExceptionHandler(IllegalStateException.class)`(409)가 있고 어드바이스에도 같은 예외의 핸들러(400)가 있다. 주문 컨트롤러에서 이 예외가 나면 몇인가 (409. 컨트롤러 안의 것이 먼저다)'
+  - id: q3
+    title: 잘못된 입력은 어떻게 막나요?
+    conclusion:
+      lead: '요청 record의 필드에 검증 어노테이션을 붙이고 인자에 `@Valid`를 붙여요. 걸리면 컨트롤러를 부르기 전에 400이 돼요.'
+      sub: '`@NotNull`은 null만, `@NotEmpty`는 빈 문자열까지, `@NotBlank`는 공백만 있는 문자열까지 막아요. `@Valid`를 빠뜨리면 어노테이션이 있어도 검사하지 않아요.'
+    says:
+      - '코드 request를 보인다. `spring-boot-starter-validation`을 넣으면 스프링 부트가 검증기(Hibernate Validator)를 설정한다. `@Valid`가 붙은 인자를 바꾼 뒤 검증하고, 걸리면 `MethodArgumentNotValidException`을 던진다. 컨트롤러는 불리지 않는다'
+      - '`{"email":" ","age":-1}`을 보낸다. 어드바이스가 없으면 400이고 본문에 어느 필드인지 없다. 코드 invalid의 핸들러를 더하면 `errors`에 `email: 비어 있을 수 없습니다`, `age: 0 이상이어야 합니다` 같은 줄이 담긴다. 실제 출력을 보인다(메시지는 실제 값을 쓴다)'
+      - '세 어노테이션의 차이를 표로: null, `""`, `" "`를 각각 넣었을 때 `@NotNull`, `@NotEmpty`, `@NotBlank`가 막는지. 표의 칸은 검증기로 직접 돌린 결과다. 문자열의 공백은 J4에서 본 `isBlank`의 기준과 같다'
+      - '`@Valid`를 빠뜨린 메서드에 같은 본문을 보내면 200이고 음수 나이가 그대로 들어간다. 테스트로 보인다'
+      - '더 알아보기: `int age`에 `@NotNull`을 붙여도 소용없다. JSON에 `age`가 없으면 0이 들어가 null이 될 수 없다(J3). 빠진 것을 막으려면 `Integer`로 받는다. `@RequestParam @Min(1) int page` 같은 단일 값 검증은 스프링 6.1부터 따로 붙이지 않아도 검사하고, 걸리면 `HandlerMethodValidationException`이다'
+    asks:
+      - '본문의 예시: 코드 request에 `{"email":"   ","age":20}`을 보내면 몇인가 (400. `@NotBlank`가 공백만 있는 문자열을 막는다)'
+      - '옮긴 상황: 상품 등록 record에 `@NotNull String name`만 있다. `{"name":""}`을 보내면 검증을 통과하나 (통과한다. `@NotNull`은 빈 문자열을 막지 않는다)'
+  - id: q4
+    title: 에러 응답의 모양은 어떻게 하나로 맞추나요?
+    conclusion:
+      lead: '모든 에러를 같은 형식(스프링의 `ProblemDetail`)으로 내보내고, 스프링 MVC의 예외와 내 예외와 마지막 남은 예외까지 어드바이스에서 그 형식으로 바꿔요.'
+      sub: '클라이언트는 `status`와 `detail`만 보면 되고, 서버의 예외 이름과 스택 트레이스는 응답이 아니라 로그에만 남겨요.'
+    says:
+      - '`ProblemDetail`은 RFC 9457의 에러 응답 형식이다. `type`, `title`, `status`, `detail`, `instance`와, 필요하면 더한 속성(`errors`)을 가진다. 응답의 `Content-Type`은 `application/problem+json`이다'
+      - 'enum 변환 실패를 본다. `{"grade":"VIPP"}`는 잭슨이 `Grade`로 바꾸지 못해 `HttpMessageNotReadableException`이 난다(J8). 기본 응답은 400이지만 우리 형식이 아니다. 이 예외의 핸들러를 더해 같은 형식과 "grade의 값이 올바르지 않아요" 문구로 바꾼다. 실제 출력을 보인다'
+      - '마지막 그물: 코드 fallback처럼 `Exception` 핸들러를 둬서 예상하지 못한 예외도 같은 형식의 500으로 내보낸다. 본문에는 일반 문구만 두고 예외는 로그에 남긴다. 응답에 예외 클래스 이름이나 SQL이 들어가면 공격자에게 내부를 알려 준다'
+      - '정리 표: 예외(없는 회원, 검증 실패, 본문을 읽지 못함, 그 밖) → 상태 코드 → `detail` 문구'
+    asks:
+      - '본문의 예시: `Grade`가 `BASIC, VIP`인데 `{"email":"a@b.com","age":20,"grade":"GOLD"}`를 보낸다. 어떤 예외가 나고 기본으로 몇인가 (`HttpMessageNotReadableException`, 400)'
+      - '옮긴 상황: 코드 fallback이 있는 앱에서 리포지토리가 DB 연결 실패 예외를 던진다. 응답의 상태 코드와 본문의 `detail`은 무엇인가 (500, "잠시 후 다시 시도해 주세요". 예외 메시지는 로그에만 남는다)'
+      - '실무 구역: 어드바이스가 `ResponseEntityExceptionHandler`를 상속하면 `GET /members/abc`의 응답 본문은 어떤 형식인가 (`ProblemDetail`)'
+practice:
+  says:
+    - '프로젝트에 그대로 들어갈 모양: `@RestControllerAdvice`가 `ResponseEntityExceptionHandler`를 상속하고, 내 예외 핸들러와 `Exception` 핸들러를 더한다. 상속하면 스프링 MVC가 던지는 예외(타입 변환, 본문 읽기, 검증, 405)가 모두 `ProblemDetail`로 나온다. 스프링 부트에서 `spring.mvc.problemdetails.enabled=true`로도 켤 수 있다고 적는다. 둘을 테스트로 비교한다'
+    - '의존성 한 줄: `spring-boot-starter-validation`. 스프링 부트 2.3부터 웹 스타터에 들어 있지 않아 따로 넣어야 한다. 빠지면 어노테이션이 있어도 검사하지 않는다(스프링 부트 문서 근거)'
+    - '흔한 실수: 컨트롤러마다 `try-catch`로 예외를 잡아 `ResponseEntity.status(...)`를 만든다. 빠뜨린 곳은 500이 되고 모양이 제각각이다. 고친 코드: 어드바이스 하나(질문 2)'
+    - '흔한 실수 둘: `catch (Exception e) { return e.getMessage(); }`로 예외 메시지를 그대로 응답한다. DB 오류의 SQL과 테이블 이름이 나간다. 고친 코드: 코드 fallback'
+claims:
+  - claim: '처리하지 않은 내 예외는 500이고 본문은 `timestamp`, `status`, `error`, `path`를 가진다'
+    how: '`MiniWeb`에 컨트롤러를 넣고 요청한다. `MiniWeb`은 `server.error.include-message=always`를 켜므로 이 테스트에서는 그 설정을 끈 앱을 따로 띄우거나 결과에 맞춰 설명을 고친다'
+  - claim: '타입 변환 실패는 400'
+    how: '`GET /members/abc`'
+  - claim: '어드바이스의 핸들러가 404와 `ProblemDetail` 본문을 만들고 `Content-Type`이 `application/problem+json`이다'
+    how: '응답 헤더와 본문'
+  - claim: '가장 가까운 타입의 핸들러가 골라지고, 컨트롤러 안의 핸들러가 어드바이스보다 먼저다'
+    how: '핸들러를 둘씩 두고 응답을 본다'
+  - claim: '`@Valid` 요청에 잘못된 값을 보내면 컨트롤러를 부르지 않고 400, 필드 오류 메시지를 얻는다. `@Valid`가 없으면 200'
+    how: '`spring-boot-starter-validation`을 testImplementation으로 넣고 요청한다'
+  - claim: 'null, 빈 문자열, 공백 문자열에 대한 `@NotNull`, `@NotEmpty`, `@NotBlank`의 결과'
+    how: '`Validator`로 직접 검증한다'
+  - claim: '`int` 필드는 값이 없으면 0이라 `@NotNull`에 걸리지 않는다'
+    how: '`Validator`로 검증한다'
+  - claim: '`@RequestParam @Min(1) int page`에 0을 주면 400(`HandlerMethodValidationException`)'
+    how: '요청한다. 결과에 맞춰 설명을 고친다'
+  - claim: 'enum에 없는 값은 `HttpMessageNotReadableException`으로 400이고, 핸들러로 같은 형식으로 바꿀 수 있다'
+    how: '요청한다'
+  - claim: '`ResponseEntityExceptionHandler`를 상속하거나 `spring.mvc.problemdetails.enabled=true`면 타입 변환 실패도 `ProblemDetail` 본문이다'
+    how: '두 앱에 같은 요청을 보낸다'
+sources:
+  - '`@ExceptionHandler`와 `@ControllerAdvice`: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-exceptionhandler.html'
+  - '`ProblemDetail`과 `ResponseEntityExceptionHandler`: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html'
+  - 'RFC 9457 Problem Details for HTTP APIs: https://www.rfc-editor.org/rfc/rfc9457'
+  - '검증 스타터와 기본 에러 처리: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/io/validation.html , https://docs.spring.io/spring-boot/reference/web/servlet.html#web.servlet.spring-mvc.error-handling'
+  - '검증 어노테이션의 뜻: Jakarta Bean Validation 3.0 명세 https://jakarta.ee/specifications/bean-validation/3.0/jakarta-bean-validation-spec-3.0'

@@ -1,0 +1,224 @@
+# 빈의 생명주기와 스코프 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 빈의 생명주기와 스코프
+unit: 스프링
+roadmap: S3
+type: 동작 확인
+prerequisites:
+  - {slug: spring-beans, title: 스프링 빈과 의존성 주입}
+assume: '자바 21, 스프링 부트 3.5. 빈은 기본으로 하나만 만들어 모든 곳에 같은 객체를 넣는다는 것(스프링 빈과 의존성 주입 레슨). static 필드와 객체 필드의 차이(static과 초기화 순서 레슨). 여러 스레드가 같은 변수를 함께 바꾸면 값이 틀어질 수 있다는 것은 이 레슨에서 한 번 보여요.'
+example: '자주 바뀌지 않는 쿠폰 정책을 시작할 때 읽어 두는 `CouponPolicyCache`와, 하루 주문 수를 세는 `OrderCounter`. 캐시로 생명주기를, 카운터로 싱글톤 빈의 상태 문제를, 장바구니 `Cart`로 스코프를 본다.'
+intro:
+  - '주문 수를 세려고 서비스에 `int count` 필드를 두었어요. 혼자 눌러 볼 때는 정확한데, 운영에서 하루가 지나고 보니 실제 주문 수보다 적어요. 또 시작할 때 캐시를 채우려고 생성자에서 설정 값을 읽었더니 null이 나와요.'
+  - '스프링 빈은 컨테이너가 정한 때에 만들어지고, 정한 순서로 값이 채워지고, 앱이 끝날 때 정리돼요. 하나만 만들어진 빈은 모든 요청 스레드가 동시에 써요. 언제 무엇을 해도 되는지, 빈에 무엇을 두면 안 되는지는 이 생명주기와 스코프에서 나와요.'
+  - '이 레슨에서는 생성자, 주입, `@PostConstruct`, `@PreDestroy`가 불리는 순서를 출력으로 보고, 싱글톤 빈의 필드를 여러 스레드가 함께 올렸을 때 사라지는 숫자를 세요.'
+covers:
+  - topic: '빈의 생명주기: 객체 생성(생성자) → 의존성 주입(필드, 세터) → 초기화 콜백(`@PostConstruct`) → 사용 → 컨테이너 종료 때 소멸 콜백(`@PreDestroy`)'
+    where: '질문 1'
+  - topic: '소멸은 만든 순서의 반대로 한다. 나를 쓰는 빈이 먼저 정리된다'
+    where: '질문 1'
+  - topic: '`@PostConstruct`는 모든 주입이 끝난 뒤에 불린다. 필드 주입이나 세터 주입 값은 생성자에서 아직 null이다'
+    where: '질문 2'
+  - topic: '생성자 주입이면 생성자에서 받은 값을 바로 쓸 수 있다. 그래도 무거운 초기화(파일 읽기, 캐시 채우기)는 생성자보다 `@PostConstruct`나 시작 완료 뒤(`ApplicationRunner`)에 둔다'
+    where: '질문 2와 실무에서는'
+  - topic: '`@PostConstruct`에서 예외가 나면 앱이 뜨지 않는다'
+    where: '질문 2'
+  - topic: '`@Bean(initMethod, destroyMethod)`와 `InitializingBean`, `DisposableBean`도 같은 자리에서 불린다. 라이브러리 객체를 정리할 때 `@Bean`의 `destroyMethod`를 쓴다'
+    where: '질문 1의 더 알아보기'
+  - topic: '싱글톤 빈은 모든 요청 스레드가 함께 쓴다. 필드에 바뀌는 값을 두면 동시에 바꿀 때 값이 사라지거나 다른 사용자의 값이 섞인다'
+    where: '질문 3'
+  - topic: '싱글톤 빈은 상태가 없게 만든다: 요청마다 다른 값은 매개변수와 지역 변수로, 꼭 함께 세야 하는 값은 `AtomicLong`이나 DB로'
+    where: '질문 3'
+  - topic: '`static` 필드에 바뀌는 값을 두어도 같은 문제가 생긴다(J5)'
+    where: '질문 3'
+  - topic: '스코프: 싱글톤(기본), 프로토타입(꺼낼 때마다 새 객체), 웹의 request와 session 스코프'
+    where: '질문 4'
+  - topic: '프로토타입 빈을 싱글톤 빈에 주입하면 주입할 때 한 번만 만들어져 늘 같은 객체가 쓰인다. 꺼낼 때마다 새로 받으려면 `ObjectProvider`'
+    where: '질문 4'
+  - topic: '컨테이너는 프로토타입 빈의 `@PreDestroy`를 부르지 않는다'
+    where: '질문 4의 더 알아보기'
+  - topic: 'request 스코프 빈을 싱글톤에 넣을 때 프록시를 쓴다(`proxyMode`)'
+    where: '질문 4의 더 알아보기. 프록시는 AOP(S9)'
+  - topic: '여러 스레드가 함께 쓰는 값을 안전하게 바꾸는 법(락, 원자 변수)의 원리'
+    where: '다루지 않음: 운영체제와 동시성 과정(C3, C6)'
+codes:
+  predict: |-
+    @Service
+    public class OrderCounter {
+      private int count = 0;
+
+      public void increase() {
+        count++;
+      }
+
+      public int count() {
+        return count;
+      }
+    }
+    // 스레드 2개가 increase()를
+    // 각각 10,000번 부른다
+  lifecycle: |-
+    @Component
+    public class CouponPolicyCache {
+      @Autowired
+      private CouponRepository repository;
+
+      public CouponPolicyCache() {
+        log("생성자 repository="
+            + repository);
+      }
+
+      @PostConstruct
+      void load() {
+        log("@PostConstruct repository="
+            + repository);
+      }
+
+      @PreDestroy
+      void close() {
+        log("@PreDestroy");
+      }
+    }
+  atomic: |-
+    @Service
+    public class OrderCounter {
+      private final AtomicLong count =
+          new AtomicLong();
+
+      public void increase() {
+        count.incrementAndGet();
+      }
+    }
+  stateful: |-
+    @Service
+    public class GreetingService {
+      private String userName;
+
+      public String greet(String name) {
+        this.userName = name;
+        audit();
+        return "안녕하세요 " + userName;
+      }
+    }
+  provider: |-
+    @Service
+    public class CartService {
+      private final ObjectProvider<Cart>
+          carts;
+
+      public CartService(
+          ObjectProvider<Cart> carts) {
+        this.carts = carts;
+      }
+
+      public Cart newCart() {
+        return carts.getObject();
+      }
+    }
+  runner: |-
+    @Component
+    class WarmUp implements ApplicationRunner {
+      @Override
+      public void run(
+          ApplicationArguments args) {
+        cache.load();
+      }
+    }
+predict:
+  text: '코드 predict의 `OrderCounter`는 싱글톤 빈이에요. 스레드 두 개가 같은 빈의 `increase()`를 각각 1만 번 부르고 둘 다 끝난 뒤 `count()`를 읽어요. 몇이 나올까요? 보기: 늘 20000, 늘 10000, 20000보다 작을 때가 많다, 예외가 난다.'
+  answer: '20000보다 작을 때가 많다. `count++`는 읽고, 더하고, 쓰는 세 걸음이라 두 스레드가 같은 값을 읽고 같은 값을 쓰면 하나가 사라진다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 빈은 어떤 순서로 만들어지고 사라지나요?
+    conclusion:
+      lead: '생성자로 만들고, 의존성을 넣고, `@PostConstruct`를 부른 뒤에 쓰이기 시작해요. 앱이 끝날 때 `@PreDestroy`를 부르고 사라져요.'
+      sub: '사라질 때는 만든 순서의 반대예요. 다른 빈을 쓰는 빈이 먼저 정리되니, 정리하는 동안 아직 쓰는 빈이 살아 있어요.'
+    says:
+      - '코드 lifecycle을 띄웠다가 닫으며 찍은 출력을 보인다. 생성자, `@PostConstruct`, (사용), `@PreDestroy` 순서다'
+      - '네 단계를 한 줄씩: 생성(생성자, 생성자 주입이면 이때 받는다), 주입(`@Autowired` 필드와 세터), 초기화 콜백(`@PostConstruct`), 소멸 콜백(`@PreDestroy`, 컨테이너가 닫힐 때)'
+      - '`A`가 `B`를 쓰면 만들 때는 `B`가 먼저, 정리할 때는 `A`가 먼저다. 두 빈의 `@PreDestroy` 출력 순서로 보인다'
+      - '컨테이너는 앱이 정상으로 끝날 때 닫힌다(`main`이 끝나거나 종료 신호를 받을 때). 프로세스를 강제로 죽이면 `@PreDestroy`는 불리지 않는다'
+      - '더 알아보기: `@PostConstruct` 대신 `@Bean(initMethod = "start", destroyMethod = "stop")`, `InitializingBean`과 `DisposableBean`도 같은 자리에서 불린다. 내 코드에 어노테이션을 붙일 수 없는 라이브러리 객체는 `destroyMethod`를 쓴다. `@Bean`은 `close`나 `shutdown` 메서드가 있으면 따로 적지 않아도 종료 때 부른다'
+    widget:
+      kind: steps
+      note: '`CouponRepository`와 `CouponPolicyCache` 두 빈을 놓고 컨테이너의 단계를 하나씩 넘긴다: Repository 생성, Cache 생성(repository 칸은 null), Cache에 주입(repository 칸이 채워짐), Cache의 `@PostConstruct`, 사용 중, 종료 신호, Cache의 `@PreDestroy`, Repository 정리. 단계마다 두 빈의 상태 칸을 바꾼다'
+    asks:
+      - '본문의 예시: 코드 lifecycle의 출력에서 `@PostConstruct` 줄과 생성자 줄 가운데 무엇이 먼저 나오나 (생성자 줄)'
+      - '옮긴 상황: `ReportService`가 `MailClient`를 쓴다. 둘 다 `@PreDestroy`가 있다. 앱을 정상 종료하면 어느 것의 `@PreDestroy`가 먼저 불리나 (`ReportService`. 만든 순서의 반대다)'
+  - id: q2
+    title: 초기화 코드는 생성자가 아니라 왜 @PostConstruct에 두나요?
+    conclusion:
+      lead: '생성자가 불릴 때는 필드 주입이 아직 끝나지 않았고, `@PostConstruct`는 모든 주입이 끝난 뒤에 불리기 때문이에요.'
+      sub: '생성자 주입이면 생성자에서 받은 값은 쓸 수 있어요. 그래도 주입이 다 끝난 뒤 한 번 할 일은 `@PostConstruct`에 두는 것이 정해진 자리예요. 여기서 예외가 나면 앱이 뜨지 않아요.'
+    says:
+      - '코드 lifecycle의 출력에서 생성자 줄은 `repository=null`, `@PostConstruct` 줄은 객체가 찍힌다. 필드 주입은 객체를 만든 뒤에 하기 때문이다'
+      - '생성자 주입으로 바꾸면 생성자에서도 `repository`를 쓸 수 있다. 받은 매개변수이기 때문이다. 이 레슨이 생성자 주입을 쓰라는 S2의 이유를 하나 더한다'
+      - '`@Value`로 받는 설정 값과 세터 주입도 필드 주입과 같다. 생성자 밖에서 받은 값은 `@PostConstruct`에서부터 쓸 수 있다'
+      - '`@PostConstruct`에서 예외를 던지면 컨텍스트가 뜨지 않는다. 캐시를 채우지 못한 채 요청을 받는 것보다 낫다. 원인 예외가 `BeanCreationException`으로 감싸져 나오는 것을 보인다'
+      - '`@PostConstruct`가 불릴 때 다른 빈이 모두 준비된 것은 아니다. 이 빈이 받은 빈만 준비되어 있다. 앱 전체가 뜬 뒤 할 일(외부 서버 연결 확인, 미리 데우기)은 실무 구역의 `ApplicationRunner`에 둔다'
+    asks:
+      - '본문의 예시: 필드에 `@Value("${coupon.max}") int max`를 두고 생성자에서 `max`를 읽으면 무엇이 나오나 (0. 아직 주입 전이라 int의 기본값이다)'
+      - '옮긴 상황: 시작할 때 외부 파일에서 금칙어 목록을 읽는 `@PostConstruct`가 파일이 없어 예외를 던진다. 앱은 뜨나 (뜨지 않는다. 빈 생성이 실패한다)'
+  - id: q3
+    title: 싱글톤 빈의 필드에 값을 두면 무슨 일이 생기나요?
+    conclusion:
+      lead: '모든 요청 스레드가 같은 객체의 같은 필드를 함께 바꿔서, 숫자가 사라지거나 다른 사용자의 값이 섞여요.'
+      sub: '싱글톤 빈은 상태가 없게 만들어요. 요청마다 다른 값은 매개변수와 지역 변수로 넘기고, 꼭 함께 세야 하는 값은 `AtomicLong`이나 DB에 둬요.'
+    says:
+      - '코드 predict를 돌린다. 스레드 두 개가 1만 번씩 올려도 결과가 20000보다 작다. 예측의 답을 밝힌다. 다섯 번 돌린 실제 결과를 보인다'
+      - '`count++`는 한 걸음이 아니다. 필드를 읽고, 1을 더하고, 필드에 쓴다. 두 스레드가 같은 값 7을 읽고 둘 다 8을 쓰면 한 번이 사라진다. 원리는 C3에서 자세히 본다'
+      - '숫자만이 아니다. 코드 stateful은 요청의 사용자 이름을 필드에 둔다. 두 요청이 동시에 오면 kim의 요청이 lee의 이름으로 인사를 받을 수 있다. 두 스레드를 엇갈리게 멈춰 그 순간을 만든 테스트를 보인다'
+      - '고치는 법: 요청마다 다른 값은 필드에 두지 않고 매개변수와 지역 변수로 넘긴다. 지역 변수는 스레드마다 따로다(S1의 질문 4와 같은 이유). 꼭 함께 세야 하면 코드 atomic의 `AtomicLong`을 쓴다. 고친 코드로 다시 돌리면 늘 20000이다'
+      - '`final` 필드에 다른 빈이나 바뀌지 않는 설정을 두는 것은 괜찮다. 바뀌지 않으니 함께 써도 된다. 문제는 바뀌는 값이다'
+      - '`static` 필드도 같다. 클래스에 딸린 값 하나를 모든 스레드가 함께 쓴다(J5)'
+      - 'O7의 전략 빈(할인 정책 구현들)도 싱글톤이다. 전략 객체에 계산 중간값을 필드로 두면 같은 문제가 생긴다. 전략은 입력을 받아 결과를 돌려주기만 하게 만든다'
+    asks:
+      - '본문의 예시: 코드 atomic의 `OrderCounter`를 스레드 두 개가 1만 번씩 올리면 결과는 늘 20000인가 (그렇다. `incrementAndGet`은 끊기지 않고 한 번에 올린다)'
+      - '옮긴 상황: 싱글톤 `@Service`에 `private List<String> errors = new ArrayList<>()` 필드를 두고 요청마다 검증 오류를 담았다가 응답에 쓰고 비운다. 동시에 두 요청이 오면 무엇이 생길 수 있나 (한 요청의 응답에 다른 요청의 오류가 섞인다. 리스트도 깨질 수 있다)'
+      - '실무 구역: 코드 stateful의 `userName` 필드를 지우고 `name`을 지역 변수로만 쓰면 섞이는 문제가 사라지나 (사라진다)'
+  - id: q4
+    title: 요청마다 새 객체가 필요하면 어떻게 하나요?
+    conclusion:
+      lead: '스코프를 바꿔요. 프로토타입 스코프는 꺼낼 때마다 새 객체를, request 스코프는 HTTP 요청마다 새 객체를 만들어요.'
+      sub: '프로토타입 빈을 싱글톤 빈의 생성자로 받으면 그때 한 번만 만들어져서 늘 같은 객체가 쓰여요. 쓸 때마다 새로 받으려면 `ObjectProvider`로 꺼내요.'
+    says:
+      - '`@Scope("prototype")`을 붙인 `Cart`는 `getBean`할 때마다 다른 객체다. 테스트로 보인다'
+      - '함정: 싱글톤 `CartService`가 생성자로 `Cart`를 받으면 `CartService`를 만들 때 한 번 만들어 넣는다. 그 뒤로는 늘 같은 `Cart`다. 프로토타입이라는 표시가 무색해진다. 테스트로 보인다'
+      - '고친 코드: 코드 provider처럼 `ObjectProvider<Cart>`를 받고 쓸 때마다 `getObject()`로 꺼낸다. 매번 다른 객체다'
+      - '웹 앱에는 request 스코프(HTTP 요청 하나 동안 하나)와 session 스코프(세션 하나 동안 하나)가 있다. 요청 두 개에서 request 스코프 빈의 id가 다른 것을 작은 웹 앱으로 보인다'
+      - '스코프가 필요한 일은 드물다. 장바구니는 대개 세션이나 DB에 두고, 서비스는 싱글톤으로 둔다. 질문 3처럼 값을 매개변수로 넘기면 대부분 해결된다'
+      - '더 알아보기: request 스코프 빈은 앱이 뜰 때 아직 요청이 없어서 싱글톤에 바로 넣을 수 없다. `@RequestScope`는 프록시를 넣어 두고 메서드를 부를 때 그 요청의 객체를 찾아 넘긴다(S9). 컨테이너는 프로토타입 빈을 만들어 넘긴 뒤 관리하지 않아 `@PreDestroy`를 부르지 않는다'
+    asks:
+      - '본문의 예시: 프로토타입 `Cart`를 싱글톤 `CartService`가 생성자로 받았다. `CartService`의 메서드를 두 번 불러 각각 `cart`에 상품을 담으면 같은 `Cart`에 담기나 (같은 `Cart`에 담긴다)'
+      - '옮긴 상황: 요청마다 고유한 추적 id를 갖는 `TraceContext`를 만들고 싶다. 싱글톤 빈에 담아 두는 것과 `@RequestScope` 빈으로 두는 것 가운데 요청마다 다른 값이 보장되는 것은 무엇인가 (`@RequestScope` 빈)'
+practice:
+  says:
+    - '시작할 때 할 일: 캐시를 채우는 것은 `@PostConstruct`, 앱이 모두 뜬 뒤 할 일은 코드 runner의 `ApplicationRunner`. 두 출력의 순서(모든 `@PostConstruct` 다음에 `ApplicationRunner`)를 테스트로 보인다'
+    - '정리할 일: 스레드 풀이나 외부 연결을 직접 만든 빈은 `@PreDestroy`에서 닫는다. 스프링 부트는 종료 신호를 받으면 컨텍스트를 닫는다. `server.shutdown=graceful`이면 처리 중인 요청을 기다린 뒤 닫는다(스프링 부트 문서 근거)'
+    - '흔한 실수: 코드 stateful처럼 싱글톤 서비스의 필드에 요청의 값을 둔다. 혼자 테스트할 때는 맞고 동시 요청에서만 틀린다. 고친 코드: 필드를 지우고 매개변수로 넘긴다(질문 3을 가리킨다)'
+    - '흔한 실수 둘: 하루 주문 수 같은 값을 빈 필드에 센다. 서버가 두 대면 각자 센다. 재시작하면 0이 된다. 함께 세야 하는 값은 DB나 Redis에 둔다고 적는다'
+claims:
+  - claim: '필드 주입 빈의 생성자에서 주입 필드는 null이고, `@PostConstruct`에서는 채워져 있다. 순서는 생성자, `@PostConstruct`, `@PreDestroy`다'
+    how: '`AnnotationConfigApplicationContext`에 두 빈을 등록하고 열고 닫으며 기록을 남긴다'
+  - claim: '`A`가 `B`를 쓰면 `@PreDestroy`는 `A`가 먼저 불린다'
+    how: '같은 컨텍스트를 닫을 때의 기록 순서'
+  - claim: '`@PostConstruct`에서 예외가 나면 컨텍스트가 `BeanCreationException`으로 뜨지 않는다'
+    how: '예외를 던지는 빈으로 컨텍스트를 띄운다'
+  - claim: '`@Value` 필드는 생성자에서 기본값이다'
+    how: '`MapPropertySource`로 값을 주고 생성자에서 읽은 값을 기록한다'
+  - claim: '싱글톤 빈의 `int` 필드를 스레드 두 개가 1만 번씩 `++`하면 20000보다 작은 값이 나오곤 한다. `AtomicLong`은 늘 20000이다'
+    how: '다섯 번 돌려 결과를 기록한다. 레슨은 "작을 때가 많다"로 쓰고 테스트는 다섯 번 가운데 한 번 이상 작으면 통과. 한 번도 작지 않으면 반복을 늘린다'
+  - claim: '필드에 이름을 두는 싱글톤 서비스는 두 스레드가 엇갈리면 다른 사용자의 이름을 돌려준다'
+    how: '`CountDownLatch`로 첫 스레드가 필드를 쓴 뒤 둘째 스레드가 덮어쓰게 맞추고 첫 스레드의 결과를 본다'
+  - claim: '프로토타입 빈은 꺼낼 때마다 다르지만, 싱글톤에 생성자로 넣으면 늘 같다. `ObjectProvider.getObject()`는 매번 다르다'
+    how: '작은 컨텍스트에서 비교한다'
+  - claim: 'request 스코프 빈은 요청마다 다른 객체다'
+    how: '`MiniWeb`에 request 스코프 빈과 그 id를 돌려주는 컨트롤러를 넣고 두 번 요청한다'
+  - claim: '모든 `@PostConstruct`가 끝난 뒤 `ApplicationRunner`가 돈다'
+    how: '`SpringApplicationBuilder`로 작은 앱을 띄워 기록 순서를 본다'
+sources:
+  - '초기화와 소멸 콜백, 소멸 순서: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html'
+  - '빈 스코프와 프로토타입의 소멸 콜백, 스코프 프록시: https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html'
+  - '`ApplicationRunner`: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.command-line-runner'
+  - '정상 종료(graceful shutdown): https://docs.spring.io/spring-boot/reference/web/graceful-shutdown.html'
