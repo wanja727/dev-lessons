@@ -1,0 +1,178 @@
+# String (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: String
+unit: 자바 언어
+roadmap: J4
+type: 자바 실행
+prerequisites:
+  - {slug: value-and-reference, title: 값과 참조}
+assume: '자바 21. `String`은 참조형이고 `==`는 같은 객체인지를, `equals`는 글자가 같은지를 본다는 것(값과 참조 레슨).'
+example: '주문 상태를 나타내는 문자열 `"PAID"`. 리터럴로 쓴 것, `new String`으로 만든 것, 실행 중에 이어 붙여 만든 것을 서로 비교해요. 실무 구역에서는 요청으로 받은 상태 문자열과 로그 메시지로 옮겨요.'
+intro:
+  - '`if (status == "PAID")`로 쓴 코드가 테스트에서는 통과했어요. 테스트가 `"PAID"`를 리터럴로 넘겼기 때문이에요. 운영에서는 요청에서 읽은 문자열이 들어왔고, 결제된 주문이 전부 "결제 안 됨"으로 처리됐어요.'
+  - '서버가 다루는 데이터의 대부분은 문자열이에요. 요청 파라미터, JSON, SQL, 로그가 다 문자열이에요. 그래서 `String`이 어떻게 저장되고 비교되는지, 이어 붙일 때 객체가 몇 개 생기는지는 스프링 개발자가 매일 쓰는 지식이고 면접의 단골 질문이에요.'
+  - '이 레슨에서는 문자열을 만드는 방법에 따라 `==`의 결과가 달라지는 것을 돌려서 확인하고, 그 이유인 불변과 문자열 상수 풀을 차례로 봐요.'
+covers:
+  - topic: 'String은 불변이다. 값을 바꾸는 것처럼 보이는 메서드는 새 객체를 돌려준다'
+    where: '질문 1'
+  - topic: '불변으로 만든 이유: 여러 곳이 같은 객체를 안심하고 함께 쓴다(풀, 맵의 키, 스레드), hashCode를 한 번 계산해 둔다'
+    where: '질문 1'
+  - topic: '문자열 리터럴과 문자열 상수 풀. 같은 리터럴은 같은 객체다'
+    where: '질문 2'
+  - topic: 'new String은 풀과 상관없이 새 객체를 만든다. intern()'
+    where: '질문 2'
+  - topic: '문자열의 ==가 틀리는 때: 실행 중에 만들어진 문자열. 컴파일할 때 정해지는 상수식은 풀에 들어간다'
+    where: '질문 3'
+  - topic: '문자열은 equals로 비교한다. null일 수 있으면 리터럴 쪽에서 부른다. equalsIgnoreCase'
+    where: '질문 3'
+  - topic: '+로 이어 붙이면 새 문자열이 만들어진다. 반복문에서 누적하면 돌 때마다 전체를 복사한다'
+    where: '질문 4'
+  - topic: 'StringBuilder는 가변이라 같은 객체에 덧붙인다. StringBuffer는 메서드가 동기화된 것'
+    where: '질문 4'
+  - topic: '한 줄의 + 연결은 컴파일러가 처리하므로 StringBuilder로 바꿀 필요가 없다. String.join, formatted, 텍스트 블록'
+    where: '질문 4의 더 알아보기'
+  - topic: 'length()가 세는 것과 글자 인코딩(UTF-16 단위, getBytes의 기본 문자셋은 자바 18부터 UTF-8)'
+    where: '질문 1의 더 알아보기'
+  - topic: '빈 문자열과 공백 문자열: isEmpty와 isBlank'
+    where: '실무에서는'
+  - topic: '요청으로 받은 문자열을 비교하는 코드'
+    where: '실무에서는'
+  - topic: '로그 메시지를 +로 만들 때와 {}로 넘길 때'
+    where: '실무에서는'
+  - topic: 'SQL을 문자열로 이어 붙이면 생기는 SQL 인젝션'
+    where: '다루지 않음: 웹 보안 기초(N10)'
+  - topic: '불변 객체를 직접 만드는 방법'
+    where: '다루지 않음: 불변 객체(J9)'
+  - topic: 'hashCode와 HashMap의 키'
+    where: '다루지 않음: equals와 hashCode(J6)'
+  - topic: '문자열 상수 풀이 놓이는 메모리 영역'
+    where: '다루지 않음: JVM 메모리 구조(J14)'
+  - topic: '상태처럼 정해진 값을 문자열 대신 enum으로 다루는 것'
+    where: '다루지 않음: enum(J8)'
+codes:
+  predict: |-
+    String a = "PAID";
+    String b = "PAID";
+    String c = new String("PAID");
+
+    System.out.println(a == b);
+    System.out.println(a == c);
+    System.out.println(a.equals(c));
+  runtime: |-
+    String half = "PA";
+    String d = half + "ID";
+    String e = "PA" + "ID";
+
+    System.out.println(a == d);
+    System.out.println(a == e);
+  loop: |-
+    String csv = "";
+    for (String id : ids) {
+      csv += id + ",";
+    }
+  builder: |-
+    StringBuilder sb = new StringBuilder();
+    for (String id : ids) {
+      sb.append(id).append(',');
+    }
+    String csv = sb.toString();
+predict:
+  text: '코드 predict를 실행하면 세 줄에 무엇이 출력될까요? 보기: true, true, true / true, false, true / false, false, true / false, false, false.'
+  answer: 'true, false, true. 같은 리터럴 `"PAID"`는 풀에 있는 같은 객체이고, `new String`은 새 객체를 만든다. `equals`는 글자를 비교한다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 'String이 불변이라는 것은 무슨 뜻이고, 왜 그렇게 만들었나요?'
+    conclusion:
+      lead: '한 번 만든 `String` 객체의 글자는 바뀌지 않고, 바꾸는 것처럼 보이는 메서드는 모두 새 객체를 돌려줘요.'
+      sub: '바뀌지 않으니 여러 변수와 컬렉션, 스레드가 같은 객체를 복사하지 않고 함께 써도 안전해요.'
+    says:
+      - '`String s = "paid"; s.toUpperCase();` 뒤에 `s`는 여전히 "paid"다. `toUpperCase`는 `s`를 고치지 않고 새 문자열을 돌려준다. `s = s.toUpperCase();`처럼 받아야 한다'
+      - '`s = s + "!"`도 객체를 고치는 것이 아니다. 새 문자열을 만들고 변수 `s`가 그것을 가리키게 바꾼다. 원래 객체는 그대로다. `String t = s;`로 잡아 둔 `t`가 바뀌지 않는 것으로 확인한다'
+      - '`concat`, `replace`, `trim`, `substring`도 모두 새 객체를 돌려준다. `String`에는 안의 글자를 고치는 메서드가 없다'
+      - '이유 1: 함께 쓰기. J2에서 본 대로 참조형은 넘기면 같은 객체를 가리킨다. `String`이 바뀔 수 있다면 한 곳에서 고친 것이 그 문자열을 든 모든 곳에 보인다. 불변이라 그럴 일이 없고, 그래서 질문 2의 풀이 가능하다'
+      - '이유 2: `HashMap`의 키로 안전하다. 키로 넣은 뒤 값이 바뀌면 찾지 못하는데(J6의 질문 5), `String`은 바뀌지 않는다. `hashCode`도 한 번 계산해 객체 안에 저장해 둔다'
+      - '이유 3: 여러 스레드가 동시에 읽어도 안전하고, 파일 경로나 접속 주소처럼 검사한 뒤에 쓰는 값이 검사와 사용 사이에 바뀌지 않는다'
+      - '더 알아보기: `length()`는 글자 수가 아니라 UTF-16 단위의 수다. 이모지 하나가 2로 세어지기도 한다. `getBytes()`의 기본 문자셋은 자바 18부터 UTF-8이다'
+    asks:
+      - '본문의 예시: `String s = "paid"; s.toUpperCase(); System.out.println(s);`의 출력은 무엇인가 (paid)'
+      - '옮긴 상황: `String s = "A"; String t = s; s = s + "B";`를 실행한 뒤 `t`의 값은 무엇인가 ("A". `s`가 새 객체를 가리키게 됐을 뿐 원래 객체는 그대로다)'
+  - id: q2
+    title: 문자열 리터럴은 어디에 저장되나요?
+    conclusion:
+      lead: '리터럴은 문자열 상수 풀에 한 번만 저장되고, 같은 내용의 리터럴은 모두 그 객체 하나를 가리켜요.'
+      sub: '`new String("PAID")`는 풀에 있는 것과 상관없이 새 객체를 하나 더 만들어요.'
+    says:
+      - '코드에 `"PAID"`라고 쓴 리터럴은 JVM이 문자열 상수 풀이라는 곳에 하나만 둔다. 다른 클래스에 쓴 `"PAID"`도 같은 객체다'
+      - '그래서 코드 predict의 `a == b`는 true다. 두 변수가 풀에 있는 같은 객체를 가리킨다'
+      - '`new`는 언제나 새 객체를 만든다. `c`는 글자가 같은 다른 객체이고 `a == c`는 false, `a.equals(c)`는 true다. 예측의 답을 밝힌다'
+      - '같은 문자열을 하나로 모아도 되는 것은 질문 1의 불변 덕분이다. 누군가 풀의 "PAID"를 고칠 수 있다면 모든 "PAID"가 바뀐다'
+      - '`c.intern()`은 풀에 있는 같은 내용의 객체를 돌려준다. `a == c.intern()`은 true다. 실무 코드에서 직접 부를 일은 드물다'
+      - '`new String("PAID")`를 쓸 이유는 없다. 리터럴을 쓴다. 이 레슨에서는 "풀에 없는 문자열"을 만들어 보이려고만 쓴다'
+    widget:
+      kind: steps
+      note: '코드 predict와 `c.intern()`을 한 줄씩 실행한다. 왼쪽 칸에 변수(a, b, c), 오른쪽 칸에 "문자열 상수 풀"과 "풀 밖의 객체"를 두고, 줄마다 어느 변수가 어느 객체를 가리키게 되는지 표시한다. 마지막에 세 비교의 결과를 한 줄 정리로 보여 준다'
+    asks:
+      - '본문의 예시: 코드 predict의 `c`로 `a == c.intern()`을 실행하면 결과는 무엇인가 (true)'
+      - '옮긴 상황: 클래스 `A`에 `static String x = "KRW";`가, 클래스 `B`에 `static String y = "KRW";`가 있다. `A.x == B.y`의 결과는 무엇인가 (true. 클래스가 달라도 같은 리터럴은 풀의 같은 객체다)'
+  - id: q3
+    title: '그러면 문자열을 ==로 비교하면 언제 틀리나요?'
+    conclusion:
+      lead: '실행 중에 만들어진 문자열은 풀에 있는 객체가 아니라서, 글자가 같아도 `==`가 false예요.'
+      sub: '요청에서 읽은 값, DB에서 읽은 값, 변수를 이어 붙인 값이 모두 그래요. 문자열은 `equals`로 비교해요.'
+    says:
+      - '코드 runtime. `half + "ID"`는 변수가 끼어 있어 실행할 때 만들어진다. 새 객체이고 `a == d`는 false다'
+      - '`"PA" + "ID"`는 리터럴끼리라 컴파일러가 미리 `"PAID"`로 계산해 둔다. 풀의 객체이고 `a == e`는 true다. `half`를 `final`로 선언하면 `d`도 true가 된다. 겉보기가 비슷한데 결과가 갈리므로 `==`에 기대면 안 된다'
+      - '파일, 네트워크, DB에서 읽은 문자열, `substring`이나 `toUpperCase`의 결과, `String.valueOf(숫자)`도 실행 중에 만들어진 객체다'
+      - '테스트는 리터럴을 넘겨서 통과하고 운영은 요청에서 읽은 값이라 틀리는 것이 도입부의 사고다'
+      - '`equals`로 비교한다. 한쪽이 null일 수 있으면 `"PAID".equals(status)`처럼 리터럴 쪽에서 부른다(J2의 질문 4). 대소문자를 무시하려면 `equalsIgnoreCase`'
+    asks:
+      - '본문의 예시: 코드 runtime의 두 줄은 각각 무엇을 출력하나. 조건: `a`는 코드 predict의 리터럴 `"PAID"`이고 `half`는 `final`이 아니다 (false와 true)'
+      - '옮긴 상황: `String a = "PAID"; String f = "paid".toUpperCase();`에서 `a == f`와 `a.equals(f)`의 결과는 무엇인가 (false와 true)'
+      - '실무 구역: 컨트롤러가 `@RequestParam String status`로 받은 값으로 `if (status == "PAID")`를 실행한다. 요청은 `?status=PAID`다. 이 조건의 결과는 무엇인가 (false. 요청에서 읽어 만든 문자열은 풀의 객체가 아니다)'
+  - id: q4
+    title: 문자열을 이어 붙일 때 무엇을 조심해야 하나요?
+    conclusion:
+      lead: '반복문 안에서 `+=`로 누적하면 돌 때마다 지금까지의 글자를 전부 복사한 새 문자열이 만들어지므로, 그런 곳에서는 `StringBuilder`를 써요.'
+      sub: '`StringBuilder`는 가변이라 같은 객체의 뒤에 덧붙이고, 마지막에 `toString()`으로 한 번만 `String`을 만들어요.'
+    says:
+      - '코드 loop. 불변이라서 `csv += ...`는 돌 때마다 새 문자열을 만든다. 만들 때 지금까지 쌓인 글자를 다 복사한다. 원소가 n개면 복사하는 글자 수가 n의 제곱에 비례해 늘어난다'
+      - '코드 builder. `StringBuilder`는 안에 고칠 수 있는 버퍼를 가진다. `append`는 같은 객체의 뒤에 붙인다. `append`가 돌려주는 것이 자기 자신인 것으로 확인한다'
+      - '원소 수를 늘려 가며 두 코드의 시간을 재서 보여 준다. 시간은 환경마다 달라서 숫자가 아니라 벌어지는 모양을 말한다'
+      - '`StringBuffer`는 메서드마다 `synchronized`가 붙은 것이다. 지역 변수로 쓰는 대부분의 경우에는 `StringBuilder`면 된다. 동기화는 C3에서 다룬다'
+      - '더 알아보기: `"주문 " + id + " 완료"`처럼 한 줄로 끝나는 연결은 그대로 둔다. 컴파일러가 한 번에 만드는 코드로 바꿔 준다. 구분자로 잇는 것은 `String.join(",", ids)`가, 여러 줄 문자열은 텍스트 블록이, 틀에 값을 채우는 것은 `"%d원".formatted(price)`가 읽기 쉽다'
+    asks:
+      - '본문의 예시: `ids`에 원소가 1000개 있을 때 코드 loop가 도는 동안 `csv`에 대입되는 `String` 객체는 몇 번 새로 만들어지나 (1000번. 돌 때마다 하나)'
+      - '옮긴 상황: `StringBuilder sb = new StringBuilder("A"); StringBuilder sb2 = sb; sb.append("B");`를 실행한 뒤 `sb2.toString()`은 무엇인가 ("AB". `StringBuilder`는 같은 객체를 고친다. 질문 1의 `String`과 반대다)'
+practice:
+  says:
+    - '요청으로 받은 문자열 비교. 컨트롤러와 서비스에서 `"PAID".equals(status)`로 쓴다. 정해진 값이면 문자열 대신 enum으로 받는 것이 낫고 그것은 J8에서 다룬다'
+    - '흔한 실수: `if (status == "PAID")`. 테스트가 리터럴을 넘기면 통과한다. 요청에서 온 값은 false다. 고친 코드: `"PAID".equals(status)`. 실행 중에 만든 문자열(바이트에서 읽어 만든 것)로 두 조건을 돌려 결과를 붙인다 (순수 자바 테스트)'
+    - '로그. `log.debug("주문 " + order)`는 debug가 꺼져 있어도 문자열을 먼저 만든다. `order.toString()`이 불리고 연결이 일어난다. `log.debug("주문 {}", order)`는 로그를 남길 때만 만든다. 로그 수준을 INFO로 두고 두 줄을 각각 불러 `toString`이 불린 횟수를 센다 (SLF4J와 Logback으로 돌리는 테스트. 스프링 부트에 들어 있다)'
+    - '빈 값 검사. `isEmpty()`는 길이가 0일 때만, `isBlank()`는 공백만 있어도 true다. 요청 값 검증에는 `@NotBlank`를 쓰고 그 동작은 S8에서 다룬다'
+    - '반복문에서 문자열을 누적하는 곳(CSV 내보내기, 긴 메시지 조립)은 `StringBuilder`나 `String.join`, 스트림의 `Collectors.joining`을 쓴다. SQL은 문자열로 이어 붙이지 않고 파라미터로 넘긴다는 것만 말하고 이유는 N10에 넘긴다'
+claims:
+  - claim: '코드 predict의 출력은 true, false, true다'
+    how: '코드를 그대로 돌린다'
+  - claim: '`toUpperCase`를 부르고 받지 않으면 원래 문자열은 그대로다. `s = s + "B"` 뒤에도 앞서 같은 객체를 가리키던 변수의 값은 그대로다'
+    how: '두 코드를 돌려 값을 본다'
+  - claim: '`new String("PAID").intern()`은 리터럴 `"PAID"`와 `==`가 true다'
+    how: '그대로 돌린다'
+  - claim: '변수를 이어 붙여 만든 문자열은 리터럴과 `==`가 false이고, 리터럴끼리 이어 붙인 것과 `final` 변수를 이어 붙인 것은 true다'
+    how: '코드 runtime과 `final` 변형을 돌린다. 컴파일러의 상수 계산에 기대는 결과라서 테스트에서 변수가 상수로 바뀌지 않게 메서드 인자로 받는 변형도 둔다'
+  - claim: '`toUpperCase`의 결과와 바이트에서 만든 문자열은 리터럴과 `==`가 false이고 `equals`가 true다'
+    how: '`new String(bytes, UTF_8)`과 `"paid".toUpperCase()`로 비교한다'
+  - claim: '`StringBuilder.append`는 자기 자신을 돌려주고, 같은 객체를 가리키는 다른 변수에서도 덧붙인 내용이 보인다'
+    how: '`sb.append("B") == sb`와 `sb2.toString()`을 본다'
+  - claim: '반복문의 `+=` 누적은 원소 수가 늘수록 `StringBuilder`보다 훨씬 느려진다'
+    how: '원소 수 세 가지로 두 방식의 시간을 재어 `CiOutput`에 남긴다. 값은 단정하지 않고 기록만 한다'
+  - claim: '로그 수준이 INFO일 때 `log.debug("주문 " + order)`는 `order.toString()`을 부르고 `log.debug("주문 {}", order)`는 부르지 않는다'
+    how: '`toString` 호출을 세는 객체로 두 줄을 각각 부르고 횟수를 본다. 로거의 수준은 테스트에서 INFO로 맞춘다'
+sources:
+  - '문자열 리터럴은 같은 객체를 가리키고, 상수식이 아닌 연결은 새 객체를 만든다: 자바 언어 명세 3.10.5 https://docs.oracle.com/javase/specs/jls/se21/html/jls-3.html#jls-3.10.5'
+  - '상수식: 자바 언어 명세 15.29 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.29'
+  - '`String`은 불변이다, `intern`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html'
+  - '`StringBuilder`와 `StringBuffer`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/StringBuilder.html'
+  - '문자열 연결을 컴파일하는 방식: JEP 280 https://openjdk.org/jeps/280'
+  - '기본 문자셋 UTF-8: JEP 400 https://openjdk.org/jeps/400'
+  - '로그의 `{}` 자리 표시: SLF4J FAQ https://www.slf4j.org/faq.html#logging_performance'

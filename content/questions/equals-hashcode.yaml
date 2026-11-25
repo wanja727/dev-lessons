@@ -10,7 +10,7 @@ subject:
 lesson:
   key: equals-hashcode
   title: equals와 hashCode
-  unit: Java
+  unit: 자바 언어
   order: 34
 concepts:
   - key: core

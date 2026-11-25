@@ -1,0 +1,190 @@
+# 상속과 다형성 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 상속과 다형성
+unit: 자바 언어
+roadmap: J7
+type: 자바 실행
+prerequisites:
+  - {slug: value-and-reference, title: 값과 참조}
+assume: '자바 21. `extends`와 `implements`를 써 본 것. 참조형 변수에는 객체를 가리키는 참조가 들어 있다는 것(값과 참조 레슨).'
+example: '알림을 보내는 `Notifier`와 그것을 상속한 `SmsNotifier`. `Notifier` 타입의 변수에 `SmsNotifier` 객체를 담고 `send`를 불러 어느 메서드가 실행되는지 봐요. 실무 구역에서는 `Notifier`를 인터페이스로 두고 스프링이 구현들을 주입하게 해요.'
+intro:
+  - '자식 클래스에 메서드를 새로 썼는데 아무리 불러도 부모의 메서드가 실행돼요. 오버라이딩했다고 생각했지만 매개변수 타입이 달라서, 자바는 그것을 이름만 같은 다른 메서드로 보고 있었어요.'
+  - '스프링은 다형성 위에 서 있어요. 서비스는 `PaymentClient`라는 인터페이스만 알고, 실제로 어느 구현이 불릴지는 실행할 때 정해져요. 리포지토리는 인터페이스만 쓰면 구현이 주입되고, `@Transactional`은 내 클래스를 상속한 프록시가 메서드를 오버라이딩해서 동작해요.'
+  - '이 레슨에서는 변수의 타입과 실제 객체의 타입이 다를 때 어느 메서드가 실행되는지를 코드를 돌려 확인하고, 오버라이딩과 오버로딩이 정해지는 시점이 다르다는 것을 봐요.'
+covers:
+  - topic: '상속하면 자식은 부모의 필드와 메서드를 물려받는다. 자바의 클래스 상속은 하나만 된다. 모든 클래스의 뿌리는 Object다'
+    where: '질문 1'
+  - topic: '부모 타입 변수에 자식 객체를 담을 수 있다. 변수의 타입이 부를 수 있는 메서드를 정한다'
+    where: '질문 1'
+  - topic: '내려받기(다운캐스팅), instanceof, ClassCastException, instanceof 패턴'
+    where: '질문 1'
+  - topic: '오버라이딩: 실행되는 메서드는 실제 객체의 타입이 정한다(실행 시점)'
+    where: '질문 2'
+  - topic: '오버라이딩의 조건(같은 시그니처)과 @Override, super로 부모 것 부르기'
+    where: '질문 2'
+  - topic: '오버라이딩되지 않는 것: 필드, static 메서드, private 메서드, final 메서드'
+    where: '질문 2'
+  - topic: '오버라이딩의 나머지 규칙(접근 범위를 좁힐 수 없다, 더 넓은 체크 예외를 던질 수 없다, 반환 타입은 더 좁혀도 된다)'
+    where: '질문 2의 더 알아보기'
+  - topic: '생성자에서 오버라이딩된 메서드를 부르면 자식의 필드가 아직 기본값이다'
+    where: '질문 2의 더 알아보기'
+  - topic: '오버로딩: 이름이 같고 매개변수가 다른 메서드. 어느 것을 부를지는 인자의 변수 타입으로 컴파일할 때 정해진다'
+    where: '질문 3'
+  - topic: '오버라이딩하려다 오버로딩이 되는 실수와 @Override가 그것을 잡아 주는 것'
+    where: '질문 3, 실무에서는'
+  - topic: '인터페이스와 추상 클래스의 차이(상태와 생성자, 여러 개 구현, default 메서드)와 고르는 기준'
+    where: '질문 4'
+  - topic: '두 인터페이스의 default 메서드가 겹칠 때'
+    where: '질문 4의 더 알아보기'
+  - topic: '접근 제어자 네 가지(public, protected, 기본, private)'
+    where: '질문 1의 더 알아보기. 캡슐화의 의미는 객체지향의 네 가지 특징(O1)'
+  - topic: '스프링에서: 인터페이스에 기대고 구현을 주입받기, 구현이 여럿일 때 List로 받기'
+    where: '실무에서는. 주입의 규칙(@Primary, @Qualifier)은 스프링 빈과 의존성 주입(S2)'
+  - topic: '스프링의 프록시는 내 클래스를 상속해 메서드를 오버라이딩한다. final과 private 메서드에는 적용되지 않는다'
+    where: '실무에서는. 프록시의 동작은 AOP(S9)와 @Transactional 동작 원리(S10)'
+  - topic: '부모와 자식 클래스의 초기화 순서'
+    where: '다루지 않음: static과 초기화 순서(J5)'
+  - topic: '메서드가 하나뿐인 인터페이스와 람다'
+    where: '다루지 않음: 람다와 함수형 인터페이스(J12)'
+  - topic: '캡슐화, 추상화를 포함한 객체지향의 네 가지 특징'
+    where: '다루지 않음: 객체지향의 네 가지 특징(O1)'
+  - topic: '자식이 부모를 대신할 수 없게 되는 상속(리스코프 치환 원칙)'
+    where: '다루지 않음: 리스코프 치환과 인터페이스 분리 원칙(O4)'
+  - topic: '상속으로 재사용할 때의 문제와 조합'
+    where: '다루지 않음: 상속보다 조합(O6)'
+  - topic: '상속할 수 있는 클래스를 정해 두는 sealed'
+    where: '다루지 않음: 자바 17과 21에서 달라진 것(J18)'
+codes:
+  predict: |-
+    class Notifier {
+      void send(Object msg) {
+        print("Notifier, Object");
+      }
+    }
+
+    class SmsNotifier extends Notifier {
+      @Override
+      void send(Object msg) {
+        print("Sms, Object");
+      }
+      void send(String msg) {
+        print("Sms, String");
+      }
+    }
+
+    Notifier n = new SmsNotifier();
+    n.send("주문 완료");
+  fields: |-
+    class Notifier {
+      String name = "기본";
+      static String type() { return "Notifier"; }
+    }
+    class SmsNotifier extends Notifier {
+      String name = "문자";
+      static String type() { return "Sms"; }
+    }
+
+    Notifier n = new SmsNotifier();
+    System.out.println(n.name);
+predict:
+  text: '코드 predict의 마지막 줄 `n.send("주문 완료")`는 무엇을 출력할까요? 인자는 `String`이고, 실제 객체는 `SmsNotifier`예요. 보기: "Notifier, Object", "Sms, Object", "Sms, String", 컴파일 오류.'
+  answer: '"Sms, Object". 컴파일러는 변수의 타입 `Notifier`에 있는 `send(Object)`를 부르기로 정하고, 실행할 때는 실제 객체인 `SmsNotifier`가 오버라이딩한 `send(Object)`가 실행된다. `send(String)`은 `Notifier`에 없어서 후보가 아니다. 질문 2와 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 부모 타입의 변수에 자식 객체를 담으면 무엇을 할 수 있나요?
+    conclusion:
+      lead: '그 변수로는 부모 타입에 선언된 메서드만 부를 수 있어요. 객체는 자식 그대로이지만 변수의 타입이 보이는 범위를 정해요.'
+      sub: '자식은 부모가 가진 것을 모두 가지므로 부모 타입 자리에 언제나 들어갈 수 있고, 반대로 내려받으려면 실제 타입을 확인해야 해요.'
+    says:
+      - '`class SmsNotifier extends Notifier`는 `Notifier`의 필드와 메서드를 물려받고 자기 것을 더한다. 클래스는 하나만 상속할 수 있고, 아무것도 상속하지 않은 클래스는 `Object`를 상속한다'
+      - '`Notifier n = new SmsNotifier();`는 컴파일된다. `SmsNotifier`는 `Notifier`가 할 수 있는 것을 다 할 수 있다. 객체는 바뀌지 않는다. J2에서 본 대로 변수에는 참조가 들어 있을 뿐이다'
+      - '`n`으로 부를 수 있는 것은 `Notifier`에 선언된 메서드뿐이다. `SmsNotifier`에만 있는 메서드를 `n`으로 부르면 컴파일 오류다. 컴파일러는 변수의 타입만 본다'
+      - '내려받기: `SmsNotifier s = (SmsNotifier) n;`. 실제 객체가 `SmsNotifier`가 아니면 실행할 때 `ClassCastException`이다. `if (n instanceof SmsNotifier s)`로 확인과 변환을 한 번에 한다'
+      - '`instanceof`로 타입마다 갈라서 처리하는 코드가 늘어나면 질문 2의 오버라이딩으로 바꿀 수 있는지 본다'
+      - '더 알아보기: 접근 제어자. `private`은 그 클래스 안, 아무것도 안 쓰면 같은 패키지, `protected`는 같은 패키지와 자식 클래스, `public`은 어디서나'
+    asks:
+      - '본문의 예시: `SmsNotifier`에만 `int remaining()` 메서드가 있다. `Notifier n = new SmsNotifier(); n.remaining();`은 어떻게 되나 (컴파일 오류. 변수의 타입 `Notifier`에 그 메서드가 없다)'
+      - '옮긴 상황: `Notifier n = new EmailNotifier(); SmsNotifier s = (SmsNotifier) n;`은 어떻게 되나. 조건: `EmailNotifier`와 `SmsNotifier`는 둘 다 `Notifier`를 상속하고 서로는 상관없다 (컴파일은 되고 실행할 때 `ClassCastException`)'
+  - id: q2
+    title: 오버라이딩한 메서드는 어느 쪽 것이 실행되나요?
+    conclusion:
+      lead: '변수의 타입이 아니라 실제 객체의 타입에 있는 메서드가 실행돼요.'
+      sub: 'JVM이 실행하는 순간에 객체의 실제 클래스를 보고 고르기 때문이고, 이것이 다형성이에요.'
+    says:
+      - '오버라이딩은 부모의 메서드와 이름과 매개변수 타입이 같은 메서드를 자식이 다시 정의하는 것이다'
+      - '`Notifier n = new SmsNotifier(); n.send(msg)`에서 실행되는 것은 `SmsNotifier`의 `send(Object)`다. 변수 타입이 `Notifier`여도 그렇다. 같은 줄 `n.send(msg)`가 `n`에 무엇이 들었느냐에 따라 다른 코드를 실행한다'
+      - '이 덕분에 호출하는 쪽은 `Notifier`만 알면 된다. 새 알림 방식을 더해도 호출하는 코드를 고치지 않는다. 이 이점을 설계 원칙으로 쓰는 것은 O3에서 다룬다'
+      - '`@Override`는 "이 메서드는 부모 것을 다시 정의한 것"이라고 컴파일러에게 알린다. 부모에 그런 메서드가 없으면 컴파일 오류가 난다. 동작을 바꾸지는 않고 실수를 잡는다'
+      - '`super.send(msg)`로 부모의 구현을 부를 수 있다'
+      - '오버라이딩되지 않는 것. 코드 fields에서 `n.name`은 "기본"이다. 필드는 변수의 타입으로 정해진다. static 메서드도 변수의 타입(클래스)으로 정해진다. `private` 메서드는 자식에게 보이지 않아 오버라이딩할 수 없고, `final` 메서드는 오버라이딩을 금지한다'
+      - '더 알아보기: 오버라이딩할 때 접근 범위를 좁힐 수 없고, 부모가 선언하지 않은 체크 예외를 던질 수 없고, 반환 타입은 자식 타입으로 좁혀도 된다'
+      - '더 알아보기: 부모의 생성자가 오버라이딩된 메서드를 부르면 자식의 구현이 실행되는데, 이때 자식의 필드는 아직 초기화 전이라 기본값이다(초기화 순서는 J5). 생성자에서는 오버라이딩될 수 있는 메서드를 부르지 않는다'
+    asks:
+      - '본문의 예시: 코드 fields에서 `n.name`의 출력은 무엇인가 ("기본". 필드는 오버라이딩되지 않고 변수의 타입 `Notifier`의 것이 쓰인다)'
+      - '옮긴 상황: `class Animal { String sound() { return "..."; } }`, `class Dog extends Animal { String sound() { return "멍"; } }`, `class Puppy extends Dog { }`가 있다. `Animal a = new Puppy(); a.sound()`의 결과는 무엇인가 ("멍". `Puppy`가 다시 정의하지 않았으므로 가장 가까운 부모 `Dog`의 것이 실행된다)'
+  - id: q3
+    title: 오버로딩은 오버라이딩과 무엇이 다른가요?
+    conclusion:
+      lead: '오버로딩은 이름만 같은 서로 다른 메서드이고, 그 가운데 어느 것을 부를지는 컴파일할 때 인자의 변수 타입으로 정해져요.'
+      sub: '오버라이딩은 실행할 때 객체의 실제 타입으로 정해지므로, 둘은 정해지는 시점과 기준이 달라요.'
+    says:
+      - '오버로딩은 한 클래스에 이름이 같고 매개변수의 타입이나 개수가 다른 메서드를 여럿 두는 것이다. `send(Object)`와 `send(String)`은 서로 다른 메서드다'
+      - '컴파일러가 호출 한 줄을 보고 어느 메서드를 부를지 정한다. 이때 보는 것은 변수에 든 실제 객체가 아니라 변수와 식의 타입이다'
+      - '코드 predict를 두 단계로 푼다. 컴파일: `n`의 타입은 `Notifier`이고 거기에는 `send(Object)`뿐이다. 인자가 `String`이어도 `send(Object)`를 부르기로 정한다. 실행: 객체는 `SmsNotifier`이고 `send(Object)`를 오버라이딩했으므로 "Sms, Object"가 나온다. 예측의 답을 밝힌다'
+      - '변수를 `SmsNotifier s = new SmsNotifier();`로 바꿔 `s.send("주문 완료")`를 부르면 컴파일러가 `send(String)`을 고른다. "Sms, String"이다'
+      - '`Object o = "주문 완료"; s.send(o);`는 "Sms, Object"다. 실제 객체가 `String`이어도 변수 `o`의 타입이 `Object`이기 때문이다. 오버로딩은 실제 객체를 보지 않는다'
+      - '실수가 생기는 곳: 오버라이딩하려고 쓴 메서드의 매개변수 타입이 부모와 다르면 오버로딩이 된다. 오류 없이 컴파일되고 부모의 메서드가 그대로 실행된다. `@Override`를 붙였다면 컴파일러가 잡는다'
+    widget:
+      kind: toggle
+      note: '두 가지를 고른다. 받는 변수의 타입(`Notifier n` 또는 `SmsNotifier s`)과 인자의 변수 타입(`String` 또는 `Object` 변수에 담긴 문자열). 네 조합마다 두 칸으로 "컴파일러가 고른 메서드(시그니처)"와 "실행된 구현"을 보여 주고 출력 한 줄을 정리한다. 실행 버튼을 눌러야 보인다'
+    asks:
+      - '본문의 예시: 코드 predict의 클래스들로 `SmsNotifier s = new SmsNotifier(); Object o = "주문 완료"; s.send(o);`를 실행하면 무엇이 출력되나 ("Sms, Object")'
+      - '옮긴 상황: `class Handler { void handle(Event e) { print("기본"); } }`, `class OrderHandler extends Handler { void handle(OrderEvent e) { print("주문"); } }`가 있고 `OrderEvent`는 `Event`를 상속한다. `Handler h = new OrderHandler(); Event e = new OrderEvent(); h.handle(e);`의 출력은 무엇인가 ("기본". `handle(OrderEvent)`는 오버라이딩이 아니라 오버로딩이고, 컴파일러는 `Handler`의 `handle(Event)`를 골랐다)'
+      - '실무 구역: 위 `OrderHandler`의 `handle(OrderEvent e)` 위에 `@Override`를 붙이고 컴파일하면 어떻게 되나 (컴파일 오류. 부모에 같은 시그니처의 메서드가 없다)'
+  - id: q4
+    title: 인터페이스와 추상 클래스는 무엇이 다르고 언제 무엇을 쓰나요?
+    conclusion:
+      lead: '인터페이스는 "무엇을 할 수 있는가"만 정하고 여러 개를 구현할 수 있어요. 추상 클래스는 필드와 구현의 일부를 물려주고 하나만 상속할 수 있어요.'
+      sub: '서로 다른 구현을 같은 타입으로 다루려면 인터페이스를, 구현들이 상태와 코드를 함께 쓸 때만 추상 클래스를 써요.'
+    says:
+      - '둘 다 `new`로 객체를 만들 수 없고, 구현이 없는 메서드를 가질 수 있다. 부모 타입으로 쓰여 질문 2의 다형성이 똑같이 동작한다'
+      - '추상 클래스는 클래스다. 인스턴스 필드와 생성자를 가질 수 있고 일부 메서드를 구현해 둘 수 있다. 자식은 하나만 `extends`할 수 있다'
+      - '인터페이스는 인스턴스 필드와 생성자가 없다. 클래스는 인터페이스를 여러 개 `implements`할 수 있다. 자바 8부터 `default` 메서드로 구현을 줄 수 있지만 상태는 여전히 가질 수 없다'
+      - '고르는 기준. 호출하는 쪽에 "이 메서드가 있다"만 약속하면 되면 인터페이스다. 구현들이 같은 필드와 같은 처리 순서를 함께 써야 하면 추상 클래스다. 둘을 함께 쓰기도 한다. 인터페이스로 타입을 정하고 추상 클래스로 공통 구현을 준다'
+      - '같은 예제로 보인다. `Notifier`를 인터페이스로 바꾸고 `SmsNotifier`와 `EmailNotifier`가 구현한다. 둘이 "보내기 전에 수신 거부를 확인한다"는 순서와 발송 횟수 필드를 함께 써야 하면 `AbstractNotifier`를 둔다. 이 구조를 패턴으로 다루는 것은 O8이다'
+      - '더 알아보기: 두 인터페이스가 같은 시그니처의 `default` 메서드를 가지면 둘을 구현한 클래스는 그 메서드를 직접 오버라이딩해야 컴파일된다'
+    asks:
+      - '본문의 예시: `interface Notifier { void send(Object msg); }`와 `abstract class AbstractNotifier { int sent; abstract void send(Object msg); }` 가운데 `int sent` 같은 인스턴스 필드를 가질 수 있는 것은 어느 쪽인가 (추상 클래스)'
+      - '옮긴 상황: `class Report extends Document, Printable`과 `class Report extends Document implements Printable, Exportable` 가운데 컴파일되는 것은 무엇인가. 조건: `Document`는 클래스, `Printable`과 `Exportable`은 인터페이스다 (둘째만 된다. 클래스는 하나만 상속하고 인터페이스는 여러 개 구현한다)'
+practice:
+  says:
+    - '인터페이스에 기대기. `interface Notifier { void send(Member to, String msg); }`를 두고 `@Component`가 붙은 `SmsNotifier`와 `EmailNotifier`가 구현한다. `OrderService`는 생성자로 `List<Notifier>`를 받아 모두에게 보낸다. 스프링이 `Notifier` 타입의 빈을 전부 모아 넣어 준다. 구현 하나를 더해도 `OrderService`는 고치지 않는다. 질문 2의 다형성이다 (작은 스프링 컨텍스트로 구현이 둘일 때와 셋일 때를 띄워 불린 구현을 기록하는 테스트)'
+    - '구현이 여럿인데 하나만 받으려면 스프링이 고를 기준이 필요하다는 것만 말하고 S2에 넘긴다'
+    - '흔한 실수: 오버라이딩하려다 오버로딩한다. 예: 공통 부모 `AbstractHandler`의 `handle(Event e)`를 자식에서 `handle(OrderEvent e)`로 쓴다. 컴파일되고, 부모 타입으로 부르는 쪽에서는 부모의 구현만 실행된다. 고친 코드: 시그니처를 부모와 맞추고 `@Override`를 붙인다. 오버라이딩하는 메서드에는 언제나 `@Override`를 붙인다 (순수 자바 테스트. `@Override`를 붙였을 때의 컴파일 오류는 테스트 안에서 컴파일러를 돌려 확인한다)'
+    - '스프링의 프록시도 오버라이딩이다. `@Transactional`이 붙은 클래스에 스프링은 그 클래스를 상속한 클래스를 실행 중에 만들어, 메서드를 오버라이딩해 앞뒤에 일을 끼워 넣는다. 그래서 오버라이딩할 수 없는 `final` 메서드와 `private` 메서드에는 적용되지 않는다. 이 레슨은 "질문 2에서 본 규칙 때문"까지만 말하고 동작은 S9와 S10에 넘긴다 (스프링 공식 문서 근거)'
+    - '스프링 데이터의 리포지토리는 인터페이스만 쓰고 구현은 스프링이 만들어 주입한다는 한 줄. 자세한 것은 P1'
+claims:
+  - claim: '코드 predict의 출력은 "Sms, Object"다'
+    how: '출력 대신 문자열을 돌려주게 한 같은 구조의 클래스를 돌린다'
+  - claim: '받는 변수의 타입과 인자의 변수 타입 네 조합의 결과: (Notifier, String)과 (Notifier, Object)와 (SmsNotifier, Object)는 "Sms, Object", (SmsNotifier, String)은 "Sms, String"이다'
+    how: '네 조합을 돌려 표로 남긴다. 위젯의 숫자와 맞춘다'
+  - claim: '코드 fields에서 `n.name`은 "기본"이다'
+    how: '그대로 돌린다'
+  - claim: '상관없는 자식 타입으로 내려받으면 `ClassCastException`이 난다'
+    how: '`EmailNotifier` 객체를 `SmsNotifier`로 변환한다'
+  - claim: '매개변수 타입이 다른 메서드는 오버라이딩이 아니어서 부모 타입으로 부르면 부모의 구현이 실행된다. 거기에 `@Override`를 붙이면 컴파일되지 않는다'
+    how: '`Handler` 예제를 돌린다. 컴파일 오류는 `javax.tools.JavaCompiler`로 소스를 컴파일해 진단 메시지가 있는지 본다'
+  - claim: '부모의 생성자가 부른 오버라이딩된 메서드 안에서 자식의 필드는 기본값이다'
+    how: '자식의 필드를 초기화식으로 채워 두고, 부모 생성자가 부른 메서드에서 그 필드를 기록한다'
+  - claim: '생성자로 `List<Notifier>`를 받는 빈에는 `Notifier`를 구현한 빈이 모두 들어온다'
+    how: '`AnnotationConfigApplicationContext`에 구현 둘과 셋을 각각 등록해 리스트의 크기와 불린 구현을 본다'
+sources:
+  - '오버라이딩: 자바 언어 명세 8.4.8 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.8'
+  - '부를 메서드를 컴파일할 때 고르는 것과 실행할 때 찾는 것: 자바 언어 명세 15.12 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12'
+  - '필드는 변수의 타입으로 정해진다: 자바 언어 명세 15.11.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.11.1'
+  - '추상 클래스와 인터페이스: 자바 언어 명세 8.1.1.1, 9장 https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html'
+  - '`instanceof` 패턴: 자바 언어 명세 15.20.2 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.20.2'
+  - '같은 타입의 빈을 컬렉션으로 주입받기: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html'
+  - '프록시가 `final` 메서드에 적용되지 않는 것: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/aop/proxying.html'

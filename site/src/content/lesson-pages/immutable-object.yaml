@@ -1,0 +1,177 @@
+# 불변 객체 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 불변 객체
+unit: 자바 언어
+roadmap: J9
+type: 자바 실행
+prerequisites:
+  - {slug: value-and-reference, title: 값과 참조}
+assume: '자바 21. 참조형 변수를 넘기면 같은 객체를 함께 가리키게 된다는 것(값과 참조 레슨). `ArrayList`에 넣고 꺼내는 방법.'
+example: '주문 `Order`가 상품 이름의 목록 `List<String> items`를 가져요. `Order`에는 setter가 없고 필드는 `final`이에요. 그런데도 바깥에서 주문의 상품 목록을 바꿀 수 있는지 봐요. 실무 구역에서는 record로 만든 응답 DTO와 설정 값 객체로 옮겨요.'
+intro:
+  - '주문 응답을 만들어 캐시에 넣어 뒀는데, 다른 요청이 그 응답의 상품 목록에 항목을 하나 추가했어요. 그 뒤로 같은 주문을 조회하는 모든 사용자에게 없는 상품이 보여요. 응답 클래스에는 setter가 하나도 없었어요.'
+  - '서버의 객체는 여러 요청과 여러 스레드가 함께 써요. 한번 만든 뒤 바뀌지 않는 객체는 누구에게 넘겨도 걱정이 없어요. 그래서 스프링 개발자는 요청과 응답 DTO, 설정 값, 금액 같은 값 객체를 불변으로 만들고, 자바 16부터는 그 일을 record가 줄여 줘요.'
+  - '이 레슨에서는 setter가 없고 `final`인데도 바뀌는 객체를 직접 돌려 보고, 무엇을 더 막아야 정말로 바뀌지 않는지 하나씩 확인해요.'
+covers:
+  - topic: '불변 객체는 만든 뒤에 상태가 바뀌지 않는 객체다. 바꾸고 싶으면 새 객체를 만든다'
+    where: '질문 1'
+  - topic: '불변이 주는 것: 넘겨도 안전하다, 맵의 키로 안전하다, 여러 스레드가 함께 읽어도 된다. 치르는 값: 바꿀 때마다 객체가 새로 생긴다'
+    where: '질문 1'
+  - topic: '자바의 불변 클래스들: String, Integer, LocalDate, BigDecimal'
+    where: '질문 1'
+  - topic: 'final 변수는 다시 대입할 수 없을 뿐이고, 가리키는 객체가 바뀌는 것은 막지 않는다'
+    where: '질문 2'
+  - topic: '불변 클래스의 조건: private final 필드, setter 없음, 상속 금지(final 클래스)'
+    where: '질문 2'
+  - topic: '필드가 가변 객체를 가리킬 때의 방어적 복사: 생성자에서 받을 때와 getter로 내줄 때'
+    where: '질문 3'
+  - topic: 'List.copyOf(복사본)와 Collections.unmodifiableList(원본을 비추는 뷰)의 차이, List.of'
+    where: '질문 3'
+  - topic: '얕은 복사와 깊은 복사: 복사한 리스트 안의 원소가 가변이면 원소는 여전히 함께 쓴다'
+    where: '질문 3'
+  - topic: 'record가 만들어 주는 것: private final 필드, 생성자, 접근자, equals, hashCode, toString'
+    where: '질문 4'
+  - topic: 'record가 해 주지 않는 것: 구성 요소가 가리키는 가변 객체는 그대로다. 간결한 생성자로 복사하고 검증한다'
+    where: '질문 4'
+  - topic: 'record의 제약: 상속할 수 없고 인스턴스 필드를 더할 수 없다'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링에서: 요청과 응답 DTO를 record로, @ConfigurationProperties를 record로'
+    where: '실무에서는. 설정을 읽는 순서는 설정과 프로파일(S5)'
+  - topic: 'JPA 엔티티는 record로 만들 수 없다. 엔티티에서 setter 대신 의미 있는 메서드를 두는 것'
+    where: '실무에서는. 값 타입(@Embeddable)은 상속 매핑과 값 타입(P10)'
+  - topic: '키로 넣은 객체의 필드를 바꾸면 HashMap에서 찾지 못한다'
+    where: '다루지 않음: equals와 hashCode(J6)'
+  - topic: '불변 객체가 스레드에 안전한 이유와 final 필드의 가시성'
+    where: '다루지 않음: 스레드에 안전한 객체(C6)'
+  - topic: '필드가 많은 불변 객체를 만드는 빌더'
+    where: '다루지 않음: 빌더 패턴(O10)'
+  - topic: 'record 패턴과 sealed'
+    where: '다루지 않음: 자바 17과 21에서 달라진 것(J18)'
+  - topic: 'String이 불변이라서 가능한 문자열 상수 풀'
+    where: '다루지 않음: String(J4)'
+codes:
+  predict: |-
+    final class Order {
+      private final List<String> items;
+
+      Order(List<String> items) {
+        this.items = items;
+      }
+      List<String> getItems() { return items; }
+    }
+
+    List<String> cart = new ArrayList<>();
+    cart.add("키보드");
+    Order order = new Order(cart);
+
+    cart.add("마우스");
+    System.out.println(order.getItems().size());
+  copied: |-
+    Order(List<String> items) {
+      this.items = [[List.copyOf(items)]];
+    }
+  record: |-
+    record OrderResponse(long id,
+        List<String> items) {
+
+      OrderResponse {
+        items = [[List.copyOf(items)]];
+      }
+    }
+predict:
+  text: '코드 predict의 `Order`는 클래스도 필드도 `final`이고 setter가 없어요. 주문을 만든 뒤에 바깥의 `cart`에 "마우스"를 추가했어요. 마지막 줄은 무엇을 출력할까요? 보기: 1, 2, 예외가 난다.'
+  answer: '2. `Order`의 `items` 필드와 바깥의 `cart`가 같은 리스트 객체를 가리킨다. `final`은 필드가 다른 리스트를 가리키게 바꾸는 것만 막는다. 질문 2에서 밝히고 질문 3에서 고친다.'
+questions:
+  - id: q1
+    title: 불변 객체는 무엇이고 왜 쓰나요?
+    conclusion:
+      lead: '만들어진 뒤에 상태가 바뀌지 않는 객체예요. 바뀌지 않으니 누구에게 넘겨도, 어디에 넣어 둬도 안전해요.'
+      sub: '값을 바꾸고 싶으면 그 객체를 고치지 않고, 바뀐 값을 가진 새 객체를 만들어요.'
+    says:
+      - 'J2에서 본 대로 객체를 넘기면 받은 쪽과 준 쪽이 같은 객체를 가리킨다. 한쪽이 고치면 다른 쪽에 보인다. 가변 객체는 넘길 때마다 "저쪽이 고치면 어쩌지"를 따져야 한다'
+      - '불변 객체는 고칠 방법이 없으므로 그 걱정이 사라진다. 캐시에 넣어 두기, 여러 요청이 함께 쓰기, `HashMap`의 키로 쓰기(J6의 질문 5), 여러 스레드가 동시에 읽기가 모두 안전하다'
+      - '바꾸는 것은 새 객체를 만드는 것이다. `Money`의 `plus`는 자기를 고치지 않고 합계를 가진 새 `Money`를 돌려준다. `String`의 메서드들이 이렇게 동작한다(J4)'
+      - '자바의 불변 클래스: `String`, `Integer` 같은 래퍼, `LocalDate`, `BigDecimal`. `date.plusDays(1)`의 결과를 받지 않으면 아무 일도 일어나지 않는 것이 같은 이유다'
+      - '치르는 값: 바꿀 때마다 객체가 새로 생긴다. 값이 자주 바뀌는 큰 객체에는 맞지 않는다. 그래서 JPA 엔티티처럼 상태가 변하는 것이 본질인 객체는 가변으로 둔다'
+    asks:
+      - '본문의 예시: `LocalDate d = LocalDate.of(2026, 1, 31); d.plusDays(1); System.out.println(d);`의 출력은 무엇인가 (2026-01-31. `plusDays`는 새 객체를 돌려주고 `d`는 그대로다)'
+      - '옮긴 상황: 불변인 `Money a = new Money(1000); Money b = a; b = b.plus(500);`을 실행한 뒤 `a`의 금액은 얼마인가. 조건: `plus`는 새 `Money`를 돌려준다 (1000)'
+  - id: q2
+    title: 'final을 붙이면 불변이 되나요?'
+    conclusion:
+      lead: '아니요. `final`은 그 변수에 다시 대입하는 것만 막고, 변수가 가리키는 객체가 바뀌는 것은 막지 않아요.'
+      sub: '`final` 필드가 가변 객체를 가리키면, 그 객체를 함께 가리키는 누구든 내용을 바꿀 수 있어요.'
+    says:
+      - '`final List<String> items = new ArrayList<>();` 뒤에 `items = new ArrayList<>();`는 컴파일 오류이고 `items.add("키보드");`는 된다. 변수에 든 참조는 못 바꾸고, 참조가 가리키는 리스트는 바꿀 수 있다'
+      - '코드 predict. `this.items = items`는 참조를 복사한다(J2). 필드 `items`와 바깥의 `cart`가 같은 `ArrayList`를 가리킨다. `cart.add("마우스")`는 그 하나뿐인 리스트를 고치므로 주문의 상품이 둘이 된다. 예측의 답을 밝힌다'
+      - '`final`과 setter 없음은 불변의 필요한 조건이지 충분한 조건이 아니다. 필드가 기본형이나 불변 객체(`String`, `Long`)만 가리키면 그것으로 충분하다. 가변 객체(리스트, 배열, `Date`)를 가리키면 질문 3이 필요하다'
+      - '불변 클래스의 나머지 조건: 필드를 `private`으로 두어 바깥에서 직접 닿지 못하게 한다. 클래스를 `final`로 두어 자식 클래스가 가변 필드를 더하거나 메서드를 오버라이딩해 약속을 깨지 못하게 한다'
+    asks:
+      - '본문의 예시: `final List<String> items = new ArrayList<>();` 다음에 `items.add("A");`와 `items = List.of("A");`를 쓰면 각각 어떻게 되나 (첫째는 컴파일되고 실행된다. 둘째는 컴파일 오류다)'
+      - '옮긴 상황: `final int[] scores = {1, 2, 3}; scores[0] = 9;`를 실행한 뒤 `scores[0]`은 얼마인가 (9. `final`은 배열의 칸을 바꾸는 것을 막지 않는다)'
+  - id: q3
+    title: 필드가 리스트 같은 가변 객체를 가리킬 때는 어떻게 지키나요?
+    conclusion:
+      lead: '받을 때 복사해서 가지고, 내줄 때도 바깥에서 고칠 수 없는 것으로 내줘요.'
+      sub: '바깥과 같은 객체를 함께 가리키지 않게 하는 것이고, 이것을 방어적 복사라고 해요.'
+    says:
+      - '들어오는 길. 코드 copied처럼 생성자에서 `List.copyOf(items)`로 복사해 필드에 넣는다. 이제 바깥의 `cart`를 고쳐도 주문의 리스트는 다른 객체라 그대로다. 예측의 코드를 고쳐 돌리면 1이 나온다'
+      - '나가는 길. `getItems()`가 필드를 그대로 돌려주면 받은 쪽이 `order.getItems().add("모니터")`로 고칠 수 있다. `List.copyOf`가 만든 리스트는 고칠 수 없는 리스트라서 `add`를 부르면 `UnsupportedOperationException`이 난다. 그래서 필드가 `List.copyOf`의 결과면 그대로 내줘도 된다'
+      - '필드를 `new ArrayList<>(items)`로 복사했다면 getter에서 다시 복사하거나 `Collections.unmodifiableList(items)`로 감싸 내준다'
+      - '`Collections.unmodifiableList(원본)`은 복사본이 아니라 원본을 비추는 창이다. 창으로는 못 고치지만 원본을 고치면 창에 보인다. 생성자에서 이것으로 받으면 `cart.add`가 여전히 주문을 바꾼다. 받을 때는 `List.copyOf`를 쓴다'
+      - '`List.of("A", "B")`는 처음부터 고칠 수 없는 리스트를 만든다'
+      - '얕은 복사. `List.copyOf`는 리스트만 새로 만들고 안의 원소는 같은 객체를 가리킨다. 원소가 `String`처럼 불변이면 문제없다. 원소가 가변 객체면 원소의 필드는 여전히 바깥에서 바뀐다. 원소까지 새로 만드는 것이 깊은 복사이고, 원소를 불변으로 만드는 쪽이 더 쉽다'
+    widget:
+      kind: toggle
+      note: '지키는 방법 셋 가운데 하나를 고른다: "그대로 받고 그대로 내줌", "받을 때 unmodifiableList로 감쌈", "받을 때 List.copyOf". 실행 버튼을 누르면 같은 두 동작(바깥의 `cart.add("마우스")`, `order.getItems().add("모니터")`)을 차례로 한 결과를 두 칸으로 보여 준다. 왼쪽 칸은 바깥의 `cart`, 오른쪽 칸은 주문 안의 리스트이고, 주문이 바뀐 줄은 문제로 표시한다. 한 줄 정리에 "주문이 바뀌었는가"를 적는다'
+    asks:
+      - '본문의 예시: 생성자를 코드 copied로 바꾼 뒤 코드 predict를 다시 실행하면 마지막 줄의 출력은 무엇인가 (1)'
+      - '옮긴 상황: `List<String> src = new ArrayList<>(List.of("A")); List<String> view = Collections.unmodifiableList(src); List<String> copy = List.copyOf(src); src.add("B");`를 실행한 뒤 `view.size()`와 `copy.size()`는 각각 얼마인가 (2와 1)'
+      - '실무 구역: `record OrderResponse(long id, List<String> items) {}`에 간결한 생성자가 없다. 엔티티의 `ArrayList`를 그대로 넘겨 응답을 만든 뒤 `response.items().add("모니터")`를 실행하면 어떻게 되나 (추가된다. 엔티티의 리스트도 같은 객체라 함께 바뀐다)'
+  - id: q4
+    title: record는 무엇을 대신 만들어 주고, 무엇은 해 주지 않나요?
+    conclusion:
+      lead: 'record는 `private final` 필드, 생성자, 접근자, `equals`와 `hashCode`와 `toString`을 선언 한 줄로 만들어 줘요.'
+      sub: '필드에 다시 대입하는 것만 막아 주므로, 구성 요소가 리스트 같은 가변 객체면 복사는 직접 해야 해요.'
+    says:
+      - '`record Money(long amount, String currency) {}` 한 줄이 만드는 것: `private final` 필드 둘, 둘을 받는 생성자, `amount()`와 `currency()` 접근자(이름에 get이 붙지 않는다), 모든 구성 요소를 비교하는 `equals`와 그것에 맞는 `hashCode`, `toString`'
+      - 'setter는 없고 필드는 `final`이다. 값을 바꾸려면 새 record를 만든다'
+      - '`new Money(1000, "KRW").equals(new Money(1000, "KRW"))`는 true다. J6에서 직접 쓰던 `equals`와 `hashCode`를 구성 요소 전체로 만들어 준다'
+      - 'record도 질문 2의 한계를 그대로 가진다. `record OrderResponse(long id, List<String> items)`의 `items`는 넘겨받은 리스트를 그대로 가리킨다. 바깥에서 그 리스트를 고치면 record가 바뀐다'
+      - '코드 record. 간결한 생성자(괄호 없는 생성자)에서 `items = List.copyOf(items)`로 복사한다. 여기에 검증도 둔다(`if (amount < 0) throw ...`). 본문이 끝나면 필드에 대입된다'
+      - '더 알아보기: record는 다른 클래스를 상속할 수 없고 상속받을 수도 없다. 구성 요소 말고 인스턴스 필드를 더할 수 없다. 인터페이스 구현과 메서드 추가는 된다'
+    asks:
+      - '본문의 예시: `record Money(long amount, String currency) {}`로 `new Money(1000, "KRW") == new Money(1000, "KRW")`와 `new Money(1000, "KRW").equals(new Money(1000, "KRW"))`를 실행한 결과는 무엇인가 (false와 true)'
+      - '옮긴 상황: `record Point(int x, int y) {}`의 객체 `p`에 대해 `p.x = 5;`와 `p.getX()`와 `p.x()` 가운데 컴파일되는 것은 무엇인가 (`p.x()`만 된다. 필드는 final이고 접근자 이름에는 get이 없다)'
+practice:
+  says:
+    - '요청과 응답 DTO를 record로 쓴다. `record OrderRequest(Long productId, Integer quantity) {}`를 `@RequestBody`로 받고 `record OrderResponse(Long id, String status, List<String> items)`를 돌려준다. Jackson이 record의 생성자로 만들고 접근자로 읽는다 (Jackson `ObjectMapper`로 JSON을 record로 읽고 다시 쓰는 테스트)'
+    - '흔한 실수: record 응답에 엔티티의 컬렉션을 그대로 넘긴다. `new OrderResponse(order.getId(), ..., order.getItemNames())`. 응답과 엔티티가 같은 리스트를 가리킨다. 응답을 캐시에 두거나 다른 곳에서 가공하면 엔티티까지 바뀐다. 고친 코드: 코드 record의 간결한 생성자로 `List.copyOf`. 고치기 전과 뒤에 `response.items().add(...)`를 돌려 결과를 붙인다 (순수 자바 테스트)'
+    - '설정 값을 record로 받는다. `@ConfigurationProperties("pay") record PayProperties(String url, Duration timeout) {}`. 스프링 부트 3은 record의 생성자로 값을 넣어 준다. 실행 중에 누가 설정 값을 바꿀 수 없다 (스프링 부트의 `ApplicationContextRunner`로 속성을 주고 바인딩된 값을 읽는 테스트. 생성자 바인딩의 규칙은 공식 문서 근거)'
+    - 'JPA 엔티티는 record로 만들 수 없다. 엔티티는 인자 없는 생성자가 있어야 하고 `final` 클래스가 아니어야 한다. 엔티티는 가변으로 두되 setter를 열어 두지 않고 `order.cancel()`처럼 의미 있는 메서드로만 바꾸고, 컬렉션 getter는 고칠 수 없는 것으로 내준다. 금액이나 주소 같은 값은 불변 객체로 만들어 엔티티에 넣을 수 있고 그것은 P10에서 다룬다 (자카르타 퍼시스턴스 명세 근거)'
+    - 'J2의 실무 구역에서 본 "싱글톤 빈이 리스트를 그대로 돌려주는 실수"가 `List.copyOf`로 막히는 이유가 질문 3이라는 한 줄'
+claims:
+  - claim: '코드 predict의 출력은 2이고, 생성자에서 `List.copyOf`로 받으면 1이다'
+    how: '두 클래스를 돌린다'
+  - claim: '`List.copyOf`가 만든 리스트에 `add`를 부르면 `UnsupportedOperationException`이 난다'
+    how: '그대로 돌려 예외의 타입을 본다'
+  - claim: '`Collections.unmodifiableList`로 감싼 리스트는 원본에 더한 원소가 보이고, `List.copyOf`로 만든 리스트는 보이지 않는다'
+    how: '원본에 원소를 더한 뒤 두 리스트의 크기를 본다'
+  - claim: '`final` 배열과 `final` 리스트는 내용을 바꿀 수 있다'
+    how: '칸을 바꾸고 원소를 더한 뒤 읽는다'
+  - claim: 'record는 구성 요소가 같으면 `equals`가 true이고 `hashCode`가 같다. `==`는 false다'
+    how: '`Money` record 둘로 확인한다'
+  - claim: '간결한 생성자가 없는 record의 리스트 구성 요소는 넘겨받은 리스트와 같은 객체이고, 간결한 생성자에서 `List.copyOf`를 하면 다른 객체다'
+    how: '바깥 리스트를 고친 뒤 record의 리스트를 읽는다'
+  - claim: 'Jackson은 record를 JSON에서 만들고 JSON으로 쓴다 (스프링 부트 3.5의 Jackson)'
+    how: '`ObjectMapper`로 읽고 쓴다'
+  - claim: '`@ConfigurationProperties`가 붙은 record에 속성 값이 생성자로 들어온다 (스프링 부트 3.5)'
+    how: '`ApplicationContextRunner`에 `pay.url`과 `pay.timeout`을 주고 빈의 값을 읽는다'
+sources:
+  - '`final` 변수: 자바 언어 명세 4.12.4 https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.12.4'
+  - 'record: 자바 언어 명세 8.10 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.10'
+  - '`List.copyOf`와 고칠 수 없는 리스트: `List` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html#unmodifiable'
+  - '`Collections.unmodifiableList`는 뷰다: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html#unmodifiableList(java.util.List)'
+  - '`@ConfigurationProperties`의 생성자 바인딩: 스프링 부트 문서 https://docs.spring.io/spring-boot/reference/features/external-config.html#features.external-config.typesafe-configuration-properties.constructor-binding'
+  - '엔티티 클래스의 조건(인자 없는 생성자, final이 아닐 것): 자카르타 퍼시스턴스 명세 2.1 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html#a18'

@@ -1,0 +1,197 @@
+# JVM 메모리 구조 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: JVM 메모리 구조
+unit: 자바 언어
+roadmap: J14
+type: 개념 설명
+prerequisites:
+  - {slug: java-execution, title: 자바 프로그램이 실행되는 과정}
+  - {slug: value-and-reference, title: 값과 참조}
+assume: '자바 21(OpenJDK, HotSpot). JVM이 클래스를 읽어 실행한다는 것(자바 프로그램이 실행되는 과정 레슨). 참조형 변수에는 객체가 아니라 참조가 들어 있다는 것(값과 참조 레슨).'
+example: '주문을 만드는 `createOrder` 메서드와 자기 자신을 부르는 `dive` 메서드. 메서드를 부르고 객체를 만들 때 스택과 힙에 무엇이 생기고 사라지는지 따라가요. 실무 구역에서는 스프링 부트 서버의 메모리 설정과 엔티티의 `toString`으로 옮겨요.'
+intro:
+  - '서버 로그에 `java.lang.OutOfMemoryError: Java heap space`가 찍히고 요청이 실패해요. 다른 날에는 `StackOverflowError`가 같은 줄을 수백 번 되풀이한 스택 트레이스와 함께 나와요. 둘 다 메모리가 모자라다는 뜻이지만 모자란 곳이 다르고 고치는 방법도 달라요.'
+  - '스프링 개발자는 JVM의 메모리를 숫자로 정하게 돼요. 서버를 띄울 때 힙을 얼마로 줄지, 컨테이너의 메모리 한도를 얼마로 잡을지, 톰캣의 스레드를 몇 개까지 둘지가 서로 물려 있어요. 어느 영역에 무엇이 놓이는지를 알아야 이 숫자들을 읽을 수 있어요.'
+  - '이 레슨에서는 메서드 호출과 객체 생성을 한 줄씩 따라가며 스택과 힙의 변화를 보고, 두 에러를 일부러 일으켜 어느 영역이 찼을 때 무엇이 나는지 확인해요.'
+covers:
+  - topic: 'JVM이 실행 중에 쓰는 메모리 영역: 힙, 스레드마다 있는 스택, 메서드 영역'
+    where: '질문 1'
+  - topic: '힙은 모든 스레드가 함께 쓰고, 스택은 스레드마다 따로 있다'
+    where: '질문 1. 스레드가 무엇을 공유하는지는 프로세스와 스레드(C1)'
+  - topic: '메서드 영역에는 클래스의 정보가 놓인다. HotSpot에서는 메타스페이스다'
+    where: '질문 1'
+  - topic: 'PC 레지스터와 네이티브 메서드 스택'
+    where: '질문 1의 더 알아보기'
+  - topic: '메서드를 부르면 스택에 프레임이 쌓이고 끝나면 사라진다. 프레임에 지역 변수와 매개변수가 있다'
+    where: '질문 2'
+  - topic: '재귀가 끝나지 않으면 StackOverflowError. 스레드마다 스택이 따로라서 한 스레드의 일이다'
+    where: '질문 2'
+  - topic: 'new로 만든 객체는 힙에 놓인다. 지역 변수에는 참조만 있다. 객체의 필드는 기본형이어도 객체와 함께 힙에 있다'
+    where: '질문 3'
+  - topic: '메서드가 끝나면 프레임의 참조는 사라지고 객체는 힙에 남는다. 누가 치우는가'
+    where: '질문 3. 치우는 방법은 가비지 컬렉션(J15)'
+  - topic: 'static 필드는 프레임이 아니라 클래스에 딸려 있어서 메서드가 끝나도 남는다. 문자열 상수 풀은 힙에 있다'
+    where: '질문 3'
+  - topic: 'HotSpot에서 static 필드의 값이 놓이는 곳, 탈출 분석으로 객체가 힙에 놓이지 않는 최적화'
+    where: '질문 3의 더 알아보기'
+  - topic: 'OutOfMemoryError: 닿을 수 있는 객체로 힙이 가득 찼을 때. StackOverflowError와의 차이'
+    where: '질문 4'
+  - topic: '힙이 아닌 곳의 OutOfMemoryError: Metaspace, 스레드를 더 만들 수 없을 때'
+    where: '질문 4의 더 알아보기'
+  - topic: '메모리 설정: -Xms, -Xmx, -Xss, 기본 최대 힙은 메모리의 4분의 1'
+    where: '질문 4, 실무에서는'
+  - topic: '컨테이너에서: 힙 말고도 메모리를 쓰는 곳이 있다(메타스페이스, 스레드 스택). MaxRAMPercentage'
+    where: '실무에서는. 컨테이너는 도커와 컨테이너(T5)'
+  - topic: '스프링에서 두 에러를 만나는 코드: 양방향 연관의 toString, 전체를 한 번에 읽는 조회'
+    where: '실무에서는. 나눠서 읽는 방법은 페이지네이션(D8)'
+  - topic: '닿을 수 없는 객체를 찾아 치우는 방법과 세대'
+    where: '다루지 않음: 가비지 컬렉션(J15)'
+  - topic: '클래스가 읽히는 과정과 클래스 로더'
+    where: '다루지 않음: 자바 프로그램이 실행되는 과정(J1)'
+  - topic: '재귀와 끝나는 조건'
+    where: '다루지 않음: 재귀(K5)'
+  - topic: '힙 덤프로 무엇이 메모리를 차지하는지 찾기'
+    where: '다루지 않음: 스레드 덤프와 힙 덤프(T10)'
+  - topic: '운영체제의 가상 메모리'
+    where: '다루지 않음: 가상 메모리(C10)'
+codes:
+  predict: |-
+    static int depth = 0;
+
+    static void dive() {
+      depth++;
+      dive();
+    }
+
+    dive();
+  create: |-
+    static Order createOrder(int price) {
+      int tax = price / 10;
+      Order order = new Order(price + tax);
+      return order;
+    }
+
+    public static void main(String[] args) {
+      Order o = createOrder(10000);
+      System.out.println(o.price);
+    }
+  heapFill: |-
+    List<byte[]> list = new ArrayList<>();
+    while (true) {
+      list.add(new byte[1024 * 1024]);
+    }
+  toStringLoop: |-
+    class Member {
+      List<Order> orders = new ArrayList<>();
+      public String toString() {
+        return "Member(orders=" + orders + ")";
+      }
+    }
+    class Order {
+      Member member;
+      public String toString() {
+        return "Order(member=" + member + ")";
+      }
+    }
+predict:
+  text: '코드 predict의 `dive`는 끝나는 조건 없이 자기 자신을 불러요. `dive()`를 실행하면 어떻게 될까요? 보기: 프로그램이 멈추지 않고 영원히 돈다, `OutOfMemoryError`가 난다, `StackOverflowError`가 난다.'
+  answer: '`StackOverflowError`가 난다. 메서드를 부를 때마다 그 스레드의 스택에 프레임이 하나씩 쌓이고, 스택의 크기에는 한도가 있다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: JVM은 메모리를 어떤 영역으로 나눠 쓰나요?
+    conclusion:
+      lead: '객체가 놓이는 힙, 메서드 호출을 기록하는 스택, 클래스의 정보가 놓이는 메서드 영역으로 나눠요.'
+      sub: '힙과 메서드 영역은 JVM에 하나씩 있어 모든 스레드가 함께 쓰고, 스택은 스레드마다 따로 있어요.'
+    says:
+      - '힙. `new`로 만든 객체와 배열이 놓인다. JVM에 하나이고 모든 스레드가 함께 쓴다. 가비지 컬렉터가 관리하는 곳이다'
+      - '스택. 스레드가 하나 생길 때마다 그 스레드의 스택이 하나 생긴다. 지금 실행 중인 메서드들의 지역 변수가 놓인다. 다른 스레드의 스택은 볼 수 없다'
+      - '메서드 영역. 읽어 온 클래스의 정보(이름, 메서드의 바이트코드, 필드의 목록)가 놓인다. J1에서 본 클래스 로딩의 결과가 여기에 쌓인다. HotSpot은 이것을 메타스페이스라는 힙 바깥의 메모리에 둔다'
+      - '나누는 이유는 수명이 다르기 때문이다. 지역 변수는 메서드가 끝나면 필요 없고, 객체는 누가 가리키는 동안 필요하고, 클래스 정보는 거의 프로그램이 끝날 때까지 필요하다'
+      - '요청을 스레드 하나가 처리하는 스프링 MVC 서버에서, 요청마다 따로인 것은 스택이고 모든 요청이 함께 쓰는 것은 힙이다. 싱글톤 빈은 힙에 하나 있고 모든 요청의 스레드가 그것을 가리킨다'
+      - '더 알아보기: 스레드마다 지금 실행 중인 명령의 위치를 적는 PC 레지스터와, 자바가 아닌 코드(네이티브 메서드)를 부를 때 쓰는 네이티브 메서드 스택이 있다'
+    asks:
+      - '본문의 예시: 스레드 둘이 같은 메서드를 동시에 실행하고 있다. 그 메서드의 지역 변수 `int tax`는 스레드마다 따로 있나, 하나를 함께 쓰나 (스레드마다 따로 있다. 각자의 스택에 놓인다)'
+      - '옮긴 상황: 톰캣의 스레드 200개가 요청을 처리하는 서버에서 힙, 스택, 메서드 영역은 각각 몇 개인가. 조건: 톰캣의 요청 처리 스레드만 센다 (힙 1개, 스택 200개, 메서드 영역 1개)'
+  - id: q2
+    title: 메서드를 부르면 스택에서 어떤 일이 일어나나요?
+    conclusion:
+      lead: '부를 때마다 그 메서드의 지역 변수를 담은 프레임이 스택 위에 하나 쌓이고, 메서드가 끝나면 그 프레임이 사라져요.'
+      sub: '스택의 크기에는 한도가 있어서, 끝나지 않고 계속 부르면 프레임을 더 쌓지 못해 `StackOverflowError`가 나요.'
+    says:
+      - '프레임에는 그 호출의 매개변수와 지역 변수, 돌아갈 위치가 있다. `main`이 `createOrder(10000)`을 부르면 `main`의 프레임 위에 `createOrder`의 프레임이 쌓인다. 그 안에 `price`와 `tax`가 있다'
+      - '`createOrder`가 끝나면 그 프레임이 사라진다. `tax`도 함께 사라진다. 지역 변수를 메서드 밖에서 쓸 수 없는 이유이고, 따로 치우는 일이 필요 없는 이유다'
+      - '같은 메서드를 다시 부르면 프레임이 새로 생긴다. 재귀에서 호출마다 지역 변수가 따로인 것이 이 때문이다'
+      - '코드 predict. `dive`가 `dive`를 부르고 어느 것도 끝나지 않는다. 프레임이 계속 쌓이다가 스택의 한도를 넘는 순간 `StackOverflowError`가 던져진다. `depth`를 출력하면 몇 번째 호출에서 났는지 보인다. 예측의 답을 밝힌다. 숫자는 환경과 설정에 따라 달라서 본문은 실측값 하나를 보여 주고 "수천에서 수만"이라고만 말한다'
+      - '스택 트레이스에 같은 줄이 끝없이 되풀이되면 끝나지 않는 재귀다'
+      - '스택은 스레드마다 따로다. 한 스레드에서 `StackOverflowError`가 나도 다른 스레드의 스택은 그대로다. 스택 하나의 크기는 `-Xss`로 정한다'
+      - '`StackOverflowError`는 J10에서 본 `Error`다. 스택을 늘려서 고칠 일이 아니라 끝나는 조건이 빠진 코드를 고친다'
+    asks:
+      - '본문의 예시: 코드 predict를 실행해 `StackOverflowError`가 났을 때 그 순간 스택에 가장 많이 쌓여 있던 것은 어느 메서드의 프레임인가 (`dive`. 부를 때마다 하나씩 쌓였다)'
+      - '옮긴 상황: `static int sum(int n) { if (n == 0) return 0; return n + sum(n - 1); }`에 `sum(3)`을 불렀다. 가장 깊이 들어갔을 때 `sum`의 프레임은 몇 개 쌓여 있나 (4개. n이 3, 2, 1, 0인 호출)'
+  - id: q3
+    title: 객체는 어디에 놓이고, 변수와는 어떤 관계인가요?
+    conclusion:
+      lead: '객체는 힙에 놓이고, 스택의 지역 변수에는 그 객체를 가리키는 참조만 들어 있어요.'
+      sub: '메서드가 끝나면 프레임과 함께 참조가 사라질 뿐 객체는 힙에 남고, 아무도 가리키지 않게 된 객체는 가비지 컬렉터가 치워요.'
+    says:
+      - '코드 create를 한 줄씩 따라간다. `new Order(...)`는 힙에 객체를 만든다. 지역 변수 `order`는 `createOrder`의 프레임에 있고 그 객체의 참조를 담는다. J2에서 "변수에는 참조가 들어 있다"고 한 것의 실제 자리다'
+      - '객체의 필드 `price`는 `int`지만 스택에 있지 않다. 객체의 일부로 힙에 있다. "기본형은 스택에"가 아니라 "지역 변수는 스택에, 객체의 필드는 객체와 함께 힙에"가 맞다'
+      - '`return order`는 참조를 `main`으로 복사한다. `createOrder`의 프레임이 사라져도 `main`의 `o`가 같은 객체를 가리키므로 객체는 살아 있다. 객체의 수명은 만든 메서드의 수명과 상관없다'
+      - '`createOrder`가 객체를 반환하지 않았다면 프레임이 사라진 뒤 그 객체를 가리키는 것이 없다. 프로그램이 닿을 방법이 없는 객체다. 힙에서 이런 객체를 찾아 치우는 것이 가비지 컬렉터의 일이고 J15에서 다룬다'
+      - 'static 필드는 프레임에 있지 않고 클래스에 딸려 있다(J5). 메서드가 끝나도 사라지지 않고, 그것이 가리키는 객체도 계속 닿을 수 있다'
+      - 'J4의 문자열 상수 풀은 힙 안에 있다. 풀의 문자열도 객체다'
+      - '더 알아보기: HotSpot은 static 필드의 값을 그 클래스를 나타내는 `Class` 객체와 함께 힙에 둔다. JIT 컴파일러는 메서드 밖으로 나가지 않는 객체를 힙에 만들지 않게 최적화하기도 한다(탈출 분석). 둘 다 코드의 결과를 바꾸지 않는다'
+    widget:
+      kind: steps
+      note: '코드 create를 한 줄씩 실행한다. 왼쪽 칸은 스택(아래부터 `main`의 프레임, 그 위에 `createOrder`의 프레임과 안의 변수), 오른쪽 칸은 힙(객체와 필드)이다. 단계: main 시작, createOrder 호출로 프레임 쌓임(price=10000), tax=1000, new Order로 힙에 객체가 생기고 order가 가리킴, return으로 프레임이 사라지고 main의 o가 같은 객체를 가리킴, 출력. 시나리오를 하나 더 둔다: 반환값을 받지 않고 `createOrder(10000);`만 부른 경우. 프레임이 사라진 뒤 힙의 객체를 가리키는 것이 없다고 표시한다'
+    asks:
+      - '본문의 예시: 코드 create에서 `createOrder`가 끝난 직후 사라진 것과 남은 것을 고르면 무엇인가. 보기: 변수 `tax`, 변수 `order`, `Order` 객체 (`tax`와 `order`는 프레임과 함께 사라지고 `Order` 객체는 힙에 남는다)'
+      - '옮긴 상황: `class Point { int x; int y; }`의 객체를 메서드 안에서 `Point p = new Point();`로 만들었다. `p`, `p.x`가 놓이는 곳은 각각 어디인가 (`p`는 그 메서드의 스택 프레임, `p.x`는 힙의 객체 안)'
+  - id: q4
+    title: OutOfMemoryError는 언제 나고 StackOverflowError와 무엇이 다른가요?
+    conclusion:
+      lead: '`OutOfMemoryError`는 아직 쓰이고 있는 객체로 힙이 가득 차서 새 객체를 놓을 자리가 없을 때 나요.'
+      sub: '`StackOverflowError`는 한 스레드의 스택이 호출로 가득 찬 것이고, `OutOfMemoryError`는 모두가 함께 쓰는 힙이 객체로 가득 찬 것이에요.'
+    says:
+      - '코드 heapFill. 1MB 배열을 계속 만들어 리스트에 담는다. 리스트가 모든 배열을 가리키고 있으므로 가비지 컬렉터가 치울 수 있는 것이 없다. 힙의 한도에 닿으면 `java.lang.OutOfMemoryError: Java heap space`가 난다'
+      - '객체를 많이 만든다고 나는 것이 아니다. 만들고 버리면 치워진다. 계속 가리키고 있는 객체가 쌓일 때 난다. 리스트에 담지 않고 만들기만 하는 코드로 바꾸면 끝없이 돌아도 에러가 나지 않는다'
+      - '힙의 최대 크기는 `-Xmx`로, 처음 크기는 `-Xms`로 정한다. 정하지 않으면 최대 힙은 기계 메모리의 4분의 1이다. `Runtime.getRuntime().maxMemory()`로 읽는다'
+      - '둘의 차이를 나란히 놓는다. 가득 찬 곳: 스택과 힙. 원인: 끝나지 않는 호출과 놓지 않는 객체. 범위: 한 스레드와 JVM 전체. 스택 트레이스: 같은 줄의 되풀이와 그 순간 객체를 만들려던 줄'
+      - '`OutOfMemoryError`의 스택 트레이스가 가리키는 줄은 마지막에 자리를 못 얻은 곳일 뿐이고, 힙을 채운 코드가 아닐 수 있다. 힙을 채운 것을 찾는 방법은 T10에서 다룬다'
+      - '힙이 함께 쓰는 곳이라서, 한 요청이 힙을 다 쓰면 상관없는 다른 요청도 객체를 만들지 못해 실패한다'
+      - '더 알아보기: 메시지가 `Metaspace`면 클래스 정보가 놓이는 곳이 찬 것이고, `unable to create native thread`면 스레드를 더 만들 메모리가 없는 것이다. 힙 설정을 늘려도 풀리지 않는다'
+    asks:
+      - '본문의 예시: 코드 heapFill에서 `list.add(...)`를 지우고 `new byte[1024 * 1024];`만 반복하면 어떻게 되나. 조건: 최대 힙은 64MB다 (`OutOfMemoryError` 없이 계속 돈다. 만든 배열을 가리키는 것이 없어 치워진다)'
+      - '옮긴 상황: 로그에 `Exception in thread "http-nio-8080-exec-3" java.lang.StackOverflowError`가 찍혔다. 가득 찬 것은 무엇이고, `-Xmx`를 두 배로 늘리면 풀리나 (그 스레드의 스택이 가득 찼다. `-Xmx`는 힙의 크기라 풀리지 않는다)'
+      - '실무 구역: 코드 toStringLoop의 `Member`와 `Order`가 서로를 가리키게 만든 뒤 `member.toString()`을 부르면 어떻게 되나 (`StackOverflowError`. 두 `toString`이 서로를 끝없이 부른다)'
+practice:
+  says:
+    - '서버를 띄울 때의 메모리 설정. `java -Xms512m -Xmx512m -jar app.jar`. 컨테이너에서는 크기를 직접 적는 대신 `-XX:MaxRAMPercentage=75`처럼 컨테이너 메모리의 비율로 준다. JVM은 컨테이너의 메모리 한도를 읽어 "기계의 메모리"로 삼고, 아무것도 주지 않으면 그 4분의 1을 최대 힙으로 쓴다 (자바 공식 문서 근거. `Runtime.maxMemory()`로 읽은 값은 테스트로 남긴다)'
+    - '힙이 전부가 아니다. 메타스페이스와 스레드의 스택은 힙 밖에 있다. 톰캣의 요청 처리 스레드는 기본으로 200개까지 늘고(`server.tomcat.threads.max`), 스레드 하나의 스택은 리눅스 64비트에서 기본 1MB까지 쓴다. 컨테이너의 메모리 한도를 힙의 크기와 똑같이 잡으면 힙 밖의 메모리 때문에 컨테이너가 한도를 넘어 종료될 수 있다. 이때는 자바의 에러가 로그에 남지 않는다 (톰캣 스레드 수는 스프링 부트 공식 문서, 스택 크기는 자바 공식 문서 근거)'
+    - '흔한 실수: 양방향 연관의 `toString`. `Member`가 `orders`를, `Order`가 `member`를 출력한다(코드 toStringLoop). 롬복의 `@ToString`이나 `@Data`를 양쪽 엔티티에 붙이면 이 코드가 만들어진다. 로그에 엔티티를 찍는 순간 `StackOverflowError`가 난다. 고친 코드: 한쪽에서 연관 필드를 뺀다(`@ToString.Exclude`, 또는 `toString`에 id만 쓴다). 고치기 전의 스택 트레이스 앞부분(같은 두 줄의 되풀이)과 고친 뒤의 출력을 붙인다 (손으로 쓴 `toString`으로 돌리는 순수 자바 테스트. 롬복이 같은 코드를 만든다는 것은 롬복 공식 문서 근거)'
+    - '`OutOfMemoryError`를 만나는 코드: 테이블 전체를 `findAll()`로 읽어 리스트에 담는다. 행이 늘면 어느 날 힙을 넘는다. 리스트가 모든 엔티티를 가리키고 있어 치울 수 없다(질문 4). 나눠서 읽는다. 방법은 D8'
+    - '로그에서 알아보는 법. `OutOfMemoryError` 뒤의 글자(`Java heap space`, `Metaspace`)가 어느 영역인지 알려 준다. 운영 서버에는 `-XX:+HeapDumpOnOutOfMemoryError`를 켜 둬서 그 순간의 힙을 파일로 남긴다. 읽는 법은 T10'
+claims:
+  - claim: '끝나는 조건이 없는 재귀는 `StackOverflowError`를 던진다'
+    how: '코드 predict를 돌려 에러를 잡고 그때의 `depth`를 `CiOutput`에 남긴다. 값은 단정하지 않는다'
+  - claim: '한 스레드에서 `StackOverflowError`가 난 뒤에도 다른 스레드는 메서드를 정상으로 부른다'
+    how: '스레드 하나에서 재귀로 에러를 내고 잡은 뒤, 다른 스레드에서 평범한 호출을 실행해 결과를 본다'
+  - claim: '`sum(3)`에서 가장 깊을 때 `sum`의 프레임은 4개다'
+    how: 'n이 0일 때 `Thread.currentThread().getStackTrace()`에서 `sum`인 프레임을 센다'
+  - claim: '메서드가 돌려준 객체는 메서드가 끝난 뒤에도 필드 값을 그대로 가진다'
+    how: '코드 create를 돌려 11000을 본다'
+  - claim: '가리키고 있는 객체로 힙이 차면 `OutOfMemoryError: Java heap space`가 나고, 가리키지 않으면 같은 양을 만들어도 나지 않는다'
+    how: '`ProcessBuilder`로 `-Xmx64m`을 준 자식 JVM을 띄워 코드 heapFill과, 담지 않는 변형을 각각 돌린다. 자식의 표준 오류와 종료 코드를 본다. 담지 않는 쪽은 정해진 횟수만 돌고 끝나게 한다'
+  - claim: '`Runtime.getRuntime().maxMemory()`는 `-Xmx`로 준 값과 같거나 그에 가깝다'
+    how: '자식 JVM에서 출력해 `CiOutput`에 남긴다. 정확히 같은지는 단정하지 않는다'
+  - claim: '서로를 출력하는 두 클래스의 `toString`은 `StackOverflowError`를 던지고, 한쪽에서 연관 필드를 빼면 문자열을 돌려준다'
+    how: '코드 toStringLoop와 고친 클래스를 돌린다'
+sources:
+  - '실행 중의 데이터 영역(힙, JVM 스택, 메서드 영역, PC 레지스터)과 두 에러가 나는 조건: JVM 명세 2.5 https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5'
+  - '프레임: JVM 명세 2.6 https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.6'
+  - '`-Xms`, `-Xmx`, `-Xss`, `MaxRAMPercentage`와 기본값: `java` 명령 문서 https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html'
+  - '기본 힙 크기(메모리의 4분의 1): HotSpot 가비지 컬렉션 튜닝 가이드 https://docs.oracle.com/en/java/javase/21/gctuning/ergonomics.html'
+  - '메타스페이스: JEP 122 https://openjdk.org/jeps/122'
+  - '톰캣 스레드 수의 기본값: 스프링 부트 문서의 속성 목록 https://docs.spring.io/spring-boot/appendix/application-properties/index.html'
+  - '롬복 `@ToString`과 제외: https://projectlombok.org/features/ToString'

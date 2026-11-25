@@ -1,6 +1,6 @@
 ---
 title: "equals와 hashCode"
-unit: Java
+unit: 자바 언어
 order: 34
 stage: 기초
 summary: 값이 같은 두 객체를 같다고 판정하게 하는 법, equals만 재정의하면 HashSet이 못 찾는 까닭, hashCode의 규약, 키로 넣은 뒤 필드를 바꾸면 생기는 일. 다섯 가지 질문에 스스로 답할 수 있게 회원 클래스 하나로 배워요.

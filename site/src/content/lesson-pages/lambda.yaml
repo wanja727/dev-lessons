@@ -1,0 +1,194 @@
+# 람다와 함수형 인터페이스 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 람다와 함수형 인터페이스
+unit: 자바 언어
+roadmap: J12
+type: 자바 실행
+prerequisites:
+  - {slug: inheritance-polymorphism, title: 상속과 다형성}
+assume: '자바 21. 인터페이스를 구현한 클래스를 만들어 인터페이스 타입의 변수에 담아 본 것(상속과 다형성 레슨). 변수에는 값이나 참조가 들어 있다는 것(값과 참조 레슨).'
+example: '주문의 목록 `List<Order>`(필드는 `price`와 `status`). "어떤 주문을 고를지"와 "무엇으로 정렬할지"를 람다로 넘겨요. 실무 구역에서는 스프링이 람다를 받는 자리(`TransactionTemplate`, `JdbcTemplate`, 정렬)로 옮겨요.'
+intro:
+  - '주문 금액의 합계를 내려고 `orders.forEach(o -> total += o.getPrice())`라고 썼더니 컴파일이 안 돼요. 오류 메시지는 람다 안에서 쓰는 지역 변수는 final이거나 사실상 final이어야 한다고 해요. for 문에서는 되던 일이에요.'
+  - '요즘 자바와 스프링의 API는 "무엇을 할지"를 인자로 받아요. 스트림의 `filter`와 `map`, `Optional`의 `orElseGet`, `TransactionTemplate`의 `execute`, `JdbcTemplate`의 행 변환이 모두 람다를 받아요. 람다가 무엇이고 언제 실행되는지를 모르면 이 API들을 읽을 수 없어요.'
+  - '이 레슨에서는 람다가 인터페이스 구현을 짧게 쓴 것임을 같은 코드를 세 가지로 써서 확인하고, 람다가 실행되는 시점과 바깥 변수를 쓸 때의 규칙을 코드를 돌려 봐요.'
+covers:
+  - topic: '함수형 인터페이스는 추상 메서드가 하나인 인터페이스다. @FunctionalInterface'
+    where: '질문 1'
+  - topic: '람다는 그 메서드 하나의 구현을 짧게 쓴 것이다. 클래스로 구현한 것, 익명 클래스, 람다가 같은 일을 한다'
+    where: '질문 1'
+  - topic: '람다의 타입은 받는 쪽의 인터페이스가 정한다. 문법(매개변수 타입 생략, 식 하나일 때 중괄호와 return 생략)'
+    where: '질문 1'
+  - topic: '자주 쓰는 표준 함수형 인터페이스: Function, Predicate, Supplier, Consumer, 그리고 Runnable과 Comparator'
+    where: '질문 2'
+  - topic: '람다는 정의할 때가 아니라 받은 쪽이 메서드를 부를 때 실행된다. 한 번도 안 불릴 수도, 여러 번 불릴 수도 있다'
+    where: '질문 2'
+  - topic: '람다 이어 붙이기(andThen, and, negate, thenComparing), BiFunction과 UnaryOperator, 기본형용 인터페이스'
+    where: '질문 2의 더 알아보기'
+  - topic: '람다가 잡는 지역 변수는 사실상 final이어야 한다. 값이 복사되기 때문이다'
+    where: '질문 3'
+  - topic: '잡은 변수가 가리키는 객체의 상태와 필드는 바꿀 수 있다'
+    where: '질문 3'
+  - topic: '람다 안의 this는 람다를 쓴 바깥 객체다'
+    where: '질문 3의 더 알아보기. 익명 클래스와의 차이는 중첩 클래스와 익명 클래스(J16)'
+  - topic: '메서드 참조 네 가지: static 메서드, 특정 객체의 메서드, 임의 객체의 메서드, 생성자'
+    where: '질문 4'
+  - topic: 'Comparator.comparing으로 정렬 기준 만들기'
+    where: '질문 4, 실무에서는'
+  - topic: '람다 안에서 체크 예외를 던지면 컴파일되지 않는 이유'
+    where: '실무에서는'
+  - topic: '스프링이 람다를 받는 자리: TransactionTemplate, JdbcTemplate의 RowMapper, ApplicationRunner'
+    where: '실무에서는. 트랜잭션의 동작은 @Transactional 동작 원리(S10)'
+  - topic: '람다는 익명 클래스의 객체로 컴파일되지 않는다(invokedynamic)'
+    where: '질문 1의 더 알아보기'
+  - topic: '람다를 받는 스트림의 연산들'
+    where: '다루지 않음: 스트림과 Optional(J13)'
+  - topic: '다른 스레드에서 실행할 일을 Runnable과 Callable로 넘기기'
+    where: '다루지 않음: 스레드 풀(C7)'
+  - topic: '바뀌는 부분을 인터페이스로 빼서 넘기는 설계'
+    where: '다루지 않음: 전략 패턴(O7)'
+  - topic: '자연 순서를 정하는 Comparable과 Comparator의 비교'
+    where: '다루지 않음: 정렬(K6)'
+codes:
+  predict: |-
+    int total = 0;
+    orders.forEach(o -> total += o.getPrice());
+    System.out.println(total);
+  three: |-
+    // 1. 클래스로 구현
+    class ExpensiveFilter
+        implements Predicate<Order> {
+      public boolean test(Order o) {
+        return o.getPrice() >= 10000;
+      }
+    }
+
+    // 2. 익명 클래스
+    Predicate<Order> p2 = new Predicate<>() {
+      public boolean test(Order o) {
+        return o.getPrice() >= 10000;
+      }
+    };
+
+    // 3. 람다
+    Predicate<Order> p3 =
+        [[o -> o.getPrice() >= 10000]];
+  lazy: |-
+    Supplier<Order> s = () -> {
+      print("주문 만드는 중");
+      return new Order(0);
+    };
+    print("람다를 정의함");
+    s.get();
+    s.get();
+  refs: |-
+    Function<String, Integer> a =
+        Integer::parseInt;
+    Supplier<Integer> b = name::length;
+    Function<Order, Integer> c =
+        Order::getPrice;
+    Supplier<List<Order>> d = ArrayList::new;
+predict:
+  text: '코드 predict는 주문 금액의 합계를 내려는 코드예요. `orders`에는 10000원짜리 주문 둘이 들어 있어요. 어떻게 될까요? 보기: 20000을 출력한다, 0을 출력한다, 컴파일 오류.'
+  answer: '컴파일 오류. 람다 안에서 쓰는 바깥의 지역 변수는 값이 바뀌지 않아야 하는데 `total`을 바꾸려 했다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 람다는 무엇이고 함수형 인터페이스와 어떤 관계인가요?
+    conclusion:
+      lead: '람다는 추상 메서드가 하나뿐인 인터페이스(함수형 인터페이스)의 구현을, 그 메서드의 매개변수와 본문만 써서 만드는 문법이에요.'
+      sub: '메서드가 하나뿐이라서 이름을 쓰지 않아도 컴파일러가 어느 메서드의 구현인지 알아요.'
+    says:
+      - '`Predicate<Order>`는 `boolean test(Order o)` 하나를 가진 인터페이스다. "주문을 받아 맞는지 아닌지를 답하는 것"을 나타낸다'
+      - '코드 three. 같은 조건을 세 가지로 쓴다. 클래스를 만들어 구현하기, 익명 클래스, 람다. 셋 다 `Predicate<Order>` 타입의 변수에 담기고 `test(order)`를 부르면 같은 결과가 나온다'
+      - '람다 `o -> o.getPrice() >= 10000`에서 `o`가 `test`의 매개변수이고 화살표 뒤가 본문이다. 매개변수의 타입은 컴파일러가 `Predicate<Order>`를 보고 안다. 본문이 식 하나면 중괄호와 `return`을 생략한다'
+      - '람다만 따로 놓고는 타입을 알 수 없다. 받는 쪽의 타입이 정한다. 같은 `o -> o.getPrice() >= 10000`이 `Predicate<Order>`에도 `Function<Order, Boolean>`에도 담긴다'
+      - '추상 메서드가 둘 이상인 인터페이스는 람다로 구현할 수 없다. 어느 메서드의 본문인지 정할 수 없다. `@FunctionalInterface`를 붙이면 메서드가 하나가 아닐 때 컴파일러가 알려 준다'
+      - '직접 만든 인터페이스도 메서드가 하나면 람다로 구현할 수 있다. J7의 `Notifier`가 그렇다'
+      - '더 알아보기: 람다는 익명 클래스를 짧게 쓴 것처럼 보이지만 컴파일된 모습은 다르다. 클래스 파일이 따로 생기지 않고 실행 중에 만들어진다'
+    asks:
+      - '본문의 예시: 코드 three의 `p3`에 대해 금액이 5000인 주문으로 `p3.test(order)`를 부르면 결과는 무엇인가 (false)'
+      - '옮긴 상황: `interface Validator { boolean validate(Order o); String name(); }`에 `Validator v = o -> o.getPrice() > 0;`을 쓰면 어떻게 되나 (컴파일 오류. 추상 메서드가 둘이라 함수형 인터페이스가 아니다)'
+  - id: q2
+    title: 람다를 받은 쪽은 그것을 어떻게 쓰고, 람다는 언제 실행되나요?
+    conclusion:
+      lead: '받은 쪽이 인터페이스의 메서드를 부르는 순간에 람다의 본문이 실행돼요. 람다를 쓴 줄에서는 실행되지 않아요.'
+      sub: '그래서 받은 쪽이 한 번도 부르지 않으면 본문은 실행되지 않고, 여러 번 부르면 여러 번 실행돼요.'
+    says:
+      - '표준 함수형 인터페이스 넷과 부르는 메서드. `Function<T, R>`은 받아서 바꿔 돌려준다(`apply`). `Predicate<T>`는 받아서 맞는지 답한다(`test`). `Supplier<T>`는 받지 않고 만들어 준다(`get`). `Consumer<T>`는 받아서 쓰고 돌려주지 않는다(`accept`)'
+      - '오래된 것 둘. `Runnable`은 받지도 돌려주지도 않는다(`run`). `Comparator<T>`는 둘을 받아 순서를 답한다(`compare`)'
+      - '람다를 넘긴다는 것은 값이 아니라 "할 일"을 넘기는 것이다. `orders.removeIf(o -> o.getPrice() < 1000)`에서 `removeIf`는 주문마다 `test`를 불러 지울지 정한다. 주문이 다섯이면 본문이 다섯 번 실행된다'
+      - '코드 lazy. "람다를 정의함"이 먼저 출력된다. 람다를 변수에 담는 줄에서는 본문이 실행되지 않는다. `s.get()`을 부를 때마다 "주문 만드는 중"이 출력되고 새 주문이 만들어진다'
+      - '이 성질로 "필요할 때만 계산하기"를 만든다. 값 대신 `Supplier`를 받으면 받은 쪽이 필요할 때만 `get()`을 부른다. `Optional`의 `orElseGet`이 이렇게 동작하고 J13에서 다룬다'
+      - '더 알아보기: 인자가 둘이면 `BiFunction`, 같은 타입을 받아 같은 타입을 돌려주면 `UnaryOperator`, 박싱을 피하려면 `IntPredicate` 같은 기본형용이 있다. `f.andThen(g)`, `p.and(q)`, `p.negate()`, `comparator.thenComparing(...)`으로 람다를 이어 붙인다'
+    asks:
+      - '본문의 예시: 코드 lazy에서 "주문 만드는 중"은 몇 번 출력되고, "람다를 정의함"보다 먼저 출력되나 나중에 출력되나 (두 번 출력되고, 둘 다 "람다를 정의함"보다 나중이다)'
+      - '옮긴 상황: `static void runIf(boolean flag, Runnable r) { if (flag) r.run(); }`에 `runIf(false, () -> print("실행"))`을 부르면 "실행"이 출력되나 (출력되지 않는다. `run()`이 불리지 않았다)'
+  - id: q3
+    title: 람다 안에서 바깥의 변수를 쓸 때 어떤 규칙이 있나요?
+    conclusion:
+      lead: '바깥의 지역 변수는 값이 한 번 정해진 뒤 바뀌지 않을 때만(사실상 final) 쓸 수 있어요.'
+      sub: '람다는 변수 자체가 아니라 그 시점의 값을 복사해 가져가기 때문에, 어느 쪽에서든 바뀌면 둘이 어긋나요.'
+    says:
+      - '`int min = 10000; Predicate<Order> p = o -> o.getPrice() >= min;`은 된다. 람다가 `min`을 쓴다. 이것을 변수를 잡는다(capture)고 한다'
+      - '`min`에 값을 한 번만 대입했으므로 `final`을 쓰지 않아도 사실상 final이다. 람다 앞이든 뒤든 `min = 20000;`을 한 줄 넣으면 람다가 컴파일되지 않는다'
+      - '코드 predict. `total += ...`은 람다 안에서 바깥 변수를 바꾸는 것이라 컴파일 오류다. 예측의 답을 밝힌다'
+      - '이유. 람다는 질문 2에서 본 대로 나중에, 다른 메서드에서, 때로는 다른 스레드에서 실행된다. 그때 지역 변수 `min`은 이미 사라졌을 수 있다. 그래서 람다는 만들어질 때 `min`의 값을 복사해 간다(J2에서 본 값 복사). 복사본과 원본이 따로 바뀌면 같은 이름이 다른 값을 뜻하게 되므로 자바는 바꾸는 것 자체를 막는다'
+      - '막는 것은 변수의 재대입뿐이다. 변수가 가리키는 객체는 바꿀 수 있다. `List<Order> result = new ArrayList<>(); orders.forEach(o -> result.add(o));`는 된다. `result`가 가리키는 리스트는 그대로이고 리스트의 내용이 바뀐다'
+      - '필드는 지역 변수가 아니라서 이 규칙을 받지 않는다. 람다 안에서 `this.count++`는 컴파일된다. 다만 여러 스레드가 함께 쓰는 객체의 필드를 람다에서 바꾸면 C3의 문제가 생긴다'
+      - '더 알아보기: 람다 안의 `this`는 람다를 쓴 메서드의 객체다. 익명 클래스 안의 `this`는 익명 클래스의 객체다. 이 차이는 J16에서 다룬다'
+    widget:
+      kind: classify
+      note: '코드 조각을 "컴파일된다"와 "컴파일 오류" 가운데 고른다. 항목: 한 번만 대입한 `min`을 람다에서 읽기(된다), 람다 뒤에서 `min = 20000` 재대입(오류), 람다 안에서 `total += price`(오류), 람다 안에서 바깥 리스트에 `add`(된다), 람다 안에서 필드 `this.count++`(된다), for 문의 `int i`를 람다에서 읽기(오류), 향상된 for 문의 `Order o`를 람다에서 읽기(된다)'
+    asks:
+      - '본문의 예시: `int min = 10000; Predicate<Order> p = o -> o.getPrice() >= min; min = 20000;`을 컴파일하면 어떻게 되나 (컴파일 오류. `min`이 사실상 final이 아니게 됐다)'
+      - '옮긴 상황: `List<String> names = new ArrayList<>(); orders.forEach(o -> names.add(o.getName()));`을 컴파일하고 실행하면 어떻게 되나. 조건: `orders`에 주문이 셋 있다 (컴파일되고 `names`에 이름 셋이 들어간다. 변수를 재대입하지 않았다)'
+      - '실무 구역: 서비스 메서드 안에서 `int total = 0; orders.forEach(o -> total += o.getPrice());`를 `int total = orders.stream().mapToInt(Order::getPrice).sum();`으로 바꿨다. 주문 금액이 10000, 20000일 때 `total`은 얼마이고 컴파일은 되나 (컴파일되고 30000이다)'
+  - id: q4
+    title: 메서드 참조는 무엇인가요?
+    conclusion:
+      lead: '이미 있는 메서드를 부르기만 하는 람다를 `클래스::메서드`로 더 짧게 쓴 것이에요.'
+      sub: '`o -> o.getPrice()`와 `Order::getPrice`는 같은 일을 하고, 인자를 어디에 넘길지는 컴파일러가 채워요.'
+    says:
+      - '람다의 본문이 메서드 호출 하나뿐이면 메서드 참조로 쓸 수 있다. 새 문법이 아니라 람다를 줄인 것이다'
+      - '코드 refs의 네 가지를 같은 일을 하는 람다와 나란히 놓는다. static 메서드 `Integer::parseInt`는 `s -> Integer.parseInt(s)`. 특정 객체의 메서드 `name::length`는 `() -> name.length()`. 임의 객체의 메서드 `Order::getPrice`는 `o -> o.getPrice()`로, 첫 인자가 메서드를 부를 대상이 된다. 생성자 `ArrayList::new`는 `() -> new ArrayList<>()`'
+      - '`Order::getPrice`와 `name::length`는 모양이 비슷하지만 다르다. 앞은 클래스 이름이라 대상이 인자로 들어오고, 뒤는 변수 이름이라 대상이 이미 정해져 있다'
+      - '정렬에서 자주 쓴다. `orders.sort(Comparator.comparing(Order::getPrice))`는 "주문에서 금액을 꺼내는 방법"을 넘기면 그것으로 비교하는 `Comparator`를 만들어 준다. `.reversed()`와 `.thenComparing(Order::getId)`를 이어 쓴다'
+      - '람다가 더 읽기 쉬우면 람다를 쓴다. 인자를 가공하거나 순서를 바꿔 넘겨야 하면 메서드 참조로 쓸 수 없다'
+    asks:
+      - '본문의 예시: `Function<Order, Integer> c = Order::getPrice;`와 같은 일을 하는 람다는 무엇인가. 보기: `() -> Order.getPrice()`, `o -> o.getPrice()`, `o -> Order.getPrice(o)` (`o -> o.getPrice()`)'
+      - '옮긴 상황: 금액이 3000, 1000, 2000인 주문 리스트에 `orders.sort(Comparator.comparing(Order::getPrice).reversed());`를 실행한 뒤 첫 주문의 금액은 얼마인가 (3000)'
+practice:
+  says:
+    - '스프링이 람다를 받는 자리 셋을 코드로 보인다. `transactionTemplate.execute(status -> orderRepository.save(order))`는 "트랜잭션 안에서 할 일"을 넘긴다. `jdbcTemplate.query(sql, (rs, rowNum) -> new OrderRow(rs.getLong("id"), rs.getInt("price")))`는 "행 하나를 객체로 바꾸는 방법"을 넘긴다. `@Bean ApplicationRunner init() { return args -> ...; }`는 "시작한 뒤 할 일"을 넘긴다. 셋 다 질문 2대로 스프링이 필요한 순간에 부른다 (각 인터페이스의 추상 메서드가 하나라는 것은 스프링 공식 API 문서 근거. `JdbcTemplate`의 행 변환은 이미 있는 PostgreSQL 컨테이너 설정으로 돌려 행마다 한 번씩 불리는 것을 확인하는 테스트)'
+    - '정렬 기준. `orders.sort(Comparator.comparing(Order::getCreatedAt).reversed())`와 `.thenComparing(Order::getId)` (순수 자바 테스트)'
+    - '흔한 실수: 람다 안에서 바깥 지역 변수에 누적한다(코드 predict). 컴파일 오류를 피하려고 `int[] total = {0}`이나 `AtomicInteger`로 감싸는 코드를 자주 본다. 컴파일은 되지만 질문 3의 규칙을 돌아간 것이고, 병렬로 돌리면 틀린 값이 나온다. 고친 코드: 결과를 돌려받는다. `orders.stream().mapToInt(Order::getPrice).sum()`. 스트림은 J13에서 다룬다 (컴파일 오류는 테스트 안에서 컴파일러를 돌려 확인하고, 고친 코드의 결과는 순수 자바 테스트)'
+    - '람다 안의 체크 예외. `paths.forEach(p -> Files.delete(p))`는 컴파일되지 않는다. `Consumer`의 `accept`에 `throws IOException`이 없기 때문이다. for 문으로 쓰거나, 람다 안에서 잡아 원인을 붙인 언체크 예외로 다시 던진다(J10의 질문 4) (컴파일 오류는 테스트 안에서 컴파일러를 돌려 확인한다)'
+    - '`@Transactional`과 견줘 `TransactionTemplate`을 언제 쓰는지는 S10에 넘긴다는 한 줄'
+claims:
+  - claim: '클래스 구현, 익명 클래스, 람다로 만든 세 `Predicate`가 같은 주문에 같은 결과를 준다'
+    how: '금액이 5000과 15000인 주문으로 셋을 부른다'
+  - claim: '추상 메서드가 둘인 인터페이스에 람다를 대입하면 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 소스를 컴파일해 오류가 있는지 본다'
+  - claim: '코드 lazy의 출력 순서는 "람다를 정의함", "주문 만드는 중", "주문 만드는 중"이다'
+    how: '출력 대신 리스트에 기록해 순서를 본다'
+  - claim: '코드 predict는 컴파일되지 않는다. 람다 뒤에서 잡은 변수를 재대입해도 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 두 소스를 컴파일한다'
+  - claim: '위젯의 일곱 조각이 적힌 대로 컴파일되거나 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 조각마다 컴파일한다'
+  - claim: '코드 refs의 네 메서드 참조가 나란히 적은 람다와 같은 결과를 준다'
+    how: '같은 인자로 양쪽을 불러 결과를 비교한다'
+  - claim: '`Comparator.comparing(Order::getPrice).reversed()`로 정렬하면 금액이 큰 주문이 앞에 온다'
+    how: '금액이 3000, 1000, 2000인 리스트를 정렬해 순서를 본다'
+  - claim: '`Consumer` 람다 안에서 체크 예외를 던지는 메서드를 그대로 부르면 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 소스를 컴파일한다'
+  - claim: '`JdbcTemplate.query`에 넘긴 람다는 결과 행마다 한 번씩 불린다'
+    how: 'PostgreSQL 컨테이너에 행 셋을 넣고, 람다 안에서 호출 횟수를 세어 3인지 본다'
+sources:
+  - '함수형 인터페이스: 자바 언어 명세 9.8 https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html#jls-9.8'
+  - '람다 식과 사실상 final: 자바 언어 명세 15.27, 4.12.4 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.27'
+  - '메서드 참조: 자바 언어 명세 15.13 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.13'
+  - '표준 함수형 인터페이스: `java.util.function` 패키지 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/function/package-summary.html'
+  - '`Comparator.comparing`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html'
+  - '`TransactionTemplate`: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/data-access/transaction/programmatic.html'
+  - '`RowMapper`: 스프링 프레임워크 API 문서 https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/core/RowMapper.html'

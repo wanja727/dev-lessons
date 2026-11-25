@@ -1,0 +1,185 @@
+# 제네릭 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 제네릭
+unit: 자바 언어
+roadmap: J11
+type: 자바 실행
+prerequisites:
+  - {slug: inheritance-polymorphism, title: 상속과 다형성}
+assume: '자바 21. `List<String>`처럼 꺾쇠 안에 타입을 써서 컬렉션을 써 본 것. 부모 타입의 변수에 자식 객체를 담을 수 있고 잘못 내려받으면 `ClassCastException`이 난다는 것(상속과 다형성 레슨).'
+example: '주문 번호의 목록 `List<Long>`과 회원 이름의 목록 `List<String>`. 꺾쇠 안의 타입이 컴파일할 때와 실행할 때 각각 어떻게 다뤄지는지 봐요. 실무 구역에서는 응답을 감싸는 `ApiResponse<T>`와 JSON을 `List<OrderDto>`로 읽는 코드로 옮겨요.'
+intro:
+  - '외부 API의 응답 JSON을 `List<OrderDto>`로 읽었어요. 컴파일도 됐고 읽는 줄도 문제없이 지나갔어요. 그런데 목록에서 첫 주문을 꺼내는 줄에서 `ClassCastException`이 나요. 메시지는 `LinkedHashMap`을 `OrderDto`로 바꿀 수 없다고 해요.'
+  - '스프링 개발자가 쓰는 타입은 거의 다 제네릭이에요. `List<Order>`, `Optional<Member>`, `JpaRepository<Order, Long>`, `ResponseEntity<OrderResponse>`가 그래요. 쓰기만 할 때는 쉽지만, 공통 응답 클래스나 유틸 메서드를 직접 만들거나 위와 같은 오류를 만났을 때는 제네릭이 실행 중에 어떻게 되는지를 알아야 해요.'
+  - '이 레슨에서는 꺾쇠 안의 타입이 실행 중에는 남아 있지 않다는 것을 코드를 돌려 확인하고, 그 사실로 제네릭의 제약과 와일드카드를 설명해요.'
+covers:
+  - topic: '제네릭이 없을 때의 문제: Object로 담고 꺼낼 때 형변환한다. 잘못 넣은 것이 꺼내는 곳에서 실행 중에 터진다'
+    where: '질문 1'
+  - topic: '제네릭은 그 오류를 컴파일 오류로 앞당기고 형변환을 없앤다'
+    where: '질문 1'
+  - topic: '제네릭 클래스와 제네릭 메서드를 직접 선언하기, 타입 매개변수의 범위 제한(T extends ...)'
+    where: '질문 1'
+  - topic: '다이아몬드(<>)와 var의 타입 추론'
+    where: '질문 1의 더 알아보기'
+  - topic: '타입 소거: 컴파일러가 검사를 마친 뒤 타입 인자를 지우고 형변환을 넣는다. 실행 중에 List<String>과 List<Integer>는 같은 클래스다'
+    where: '질문 2'
+  - topic: '소거 때문에 안 되는 것: new T(), instanceof List<String>, 타입 인자만 다른 오버로딩, 기본형 타입 인자'
+    where: '질문 2'
+  - topic: '로 타입(raw type)과 섞어 쓰면 엉뚱한 타입이 들어가고, 형변환이 보이지 않는 줄에서 ClassCastException이 난다. unchecked 경고의 뜻'
+    where: '질문 2'
+  - topic: '실행 중에 타입이 필요하면 Class<T>를 함께 넘긴다'
+    where: '질문 2'
+  - topic: 'List<Integer>는 List<Number>가 아니다(무공변). 허용하면 생기는 일'
+    where: '질문 3'
+  - topic: '배열은 반대로 허용하고 실행 중에 ArrayStoreException으로 막는다'
+    where: '질문 3'
+  - topic: '와일드카드: ? extends T는 꺼내기만, ? super T는 넣기만. 꺼내는 쪽에 extends, 넣는 쪽에 super'
+    where: '질문 4'
+  - topic: '제한 없는 와일드카드 List<?>'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링에서: 공통 응답 클래스 ApiResponse<T>, JpaRepository<T, ID>'
+    where: '실무에서는. 리포지토리의 사용법은 ORM과 JPA(P1)'
+  - topic: 'JSON을 제네릭 타입으로 읽기: TypeReference와 ParameterizedTypeReference'
+    where: '실무에서는'
+  - topic: '제네릭 배열을 만들 수 없는 것, 브리지 메서드'
+    where: '질문 2의 더 알아보기'
+  - topic: 'TypeReference가 지워진 타입을 알아내는 방법(클래스 선언에 남은 제네릭 정보를 리플렉션으로 읽는다)'
+    where: '다루지 않음: 리플렉션과 어노테이션(J17)'
+  - topic: '컬렉션에 기본형 대신 래퍼를 쓰는 것과 박싱'
+    where: '다루지 않음: 래퍼 클래스와 오토박싱(J3)'
+  - topic: 'List, Set, Map의 구현체를 고르는 기준'
+    where: '다루지 않음: 컬렉션 고르기(K10)'
+codes:
+  predict: |-
+    List<String> names = new ArrayList<>();
+    List<Long> ids = new ArrayList<>();
+
+    System.out.println(
+        names.getClass() == ids.getClass());
+  raw: |-
+    List list = new ArrayList();
+    list.add("kim");
+    list.add(10L);
+
+    String name = (String) list.get(1);
+  typed: |-
+    List<String> list = new ArrayList<>();
+    list.add("kim");
+    list.add([[10L]]);
+
+    String name = list.get(0);
+  pollution: |-
+    List<String> names = new ArrayList<>();
+    List raw = names;
+    raw.add(10L);
+
+    String first = names.get(0);
+  invariant: |-
+    List<Integer> ints = new ArrayList<>();
+    List<Number> nums = [[ints]];
+    nums.add(3.14);
+    Integer n = ints.get(0);
+predict:
+  text: '코드 predict는 `List<String>` 객체와 `List<Long>` 객체의 클래스가 같은지 비교해요. 무엇이 출력될까요? 보기: true, false, 컴파일 오류.'
+  answer: 'true. 둘 다 그냥 `ArrayList`다. 꺾쇠 안의 `String`과 `Long`은 컴파일러가 검사에 쓰고 지워서, 실행 중인 객체에는 남아 있지 않다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 제네릭은 어떤 문제를 해결하나요?
+    conclusion:
+      lead: '잘못된 타입을 넣는 실수를 실행 중의 `ClassCastException`이 아니라 컴파일 오류로 잡아 줘요.'
+      sub: '컬렉션에 무엇이 들었는지를 타입에 적어 두면, 컴파일러가 넣는 곳을 검사하고 꺼내는 곳의 형변환을 대신 넣어 줘요.'
+    says:
+      - '코드 raw. 제네릭 없이 쓰면 리스트는 `Object`를 담는다. 문자열 사이에 `Long`을 넣어도 컴파일된다. 꺼낼 때 `(String)`으로 형변환해야 하고, `Long`이 든 칸을 꺼내는 줄에서 `ClassCastException`이 난다. 잘못 넣은 곳과 터지는 곳이 다르다'
+      - '코드 typed. `List<String>`이라고 적으면 `list.add(10L)`이 컴파일 오류다. 꺼낼 때 형변환을 쓰지 않는다. 오류가 넣는 줄로, 실행 전으로 당겨졌다'
+      - '직접 선언하기. `class Page<T> { List<T> content; int number; }`의 `T`는 쓰는 쪽이 정하는 타입이다. `Page<Order>`에서는 `content`가 `List<Order>`가 된다. 클래스 하나로 모든 타입의 페이지를 만든다'
+      - '제네릭 메서드. `static <T> T first(List<T> list)`는 메서드 앞에 `<T>`를 적는다. 부를 때 인자를 보고 컴파일러가 `T`를 정한다'
+      - '범위 제한. `<T extends Comparable<T>> T max(List<T> list)`는 `T`가 비교할 수 있는 타입일 때만 받는다. 그래서 메서드 안에서 `compareTo`를 부를 수 있다'
+      - '더 알아보기: `new ArrayList<>()`의 빈 꺾쇠(다이아몬드)는 왼쪽을 보고 컴파일러가 채운다. `var list = new ArrayList<String>();`의 `var`도 컴파일러가 타입을 정해 주는 것이고 실행 중의 동작은 같다'
+    asks:
+      - '본문의 예시: 코드 raw와 코드 typed에서 `Long` 값을 리스트에 넣는 실수는 각각 언제 드러나나 (코드 raw는 실행 중에 꺼내는 줄에서 `ClassCastException`, 코드 typed는 넣는 줄의 컴파일 오류)'
+      - '옮긴 상황: `static <T extends Comparable<T>> T max(List<T> list)`에 `List<String>`과 `List<Object>`를 각각 넘기면 어떻게 되나 (`List<String>`은 컴파일되고 `List<Object>`는 컴파일 오류다. `Object`는 `Comparable`이 아니다)'
+  - id: q2
+    title: 꺾쇠 안의 타입은 실행 중에 어떻게 되나요?
+    conclusion:
+      lead: '남아 있지 않아요. 컴파일러가 검사를 마친 뒤 타입 인자를 지우고, 필요한 자리에 형변환을 넣어요. 이것을 타입 소거라고 해요.'
+      sub: '그래서 실행 중에 타입 인자가 필요한 일은 할 수 없고, 컴파일러의 검사를 비켜 간 값은 꺼내는 곳에서야 드러나요.'
+    says:
+      - '코드 predict. `names.getClass()`와 `ids.getClass()`는 둘 다 `ArrayList`다. 실행 중의 리스트는 자기가 `String`용인지 `Long`용인지 모른다. 예측의 답을 밝힌다'
+      - '컴파일러가 하는 일은 둘이다. 넣는 곳의 타입을 검사한다. 그리고 `String s = list.get(0);`을 `String s = (String) list.get(0);`으로 바꾼다. 코드 raw에서 손으로 쓰던 형변환이 보이지 않게 들어가 있다'
+      - '이렇게 만든 이유는 제네릭이 없던 시절의 코드와 클래스 파일이 그대로 돌게 하기 위해서다. 자바 5에서 제네릭이 들어왔다'
+      - '소거 때문에 안 되는 것. `new T()`는 실행 중에 `T`가 무엇인지 몰라서, `obj instanceof List<String>`은 확인할 정보가 없어서, `void save(List<String> a)`와 `void save(List<Long> a)`의 오버로딩은 지우고 나면 둘이 같아져서 컴파일되지 않는다. `List<int>`가 안 되는 것도 지운 자리가 `Object`가 되어야 해서다(J3)'
+      - '실행 중에 타입이 필요하면 `Class<T>`를 인자로 함께 받는다. `objectMapper.readValue(json, OrderDto.class)`의 둘째 인자가 그것이다'
+      - '코드 pollution. 꺾쇠 없는 타입(로 타입)에 대입하면 컴파일러의 검사가 꺼진다. `raw.add(10L)`은 경고만 내고 컴파일된다. `List<String>`에 `Long`이 들어갔다. 예외는 넣을 때가 아니라 `names.get(0)`을 `String`에 담는 줄에서 난다. 그 줄에 숨은 `(String)` 형변환이 있기 때문이다. 코드에 형변환이 보이지 않는 줄에서 `ClassCastException`이 나면 이것을 의심한다'
+      - '컴파일러의 unchecked 경고는 "이 줄은 검사하지 못했으니 타입이 틀려도 책임지지 못한다"는 뜻이다. 무시하지 않는다'
+      - '더 알아보기: `new T[10]` 같은 제네릭 배열은 만들 수 없다. 제네릭 부모의 메서드를 오버라이딩하면 컴파일러가 소거된 시그니처를 잇는 브리지 메서드를 만든다'
+    asks:
+      - '본문의 예시: 코드 pollution을 실행하면 `ClassCastException`이 나는 줄은 어디인가. 보기: `List raw = names;`, `raw.add(10L);`, `String first = names.get(0);` (`String first = names.get(0);`. 넣는 줄은 지나간다)'
+      - '옮긴 상황: `class Repo { void save(List<String> names) {} void save(List<Long> ids) {} }`를 컴파일하면 어떻게 되나 (컴파일 오류. 타입 인자를 지우면 두 메서드의 시그니처가 같다)'
+      - '실무 구역: `List<OrderDto> orders = objectMapper.readValue(json, List.class);`가 경고와 함께 컴파일됐다. `json`은 주문 객체 둘의 배열이다. `OrderDto first = orders.get(0);`을 실행하면 어떻게 되나 (`ClassCastException`. 리스트에 든 것은 `LinkedHashMap`이다)'
+  - id: q3
+    title: 'List<Integer>는 왜 List<Number>에 넣을 수 없나요?'
+    conclusion:
+      lead: '넣을 수 있다면 `List<Number>` 변수로 그 리스트에 `Double`을 넣을 수 있게 되어, `List<Integer>`에 `Integer`가 아닌 것이 들어가기 때문이에요.'
+      sub: '`Integer`가 `Number`의 자식이어도 `List<Integer>`는 `List<Number>`의 자식이 아니에요.'
+    says:
+      - '`Number n = Integer.valueOf(1);`은 된다. 그래서 `List<Number> nums = ints;`도 될 것 같지만 컴파일 오류다'
+      - '코드 invariant로 이유를 본다. 둘째 줄이 허용된다고 하자. `nums`와 `ints`는 같은 리스트를 가리킨다(J2). `nums.add(3.14)`는 `List<Number>`에 `Double`을 넣는 것이라 막을 이유가 없다. 그러면 `ints`에 `Double`이 들어 있고 `ints.get(0)`이 깨진다. 컴파일러는 이 길을 처음 줄에서 막는다'
+      - '소거 때문에 실행 중에는 막을 방법이 없다(질문 2). 그래서 컴파일할 때 막는 수밖에 없다'
+      - '배열은 반대로 정했다. `Number[] nums = new Integer[1];`이 컴파일된다. 대신 배열은 실행 중에 자기 원소 타입을 알고 있어서 `nums[0] = 3.14;`에서 `ArrayStoreException`을 던진다. 같은 문제를 배열은 실행 중에, 제네릭은 컴파일할 때 막는다'
+      - '그러면 `List<Integer>`와 `List<Double>`을 모두 받아 합계를 내는 메서드는 어떻게 쓰나. 다음 질문의 와일드카드다'
+    asks:
+      - '본문의 예시: 코드 invariant에서 컴파일 오류가 나는 줄은 어디인가 (`List<Number> nums = ints;`)'
+      - '옮긴 상황: `Object[] arr = new String[1]; arr[0] = 10;`은 어떻게 되나 (컴파일은 되고 실행 중에 `ArrayStoreException`)'
+  - id: q4
+    title: '와일드카드 ? extends와 ? super는 언제 쓰나요?'
+    conclusion:
+      lead: '컬렉션에서 꺼내기만 하는 매개변수에는 `? extends T`를, 넣기만 하는 매개변수에는 `? super T`를 써요.'
+      sub: '`? extends T`는 무엇이든 `T`로 꺼낼 수 있지만 넣을 수 없고, `? super T`는 `T`를 넣을 수 있지만 `Object`로만 꺼낼 수 있어요.'
+    says:
+      - '`double sum(List<? extends Number> list)`는 `List<Integer>`도 `List<Double>`도 받는다. `?`는 "`Number`의 자식인 어떤 타입"이다'
+      - '꺼낸 것은 `Number`로 쓸 수 있다. 어떤 타입이든 `Number`의 자식이기 때문이다'
+      - '넣을 수는 없다. `list.add(1)`은 컴파일 오류다. 실제로는 `List<Double>`일 수도 있어서 컴파일러가 무엇도 안전하다고 할 수 없다. 질문 3의 문제를 이렇게 막는다'
+      - '`void fill(List<? super Integer> list)`는 `List<Integer>`, `List<Number>`, `List<Object>`를 받는다. `Integer`를 넣는 것은 셋 모두에 안전하다. 꺼낸 것은 `Object`로만 받을 수 있다'
+      - '정리: 그 컬렉션이 값을 내주는 쪽이면 extends, 값을 받는 쪽이면 super. `Collections.copy(List<? super T> dest, List<? extends T> src)`가 두 가지를 다 보여 준다. 읽기도 쓰기도 하면 와일드카드 없이 `List<T>`로 쓴다'
+      - '와일드카드는 매개변수에 쓴다. 반환 타입에 쓰면 받는 쪽이 불편해진다'
+      - '더 알아보기: `List<?>`는 무엇의 리스트인지 상관하지 않을 때 쓴다. `size()`를 부르거나 `Object`로 꺼내는 것만 한다'
+    widget:
+      kind: classify
+      note: '코드 한 줄씩을 "컴파일된다"와 "컴파일 오류" 가운데 고른다. 앞에 `List<? extends Number> src`와 `List<? super Integer> dest`가 선언돼 있다고 적어 둔다. 항목: `Number n = src.get(0);`(된다), `src.add(1);`(오류), `Integer i = src.get(0);`(오류), `dest.add(1);`(된다), `Integer j = dest.get(0);`(오류), `Object o = dest.get(0);`(된다), `sum(new ArrayList<Double>())`에서 매개변수가 `List<? extends Number>`일 때(된다), 매개변수가 `List<Number>`일 때(오류)'
+    asks:
+      - '본문의 예시: `double sum(List<? extends Number> list)` 안에서 `Number n = list.get(0);`과 `list.add(1);`은 각각 어떻게 되나 (첫째는 컴파일되고 둘째는 컴파일 오류다)'
+      - '옮긴 상황: `void addDefaults(List<? super Long> ids) { ids.add(0L); }`에 `List<Number>`와 `List<Integer>`를 각각 넘기면 어떻게 되나 (`List<Number>`는 컴파일되고 `List<Integer>`는 컴파일 오류다. `Integer`는 `Long`의 부모가 아니다)'
+practice:
+  says:
+    - '공통 응답 클래스. `record ApiResponse<T>(T data, String message) { static <T> ApiResponse<T> ok(T data) { ... } }`. 컨트롤러는 `ApiResponse<OrderResponse>`나 `ApiResponse<List<OrderResponse>>`를 돌려준다. 질문 1의 제네릭 클래스와 제네릭 메서드가 그대로 쓰인다 (Jackson `ObjectMapper`로 직렬화한 JSON을 붙이는 테스트)'
+    - '스프링 데이터의 `interface OrderRepository extends JpaRepository<Order, Long>`에서 꺾쇠의 두 타입이 엔티티와 id의 타입이다. `findById`의 인자가 `Long`이고 반환이 `Optional<Order>`인 것이 여기서 정해진다. 사용법은 P1'
+    - '흔한 실수: JSON 배열을 `objectMapper.readValue(json, List.class)`로 읽어 `List<OrderDto>`에 담는다. `List.class`에는 원소의 타입이 없다(질문 2). Jackson은 원소를 `LinkedHashMap`으로 만든다. 대입은 경고만 내고 지나가고, 원소를 `OrderDto`로 꺼내는 줄에서 `ClassCastException`이 난다. 고친 코드: `objectMapper.readValue(json, new TypeReference<List<OrderDto>>() {})`. 고치기 전의 예외 메시지와 고친 뒤의 결과를 붙인다 (Jackson `ObjectMapper`로 돌리는 테스트)'
+    - '외부 API를 부를 때도 같다. `RestClient`의 `.body(List.class)` 대신 `.body(new ParameterizedTypeReference<List<OrderDto>>() {})`를 쓴다 (스프링 프레임워크 공식 문서 근거)'
+    - '`TypeReference`가 지워진 타입을 어떻게 아는지는 한 줄만 적는다. 중괄호 `{}`로 만든 익명 클래스의 선언에는 부모의 타입 인자가 클래스 파일에 남고, Jackson이 그것을 읽는다. 읽는 방법은 J17'
+    - '컴파일러의 unchecked 경고를 `@SuppressWarnings`로 끄기 전에 왜 났는지 본다는 것'
+claims:
+  - claim: '코드 predict의 출력은 true다'
+    how: '그대로 돌린다'
+  - claim: '코드 raw는 꺼내는 줄에서 `ClassCastException`이 난다'
+    how: '그대로 돌려 예외를 본다'
+  - claim: '코드 pollution에서 `raw.add(10L)`은 예외 없이 지나가고 `String first = names.get(0)`에서 `ClassCastException`이 난다'
+    how: '줄마다 따로 실행해 어느 줄에서 예외가 나는지 본다'
+  - claim: '`List<String>`에 `Long`을 넣는 코드, 타입 인자만 다른 오버로딩, `List<Number> nums = ints`는 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 각 소스를 컴파일해 오류가 있는지 본다'
+  - claim: '`Number[] nums = new Integer[1]; nums[0] = 3.14;`는 `ArrayStoreException`을 던진다'
+    how: '그대로 돌린다'
+  - claim: '위젯의 여덟 줄이 적힌 대로 컴파일되거나 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 한 줄씩 컴파일한다'
+  - claim: 'Jackson으로 객체의 배열을 `List.class`로 읽으면 원소가 `LinkedHashMap`이고, `OrderDto`로 꺼내면 `ClassCastException`이 난다. `TypeReference<List<OrderDto>>`로 읽으면 원소가 `OrderDto`다 (스프링 부트 3.5의 Jackson)'
+    how: '`ObjectMapper`로 두 방식으로 읽어 원소의 클래스를 보고, 첫 방식에서 꺼낼 때의 예외를 본다'
+  - claim: '`ApiResponse<OrderResponse>`가 `data` 안에 주문이 든 JSON으로 직렬화된다'
+    how: '`ObjectMapper`로 써서 문자열을 본다'
+sources:
+  - '타입 소거: 자바 언어 명세 4.6 https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.6'
+  - '제네릭 클래스와 타입 매개변수: 자바 언어 명세 8.1.2 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.2'
+  - '와일드카드와 타입 인자: 자바 언어 명세 4.5.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.5.1'
+  - '로 타입과 unchecked 경고: 자바 언어 명세 4.8 https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.8'
+  - '배열의 저장 검사: 자바 언어 명세 10.5 https://docs.oracle.com/javase/specs/jls/se21/html/jls-10.html#jls-10.5'
+  - '`Collections.copy`의 시그니처: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html'
+  - '`ParameterizedTypeReference`: 스프링 프레임워크 API 문서 https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/core/ParameterizedTypeReference.html'

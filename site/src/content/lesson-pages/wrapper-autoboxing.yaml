@@ -1,0 +1,168 @@
+# 래퍼 클래스와 오토박싱 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 래퍼 클래스와 오토박싱
+unit: 자바 언어
+roadmap: J3
+type: 자바 실행
+prerequisites:
+  - {slug: value-and-reference, title: 값과 참조}
+assume: '자바 21, JVM 옵션은 기본값. 기본형 변수에는 값이, 참조형 변수에는 참조가 들어 있고 `==`는 변수에 든 것을 비교한다는 것(값과 참조 레슨).'
+example: '회원 번호를 `Long`으로 가진 회원 두 명이 같은 회원인지 비교해요. 번호가 127일 때와 128일 때를 돌려 봐요. 실무 구역에서는 같은 비교를 JPA 엔티티의 `Long id`와 요청 DTO로 옮겨요.'
+intro:
+  - '테스트에서는 잘 되던 "같은 회원인지" 비교가 운영에서만 틀려요. 테스트 데이터의 회원 번호는 1번, 2번이었고 운영의 회원 번호는 수만 번대였어요. 코드는 `a.getId() == b.getId()` 한 줄이에요.'
+  - '스프링 개발자는 `int`보다 `Integer`와 `Long`을 더 자주 만나요. 엔티티의 `Long id`, `List<Integer>`, 요청 DTO의 숫자 필드가 모두 래퍼예요. 필드를 `int`로 둘지 `Integer`로 둘지에 따라 "값이 안 왔다"와 "0이 왔다"를 구별할 수 있는지가 갈려요.'
+  - '이 레슨에서는 `Integer`가 `int`와 무엇이 다른지, 자바가 둘을 언제 몰래 바꿔 주는지, 그 때문에 `==`와 null에서 무슨 일이 생기는지를 코드를 돌려 확인해요.'
+covers:
+  - topic: '래퍼 클래스는 기본형 값 하나를 담은 객체다. 여덟 기본형마다 하나씩 있다'
+    where: '질문 1'
+  - topic: '래퍼가 필요한 곳: 컬렉션과 제네릭, null로 "값 없음"을 나타내야 할 때'
+    where: '질문 1'
+  - topic: '오토박싱과 언박싱: 컴파일러가 valueOf와 intValue 호출을 넣어 준다. 일어나는 곳(대입, 인자, 반환, 연산, 컬렉션)'
+    where: '질문 2'
+  - topic: '래퍼끼리의 ==는 참조를 비교한다. -128부터 127까지는 같은 객체가 나와서 true이고 그 밖은 false다'
+    where: '질문 3'
+  - topic: '래퍼와 기본형을 ==로 비교하면 언박싱되어 값이 비교된다'
+    where: '질문 3'
+  - topic: '래퍼는 equals로 비교한다. 타입이 다르면 값이 같아도 false다(Long과 Integer)'
+    where: '질문 3'
+  - topic: 'null인 래퍼를 언박싱하면 NullPointerException'
+    where: '질문 4'
+  - topic: '삼항 연산자에서 래퍼와 기본형이 섞이면 언박싱이 일어난다'
+    where: '질문 4의 더 알아보기'
+  - topic: '반복문에서 래퍼로 더하면 돌 때마다 객체를 만든다'
+    where: '질문 2의 더 알아보기'
+  - topic: 'parseInt와 valueOf의 차이, 래퍼는 불변이다'
+    where: '질문 1의 더 알아보기'
+  - topic: 'JPA 엔티티의 id를 Long으로 두는 이유와 id 비교'
+    where: '실무에서는'
+  - topic: '요청 DTO의 int와 Integer: 값이 오지 않았을 때 0이 되는가 null이 되는가'
+    where: '실무에서는. 입력 검증(@NotNull)의 동작은 예외 처리와 검증(S8)'
+  - topic: '@RequestParam을 기본형으로 받을 때 값이 없으면 생기는 일'
+    where: '실무에서는'
+  - topic: '제네릭에 기본형을 쓸 수 없는 이유'
+    where: '다루지 않음: 제네릭(J11)'
+  - topic: 'IntStream 같은 기본형 스트림으로 박싱을 피하는 것'
+    where: '다루지 않음: 스트림과 Optional(J13)'
+  - topic: 'equals와 hashCode를 재정의하는 방법'
+    where: '다루지 않음: equals와 hashCode(J6)'
+  - topic: '정수 오버플로, 부동소수점 오차, BigDecimal'
+    where: '다루지 않음: 숫자 타입의 한계(J19)'
+codes:
+  predict: |-
+    Long a = 127L;
+    Long b = 127L;
+    System.out.println(a == b);
+
+    Long c = 128L;
+    Long d = 128L;
+    System.out.println(c == d);
+  sugar: |-
+    Integer boxed = 10;
+    // 컴파일러가 바꾼 모습
+    Integer boxed = Integer.valueOf(10);
+
+    int n = boxed;
+    // 컴파일러가 바꾼 모습
+    int n = boxed.intValue();
+predict:
+  text: '코드 predict를 실행하면 두 줄에 무엇이 출력될까요? 보기: true와 true, false와 false, true와 false, 컴파일 오류.'
+  answer: 'true와 false. `Long`끼리의 `==`는 값이 아니라 같은 객체인지를 본다. 127은 미리 만들어 둔 객체가 나와서 같고, 128은 새 객체가 둘 만들어져서 다르다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 'int가 있는데 Integer는 왜 있나요?'
+    conclusion:
+      lead: '`Integer`는 `int` 값 하나를 담은 객체이고, 객체만 들어갈 수 있는 곳에 숫자를 넣으려고 있어요.'
+      sub: '컬렉션은 객체만 담고, 객체라야 null로 "값이 없음"을 나타낼 수 있어요.'
+    says:
+      - '여덟 기본형마다 래퍼 클래스가 있다: `Integer`, `Long`, `Double`, `Boolean`, `Character` 등'
+      - '`List<int>`는 컴파일되지 않는다. 컬렉션과 제네릭의 타입 자리에는 참조형만 올 수 있다. 그래서 `List<Integer>`를 쓴다. 왜 그런지는 J11에서 다룬다'
+      - '`int`는 null이 될 수 없다. "아직 값이 없다"를 0과 구별해야 하면 `Integer`를 쓴다. 예: 아직 저장하지 않아 번호가 없는 회원'
+      - '`Integer`는 참조형이다. 그래서 J2에서 본 참조형의 규칙(`==`는 같은 객체인지, null일 수 있음)이 그대로 적용된다. 이 레슨의 나머지가 그 결과다'
+      - '더 알아보기: `Integer.parseInt("10")`은 `int`를, `Integer.valueOf("10")`은 `Integer`를 준다. 래퍼 객체는 한 번 만들면 안의 값이 바뀌지 않는다'
+    asks:
+      - '본문의 예시: `int age`와 `Integer age` 필드 가운데 "나이를 아직 입력하지 않았다"와 "나이가 0이다"를 구별해서 담을 수 있는 것은 어느 쪽인가 (`Integer`. null을 담을 수 있다)'
+      - '옮긴 상황: `List<long> ids`와 `List<Long> ids` 가운데 컴파일되는 것은 어느 것인가 (`List<Long>`만 된다)'
+  - id: q2
+    title: 'int와 Integer는 언제 서로 바뀌나요?'
+    conclusion:
+      lead: '타입이 맞지 않는 자리에서 컴파일러가 `Integer.valueOf(값)`이나 `intValue()` 호출을 넣어서 바꿔 줘요.'
+      sub: '`int`를 객체로 싸는 것이 오토박싱, 객체에서 `int`를 꺼내는 것이 언박싱이고, 코드에 보이지 않을 뿐 메서드 호출이에요.'
+    says:
+      - '코드 sugar. `Integer boxed = 10;`은 `Integer.valueOf(10)`으로, `int n = boxed;`는 `boxed.intValue()`로 컴파일된다'
+      - '일어나는 곳: 대입, 메서드에 인자로 넘길 때, 반환할 때, `list.add(1)`처럼 컬렉션에 넣을 때(박싱), `list.get(0) + 1`처럼 연산할 때(언박싱), 래퍼와 기본형을 비교할 때(언박싱)'
+      - '산술과 크기 비교(`+`, `<`, `>`)는 기본형에만 있는 연산이다. 래퍼에 쓰면 언박싱한 뒤 계산한다. `Integer a = 1000, b = 1000;`에서 `a < b`와 `a + b`는 값으로 계산된다'
+      - '언박싱이 메서드 호출이라는 점이 질문 4의 원인이 되고, 박싱이 `valueOf` 호출이라는 점이 질문 3의 원인이 된다'
+      - '더 알아보기: `Long sum = 0L; for (...) sum += i;`는 돌 때마다 언박싱하고 더하고 다시 박싱해서 새 객체를 만든다. 합계 같은 계산은 `long`으로 한다'
+    widget:
+      kind: classify
+      note: '코드 한 줄씩을 보고 "박싱", "언박싱", "둘 다 일어나지 않음" 가운데 고른다. 항목: `Integer a = 5;`, `int b = a;`, `list.add(3)`, `int c = list.get(0);`, `a + 1`의 a, `Integer d = a;`(없음), `long e = 5;`(없음), `a == 5`의 a'
+    asks:
+      - '본문의 예시: `List<Integer> list = new ArrayList<>(); list.add(3); int x = list.get(0);`에서 박싱과 언박싱은 각각 몇 번 일어나나 (박싱 한 번, 언박싱 한 번)'
+      - '옮긴 상황: `Integer a = 1000; Integer b = 1000;`에서 `a + b`를 계산하면 어떻게 되나. 조건: 결과를 `int`에 담는다 (두 값이 언박싱되어 2000이 된다. 예외나 오류는 없다)'
+  - id: q3
+    title: 'Integer를 ==로 비교하면 왜 어떤 때는 true이고 어떤 때는 false인가요?'
+    conclusion:
+      lead: '래퍼끼리의 `==`는 값이 아니라 같은 객체인지를 비교하는데, -128부터 127까지는 미리 만들어 둔 객체를 돌려줘서 우연히 true가 나와요.'
+      sub: '그 범위 밖의 값은 박싱할 때마다 새 객체가 만들어지므로 false예요. 래퍼는 `equals`로 비교해요.'
+    says:
+      - '`Long a = 127L`은 `Long.valueOf(127L)`이다. `valueOf`는 -128부터 127까지의 값이면 미리 만들어 둔 객체를 돌려준다. 그래서 `a`와 `b`가 같은 객체를 가리키고 `==`가 true다. 예측의 첫 줄'
+      - '128은 범위 밖이라 `valueOf`가 부를 때마다 새 객체를 만든다. `c`와 `d`는 값이 같은 서로 다른 객체이고 `==`가 false다. 예측의 둘째 줄'
+      - '`Integer`도 같다. 자바 언어 명세가 -128부터 127까지의 `int`를 박싱하면 같은 객체가 나온다고 정했다. 그 밖의 값이 같은 객체일지는 정하지 않았다. 이 레슨의 결과는 JVM 옵션이 기본값일 때다'
+      - '테스트 데이터의 번호가 작아서 `==`가 통과하고 운영에서 깨지는 이유가 이것이다'
+      - '한쪽이 기본형이면 다르다. `Long c = 128L; long e = 128L;`에서 `c == e`는 `c`가 언박싱되어 값끼리 비교되므로 true다'
+      - '`equals`는 안의 값을 비교한다. `c.equals(d)`는 true다. 다만 타입도 본다. `Long.valueOf(1).equals(1)`은 false다. 인자 `1`이 `Integer`로 박싱되기 때문이다'
+      - 'null일 수 있는 두 래퍼는 `Objects.equals(a, b)`로 비교한다'
+    widget:
+      kind: toggle
+      note: '값을 고른다(-128, 127, 128, 10000). 고를 때마다 `Integer a = 값; Integer b = 값;`의 `a == b`와 `a.equals(b)` 결과, 그리고 두 변수가 가리키는 객체가 하나인지 둘인지를 두 칸으로 보여 준다. 실행 버튼을 눌러야 결과가 보이게 해서 먼저 예상하게 한다'
+    asks:
+      - '본문의 예시: 코드 predict에서 `c == d`가 false일 때 `c.equals(d)`의 결과는 무엇인가 (true)'
+      - '옮긴 상황: `Integer x = 1000; int y = 1000;`에서 `x == y`의 결과는 무엇인가 (true. 한쪽이 기본형이라 `x`가 언박싱되어 값으로 비교된다)'
+      - '실무 구역: 엔티티 `Member`의 `getId()`가 `Long`을 돌려준다. id가 300인 회원을 DB에서 두 번 따로 읽어 `m1.getId() == m2.getId()`와 `m1.getId().equals(m2.getId())`를 실행했다. 조건: 두 `Long`은 각각 따로 박싱된 객체다. 결과는 무엇인가 (false와 true)'
+  - id: q4
+    title: 래퍼가 null이면 어떤 일이 생기나요?
+    conclusion:
+      lead: 'null인 래퍼가 언박싱되는 자리에서 `NullPointerException`이 나요.'
+      sub: '언박싱은 `intValue()` 호출이라서 null에 메서드를 부른 것이 되고, 코드에는 점이 보이지 않아서 찾기 어려워요.'
+    says:
+      - '`Integer count = null; int n = count;`는 컴파일되고, 실행하면 `NullPointerException`이다. 질문 2에서 본 대로 `count.intValue()`가 숨어 있다'
+      - '같은 일이 생기는 자리: `count + 1`, `count > 0`, `count == 0`(한쪽이 기본형), `int`를 받는 메서드에 넘길 때, `int`를 반환하는 메서드에서 `return count;`'
+      - '`Map<String, Integer>`에서 없는 키를 `get`하면 null이 나온다. `int stock = map.get("없는 키");`가 흔한 자리다. `getOrDefault(key, 0)`으로 막는다'
+      - '스택 트레이스의 줄에 점(`.`)이 없어도 래퍼를 기본형처럼 쓴 곳이면 언박싱을 의심한다'
+      - '더 알아보기: 삼항 연산자 `Integer r = flag ? 1 : nullable;`은 둘째와 셋째 항의 타입이 `int`와 `Integer`로 섞여서 결과가 `int`로 계산된다. `flag`가 false이고 `nullable`이 null이면 언박싱하다 예외가 난다'
+    asks:
+      - '본문의 예시: `Integer count = null;` 다음 줄에서 `if (count == 0)`을 실행하면 어떻게 되나 (`NullPointerException`. 0과 비교하려고 `count`를 언박싱한다)'
+      - '옮긴 상황: `Map<String, Integer> stock`에 "A"만 들어 있다. `int n = stock.get("B");`를 실행하면 어떻게 되나 (`get`이 null을 돌려주고, `int`에 담으려 언박싱하다 `NullPointerException`)'
+practice:
+  says:
+    - 'JPA 엔티티의 id는 `long`이 아니라 `Long`으로 둔다. `@Id @GeneratedValue private Long id;`. 아직 저장하지 않은 엔티티는 id가 null이고, 0과 구별된다 (하이버네이트 공식 문서 근거)'
+    - '흔한 실수 1: `if (order.getMember().getId() == loginMemberId)`처럼 두 `Long`을 `==`로 비교한다. id가 127 이하인 테스트 데이터에서는 통과하고 운영에서 "내 주문이 아니다"로 틀린다. 고친 코드: `Objects.equals(a, b)` 또는 `a.equals(b)`. id가 100일 때와 300일 때를 돌려 결과를 붙인다 (순수 자바 테스트. 엔티티 모양의 클래스로 확인한다)'
+    - '요청 DTO의 숫자 필드: `record OrderRequest(int quantity)`에 `{}`가 오면 `quantity`는 0이 된다. 값이 안 온 것과 0이 온 것을 구별할 수 없다. `Integer quantity`로 두면 null이 되고, `@NotNull`로 걸러 낼 수 있다. 검증의 동작은 S8에 넘긴다 (Jackson `ObjectMapper`로 역직렬화해 확인하는 테스트)'
+    - '흔한 실수 2: `@RequestParam(required = false) int page`. 값이 없으면 null을 `int`에 넣을 수 없어서 스프링이 예외를 던지고 500이 나간다. 고친 코드: `@RequestParam(defaultValue = "0") int page` 또는 `Integer page` (컨트롤러 하나를 띄워 요청하는 테스트. 예외 타입과 상태 코드는 테스트로 확인한 것을 적는다)'
+    - '정리: 엔티티의 id와 null일 수 있는 열, 요청에서 빠질 수 있는 값은 래퍼로, 반드시 값이 있고 계산에 쓰는 것은 기본형으로 둔다'
+claims:
+  - claim: '코드 predict의 출력은 true와 false다 (JVM 옵션 기본값)'
+    how: '코드를 그대로 돌린다'
+  - claim: '`Integer`도 127은 `==`가 true, 128은 false이고 `equals`는 둘 다 true다'
+    how: '-128, 127, 128, 10000으로 `==`와 `equals`를 돌려 표로 남긴다'
+  - claim: '래퍼와 기본형의 `==`는 값으로 비교되어 범위 밖의 값도 true다'
+    how: '`Integer x = 1000; int y = 1000;`을 비교한다'
+  - claim: '`Long.valueOf(1).equals(1)`은 false이고 `Long.valueOf(1).equals(1L)`은 true다'
+    how: '그대로 돌린다'
+  - claim: 'null인 래퍼를 `int`에 대입하거나 0과 `==`로 비교하면 `NullPointerException`이 난다'
+    how: '각 줄을 돌려 예외의 타입을 본다'
+  - claim: '삼항 연산자에서 `int`와 null인 `Integer`가 섞이면 `NullPointerException`이 난다'
+    how: '`Integer r = flag ? 1 : nullable;`을 `flag`가 false, `nullable`이 null인 채로 돌린다'
+  - claim: 'Jackson으로 `{}`를 읽으면 `int` 필드는 0, `Integer` 필드는 null이 된다 (스프링 부트 3.5의 기본 `ObjectMapper`)'
+    how: '`int` 구성 요소의 record와 `Integer` 구성 요소의 record로 각각 역직렬화한다'
+  - claim: '`@RequestParam(required = false) int page`에 값 없이 요청하면 예외가 나고 `Integer page`는 null을 받는다'
+    how: '컨트롤러 하나만 띄운 작은 스프링 부트 앱에 요청해 상태 코드와 예외 타입을 본다. 본문에는 확인된 값만 적는다'
+sources:
+  - '박싱 변환과 -128부터 127까지의 값: 자바 언어 명세 5.1.7 https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.7'
+  - '언박싱과 null: 자바 언어 명세 5.1.8 https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.8'
+  - '`Long.valueOf`가 -128부터 127까지를 캐시한다: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Long.html#valueOf(long)'
+  - '숫자 비교 `==`에서 한쪽이 기본형일 때: 자바 언어 명세 15.21.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.21.1'
+  - '삼항 연산자의 타입: 자바 언어 명세 15.25 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.25'
+  - '엔티티의 식별자에 래퍼 타입을 쓰는 것: 하이버네이트 사용자 가이드 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#entity-pojo-identifier'
+  - '`@RequestParam`: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/requestparam.html'
