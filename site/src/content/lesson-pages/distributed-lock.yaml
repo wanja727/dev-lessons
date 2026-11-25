@@ -1,0 +1,330 @@
+# 분산 락
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/distributed-lock.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 분산 락
+description: 서버가 여러 대일 때 synchronized로 막을 수 없는 이유와 Redis 락, 락에 만료 시간이 필요한 이유, 풀 때 주인을 확인해야 하는 이유, 만료가 일보다 짧을 때의 한계와 펜싱 토큰. Redis 컨테이너로 서버 여러 대의 락을 재현하는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 20
+roadmap: A12
+type: 동작 확인
+prerequisites:
+  - {slug: stock-concurrency, title: 동시 요청에서 재고 지키기}
+assume: 'Redis 7, Lettuce. 서버를 여러 대 띄우면 @Scheduled가 서버마다 돈다는 것(서버를 늘리는 방법 레슨). Redis의 명령 하나는 원자적이고 Lua 스크립트로 여러 명령을 한 번에 실행한다는 것(Redis 레슨). DB 락과 조건부 UPDATE(동시 요청에서 재고 지키기 레슨).'
+example: '매일 0시의 정산 작업. 서버 3대가 같은 순간 정산을 시작하는데 정산은 한 번만 돌아야 한다. Redis에 락 키 `lock:settle`을 두고 잡은 서버만 실행한다.'
+intro:
+  - '서버를 세 대로 늘린 다음 날, 가맹점 정산이 세 번 입금됐어요. 정산 메서드에는 `synchronized`도 붙어 있었는데요. `synchronized`는 서버 한 대의 JVM 안에서만 막아요.'
+  - '서버가 여러 대인 스프링 서비스에서 "이 일은 한 번에 하나만"을 지키려면 서버들이 함께 보는 곳에 락을 둬야 해요. Redis가 가장 흔한 자리예요. 그런데 락에는 만료, 풀기, 늦게 끝나는 작업 같은 함정이 있어요. 경력 면접에서 "분산 락을 어떻게 구현하나요", "Redis 락의 한계"를 물어요.'
+  - '이 레슨에서는 Redis 연결을 따로 가진 스레드로 서버 여러 대를 흉내 내, 락이 정산을 한 번만 돌게 하는지, 잘못 풀면 무엇이 깨지는지, 만료가 일보다 짧으면 두 서버가 동시에 들어가는지 확인해요.'
+covers:
+  - topic: 'synchronized와 ReentrantLock은 한 JVM 안에서만 막는다. 서버가 여러 대면 모두가 보는 곳에 락을 둔다'
+    where: '질문 1'
+  - topic: 'Redis 락: SET key token NX PX ms. 키가 없을 때만 넣고 만료 시간을 함께 준다'
+    where: '질문 1'
+  - topic: '만료 시간이 없으면 락을 쥔 서버가 죽었을 때 락이 영원히 남는다'
+    where: '질문 2'
+  - topic: '락을 풀 때는 내 토큰일 때만 지운다. 그냥 DEL하면 만료 뒤 다른 서버가 잡은 락을 지운다. 확인과 삭제를 Lua로 한 번에'
+    where: '질문 3'
+  - topic: '일이 만료 시간보다 오래 걸리면(GC 멈춤, 느린 I/O) 두 서버가 동시에 들어간다'
+    where: '질문 4'
+  - topic: '펜싱 토큰: 락을 얻을 때마다 커지는 번호를 받아, 저장하는 쪽이 더 작은 번호의 쓰기를 거절한다'
+    where: '질문 4'
+  - topic: '최종 방어선은 DB 제약과 조건부 UPDATE다. 분산 락은 중복 실행을 줄이는 장치다'
+    where: '질문 4'
+  - topic: '레디슨(Redisson)의 RLock과 감시견(watchdog)의 만료 연장'
+    where: '실무에서는'
+  - topic: '여러 Redis 노드에 락을 거는 레드락(Redlock)과 그에 대한 논쟁'
+    where: '질문 4의 더 알아보기'
+  - topic: '선착순 이벤트에서 락 대신 쓰는 방법'
+    where: '다루지 않음: 선착순 이벤트 설계(A14)'
+codes:
+  predict: |-
+    // 서버 3대가 같은 순간 정산 시작
+    String token = UUID.randomUUID()
+        .toString();
+    if ("OK".equals(redis.set(
+        "lock:settle", token,
+        SetArgs.Builder.nx().px(10_000)))) {
+      settle();
+    }
+    // 정산은 몇 번 돌까?
+  sync: |-
+    @Scheduled(cron = "0 0 0 * * *")
+    public [[synchronized]] void settle() {
+      ...
+    }
+  setNx: |-
+    SET lock:settle 7f3c-... [[NX]] [[PX 10000]]
+  badUnlock: |-
+    try {
+      settle();
+    } finally {
+      [[redis.del("lock:settle");]]
+    }
+  unlockLua: |-
+    if redis.call('GET', KEYS[1])
+        == ARGV[1] then
+      return redis.call('DEL', KEYS[1])
+    end
+    return 0
+  fencing: |-
+    long fence = redis.incr("fence:job");
+    ...
+    // 저장소: 더 큰 번호만 받는다
+    if (fence > lastFence) {
+      write(...);
+      lastFence = fence;
+    } else {
+      reject();
+    }
+  redisson: |-
+    RLock lock =
+        redisson.getLock("lock:settle");
+    if (lock.[[tryLock]](0, TimeUnit.SECONDS)) {
+      try {
+        settle();
+      } finally {
+        lock.unlock();
+      }
+    }
+  noFinally: |-
+    RLock lock =
+        redisson.getLock("lock:settle");
+    lock.lock();
+    settle();
+    [[lock.unlock();]]
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/distlock/DistributedLockTest.java
+  redisSet: https://redis.io/docs/latest/commands/set/
+  redisLock: https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+  redisson: https://redisson.org/docs/data-and-services/locks-and-synchronizers/
+  kleppmann: https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html
+predict:
+  title: 정산은 몇 번 돌까요?
+  text: '서버 3대가 같은 순간 코드 predict를 실행해요. `SET ... NX PX`는 키가 없을 때만 넣어요. 정산은 몇 번 돌까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: '1'
+      label: 1번
+    - value: '3'
+      label: 3번
+    - value: '0'
+      label: 0번
+  answer: '1'
+  storageKey: distlock-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 서버가 여러 대면 왜 분산 락이 필요하고, Redis로 어떻게 거나요?
+    conclusion:
+      lead: '`synchronized`는 한 JVM 안에서만 막아서, 서버가 여러 대면 모든 서버가 함께 보는 Redis에 락 키를 둬요.'
+      sub: '`SET key token NX PX ms`로 키가 없을 때만 넣으면, Redis가 명령을 하나씩 실행하니 동시에 시도해도 한 서버만 얻어요.'
+    says:
+      - 'synchronized는 서버마다 따로. 서버 3대면 3번'
+      - 'SET NX PX: 3대가 동시에 시도해 1대만 얻는다. 예측의 답'
+    asks:
+      - '본문의 예시: 서버 3대가 동시에 SET lock:settle NX PX를 보냈다. 락을 얻는 서버는 (1대)'
+      - '옮긴 상황: 서버 2대에서 @Scheduled 메서드에 synchronized를 붙였다. 정산은 (서버마다 1번씩, 2번 돈다)'
+    body:
+      - p: '`synchronized`는 **그 JVM 안의** 스레드끼리만 막아요. 서버가 세 대면 JVM도 셋이라 서로를 몰라요([서버를 늘리는 방법](lesson:scale-out)에서 본 `@Scheduled`가 서버마다 도는 것과 같아요).'
+      - code: sync
+      - p: '그래서 서버 셋이 **함께 보는 곳**에 락을 둬요. Redis에 키 하나를 두고, 그 키를 넣는 데 성공한 서버만 일을 해요.'
+      - code: setNx
+      - ul:
+          - '`NX`: 키가 **없을 때만** 넣어요. 이미 있으면 실패해요.'
+          - '`PX 10000`: 10초 뒤 키가 저절로 사라져요(질문 2).'
+          - '값에는 서버마다 다른 **토큰**(UUID)을 넣어요. 풀 때 주인을 확인하는 데 써요(질문 3).'
+      - p: 'Redis는 명령을 하나씩 실행하니([Redis](lesson:redis-ranking)), 세 서버가 같은 순간 보내도 `SET NX`는 하나만 성공해요([Redis 문서](link:redisSet)).'
+      - ci:
+          key: once
+          label: 실제 결과 보기
+          source: DistributedLockTest.lockRunsOnce
+          code: predict
+      - p: '답은 **1번**이에요. {{predict-result}} 락 없이는 세 서버가 모두 정산했고, 락을 건 뒤에는 얻은 한 서버만 정산했어요.'
+      - quiz:
+          q: '서버 2대에서 `@Scheduled` 정산 메서드에 `synchronized`를 붙였어요. 0시에 정산은 몇 번 도나요?'
+          options:
+            - '1번'
+            - '2번'
+            - '0번'
+          answer: 2
+          explain: '`synchronized`는 서버마다 따로라 서로를 막지 못해요. 서버마다 한 번씩 돌아요.'
+      - next: '락을 잡은 서버가 정산하다 죽으면, 그 락은 어떻게 될까요?'
+    recall: '`synchronized`나 `ReentrantLock`은 한 JVM 안의 스레드끼리만 막아서, 서버가 여러 대면 서로를 몰라요. 그래서 모든 서버가 함께 보는 Redis에 락 키를 두고, `SET key token NX PX ms`로 키가 없을 때만 넣어요. Redis가 명령을 하나씩 실행하니 동시에 시도해도 한 서버만 성공하고, 그 서버만 일을 해요.'
+  - id: q2
+    title: 락에는 왜 만료 시간을 주나요?
+    conclusion:
+      lead: '락을 쥔 서버가 풀기 전에 죽으면, 만료가 없는 락은 영원히 남아 아무도 그 일을 못 하게 돼요.'
+      sub: '`PX`로 만료를 주면 죽은 서버의 락도 정한 시간이 지나 저절로 풀려요. 만료는 일이 끝나는 데 걸리는 시간보다 넉넉하게 잡아요.'
+    says:
+      - '만료 없는 락: 0.5초 뒤 서버 2가 못 얻음, TTL -1. PX 300: 얻음'
+    asks:
+      - '본문의 예시: 만료 없이 락을 잡은 서버가 죽었다. 다른 서버는 (영원히 락을 얻지 못한다)'
+      - '옮긴 상황: 정산이 보통 2분 걸리는데 락 만료를 10초로 줬다. 문제는 (정산 중에 락이 풀려 다른 서버가 또 정산할 수 있다)'
+    body:
+      - p: '락을 쥔 서버가 일하다 죽거나 배포로 내려가면 `finally`의 풀기도 실행되지 않아요. 두 락을 비교해 봤어요. 하나는 만료 없이, 하나는 300ms 만료로 잡고 서버 1이 죽었다고 치고, 0.5초 뒤 서버 2가 시도했어요.'
+      - ci:
+          key: expiry
+          label: 실제 결과 보기
+          source: DistributedLockTest.expiryReleasesDeadHolder
+      - p: '만료 없는 락은 TTL이 -1(만료 없음)로 **영원히 남아** 서버 2가 얻지 못했어요. 누군가 손으로 지울 때까지 정산이 멈춰요. `PX`를 준 락은 저절로 풀려 서버 2가 얻었어요.'
+      - p: '만료 시간은 **일이 끝나는 데 걸리는 시간보다 넉넉하게** 잡아요. 너무 짧으면 일하는 중에 락이 풀려 다른 서버가 들어와요(질문 4). 너무 길면 서버가 죽었을 때 그만큼 일이 멈춰요.'
+      - quiz:
+          q: '정산이 보통 2분 걸리는데 락 만료를 10초로 줬어요. 무엇이 문제인가요?'
+          options:
+            - '문제없다'
+            - '정산 중에 락이 풀려 다른 서버가 또 정산할 수 있다'
+            - '락을 얻을 수 없다'
+          answer: 2
+          explain: '만료가 일보다 짧으면 일하는 도중에 키가 사라져, 다른 서버가 락을 얻어요.'
+      - next: '이제 일을 마치면 락을 풀어야 해요. 그냥 키를 지우면 될까요?'
+    recall: '락을 쥔 서버가 풀기 전에 죽거나 내려가면 finally의 풀기도 실행되지 않아, 만료가 없는 락은 영원히 남아 아무도 그 일을 못 해요. `PX`로 만료를 주면 정한 시간이 지나 저절로 풀려요. 만료는 일이 끝나는 시간보다 넉넉하게 잡아요. 너무 짧으면 일하는 중에 풀리고, 너무 길면 서버가 죽었을 때 그만큼 멈춰요.'
+  - id: q3
+    title: 락을 풀 때 무엇을 확인하나요?
+    conclusion:
+      lead: '그 락이 아직 내 것인지, 값이 내 토큰인지 확인하고 지워요. 확인과 삭제는 Lua 스크립트로 한 번에 해요.'
+      sub: '그냥 `DEL`하면, 내 락이 만료된 뒤 다른 서버가 잡은 락을 지워 버려 세 번째 서버까지 들어와요.'
+    says:
+      - 'A 만료 → B 잡음 → A가 DEL: 남은 주인 없음, C가 얻음. Lua: B 그대로, C 못 얻음'
+    asks:
+      - '본문의 예시: A의 락이 만료돼 B가 잡았는데 A가 일을 마치고 그냥 DEL했다. 이어서 C가 시도하면 (C가 얻어 B와 C가 동시에 일한다)'
+      - '옮긴 상황: 토큰을 확인하는 코드를 GET과 DEL 두 명령으로 짰다. 문제는 (GET과 DEL 사이에 락이 만료되고 다른 서버가 잡으면 그 락을 지운다)'
+    body:
+      - p: '락을 푸는 가장 쉬운 코드예요.'
+      - code: badUnlock
+        notes:
+          - mark: redis.del("lock:settle");
+            as: code
+            text: '그 키가 지금 누구 것이든 지워요.'
+      - p: 'A의 일이 오래 걸려 락이 만료됐고, 그사이 B가 락을 잡았어요. A가 일을 마치고 `DEL`하면 **B의 락**을 지워요. 그러면 C가 락을 얻어 B와 C가 동시에 일해요. 그래서 풀 때는 **값이 내 토큰일 때만** 지워요. 확인(GET)과 삭제(DEL)를 따로 보내면 그 사이에 또 바뀔 수 있으니 Lua 스크립트 하나로 해요([Redis 문서](link:redisLock)).'
+      - code: unlockLua
+      - ci:
+          key: unlock
+          label: 실제 결과 보기
+          source: DistributedLockTest.unlockMustCheckOwner
+      - p: '그냥 `DEL`은 B의 락을 지워 C가 들어왔고, 토큰을 확인하는 Lua는 B의 락을 남겨 C가 못 들어왔어요.'
+      - quiz:
+          q: '토큰을 확인해 풀려고 `GET`으로 값을 읽어 내 토큰이면 `DEL`을 보내는 두 명령으로 짰어요. 무엇이 문제인가요?'
+          options:
+            - '문제없다'
+            - 'GET과 DEL 사이에 락이 만료되고 다른 서버가 잡으면, 그 서버의 락을 지운다'
+            - 'GET은 Redis에서 쓸 수 없다'
+          answer: 2
+          explain: '두 명령 사이에 다른 명령이 끼어들 수 있어요. 확인과 삭제를 Lua 스크립트 하나로 묶어요.'
+      - next: '주인 확인까지 했어요. 그래도 남는 구멍이 있어요. 일이 만료보다 오래 걸리면요?'
+    recall: '락을 풀 때는 값이 내 토큰인지 확인하고 지워요. 그냥 DEL하면, 내 락이 만료된 뒤 다른 서버(B)가 잡은 락을 지워서 세 번째 서버(C)까지 들어와 B와 C가 동시에 일해요. 확인과 삭제를 GET과 DEL 두 명령으로 나누면 그 사이에 또 바뀔 수 있으니 Lua 스크립트 하나로 묶어요.'
+  - id: q4
+    title: Redis 락으로 완전히 막을 수 있나요?
+    conclusion:
+      lead: '아니요. 일이 만료 시간보다 오래 걸리면(GC 멈춤, 느린 I/O) 락이 풀려 두 서버가 동시에 들어가요.'
+      sub: '그래서 락을 얻을 때마다 커지는 펜싱 토큰을 받아 저장하는 쪽이 늦은 쓰기를 거절하게 하거나, DB 제약과 조건부 UPDATE를 마지막 방어선으로 둬요.'
+    says:
+      - '락 0.2초, 일 0.6초: 동시에 2대. 펜싱 번호 1의 늦은 쓰기 거절'
+      - '최종 방어선은 DB'
+      - '더 알아보기: 레드락 논쟁'
+    widget:
+      kind: steps
+      note: '서버 1이 락(번호 1) → 서버 1 멈춤 → 락 만료 → 서버 2가 락(번호 2) → 서버 2 쓰기 받음 → 서버 1 깨어나 쓰기 → 번호 1이라 거절'
+    asks:
+      - '본문의 예시: 서버 1이 펜싱 번호 1로, 서버 2가 번호 2로 락을 얻었다. 서버 2가 먼저 쓴 뒤 서버 1이 쓰면 (서버 1의 쓰기는 거절된다)'
+      - '옮긴 상황: 분산 락으로 쿠폰 발급을 막는데 쿠폰 테이블에 (회원, 쿠폰) 유니크 제약을 걸자는 의견이 나왔다. 필요한가 (필요하다. 락이 뚫려도 DB가 두 번째 발급을 막는다)'
+    body:
+      - p: '락은 만료 시간이 지나면 풀려요. 그런데 서버 1이 락을 쥔 채 GC로 멈추거나 느린 디스크를 기다리느라 만료보다 오래 걸리면요? 락은 풀리고, 서버 2가 락을 얻어요. 서버 1은 자기가 아직 락을 쥔 줄 알고 깨어나 이어서 일해요.'
+      - p: '넘기며 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: Redis 락, rows: [{k: 주인, v: 없음}]}
+              - {label: 저장소, rows: [{k: 마지막으로 받은 번호, v: '0'}]}
+          scenarios:
+            default:
+              - log: '서버 1: 락 얻음, 펜싱 번호 1'
+                duo:
+                  - {label: Redis 락, rows: [{k: 주인, v: 서버 1, mark: changed}]}
+                  - {label: 저장소, rows: [{k: 마지막으로 받은 번호, v: '0'}]}
+              - log: '서버 1: GC로 멈춤. 0.2초 뒤 락 만료'
+                duo:
+                  - {label: Redis 락, rows: [{k: 주인, v: 없음, mark: bad}]}
+                  - {label: 저장소, rows: [{k: 마지막으로 받은 번호, v: '0'}]}
+              - log: '서버 2: 락 얻음, 펜싱 번호 2. 쓰기 → 받음'
+                duo:
+                  - {label: Redis 락, rows: [{k: 주인, v: 서버 2, mark: changed}]}
+                  - {label: 저장소, rows: [{k: 마지막으로 받은 번호, v: '2', mark: changed}]}
+              - log: '서버 1: 깨어나 번호 1로 쓰기 → 거절'
+                duo:
+                  - {label: Redis 락, rows: [{k: 주인, v: 서버 2}]}
+                  - {label: 저장소, rows: [{k: 마지막으로 받은 번호, v: '2'}]}
+                verdict: '락만으로는 둘이 동시에 들어왔지만, 펜싱 번호 덕분에 늦은 쓰기가 막혔어요.'
+      - ci:
+          key: fencing
+          label: 실제 결과 보기
+          source: DistributedLockTest.expiryDuringWorkAndFencing
+      - p: '두 서버가 **동시에** 임계 구역에 있었어요. 락만으로는 막지 못했어요. 그래서 락을 얻을 때마다 Redis `INCR`로 커지는 번호(**펜싱 토큰**)를 받고, 저장하는 쪽이 이미 받은 것보다 작은 번호의 쓰기를 거절해요. 늦게 깨어난 서버 1의 쓰기가 거절됐어요([마틴 클레프만의 글](link:kleppmann)).'
+      - p: '저장소가 번호를 확인해 주지 못하면 어떻게 할까요? 결국 **DB가 마지막 방어선**이에요. 정산이라면 (가맹점, 날짜)에 유니크 제약을 걸고, 재고라면 조건부 UPDATE를 써요([동시 요청에서 재고 지키기](lesson:stock-concurrency)). 분산 락은 중복 실행을 **줄이는** 장치이고, 정확성은 DB가 지켜요.'
+      - more:
+          summary: 여러 Redis에 거는 레드락
+          body:
+            - p: 'Redis 한 대가 죽으면 락이 사라질 수 있어서, 여러 대의 Redis 과반에 락을 거는 레드락(Redlock)이 제안됐어요([Redis 문서](link:redisLock)). 하지만 위의 GC 멈춤 문제는 레드락으로도 풀리지 않는다는 비판이 있어요(위 클레프만의 글). 정확성이 중요하면 펜싱 토큰이나 DB 제약을 함께 둬요.'
+      - quiz:
+          q: '분산 락으로 쿠폰 중복 발급을 막고 있는데, 쿠폰 발급 테이블에 (회원, 쿠폰) 유니크 제약을 걸자는 의견이 나왔어요. 필요한가요?'
+          options:
+            - '필요 없다. 락이 있으니까'
+            - '필요하다. 락이 만료 등으로 뚫려도 DB가 두 번째 발급을 막는다'
+            - '락을 지우고 제약만 둬야 한다'
+          answer: 2
+          explain: '락은 일이 만료보다 오래 걸리면 뚫려요. 정확성은 DB 제약이 지켜요.'
+      - next: '원리는 여기까지예요. 이제 스프링에서 많이 쓰는 레디슨의 락과 흔한 실수를 볼게요.'
+    recall: '아니요. 락을 쥔 서버가 GC 멈춤이나 느린 I/O로 만료 시간보다 오래 걸리면 락이 풀려 다른 서버가 얻고, 깨어난 서버는 자기가 아직 락을 쥔 줄 알고 이어서 일해 두 서버가 동시에 들어가요. 락을 얻을 때마다 커지는 펜싱 토큰을 받아 저장하는 쪽이 작은 번호의 쓰기를 거절하게 하거나, DB의 유니크 제약과 조건부 UPDATE를 마지막 방어선으로 둬요.'
+practice:
+  title: 스프링에서 분산 락을 쓸 때
+  says:
+    - '레디슨 RLock의 tryLock, unlock. 감시견이 만료를 연장한다. 문서가 근거'
+    - '흔한 실수: finally 없이 unlock'
+  body:
+    - p: '스프링 서비스에서는 락을 직접 짜기보다 레디슨(Redisson) 같은 라이브러리를 많이 써요. `RLock`이 토큰 확인, Lua로 풀기를 대신 해 줘요([레디슨 문서](link:redisson)). 이 레슨의 테스트는 레디슨을 쓰지 않아서 아래 동작은 문서가 근거예요.'
+    - code: redisson
+      notes:
+        - mark: tryLock
+          as: code
+          text: '기다리지 않고(0초) 한 번만 시도해요. 정산처럼 "누군가 하고 있으면 건너뛰기"에 맞아요.'
+    - p: '레디슨은 만료 시간을 직접 주지 않고 잡으면 **감시견**(watchdog)이 락을 쥔 동안 만료를 계속 연장해요. 질문 2의 "만료가 일보다 짧으면"을 줄여 주지만, 서버가 통째로 멈추면 연장도 멈추니 질문 4의 문제는 남아요.'
+    - h3: 흔한 실수 하나
+    - code: noFinally
+      notes:
+        - mark: lock.unlock();
+          as: code
+          text: '`settle()`이 예외를 던지면 이 줄에 닿지 못해요.'
+    - p: '예외가 나면 락이 만료될 때까지(또는 감시견이 계속 연장하면 서버가 살아 있는 한) 다른 서버가 그 일을 못 해요. 위의 `redisson` 코드처럼 `try`와 `finally`로 감싸 꼭 풀어요.'
+interview:
+  question: 서버가 여러 대일 때 한 번만 실행되게 하려면 어떻게 하나요?
+  model:
+    - label: 정의
+      text: synchronized는 한 JVM 안에서만 막으니, 모든 서버가 보는 Redis에 락 키를 두는 분산 락을 씁니다. SET key token NX PX로 키가 없을 때만 넣고 만료 시간을 함께 줍니다.
+    - label: 원리
+      text: 만료가 없으면 락을 쥔 서버가 죽었을 때 락이 영원히 남습니다. 풀 때는 값이 내 토큰일 때만 지우고, 확인과 삭제를 Lua로 묶습니다. 그냥 DEL하면 만료 뒤 다른 서버가 잡은 락을 지웁니다.
+    - label: 한계
+      text: 일이 만료보다 오래 걸리면 두 서버가 동시에 들어갑니다. 펜싱 토큰으로 늦은 쓰기를 거절하거나, DB의 유니크 제약과 조건부 UPDATE를 마지막 방어선으로 둡니다. 레디슨을 쓰면 감시견이 만료를 연장하고, unlock은 finally에서 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 서버를 늘린 뒤 정산이 여러 번 돌던 문제를 레디슨 tryLock으로 막고, 정산 테이블에 (가맹점, 날짜) 유니크 제약을 더했습니다.'
+verified: 락이 정산을 한 번만 돌게 하는 것, 만료, 풀기, 펜싱 토큰의 결과는 Redis 7에 연결을 따로 가진 스레드로 서버 여러 대를 흉내 내 받은 값이에요. 코드가 바뀔 때마다 테스트([DistributedLockTest](link:test))가 다시 돌아요.
+footer: '근거: SET의 NX와 PX는 [Redis 문서](link:redisSet), 락 패턴은 [Redis 문서](link:redisLock), 펜싱 토큰은 [마틴 클레프만의 글](link:kleppmann), RLock은 [레디슨 문서](link:redisson). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '락 없이 서버 3대면 정산 3번, SET NX PX 락이면 1번'
+    how: 'Redis 연결을 따로 가진 스레드 3개'
+    test: DistributedLockTest.lockRunsOnce
+  - claim: '만료 없는 락은 서버가 죽으면 영원히 남고, PX 락은 만료 뒤 다른 서버가 얻는다'
+    how: '같은 구성'
+    test: DistributedLockTest.expiryReleasesDeadHolder
+  - claim: '그냥 DEL은 만료 뒤 다른 서버의 락을 지우고, 토큰을 확인하는 Lua는 지우지 않는다'
+    how: '같은 구성'
+    test: DistributedLockTest.unlockMustCheckOwner
+  - claim: '일이 만료보다 길면 두 서버가 동시에 들어가고, 펜싱 토큰으로 늦은 쓰기를 거절한다'
+    how: '락 0.2초, 일 0.6초'
+    test: DistributedLockTest.expiryDuringWorkAndFencing
+sources:
+  - 'SET NX PX: https://redis.io/docs/latest/commands/set/'
+  - 'Redis 분산 락 패턴: https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/'
+  - '펜싱 토큰: https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html'
+  - '레디슨 락: https://redisson.org/docs/data-and-services/locks-and-synchronizers/'
