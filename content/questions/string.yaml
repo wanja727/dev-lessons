@@ -43,7 +43,7 @@ questions:
       - paid
       - PAID
       - 컴파일 오류
-      - null
+      - "null"
     answer: "1"
     explanation: |-
       **paid예요.** toUpperCase는 s를 고치지 않고 대문자로 된 새 문자열을 돌려줘요.
@@ -66,7 +66,7 @@ questions:
       - '"A"'
       - '"AB"'
       - '"B"'
-      - null
+      - "null"
     answer: "1"
     explanation: |-
       **"A"예요.** s + "B"는 원래 객체를 고치지 않고 새 문자열을 만들어요.
