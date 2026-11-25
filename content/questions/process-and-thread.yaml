@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/process-and-thread.yaml의 says).
 # 동작에 관한 정답은 verification의 processthread/ProcessAndThreadTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 자바 프로그램이 자식 JVM을 하나 더 띄웠고, 자식은 자기의 static 변수 count를 100으로 바꾸고 끝났어요. 부모 JVM의 같은 이름 변수 count(처음 0)는 무엇일까요?
     choices:
@@ -51,7 +52,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서버 프로세스 하나에서 요청 스레드 여러 개가 일하는 중에, 한 요청 때문에 프로세스가 죽었어요. 같은 프로세스의 다른 요청 스레드들은 어떻게 될까요?
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 두 스레드가 아래 메서드를 동시에 실행해요. 각 스레드가 돌려받는 값은 무엇일까요?
     code: |-
@@ -95,7 +96,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"두 요청 스레드가 각자 지역 변수 list를 가지고 있고, 둘 다 같은 싱글톤 빈의 getItems()가 돌려준 리스트를 받았다. 변수가 지역 변수이니 이 리스트는 스레드마다 따로다\""
     answer: X
@@ -110,7 +111,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: main 스레드에서 아래 두 줄을 차례로 실행해요. 두 줄이 찍는 스레드 이름은 각각 무엇일까요?
     code: |-
@@ -134,7 +135,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스레드 A와 B를 차례로 start()하고, join() 없이 바로 결과 리스트의 크기를 출력했어요. A와 B는 각각 리스트에 값 하나를 넣어요(리스트는 여러 스레드가 써도 안전한 것). 출력으로 맞는 것은?
     choices:
@@ -154,7 +155,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: count가 5일 때 두 스레드가 거의 동시에 count++를 한 번씩 했어요. 동기화는 하지 않았어요. 끝난 뒤 count로 나올 수 있는 값을 모두 고르면?
     choices:
@@ -173,7 +174,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 좋아요 수를 likes = likes + 1로 올리는 코드를 스레드 10개가 100번씩 실행했어요. 동기화는 하지 않았어요. 결과로 맞는 설명은?
     choices:
@@ -192,7 +193,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링의 싱글톤 빈인 아래 서비스의 visit()을 요청 스레드 여럿이 동시에 1만 번 불렀어요. 끝난 뒤 count는?
     code: |-
@@ -222,7 +223,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "프로세스와 스레드의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

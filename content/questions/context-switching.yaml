@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/context-switching.yaml의 says).
 # 시간에 관한 정답은 verification의 contextswitch/ContextSwitchingTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 코어 2개인 기계에서 계산만 하는 스레드 8개를 띄웠어요. 한 순간에 실제로 코어에서 실행되는 스레드는 최대 몇 개일까요?
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 코어 8개인 서버에 스레드가 200개 있고, 그 가운데 190개는 DB의 응답을 기다리는 중이에요. 지금 코어를 차지하려고 다투는 스레드는 대략 몇 개일까요?
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 A가 실행 위치 PC=12에서 타임 슬라이스를 다 써서 코어에서 내려왔어요. 나중에 다시 코어에 올라오면 어디서부터 실행할까요?
     choices:
@@ -88,7 +89,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"스레드가 타임 슬라이스를 남긴 채 Thread.sleep(1000)을 부르면, 남은 시간이 끝날 때까지 코어를 쥐고 있다\""
     answer: X
@@ -102,7 +103,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 두 스레드가 값을 하나씩 10만 번 주고받는 코드와, 한 스레드가 같은 덧셈을 10만 번 하는 코드가 있어요. 어느 쪽이 더 오래 걸릴까요?
     choices:
@@ -121,7 +122,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 로그를 한 줄 쓸 때마다 다른 스레드에 넘기고, 그 스레드가 다 쓸 때까지 기다리는 코드가 있어요. 로그 한 줄을 쓰는 일은 아주 짧아요. 이 코드에서 시간을 가장 많이 차지하는 것은?
     choices:
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 코어 4개인 기계에서 계산만 하는 작업 8개를 스레드 4개짜리 풀과 64개짜리 풀로 각각 돌렸어요. 64개짜리 풀은 얼마나 빠를까요?
     choices:
@@ -159,7 +160,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 외부 API를 부르고 200ms 기다리는 작업 100개를 처리해요. 외부 API는 동시 호출을 막지 않아요. 스레드 10개 풀과 100개 풀 가운데 어느 쪽이 빨리 끝나고, 대략 얼마나 걸릴까요?
     choices:
@@ -178,7 +179,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 코어 8개 서버에서 이미지 크기를 바꾸는 계산 작업을 아래 풀에 맡겨요. 이 설정의 문제로 맞는 것은?
     code: |-
@@ -202,7 +203,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "컨텍스트 스위칭이 무엇이고 왜 비용이 드는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

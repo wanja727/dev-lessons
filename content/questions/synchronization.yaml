@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/synchronization.yaml의 says).
 # 동작에 관한 정답은 verification의 synchronization/SynchronizationTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드를 같은 userId로 두 스레드가 거의 동시에 실행했어요. issued는 여러 스레드가 써도 안전한 집합이에요. couponCount가 2가 될 수 있을까요?
     code: |-
@@ -56,7 +57,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 잔액 100에서 두 스레드가 각각 if (balance >= 80) balance -= 80;을 실행했어요. 동기화는 하지 않았어요. 잔액이 음수가 될 수 있을까요?
     choices:
@@ -75,7 +76,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 두 스레드가 아래 코드를 동시에 실행하고 둘 다 끝난 뒤 count를 출력해요. 결과로 맞는 것은?
     code: |-
@@ -100,7 +101,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 설정을 다시 읽는 스레드 하나만 config 참조를 새 객체로 바꾸고, 요청 스레드들은 config를 읽기만 해요. 요청 스레드가 바뀐 설정을 보게 하는 가장 가벼운 방법은?
     choices:
@@ -120,7 +121,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 두 스레드가 같은 객체의 inc()를 100만 번씩 불러요. 끝난 뒤 count는?
     code: |-
@@ -145,7 +146,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Counter 객체를 두 개 만들어 스레드 A는 첫째의 synchronized inc()를, 스레드 B는 둘째의 synchronized inc()를 100만 번씩 불러요. 맞는 설명은?
     choices:
@@ -164,7 +165,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 쿠폰 수량을 DB에서 읽고 하나 줄여 쓰는 메서드에 synchronized를 붙였어요. 같은 애플리케이션을 서버 두 대로 띄우면 초과 발급을 막을 수 있을까요?
     choices:
@@ -184,7 +185,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 다른 스레드가 이미 값을 6으로 바꾼 AtomicInteger에 compareAndSet(5, 6)을 불렀어요. 결과는?
     choices:
@@ -203,7 +204,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"재고 stock과 판매 수 sold를 각각 AtomicInteger로 두고 stock.decrementAndGet(); sold.incrementAndGet();을 여러 스레드가 실행하면, 언제 읽어도 stock + sold는 처음 재고와 같다\""
     answer: X
@@ -217,7 +218,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "volatile과 synchronized와 AtomicInteger의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

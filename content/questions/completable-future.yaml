@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/completable-future.yaml의 says).
 # 동작에 관한 정답은 verification의 completablefuture/FutureAndCompletableFutureTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 # 2026-11-25에 예전 레슨 둘(future-and-callable, completable-future)을 합쳐 핵심 질문 구조로 다시 썼다.
 # 예전 문제는 지웠고, future-and-callable 문제 파일도 지웠다.
 subject:
@@ -33,7 +34,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 3개짜리 풀에서 300ms 걸리는 호출 셋을 아래처럼 불러요. 세 결과를 모두 받는 데 대략 얼마나 걸릴까요?
     code: |-
@@ -59,7 +60,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스레드 2개짜리 풀에 각각 1초 걸리는 작업 5개를 모두 맡긴 뒤 차례로 get했어요. 대략 얼마나 걸릴까요?
     choices:
@@ -78,7 +79,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드에서 f.get()이 던지는 예외와, 그 예외의 getCause()가 돌려주는 것은?
     code: |-
@@ -103,7 +104,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"try { pool.submit(() -> parse(bad)); } catch (NumberFormatException e) { log(e); }에서 parse가 NumberFormatException을 던지면 catch가 실행된다\""
     answer: X
@@ -118,7 +119,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 주문 결과의 쿠폰 id로 couponApiAsync(id)(CompletableFuture<Coupon>을 돌려줌)를 이어 불러요. order.thenApply(o -> couponApiAsync(o.couponId()))의 타입은?
     choices:
@@ -137,7 +138,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 상품 정보(200ms)와 재고(400ms)를 각각 supplyAsync로 맡기고 thenCombine으로 합쳐요. 풀의 스레드는 충분해요. 합친 결과가 나오기까지 대략 얼마나 걸릴까요?
     choices:
@@ -156,14 +157,15 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
-    body: 아래 식의 결과는?
+    body: 아래 코드의 마지막 식은 무엇을 돌려줄까요?
     code: |-
-      supplyAsync(() -> {
+      CompletableFuture<Integer> f =
+          supplyAsync(() -> {
             throw new RuntimeException();
-          })
-          .thenApply(x -> x + 1)
+          });
+      f.thenApply(x -> x + 1)
           .exceptionally(e -> -1)
           .join();
     choices:
@@ -181,7 +183,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 추천 상품 API가 가끔 5초 넘게 걸려요. 화면은 1초 안에 나가야 하고, 추천이 없으면 빈 목록이면 돼요. 추천 호출의 CompletableFuture에 붙일 것으로 맞는 것은?
     choices:
@@ -200,7 +202,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 요청 스레드에서 아래처럼 executor 없이 2초 걸리는 외부 호출을 수십 개 맡겼어요. 같은 JVM의 병렬 스트림은 어떻게 될까요?
     code: |-
@@ -223,7 +225,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "Future와 CompletableFuture의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

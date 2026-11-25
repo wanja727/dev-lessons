@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/thread-safe-objects.yaml의 says).
 # 동작에 관한 정답은 verification의 threadsafe/ThreadSafeObjectsTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 처음 값은 (10000, KRW)예요. 한 스레드가 set(12000, "USD")의 첫 줄만 실행한 순간 다른 스레드가 두 필드를 읽었어요. 읽은 값으로 나올 수 있는 것은?
     code: |-
@@ -60,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"record Range(int lo, int hi)를 volatile Range range로 두고 바꿀 때마다 새 Range를 만들면, 읽는 스레드가 lo는 새 값, hi는 옛 값을 볼 수 있다\""
     answer: X
@@ -75,7 +76,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: static ThreadLocal<String> user가 있어요. 스레드 A가 user.set("kim"), 스레드 B가 user.set("lee")를 한 뒤 스레드 A가 user.get()을 불렀어요. 결과는?
     choices:
@@ -93,7 +94,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 메서드 안에서 new ArrayList<>()로 리스트를 만들어 값을 넣고, 돌려주기 전에 싱글톤 빈의 필드 lastResult에도 넣었어요. 이 리스트에 대해 맞는 설명은?
     choices:
@@ -112,7 +113,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 하나짜리 풀에서 아래 두 작업을 차례로 실행해요. 둘째 작업이 출력하는 값은?
     code: |-
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 요청 스레드에서 user.set("kim")을 한 뒤 CompletableFuture.runAsync(() -> log(user.get()))로 공용 풀에서 실행했어요. 공용 풀의 스레드는 user를 넣은 적이 없어요. 찍히는 값은?
     choices:
@@ -159,7 +160,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 인터셉터의 preHandle에서 직접 만든 ThreadLocal CURRENT에 로그인 사용자를 넣고, 어디에서도 지우지 않아요. 톰캣의 요청 처리 스레드는 풀이에요. 생길 수 있는 일과 고치는 곳으로 맞는 것은?
     choices:
@@ -178,7 +179,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스레드 8개가 ConcurrentHashMap에서 같은 키의 값을 get 하고 1을 더해 put 하기를 1만 번씩 했어요. 끝난 뒤 값은?
     choices:
@@ -197,7 +198,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 상품 id별로 재입고 알림을 받을 사용자 목록을 ConcurrentHashMap에 모아요. 여러 요청이 같은 상품에 처음으로 동시에 등록할 때 목록이 하나만 만들어지게 하려면?
     choices:
@@ -218,7 +219,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스레드에 안전한 객체를 만드는 방법을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

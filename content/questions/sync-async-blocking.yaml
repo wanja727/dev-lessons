@@ -6,6 +6,7 @@
 # 동작에 관한 정답은 verification의 syncasync/SyncAsyncBlockingTest로 확인했다 (자바 21).
 # 웹플럭스에 관한 정답은 스프링 문서가 근거다.
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: deliveryApiAsync()는 200ms 뒤에 "배송 중"으로 완료되는 CompletableFuture를 바로 돌려줘요. 아래 코드에서 먼저 찍히는 것은?
     code: |-
@@ -55,7 +56,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 회원 가입 뒤 환영 메일 요청을 메시지 큐에 넣고 바로 "가입 완료"로 응답해요. 메일은 다른 서버가 나중에 보내요. 응답하는 쪽에서 보면 메일 발송은?
     choices:
@@ -74,7 +75,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 빈 LinkedBlockingQueue에 한 스레드는 poll()을, 다른 스레드는 take()를 불렀어요. 각 스레드는 어떻게 될까요?
     choices:
@@ -93,7 +94,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"lock.tryLock()은 락이 잡혀 있으면 풀릴 때까지 기다리므로 블로킹 호출이다\""
     answer: X
@@ -107,7 +108,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: deliveryApiAsync()는 200ms 뒤에 완료되는 CompletableFuture를 돌려줘요. 아래 코드는 네 조합 가운데 무엇이고, 대략 얼마나 걸릴까요?
     code: |-
@@ -129,7 +130,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 파일 변환을 풀에 맡긴 뒤 1초마다 isDone()을 확인하며 진행 막대를 그리고, 끝나면 결과를 보여 줘요. 네 조합 가운데 무엇일까요?
     choices:
@@ -148,7 +149,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 200ms 기다리는 배송 API 호출 100건을 스레드 10개짜리 풀에서 블로킹으로 처리해요. 100건이 모두 끝나는 데 대략 얼마나 걸릴까요?
     choices:
@@ -167,7 +168,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 이벤트 루프 스레드 4개로 도는 서버의 핸들러에서 500ms 걸리는 JDBC 쿼리를 바로 불러요. 요청 8개가 동시에 들어오면 어떻게 될까요?
     choices:
@@ -186,7 +187,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 스프링 MVC 컨트롤러의 서비스가 DB를 1초 기다려요. 톰캣의 요청 처리 스레드가 200개일 때 동시에 들어온 요청 300개 가운데 처음 1초 안에 처리가 시작되는 요청은 몇 개일까요?
     code: |-
@@ -209,7 +210,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "동기와 비동기, 블로킹과 논블로킹의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
