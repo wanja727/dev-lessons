@@ -1,0 +1,190 @@
+# 식별자 생성 전략 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/id-generation.yaml의 says).
+# 동작에 관한 정답은 verification의 IdGenerationTest, IdGenerationBatchTest로 확인했다 (Hibernate 6.6, PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들었다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: id-generation
+  title: 식별자 생성 전략
+  unit: JPA
+  order: 809
+concepts:
+  - key: core
+    name: 식별자 생성 전략
+coreQuestions:
+  - key: q1
+    text: "IDENTITY와 SEQUENCE는 id를 언제 얻나요?"
+  - key: q2
+    text: "allocationSize는 무엇을 아끼나요?"
+  - key: q3
+    text: "한꺼번에 많이 넣을 때 왜 차이가 나나요?"
+  - key: q4
+    text: "롤백하면 받은 번호는 돌아오나요?"
+questions:
+  # ── 질문 1 ──
+  - key: idgen-seq-persist
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 한 트랜잭션 안에서 SEQUENCE 전략인 엔티티 셋을 em.persist했어요. flush 전까지 나가는 INSERT는 몇 번이고, 첫 엔티티의 getId()는 무엇일까요?
+    choices:
+      - INSERT 0번, id는 이미 있다
+      - INSERT 0번, id는 null이다
+      - INSERT 3번, id는 이미 있다
+    answer: "1"
+    explanation: |-
+      **INSERT 0번이고 id는 이미 있어요.** SEQUENCE는 시퀀스에서 id를 미리 받아 두고 INSERT를 flush까지 미뤄요.
+
+      - IDENTITY였다면 persist마다 INSERT가 바로 나가요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators
+  - key: idgen-mysql-identity
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: MySQL에서 AUTO_INCREMENT id(@GeneratedValue(strategy = IDENTITY))인 회원을 트랜잭션 안에서 em.persist한 직후 member.getId()를 읽었어요. 아직 flush도 커밋도 하지 않았어요. 값은 어떻게 될까요?
+    choices:
+      - "null"
+      - DB가 만든 id
+      - "0"
+    answer: "2"
+    explanation: |-
+      **DB가 만든 id예요.** IDENTITY는 id를 받으려고 persist하는 순간 INSERT를 보내요.
+
+      - 영속성 컨텍스트는 엔티티를 id로 담아서, persist할 때 id가 있어야 해요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators
+  # ── 질문 2 ──
+  - key: idgen-alloc-calls
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 같은 120건을 SEQUENCE 전략으로 저장해요. allocationSize가 50일 때와 1일 때, 시퀀스를 부르는 횟수는 대략 어떻게 될까요?
+    choices:
+      - 둘 다 120번
+      - 50이면 몇 번, 1이면 120번
+      - 50이면 50번, 1이면 1번
+    answer: "2"
+    explanation: |-
+      **50이면 몇 번(테스트에서 4번), 1이면 120번이에요.** 시퀀스를 한 번 부를 때 번호 50개를 예약하고 나머지는 메모리에서 나눠 줘요.
+
+      - DB 시퀀스의 증가값도 50이어야 해요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators
+  - key: idgen-restart-gap
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: allocationSize 50인 엔티티를 저장하던 앱이 id 1~10을 쓰고 배포로 다시 시작됐어요. 다시 뜬 앱이 처음 저장하는 엔티티의 id는 11일까요?
+    choices:
+      - 11이다
+      - 11이 아니라 더 큰 번호다
+      - 1부터 다시 쓴다
+    answer: "2"
+    explanation: |-
+      **더 큰 번호예요.** 예약해 둔 11~50은 꺼진 앱의 메모리에만 있었고, 다시 뜬 앱은 시퀀스에서 새 묶음을 받아요.
+
+      - 그래서 id에 구멍이 생겨요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators
+  # ── 질문 3 ──
+  - key: idgen-identity-batch
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: hibernate.jdbc.batch_size를 50으로 켜고 한 트랜잭션에서 엔티티 1,000건을 저장해요. SEQUENCE 전략일 때와 IDENTITY 전략일 때 INSERT는 어떻게 나갈까요?
+    choices:
+      - 둘 다 50개씩 배치 20번
+      - SEQUENCE는 배치 20번, IDENTITY는 배치 없이 1,000번
+      - SEQUENCE는 1,000번, IDENTITY는 배치 20번
+    answer: "2"
+    explanation: |-
+      **SEQUENCE만 배치로 묶여요.** IDENTITY는 INSERT마다 DB가 만든 id를 돌려받아야 해서 모아 보낼 수 없어요.
+
+      - Hibernate는 IDENTITY 엔티티에 배치를 쓰지 않아요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#batch
+  - key: idgen-fix-slow
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: PostgreSQL을 쓰는 서비스에서 정산 로그 10만 건 저장이 느려 batch_size를 100으로 켰는데 그대로예요. 엔티티의 id는 @GeneratedValue(strategy = IDENTITY)예요. 무엇을 바꿀까요?
+    choices:
+      - batch_size를 1000으로 더 키운다
+      - id 전략을 SEQUENCE로 바꾼다
+      - allocationSize를 1로 줄인다
+    answer: "2"
+    explanation: |-
+      **id 전략을 SEQUENCE로 바꿔요.** IDENTITY에는 배치가 쓰이지 않으니 batch_size를 키워도 그대로예요.
+
+      - 바꾸기 어려우면 그 저장만 JdbcTemplate의 batchUpdate로 해요
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#batch
+  # ── 질문 4 ──
+  - key: idgen-rollback
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: IDENTITY 전략으로 저장한 로그가 id 7을 받은 뒤 트랜잭션이 롤백됐어요. 바로 다음 저장의 id는 7일까요?
+    choices:
+      - 7이다
+      - 7이 아니라 8 이상이다
+    answer: "2"
+    explanation: |-
+      **7이 아니에요.** identity와 시퀀스는 롤백돼도 한 번 준 번호를 돌려받지 않아요.
+
+      - 7은 구멍으로 남아요
+    source: https://www.postgresql.org/docs/16/functions-sequence.html
+  - key: idgen-order-number
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 오늘 들어온 주문 수를 "오늘 마지막 주문의 id - 오늘 첫 주문의 id + 1"로 계산하는 통계 코드가 있어요. 무엇이 문제일까요?
+    choices:
+      - 문제없다. id는 1씩 늘어난다
+      - 롤백과 예약 번호 때문에 id에 구멍이 있어 실제보다 크게 나올 수 있다
+      - id는 무작위라 계산할 수 없다
+    answer: "2"
+    explanation: |-
+      **id에는 구멍이 있어요.** 롤백, 버려진 예약 번호, 실패한 INSERT가 번호를 건너뛰게 해요.
+
+      - 건수는 count로 세요
+    source: https://www.postgresql.org/docs/16/functions-sequence.html
+  # ── 네 질문을 하나로 ──
+  - key: idgen-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "IDENTITY와 SEQUENCE 전략은 무엇이 다르고 어떻게 고르나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **IDENTITY는 INSERT할 때 DB가 id를 만들어 persist 즉시 INSERT하고, SEQUENCE는 id를 미리 받아 INSERT를 미뤄서 배치로 묶을 수 있어요.**
+
+      - SEQUENCE는 allocationSize만큼 예약해 시퀀스 호출을 줄인다
+      - IDENTITY는 JDBC 배치가 되지 않는다
+      - 롤백과 재시작으로 id에 구멍이 생긴다
+      - 시퀀스가 없는 DB는 IDENTITY와 batchUpdate를 쓴다
+    checklist:
+      - id를 얻는 때가 다르다고 말했다
+      - IDENTITY는 persist 즉시 INSERT한다고 말했다
+      - allocationSize를 말했다
+      - IDENTITY는 배치가 안 된다고 말했다
+      - id에 구멍이 생긴다고 말했다
+    source: https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators
