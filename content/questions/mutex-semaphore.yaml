@@ -1,0 +1,232 @@
+# 뮤텍스와 세마포어 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/mutex-semaphore.yaml의 says).
+# 동작에 관한 정답은 verification의 mutexsemaphore/MutexSemaphoreTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: mutex-semaphore
+  title: 뮤텍스와 세마포어
+  unit: 운영체제와 동시성
+  order: 404
+concepts:
+  - key: core
+    name: 뮤텍스와 세마포어
+coreQuestions:
+  - key: q1
+    text: "뮤텍스는 무엇이고 자바에서는 무엇으로 쓰나요?"
+  - key: q2
+    text: "ReentrantLock은 synchronized로 못 하는 무엇을 하나요?"
+  - key: q3
+    text: "세마포어는 무엇이고 뮤텍스와 무엇이 다른가요?"
+  - key: q4
+    text: "뮤텍스와 세마포어는 각각 언제 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: ms-no-finally
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 fetchNewToken()이 예외를 던졌어요. 그다음 refreshToken()을 부르는 다른 스레드는 어떻게 될까요?
+    code: |-
+      void refreshToken() {
+        lock.lock();
+        token = fetchNewToken();
+        lock.unlock();
+      }
+    choices:
+      - 바로 들어간다. 예외가 나면 락이 저절로 풀린다
+      - 영원히 기다린다. 락이 풀리지 않았다
+      - IllegalMonitorStateException이 난다
+      - 다른 스레드도 같은 예외를 받는다
+    answer: "2"
+    explanation: |-
+      **영원히 기다려요.** ReentrantLock은 직접 unlock()을 불러야 하는데, 예외로 그 줄을 건너뛰었어요.
+
+      - unlock()은 꼭 finally에 둬요
+      - synchronized는 블록을 벗어나면 저절로 풀려서 이 실수가 없어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html
+  - key: ms-owner-unlock
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스레드 A가 lock.lock()으로 잡은 ReentrantLock을 스레드 B가 lock.unlock()으로 풀려고 해요. 결과는?
+    choices:
+      - 락이 풀리고 B가 들어간다
+      - IllegalMonitorStateException이 난다
+      - B가 A의 일이 끝날 때까지 기다렸다가 푼다
+      - 아무 일도 일어나지 않는다
+    answer: "2"
+    explanation: |-
+      **IllegalMonitorStateException이 나요.** 뮤텍스에는 주인이 있어서 잡은 스레드만 풀 수 있어요.
+
+      - 세마포어는 주인이 없어서 다른 스레드가 돌려줘도 돼요. 둘의 차이예요
+      - 검증: MutexSemaphoreTest.onlyOwnerUnlocks
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html
+  # ── 질문 2 ──
+  - key: ms-trylock-timeout
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 스레드 A가 락을 잡고 1초 동안 일하는 중에 스레드 B가 lock.tryLock(100, MILLISECONDS)를 불렀어요. B가 받는 값과 걸리는 시간은?
+    choices:
+      - true, 1초쯤
+      - false, 100ms쯤
+      - false, 바로
+      - InterruptedException, 100ms쯤
+    answer: "2"
+    explanation: |-
+      **false를 100ms쯤 뒤에 받아요.** 정한 시간만큼만 기다리고 못 잡으면 포기해요.
+
+      - 시간을 주지 않은 tryLock()은 기다리지 않고 바로 false예요
+      - 검증: MutexSemaphoreTest.tryLockGivesUp
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html
+  - key: ms-cache-refresh
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 캐시를 다시 채우는 일은 한 스레드만 해야 하고, 그동안 다른 스레드는 기다리지 말고 지난 값을 바로 돌려줘야 해요. 어떤 방법이 맞을까요?
+    choices:
+      - synchronized 메서드로 감싼다
+      - lock.lock()으로 잡는다
+      - lock.tryLock()으로 잡고, 못 잡으면 지난 값을 돌려준다
+      - 아무것도 쓰지 않는다
+    answer: "3"
+    explanation: |-
+      **tryLock()이 맞아요.** 잡지 못하면 기다리지 않고 바로 false라서 다른 길(지난 값)로 갈 수 있어요.
+
+      - synchronized와 lock()은 풀릴 때까지 끝없이 기다려요
+      - 아무것도 안 쓰면 여러 스레드가 동시에 다시 채워요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html
+  # ── 질문 3 ──
+  - key: ms-semaphore-time
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 허가 3개인 세마포어에 200ms 걸리는 호출 9개를 동시에 보냈어요. 각 호출은 acquire로 허가를 받고 끝나면 release해요. 모두 끝나는 데 대략 얼마나 걸릴까요?
+    choices:
+      - 200ms쯤
+      - 600ms쯤
+      - 1.8초쯤
+      - 3초쯤
+    answer: "2"
+    explanation: |-
+      **600ms쯤이에요.** 한 번에 3개까지만 들어가서 세 개씩 세 묶음으로 나가요.
+
+      - 넷째부터는 누가 허가를 돌려줄 때까지 기다려요
+      - 검증: MutexSemaphoreTest.semaphoreLimits (스레드 10개, 동시에 안에 있던 최대 수 3)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+  - key: ms-extra-release
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: new Semaphore(2)를 만들고, 아무도 acquire하지 않은 상태에서 한 스레드가 release()를 한 번 불렀어요. 지금 동시에 들어갈 수 있는 수는?
+    choices:
+      - 1개
+      - 2개
+      - 3개
+      - IllegalMonitorStateException이 나서 그대로 2개
+    answer: "3"
+    explanation: |-
+      **3개예요.** 세마포어에는 주인 검사가 없어서, 받지 않고 돌려줘도 허가가 늘어나요.
+
+      - 그래서 허가 1개인 세마포어도 뮤텍스와 같지 않아요
+      - 검증: MutexSemaphoreTest.semaphoreHasNoOwner
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+  # ── 질문 4 ──
+  - key: ms-inside-counter
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "\"허가 3개인 세마포어로 감싼 구간 안에서는 함께 쓰는 int calls를 calls++해도 정확하다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 허가 3개면 세 스레드가 동시에 안에 있어요. 세마포어는 수만 셀 뿐 안의 경쟁 상태를 막지 않아요.
+
+      - 그 값은 따로 뮤텍스나 AtomicInteger로 지켜요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+  - key: ms-pdf-limit
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: PDF 생성이 메모리를 많이 써서 서버 한 대에서 동시에 2개까지만 돌게 하고 싶어요. 무엇을 쓰는 게 맞을까요?
+    choices:
+      - synchronized 메서드
+      - 허가 2개인 Semaphore
+      - volatile 플래그
+      - AtomicInteger 하나로 세고 넘으면 그냥 실행
+    answer: "2"
+    explanation: |-
+      **허가 2개인 세마포어예요.** 자원의 동시 사용 수를 정한 수로 제한하는 일이에요.
+
+      - synchronized는 하나만 들여보내서 둘째도 기다려요
+      - 값을 고치는 구간이었다면 뮤텍스가 맞아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+  - key: ms-permit-leak
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: permits는 new Semaphore(3)이에요. 결제 API가 연달아 예외를 세 번 던졌어요. 그다음 pay()는 어떻게 될까요?
+    code: |-
+      void pay() throws Exception {
+        permits.acquire();
+        callPaymentApi();
+        permits.release();
+      }
+    choices:
+      - 정상으로 허가를 받는다
+      - 영원히 기다린다. 허가가 0이 됐다
+      - Semaphore가 예외를 감지해 허가를 돌려놓는다
+      - IllegalMonitorStateException이 난다
+    answer: "2"
+    explanation: |-
+      **영원히 기다려요.** 예외가 날 때마다 release()를 건너뛰어 허가가 하나씩 사라졌어요.
+
+      - acquire() 다음 줄에서 try를 열고 finally에서 release()해요
+      - 검증: MutexSemaphoreTest.permitLeak (finally 밖이면 남은 허가 0, 안이면 3)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
+  # ── 네 질문을 하나로 ──
+  - key: ms-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "뮤텍스와 세마포어의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **뮤텍스는 한 번에 하나만 들여보내는 주인 있는 락이고, 세마포어는 N개까지 들여보내는 주인 없는 계수기예요.**
+
+      - **뮤텍스:** 잡은 스레드만 푼다. 자바에서는 synchronized와 ReentrantLock
+      - **ReentrantLock:** tryLock으로 기다리는 시간에 끝을 주고, 인터럽트와 공정 모드를 쓴다
+      - **세마포어:** acquire와 release로 허가를 받고 돌려준다. 다른 스레드가 돌려줘도 된다
+      - **고르기:** 값을 고치는 구간은 뮤텍스, 동시 사용 수 제한은 세마포어. 안쪽의 값은 따로 지킨다
+      - **실수:** unlock과 release는 finally에
+    checklist:
+      - 뮤텍스가 한 번에 하나, 세마포어가 N개까지라고 말했다
+      - 뮤텍스에는 주인이 있고 세마포어에는 없다고 말했다
+      - 자바의 synchronized, ReentrantLock, Semaphore를 짝지었다
+      - 언제 무엇을 쓰는지 예를 들었다(값 고치기, 외부 API 동시 호출 수)
+      - unlock이나 release를 finally에 두는 이유를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html
