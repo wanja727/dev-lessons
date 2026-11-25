@@ -190,7 +190,7 @@ class GitBranchMergeTest {
                 $ git merge feature/coupon
                 %s
 
-                $ git log --graph --format=%s
+                $ git log --graph --format=%%s
                 %s""".formatted(firstLines(out, 2), r.ok("log", "--oneline", "--graph", "--format=%s")));
     }
 
@@ -212,7 +212,7 @@ class GitBranchMergeTest {
                 $ git log --oneline | wc -l
                 %d
 
-                $ git log --graph --format=%s
+                $ git log --graph --format=%%s
                 %s
 
                 $ git cat-file -p HEAD
@@ -250,7 +250,7 @@ class GitBranchMergeTest {
                 $ git switch main && git merge feature/coupon
                 %s
 
-                $ git log --graph --format=%s
+                $ git log --graph --format=%%s
                 %s""".formatted(before, after, firstLines(merge, 2),
                 r.ok("log", "--graph", "--format=%s")));
     }
@@ -420,7 +420,7 @@ class GitBranchMergeTest {
         assertThat(r.read("Shipping.java")).contains("fee = 3000");
         CiOutput.record(LESSON, "revert", """
                 $ git revert %s
-                $ git log --format=%s
+                $ git log --format=%%s
                 %s
 
                 $ cat Shipping.java
