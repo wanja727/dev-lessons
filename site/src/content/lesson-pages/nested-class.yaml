@@ -1,8 +1,9 @@
-# 중첩 클래스와 익명 클래스 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 중첩 클래스와 익명 클래스
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/nested-class.yaml에 있다.
 title: 중첩 클래스와 익명 클래스
+description: 클래스 안에 클래스를 선언하는 네 가지 방법, 내부 클래스와 static 중첩 클래스의 차이, 내부 클래스가 바깥 객체를 붙잡을 때 생기는 문제, 익명 클래스와 람다의 차이. 네 가지 질문에 스스로 답할 수 있게, 주문과 주문 상품과 리스너로 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 20
 roadmap: J16
 type: 자바 실행
 prerequisites:
@@ -11,7 +12,7 @@ prerequisites:
 assume: '자바 21(OpenJDK의 javac). static이 붙은 것은 객체가 아니라 클래스에 딸려 있다는 것(static과 초기화 순서 레슨). 람다는 함수형 인터페이스의 구현이고 지역 변수를 잡을 때 사실상 final이어야 한다는 것(람다와 함수형 인터페이스 레슨). 닿을 수 있는 객체는 치워지지 않는다는 것(가비지 컬렉션 레슨).'
 example: '주문 `Order`와 그 안에 선언한 주문 상품 `Item`, 그리고 주문이 바뀔 때 불리는 리스너. `Item`을 static으로 선언할 때와 아닐 때, 리스너를 익명 클래스로 쓸 때와 람다로 쓸 때를 견줘요. 실무 구역에서는 요청 DTO 안에 선언한 클래스로 옮겨요.'
 intro:
-  - '주문 요청 DTO 안에 상품 한 줄을 나타내는 클래스를 선언했어요. 컴파일은 됐는데, 요청이 오면 Jackson이 "내부 클래스의 객체를 만들 수 없다"는 예외를 던지고 400이 나가요. 클래스 선언 앞에 `static` 한 단어가 빠져 있었어요.'
+  - '주문 요청 DTO 안에 상품 한 줄을 나타내는 클래스를 선언했어요. 컴파일은 됐는데, 요청이 오면 Jackson이 "내부 클래스의 객체를 만들 수 없다"는 예외를 던지고 서버가 500으로 답해요. 클래스 선언 앞에 `static` 한 단어가 빠져 있었어요.'
   - '클래스 안에 클래스를 선언하는 코드는 스프링 프로젝트에 흔해요. 응답 DTO 안의 작은 DTO, 빌더, `@Configuration` 안의 설정 클래스, 테스트의 `@Nested`가 그래요. `static`을 붙이느냐에 따라 그 클래스의 객체가 바깥 객체를 붙잡는지가 갈리고, 프레임워크가 그 객체를 만들 수 있는지도 갈려요.'
   - '이 레슨에서는 내부 클래스의 객체가 바깥 객체의 참조를 숨겨서 가진다는 것을 코드를 돌려 확인하고, 익명 클래스와 람다가 겉은 비슷해도 무엇이 다른지 봐요.'
 covers:
@@ -69,6 +70,19 @@ codes:
         b.run();
       }
     }
+  four: |-
+    class Order {
+      static class Line { }   // static 중첩
+      class Item { }          // 내부 클래스
+
+      void run() {
+        class Step { }        // 지역 클래스
+        Runnable r =
+            new Runnable() {  // 익명 클래스
+              public void run() { }
+            };
+      }
+    }
   inner: |-
     class Order {
       private int total = 10000;
@@ -85,13 +99,32 @@ codes:
     Order order = new Order();
     Order.Item item = [[order.new Item()]];
     Order.Line line = new Order.Line();
+  fieldsRun: |-
+    Order.Item.class.getDeclaredFields();
+    Order.Line.class.getDeclaredFields();
+  newOutside: |-
+    // Order 밖, 바깥 객체가 없는 곳
+    static void make() {
+      new Order.Item();
+      new Order.Line();
+    }
+  teamMember: |-
+    class Team {
+      String name;
+
+      static class Member {
+        String label() {
+          return [[name]];
+        }
+      }
+    }
   listener: |-
     class Order {
       byte[] data = new byte[10_000_000];
 
       class Watcher implements Runnable {
         public void run() {
-          print(data.length);
+          print([[data]].length);
         }
       }
     }
@@ -102,9 +135,114 @@ codes:
     Order order = new Order();
     watchers.add(order.new Watcher());
     order = null;
+  listenerFixed: |-
+    class Order {
+      byte[] data = new byte[10_000_000];
+
+      [[static]] class Watcher
+          implements Runnable {
+        private final int size;
+        Watcher(int size) {
+          this.size = size;
+        }
+        public void run() { print(size); }
+      }
+    }
+
+    watchers.add(
+        new Order.Watcher(order.data.length));
+    order = null;
+  listenerRun: |-
+    // 두 방법으로 각각 등록하고
+    // order = null 뒤 GC를 요청한다
+  outerThis: |-
+    Runnable a = new Runnable() {
+      String name = "익명";
+      public void run() {
+        print([[Order.this.name]]);
+      }
+    };
+  shadow: |-
+    int count = 1;
+
+    // 람다
+    Runnable r1 = () -> {
+      int count = 2;
+    };
+
+    // 익명 클래스
+    Runnable r2 = new Runnable() {
+      public void run() {
+        int count = 2;
+      }
+    };
+  dtoInner: |-
+    class OrderRequest {
+      public List<Line> lines;
+
+      class Line {
+        public String name;
+        public int qty;
+      }
+    }
+  dtoRun: |-
+    POST /orders
+    {"lines":[{"name":"펜","qty":2}]}
+  dtoFixed: |-
+    record OrderRequest(List<Line> lines) {
+      record Line(String name, int qty) { }
+    }
+
+    // 클래스로 둔다면
+    class OrderRequest {
+      public List<Line> lines;
+
+      [[static]] class Line { ... }
+    }
+  doubleBrace: |-
+    Map<String, Integer> m =
+        new HashMap<String, Integer>() [[{{]]
+          put("A", 1);
+        }};
+  mapOf: |-
+    Map<String, Integer> m = Map.of("A", 1);
+  nestedTest: |-
+    class OrderServiceTest {
+      OrderService service = new OrderService();
+
+      [[@Nested]]
+      class 결제한_주문은 {
+        @Test
+        void 취소할_수_있다() {
+          // 바깥의 service를 쓴다
+        }
+      }
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nested/NestedClassTest.java
+  jlsInner: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  jlsNew: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.2
+  jlsAnon: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.5
+  jlsLambda: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.27.2
+  jdk8271623: https://bugs.openjdk.org/browse/JDK-8271623
+  junitNested: https://junit.org/junit5/docs/current/user-guide/#writing-tests-nested
 predict:
-  text: '코드 predict에서 `a`는 익명 클래스로, `b`는 람다로 만든 `Runnable`이에요. 둘 다 `this.name`을 출력해요. `new Order().run()`을 실행하면 두 줄에 무엇이 출력될까요? 보기: 익명, 익명 / 주문, 주문 / 익명, 주문 / 주문, 익명.'
-  answer: '익명, 주문. 익명 클래스 안의 `this`는 그 익명 클래스의 객체이고, 람다 안의 `this`는 람다를 쓴 바깥 객체(`Order`)다. 질문 4에서 밝힌다.'
+  title: 두 this는 같은 것을 가리킬까요?
+  text: '`a`는 익명 클래스로, `b`는 람다로 만든 `Runnable`이에요. 둘 다 `this.name`을 출력해요. `new Order().run()`을 실행하면 두 줄에 무엇이 출력될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 4에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: anon-anon
+      label: 익명, 익명
+    - value: order-order
+      label: 주문, 주문
+    - value: anon-order
+      label: 익명, 주문
+    - value: order-anon
+      label: 주문, 익명
+  answer: anon-order
+  storageKey: nested-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 클래스 안에 클래스를 선언하는 방법에는 무엇이 있나요?
@@ -122,6 +260,35 @@ questions:
     asks:
       - '본문의 예시: 코드 inner에서 `Item`과 `Line`은 각각 네 가지 가운데 무엇인가 (`Item`은 내부 클래스, `Line`은 static 중첩 클래스)'
       - '옮긴 상황: `class Cart { record Line(String name, int qty) {} }`의 `Line`은 바깥 `Cart` 객체 없이 `new Cart.Line("펜", 2)`로 만들 수 있나 (만들 수 있다. 중첩된 record는 언제나 static이다)'
+    body:
+      - p: '클래스 안에 클래스를 선언하는 방법은 네 가지예요. 한 클래스에 다 넣어 보면 이래요.'
+      - code: four
+      - table:
+          head: [종류, 선언하는 곳, 바깥 객체에 딸리나]
+          rows:
+            - [static 중첩 클래스, '클래스 안, `static class`', '아니요. 바깥 클래스의 이름을 빌려 쓸 뿐 평범한 클래스예요']
+            - [내부 클래스, '클래스 안, `static` 없이', '네. 객체가 바깥 객체 하나에 딸려 만들어져요(질문 2)']
+            - [지역 클래스, 메서드 안, '인스턴스 메서드 안이면 네. 드물게 써요']
+            - [익명 클래스, '식 안, `new 타입() { ... }`', '인스턴스 메서드 안이면 네. 이름 없이 객체를 하나 만들어요(질문 4)']
+      - p: '가장 큰 갈림은 **`static`이 붙었는가**예요. static과 초기화 순서 레슨에서 본 대로 static이 붙으면 객체가 아니라 클래스에 딸린 것이에요. 중첩 클래스에서도 같은 뜻이라, static 중첩 클래스는 바깥의 어느 객체와도 상관없어요.'
+      - h3: 왜 안에 선언하나요
+      - ul:
+          - '**함께 쓰인다는 것을 위치로 보여 줘요.** `Map.Entry`, `Order.Item`처럼 이름만 봐도 어느 클래스에 딸린 타입인지 알아요.'
+          - '**바깥의 `private` 멤버에 닿아요.** 중첩 클래스는 바깥 클래스의 일부라서 `private` 필드와 메서드를 쓸 수 있어요.'
+      - more:
+          summary: '더 알아보기: 클래스 파일과 언제나 static인 것들'
+          body:
+            - p: '컴파일하면 중첩 클래스마다 `Order$Item.class`, `Order$Line.class`처럼 클래스 파일이 따로 생겨요. 익명 클래스는 이름이 없어서 `Order$1.class`처럼 번호가 붙어요. 클래스 안에 선언한 **record, enum, 인터페이스는 `static`을 쓰지 않아도 언제나 static**이에요.'
+      - quiz:
+          q: '`class Cart { record Line(String name, int qty) {} }`의 `Line`을 바깥 `Cart` 객체 없이 `new Cart.Line("펜", 2)`로 만들 수 있을까요?'
+          options:
+            - 만들 수 없다. static이 없다
+            - 만들 수 있다. 중첩된 record는 언제나 static이다
+            - 바깥이 record일 때만 만들 수 있다
+          answer: 2
+          explain: '클래스 안의 record, enum, 인터페이스는 `static`을 쓰지 않아도 static이에요.'
+      - next: '`static`이 없는 내부 클래스는 "바깥 객체에 딸린다"고 했어요. 딸린다는 것이 코드에서는 무엇일까요?'
+    recall: '네 가지예요. 클래스 안의 `static class`인 static 중첩 클래스, `static` 없이 선언한 내부 클래스, 메서드 안의 지역 클래스, 이름 없이 선언과 동시에 객체를 만드는 익명 클래스예요. 가장 큰 갈림은 `static`이라, 붙지 않은 셋은 바깥 객체에 딸려요. 중첩된 record, enum, 인터페이스는 언제나 static이에요.'
   - id: q2
     title: 내부 클래스와 static 중첩 클래스는 무엇이 다른가요?
     conclusion:
@@ -137,6 +304,56 @@ questions:
     asks:
       - '본문의 예시: 코드 inner에서 `new Order.Item()`과 `new Order.Line()`을 `Order` 밖의 static 메서드에 쓰면 각각 어떻게 되나 (`Item`은 컴파일 오류, `Line`은 컴파일된다)'
       - '옮긴 상황: `class Team { String name; static class Member { String label() { return name; } } }`를 컴파일하면 어떻게 되나 (컴파일 오류. static 중첩 클래스는 바깥의 인스턴스 필드 `name`을 쓸 수 없다)'
+    body:
+      - code: inner
+        notes:
+          - mark: total
+            as: code
+            text: '`Item`에는 `total`이 없어요. 바깥 `Order` 객체의 필드예요.'
+          - mark: order.new Item()
+            as: code
+            text: '어느 `Order`에 딸린 `Item`인지 정하며 만들어요.'
+      - p: '`Item`의 `share()`는 `total`을 그냥 써요. 그런데 `Item`에는 `total`이 없어요. 바깥 `Order` 객체의 것이에요. **어느 `Order`의 `total`인지** 알아야 하니, `Item` 객체는 자기를 만든 `Order` 객체의 참조를 가지고 있어야 해요. 코드에는 보이지 않지만 컴파일러가 숨은 필드로 넣어 줘요. 두 클래스의 필드를 리플렉션으로 꺼내 봤어요.'
+      - ci:
+          key: fields
+          label: 실제 필드 목록 보기
+          source: NestedClassTest.hiddenOuterField
+          code: fieldsRun
+      - p: '`Item`에는 선언하지 않은 `Order` 타입의 필드 `this$0`이 있고, `Line`에는 아무것도 없어요. 이 숨은 필드 때문에 둘의 쓰임이 갈려요.'
+      - table:
+          head: ['', '내부 클래스 `Item`', 'static 중첩 클래스 `Line`']
+          rows:
+            - [바깥 객체의 참조, 숨은 필드로 가져요, 없어요]
+            - [만드는 법, '`order.new Item()`. `Order`의 인스턴스 메서드 안에서는 `new Item()`', '`new Order.Line()`. 바깥 객체가 필요 없어요']
+            - [바깥의 인스턴스 필드, 바로 써요, 쓸 수 없어요(컴파일 오류)]
+            - [바깥 객체를 가리킬 때, '`Order.this`', 해당 없음]
+      - p: '바깥 객체가 없는 곳에서 둘을 만들어 보고, static 중첩 클래스에서 바깥의 필드를 써 봤어요.'
+      - code: newOutside
+      - ci:
+          key: new-inner
+          label: 실제 컴파일 결과 보기
+          source: NestedClassTest.compileRules
+          code: newOutside
+      - code: teamMember
+        notes:
+          - mark: name
+            as: code
+            text: '바깥 `Team` 객체의 필드예요. `Member`에는 어느 `Team`인지 알 길이 없어요.'
+      - ci:
+          key: static-field
+          label: 실제 컴파일 결과 보기
+          source: NestedClassTest.compileRules
+      - p: '**기준은 하나예요.** 바깥 객체의 상태를 써야 할 때만 내부 클래스로 두고, 그렇지 않으면 `static`을 붙여요. DTO, 빌더, 값 묶음은 거의 다 static이에요.'
+      - quiz:
+          q: '`Order` 밖의 static 메서드에서 `new Order.Item()`(내부 클래스)과 `new Order.Line()`(static 중첩 클래스)을 쓰면 어떻게 될까요?'
+          options:
+            - 둘 다 컴파일된다
+            - Item은 컴파일 오류, Line은 컴파일된다
+            - Item은 컴파일되고, Line은 컴파일 오류
+          answer: 2
+          explain: '`Item`은 딸릴 바깥 객체가 있어야 만들어져요. `Line`은 바깥 객체가 필요 없어요.'
+      - next: '내부 클래스의 객체가 바깥 객체를 가리킨다면, 가비지 컬렉션 레슨의 기준으로 무슨 일이 생길 수 있을까요?'
+    recall: '내부 클래스의 객체는 바깥 객체의 참조를 컴파일러가 넣은 숨은 필드로 가지고 있어요. 그래서 `order.new Item()`처럼 바깥 객체가 있어야 만들고, 바깥의 인스턴스 필드를 바로 써요. static 중첩 클래스는 그 참조가 없어서 바깥 객체 없이 만들고 바깥의 인스턴스 필드를 쓸 수 없어요. 바깥의 상태가 필요 없으면 static을 붙여요.'
   - id: q3
     title: 내부 클래스가 바깥 객체를 붙잡으면 어떤 문제가 생기나요?
     conclusion:
@@ -155,6 +372,72 @@ questions:
     asks:
       - '본문의 예시: 코드 listener를 실행한 뒤 GC가 돌았다. `Order` 객체는 치워졌나 (치워지지 않았다. static 리스트의 `Watcher`가 `Order`를 가리킨다)'
       - '옮긴 상황: 같은 코드에서 `Watcher`를 `static class Watcher implements Runnable { private final int size; Watcher(int size) { this.size = size; } ... }`로 바꾸고 `watchers.add(new Order.Watcher(order.data.length)); order = null;`을 실행했다. GC 뒤 `Order` 객체는 치워질 수 있나 (치워질 수 있다. `Watcher`가 가진 것은 `int` 값뿐이다)'
+    body:
+      - p: '10MB짜리 데이터를 가진 주문에, 바깥의 `data`를 쓰는 리스너 `Watcher`를 내부 클래스로 만들었어요. 그 리스너를 static 리스트에 등록하고 주문 변수는 비웠어요.'
+      - code: listener
+        notes:
+          - mark: data
+            as: code
+            text: '바깥 `Order`의 필드를 써서 `Watcher`는 `Order`의 참조를 가져요.'
+      - p: '코드에는 `Order`를 가리키는 변수가 이제 하나도 보이지 않아요. 그래도 static 리스트 → `Watcher` → 숨은 필드 → `Order`로 **닿는 길**이 남아 있어요. 가비지 컬렉션 레슨의 기준으로 `Order`와 그 안의 10MB 배열은 치울 대상이 아니에요.'
+      - p: '고친 쪽은 `Watcher`를 static으로 만들고 필요한 값(배열의 길이)만 생성자로 받아요.'
+      - code: listenerFixed
+        notes:
+          - mark: static
+            as: code
+            text: '바깥 객체의 참조가 없어요. 가진 것은 `int` 하나예요.'
+      - p: '두 방법을 골라 실행해 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, buttons, duo, verdict]
+          selector:
+            label: Watcher를 선언한 방법
+            options:
+              - {value: inner, label: '내부 클래스 (바깥의 data를 씀)'}
+              - {value: static, label: 'static 중첩 클래스 (값만 받음)'}
+          run: {label: 'watchers.add, order = null, GC'}
+          initial:
+            duo:
+              - {label: 닿는 길, state: dim, text: 'static watchers → (비어 있음)'}
+              - {label: GC 뒤에 남은 것, state: dim, text: 아직 실행 전}
+          scenes:
+            inner:
+              duo:
+                - label: 닿는 길
+                  rows: [{k: watchers, v: '→ Watcher'}, {k: Watcher, v: '→ 숨은 필드 → Order', mark: bad}, {k: Order, v: '→ 10MB 배열'}]
+                - label: GC 뒤에 남은 것
+                  rows: [{k: Watcher, v: 남음}, {k: Order, v: 남음, mark: bad}, {k: 10MB 배열, v: 남음, mark: bad}]
+              verdict: '작은 리스너 하나가 숨은 참조로 주문과 10MB 배열을 통째로 붙잡았어요.'
+            static:
+              duo:
+                - label: 닿는 길
+                  rows: [{k: watchers, v: '→ Watcher'}, {k: Watcher, v: 'size = 10000000 (int)', mark: changed}]
+                - label: GC 뒤에 남은 것
+                  rows: [{k: Watcher, v: 남음}, {k: Order, v: 치워짐, mark: changed}, {k: 10MB 배열, v: 치워짐, mark: changed}]
+              verdict: '리스너가 가진 것은 값 하나라서 주문으로 가는 길이 없어요. 주문과 배열이 치워졌어요.'
+      - ci:
+          key: listener
+          label: 두 방법을 실제로 돌린 결과 보기
+          source: NestedClassTest.innerKeepsOuter
+          code: listenerRun
+      - ul:
+          - '**생기는 자리.** 오래 사는 객체(스레드 풀, 이벤트 버스, 캐시, static 컬렉션)에 내부 클래스나 익명 클래스의 객체를 넘길 때예요. 넘긴 것은 작아 보여도 바깥 객체가 함께 따라가요.'
+          - '**찾기 어려워요.** 참조가 코드에 보이지 않아서 "누가 이 주문을 붙잡고 있지?"에 답하기 어려워요.'
+          - '**막는 법.** 바깥 객체가 필요 없으면 static으로 선언하고, 필요한 값만 생성자로 넘기고, 등록한 것은 빼요.'
+      - more:
+          summary: '더 알아보기: 바깥을 쓰지 않는 내부 클래스'
+          body:
+            - p: '자바 18부터 javac는 바깥 객체의 것을 전혀 쓰지 않는 내부 클래스에는 숨은 참조를 넣지 않아요([JDK-8271623](link:jdk8271623)). 질문 2의 필드 목록에서 `Plain`에 필드가 없던 것이 그래서예요. 그래도 "쓰지 않으면 static"이라는 기준은 그대로예요. 나중에 한 줄을 더해 바깥의 필드를 쓰는 순간 붙잡기 시작하거든요.'
+      - quiz:
+          q: '`Watcher`를 값 하나만 생성자로 받는 static 중첩 클래스로 바꾸고 `watchers.add(new Order.Watcher(order.data.length)); order = null;`을 실행했어요. GC 뒤 `Order`는 어떻게 될까요?'
+          options:
+            - 남는다. Watcher가 Order에서 만들어졌다
+            - 치워질 수 있다. Watcher가 가진 것은 int 값뿐이다
+            - watchers에서 빼야만 치워진다
+          answer: 2
+          explain: 'static 중첩 클래스에는 바깥 객체의 참조가 없어요. 주문으로 가는 길이 없으니 치워질 수 있어요.'
+      - next: '인스턴스 메서드 안의 익명 클래스도 바깥 객체를 붙잡는다고 했어요. 람다와는 무엇이 다를까요?'
+    recall: '내부 클래스의 객체가 살아 있는 동안에는 숨은 참조를 따라 바깥 객체도 닿을 수 있어서 치워지지 않아요. 작은 리스너를 static 리스트나 스레드 풀처럼 오래 사는 곳에 등록하면 큰 바깥 객체가 통째로 남고, 참조가 코드에 보이지 않아 찾기 어려워요. 바깥이 필요 없으면 static으로 두고 필요한 값만 넘겨요.'
   - id: q4
     title: 익명 클래스와 람다는 무엇이 다른가요?
     conclusion:
@@ -172,28 +455,146 @@ questions:
       - '본문의 예시: 코드 predict의 익명 클래스 안에서 `print(this.name)`을 `print(Order.this.name)`으로 바꾸면 첫 줄에 무엇이 출력되나 ("주문")'
       - '옮긴 상황: 메서드 안에 `int count = 1;`이 있다. 그 아래에 `Runnable r = () -> { int count = 2; };`와 `Runnable r = new Runnable() { public void run() { int count = 2; } };`를 각각 쓰면 어떻게 되나 (람다는 컴파일 오류, 익명 클래스는 컴파일된다)'
       - '실무 구역: `class OrderRequest { List<Line> lines; class Line { String name; int qty; } }`에 `{"lines":[{"name":"펜","qty":2}]}`를 Jackson으로 읽으면 어떻게 되나. 조건: `Line` 앞에 `static`이 없다 (예외가 난다. 바깥 객체 없이 내부 클래스의 객체를 만들 수 없다)'
+    body:
+      - p: '익명 클래스는 `new Runnable() { public void run() { ... } }`처럼 인터페이스나 클래스를 **그 자리에서 구현하면서 객체를 하나** 만들어요. 람다와 함수형 인터페이스 레슨에서 람다와 나란히 놓았던 것이에요. 겉은 비슷하지만 익명 클래스는 이름만 없는 진짜 클래스이고, 람다는 클래스가 아니에요.'
+      - h3: this가 가리키는 것
+      - p: '처음 예측의 답은 **익명, 주문**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: NestedClassTest.thisDiffers
+          code: predict
+      - ul:
+          - '**익명 클래스 안의 `this`는 익명 클래스의 객체예요.** 클래스라서 자기 필드 `name`("익명")을 가졌고, `this.name`은 그것이에요.'
+          - '**람다 안의 `this`는 람다를 쓴 메서드의 객체예요.** 람다는 새 객체의 문맥을 만들지 않아서 `this`가 바깥 `Order` 그대로이고, `this.name`은 "주문"이에요.'
+      - p: '익명 클래스 안에서 바깥 객체를 가리키려면 내부 클래스와 같이 `Order.this`라고 써요.'
+      - code: outerThis
+        notes:
+          - mark: Order.this.name
+            as: code
+            text: '익명 클래스를 감싼 `Order` 객체의 `name`이에요.'
+      - ci:
+          key: outer-this
+          label: 실제 출력 보기
+          source: NestedClassTest.thisDiffers
+      - h3: 이름을 다시 선언할 수 있는가
+      - p: '익명 클래스는 클래스라서 **새 범위**를 열어요. 람다는 바깥 메서드와 **같은 범위**예요. 바깥에 `count`가 있을 때 안에서 `count`를 다시 선언해 봤어요.'
+      - code: shadow
+      - ci:
+          key: shadow
+          label: 실제 컴파일 결과 보기
+          source: NestedClassTest.compileRules
+      - h3: 나란히 놓으면
+      - table:
+          head: ['', 익명 클래스, 람다]
+          rows:
+            - ['`this`', 익명 클래스의 객체, 바깥 객체 그대로]
+            - [바깥과 같은 이름 선언, 된다(새 범위), 컴파일 오류(같은 범위)]
+            - [구현할 수 있는 것, '메서드가 여럿인 인터페이스, 추상 클래스도', 추상 메서드가 하나인 인터페이스만]
+            - [필드, 가질 수 있다, 없다]
+            - [바깥 객체를 잡나, '인스턴스 메서드 안이면 잡는다(질문 3)', '`this`나 바깥의 필드를 쓸 때만']
+            - [바깥의 지역 변수, 사실상 final일 때만, 사실상 final일 때만]
+      - p: '그래서 **함수형 인터페이스를 구현하는 자리에서는 람다**를 쓰고, 메서드가 여럿이거나 상태가 필요한 자리에서만 익명 클래스를 써요. 바깥의 지역 변수를 쓰는 규칙은 둘이 같아요(람다와 함수형 인터페이스 레슨의 질문 3).'
+      - quiz:
+          q: '메서드 안에 `int count = 1;`이 있어요. 그 아래 람다 안에서 `int count = 2;`를 선언하면 어떻게 될까요? 익명 클래스의 메서드 안이라면요?'
+          options:
+            - 둘 다 컴파일된다
+            - 람다는 컴파일 오류, 익명 클래스는 컴파일된다
+            - 둘 다 컴파일 오류
+          answer: 2
+          explain: '람다는 바깥과 같은 범위라 이미 있는 이름을 다시 선언할 수 없어요. 익명 클래스는 새 범위를 열어요.'
+    recall: '익명 클래스는 이름만 없는 진짜 클래스라서 `this`가 익명 클래스의 객체이고, 필드를 가지고, 새 범위를 열어 바깥과 같은 이름을 다시 선언할 수 있고, 메서드가 여럿인 타입도 구현해요. 람다는 클래스가 아니라서 `this`가 바깥 객체 그대로이고 바깥과 같은 범위예요. 바깥의 지역 변수는 둘 다 사실상 final일 때만 써요.'
 practice:
+  title: 스프링 서버에서는 이렇게 만나요
   says:
     - 'DTO 안의 작은 타입. `record OrderRequest(List<Line> lines) { record Line(String name, int qty) {} }`. 중첩된 record는 언제나 static이라 Jackson이 만든다. 클래스로 쓸 때는 `static class Line`이다 (Jackson `ObjectMapper`로 읽는 테스트)'
-    - '흔한 실수 1: DTO 안의 클래스에 `static`을 빠뜨린다. 요청 JSON을 읽을 때 Jackson이 `Line`의 객체를 만들지 못해 예외를 던지고 스프링 MVC는 400으로 답한다. 내부 클래스의 객체는 바깥 객체가 있어야 만들어지는데(질문 2) Jackson은 바깥 객체를 넘겨줄 방법이 없다. 고친 코드: `static`을 붙이거나 record로 바꾼다. 고치기 전의 예외 메시지와 고친 뒤의 결과를 붙인다 (Jackson `ObjectMapper`로 돌리는 테스트. 예외의 타입과 문구는 확인한 것을 적는다)'
+    - '흔한 실수 1: DTO 안의 클래스에 `static`을 빠뜨린다. 요청 JSON을 읽을 때 Jackson이 `Line`의 객체를 만들지 못해 예외를 던진다. 스프링 MVC는 이것을 요청의 잘못이 아니라 타입 정의의 잘못으로 보고 500으로 답한다(테스트로 확인. 설계서의 400은 틀렸다). 내부 클래스의 객체는 바깥 객체가 있어야 만들어지는데(질문 2) Jackson은 바깥 객체를 넘겨줄 방법이 없다. 고친 코드: `static`을 붙이거나 record로 바꾼다. 고치기 전의 예외 메시지와 고친 뒤의 결과를 붙인다 (Jackson `ObjectMapper`와 `MiniWeb`으로 돌리는 테스트)'
     - '흔한 실수 2: 이중 중괄호 초기화. `new HashMap<String, Integer>() {{ put("A", 1); }}`는 `HashMap`을 상속한 익명 클래스를 만들고 그 초기화 블록에서 `put`을 부른다. 인스턴스 메서드 안에서 쓰면 바깥 객체를 붙잡고(질문 3), 클래스가 `HashMap`이 아니라서 `getClass() == HashMap.class`가 false다. 고친 코드: `Map.of("A", 1)` (순수 자바 테스트로 클래스 이름과 `Map.of`의 결과를 본다)'
     - '리스너와 콜백을 넘길 때는 람다나 메서드 참조를 쓴다. 바깥의 큰 객체가 아니라 필요한 값만 지역 변수로 꺼내 잡게 한다'
     - '더 알아보기: JUnit 5의 `@Nested` 테스트 클래스는 일부러 static이 아닌 내부 클래스로 쓴다. 바깥 테스트 객체의 필드와 준비 코드를 함께 쓰기 위해서다. 반대로 `@Configuration` 클래스 안의 설정 클래스는 static으로 둔다 (JUnit과 스프링 공식 문서 근거)'
+  body:
+    - p: '스프링 프로젝트의 중첩 클래스는 대부분 요청과 응답 DTO 안에서 만나요. 이 구역의 결과는 Jackson과 스프링 MVC로 테스트해서 확인했어요.'
+    - h3: '흔한 실수: DTO 안의 클래스에 static을 빠뜨린다'
+    - code: dtoInner
+    - p: '이 DTO로 요청을 받으면 어떻게 될까요? Jackson으로 직접 읽어 보고, 스프링 MVC 컨트롤러에도 보내 봤어요.'
+    - ci:
+        key: jackson
+        label: Jackson으로 읽은 실제 결과 보기
+        source: NestedClassTest.jacksonNeedsStatic
+        code: dtoRun
+    - ci:
+        key: spring
+        label: 스프링 MVC의 실제 응답 보기
+        source: NestedClassTest.springAnswers500
+        code: dtoRun
+    - p: 'Jackson은 `Line`의 객체를 만들지 못해 `InvalidDefinitionException`을 던졌어요. 내부 클래스의 객체는 바깥 `OrderRequest` 객체가 있어야 만들어지는데(질문 2), 리스트 안의 원소를 만들 때 Jackson은 넘겨줄 바깥 객체가 없어요.'
+    - p: '스프링 MVC는 **500**으로 답했어요. 잘못된 JSON이면 400이지만, 이것은 요청이 아니라 **타입 정의의 잘못**이라서 서버 오류로 봐요. 클라이언트가 무엇을 보내든 실패하니 로그의 `Type definition error`를 보고 DTO를 고쳐야 해요.'
+    - p: '고친 코드는 `static`을 붙이거나 record로 바꾸는 거예요. 중첩된 record는 언제나 static이에요.'
+    - code: dtoFixed
+      notes:
+        - mark: static
+          as: code
+          text: '바깥 객체 없이 만들 수 있어서 Jackson이 리스트의 원소를 만들어요.'
+    - h3: '흔한 실수: 이중 중괄호 초기화'
+    - code: doubleBrace
+      notes:
+        - mark: '{{'
+          as: code
+          text: '바깥 `{`는 `HashMap`을 상속한 익명 클래스의 몸통, 안쪽 `{`는 그 클래스의 초기화 블록이에요.'
+    - p: '맵을 한 줄로 채우는 요령처럼 보이지만, 실제로는 `HashMap`을 상속한 **익명 클래스**를 하나 만들어요. 인스턴스 메서드 안에서 쓰면 질문 3처럼 바깥 객체를 붙잡아요.'
+    - ci:
+        key: double-brace
+        label: 실제 결과 보기
+        source: NestedClassTest.doubleBraceIsAnonymous
+        code: doubleBrace
+    - p: '클래스가 `HashMap`이 아니라 `OrderService$1`이고, 바깥 객체를 가리키는 필드가 있어요. 이 맵을 캐시나 다른 빈에 넘기면 서비스 객체가 함께 따라가요. 고친 코드는 `Map.of`예요. 내용은 같고 익명 클래스를 만들지 않아요.'
+    - code: mapOf
+    - h3: 리스너와 콜백은 람다로 넘겨요
+    - p: '오래 사는 곳에 리스너나 콜백을 넘길 때는 람다나 메서드 참조를 써요. 그리고 바깥의 큰 객체 대신 필요한 값만 지역 변수로 꺼내 잡게 해요. 람다는 `this`나 바깥의 필드를 쓸 때만 바깥 객체를 잡아요(질문 4).'
+    - more:
+        summary: '더 알아보기: @Nested는 일부러 내부 클래스예요'
+        body:
+          - p: 'JUnit 5의 `@Nested` 테스트 클래스는 **static이 아닌** 내부 클래스로 써요. 바깥 테스트 객체의 필드와 준비 코드를 함께 쓰기 위해서예요([JUnit 문서](link:junitNested)). 반대로 `@Configuration` 클래스 안에 둔 설정 클래스는 바깥 객체가 필요 없어서 static으로 둬요.'
+          - code: nestedTest
+            notes:
+              - mark: '@Nested'
+                as: anno
+                text: '바깥 테스트 객체에 딸린 내부 클래스라서 `service`를 그대로 써요.'
+interview:
+  question: 내부 클래스와 static 중첩 클래스, 익명 클래스와 람다의 차이를 설명해 주세요
+  model:
+    - label: 정의
+      text: 클래스 안에 선언하는 클래스는 static 중첩 클래스, 내부 클래스, 지역 클래스, 익명 클래스가 있습니다. static이 없는 내부 클래스는 바깥 객체에 딸려서 바깥 객체의 참조를 숨은 필드로 가집니다.
+    - label: 원리
+      text: 그래서 내부 클래스는 바깥 객체가 있어야 만들고 바깥의 인스턴스 필드를 바로 쓰며, static 중첩 클래스는 바깥 객체 없이 만듭니다. 익명 클래스는 이름만 없는 클래스라 this가 자기 자신이고, 람다는 클래스가 아니라 this가 바깥 객체입니다.
+    - label: 주의할 점
+      text: 내부 클래스나 익명 클래스의 객체를 오래 사는 곳에 넘기면 바깥 객체가 치워지지 않습니다. DTO 안의 클래스에 static을 빠뜨리면 Jackson이 만들지 못해 요청이 500으로 실패합니다. 바깥이 필요 없으면 static이나 record로 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 요청 DTO 안의 Line 클래스에 static이 없어 Type definition error가 났고, 중첩 record로 바꿔 해결했습니다.'
+verified: 이 레슨의 출력과 컴파일 결과는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 숨은 필드는 리플렉션으로, 바깥 객체가 남는지는 약한 참조로, DTO는 Jackson과 스프링 MVC로 확인했어요. 코드가 바뀔 때마다 테스트([NestedClassTest](link:test))가 다시 돌아요.
+footer: '근거: 내부 클래스와 바깥 객체는 자바 언어 명세 8.1.3([링크](link:jlsInner)), 내부 클래스의 객체 만들기는 15.9.2([링크](link:jlsNew)), 익명 클래스는 15.9.5([링크](link:jlsAnon)), 람다 본문의 this와 범위는 15.27.2([링크](link:jlsLambda)). 결과는 OpenJDK 21과 스프링 부트 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict의 출력은 "익명", "주문"이다. `Order.this.name`으로 바꾸면 첫 줄이 "주문"이다'
     how: '출력 대신 리스트에 기록해 두 경우를 돌린다'
-  - claim: '바깥의 필드를 쓰는 내부 클래스에는 바깥 클래스 타입의 숨은 필드가 있고 static 중첩 클래스에는 없다 (자바 21의 javac)'
-    how: '`getDeclaredFields()`로 두 클래스의 필드를 출력한다. 숨은 필드의 이름은 컴파일러가 정하는 것이라 타입만 단정한다'
-  - claim: '바깥 객체 없이 내부 클래스를 `new`하는 코드, static 중첩 클래스에서 바깥의 인스턴스 필드를 쓰는 코드, 람다 안에서 바깥 지역 변수와 같은 이름을 선언하는 코드는 컴파일되지 않는다. 익명 클래스 안에서 같은 이름을 선언하는 코드는 컴파일된다'
-    how: '`javax.tools.JavaCompiler`로 네 소스를 컴파일한다'
+    test: NestedClassTest.thisDiffers
+  - claim: '바깥의 필드를 쓰는 내부 클래스에는 바깥 클래스 타입의 숨은 필드가 있고, static 중첩 클래스와 바깥의 것을 쓰지 않는 내부 클래스에는 없다 (자바 21의 javac)'
+    how: '`getDeclaredFields()`로 세 클래스의 필드를 출력한다. 숨은 필드의 이름은 컴파일러가 정하는 것이라 타입과 synthetic인지만 단정한다'
+    test: NestedClassTest.hiddenOuterField
+  - claim: '바깥 객체 없이 내부 클래스를 `new`하는 코드, static 중첩 클래스에서 바깥의 인스턴스 필드를 쓰는 코드, 람다 안에서 바깥 지역 변수와 같은 이름을 선언하는 코드는 컴파일되지 않는다. static 중첩 클래스의 `new`와 익명 클래스 안에서 같은 이름을 선언하는 코드는 컴파일된다'
+    how: '`JavaSource`로 다섯 소스를 컴파일한다'
+    test: NestedClassTest.compileRules
   - claim: 'static 리스트에 넣은 내부 클래스 객체가 바깥의 필드를 쓰면 바깥 객체는 GC 뒤에도 남고, 값만 받은 static 중첩 클래스로 바꾸면 치워진다 (HotSpot)'
     how: '바깥 객체를 `WeakReference`로 지켜보며 `System.gc()`를 부르고 정해진 시간 동안 기다린다. J15의 테스트와 같은 방법이다'
-  - claim: '바깥의 것을 쓰지 않는 내부 클래스에는 숨은 필드가 없다 (자바 21의 javac)'
-    how: '`getDeclaredFields()`로 확인한다. 결과가 다르면 질문 3의 더 알아보기를 지운다'
-  - claim: 'static이 아닌 내부 클래스가 든 DTO는 Jackson으로 읽을 때 예외가 나고, `static`을 붙이거나 중첩된 record로 바꾸면 읽힌다 (스프링 부트 3.5의 Jackson)'
+    test: NestedClassTest.innerKeepsOuter
+  - claim: 'static이 아닌 내부 클래스가 든 DTO는 Jackson으로 읽을 때 `InvalidDefinitionException`이 나고, `static`을 붙이거나 중첩된 record로 바꾸면 읽힌다 (스프링 부트 3.5의 Jackson)'
     how: '`ObjectMapper`로 세 가지 DTO를 읽어 예외와 결과를 본다'
-  - claim: '이중 중괄호로 만든 맵의 클래스는 `HashMap`이 아니다'
-    how: '`getClass()`와 `HashMap.class`를 비교하고 클래스 이름을 출력한다'
+    test: NestedClassTest.jacksonNeedsStatic
+  - claim: '스프링 MVC는 그 DTO를 `@RequestBody`로 받는 요청에 500으로 답하고, static으로 고치면 200으로 답한다'
+    how: '`MiniWeb`에 컨트롤러를 띄워 같은 JSON을 보낸다. 설계서에는 400으로 적었으나 테스트 결과가 500이라 레슨을 고쳤다'
+    test: NestedClassTest.springAnswers500
+  - claim: '이중 중괄호로 만든 맵의 클래스는 `HashMap`을 상속한 익명 클래스이고 바깥 객체를 가리키는 필드가 있다'
+    how: '`getClass()`, 상위 클래스, 필드의 타입을 보고 `Map.of`와 내용이 같은지 본다'
+    test: NestedClassTest.doubleBraceIsAnonymous
 sources:
   - '중첩 클래스와 내부 클래스, 바깥 객체: 자바 언어 명세 8.1.3 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3'
   - '내부 클래스의 객체 만들기와 바깥 객체 정하기: 자바 언어 명세 15.9.2 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.2'

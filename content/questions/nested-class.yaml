@@ -1,0 +1,292 @@
+# 중첩 클래스와 익명 클래스 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/nested-class.yaml의 says).
+# 동작에 관한 정답은 verification의 NestedClassTest로 확인했다 (자바 21, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: nested-class
+  title: 중첩 클래스와 익명 클래스
+  unit: 자바 언어
+  order: 52
+concepts:
+  - key: core
+    name: 중첩 클래스와 익명 클래스
+coreQuestions:
+  - key: q1
+    text: "클래스 안에 클래스를 선언하는 방법에는 무엇이 있나요?"
+  - key: q2
+    text: "내부 클래스와 static 중첩 클래스는 무엇이 다른가요?"
+  - key: q3
+    text: "내부 클래스가 바깥 객체를 붙잡으면 어떤 문제가 생기나요?"
+  - key: q4
+    text: "익명 클래스와 람다는 무엇이 다른가요?"
+questions:
+  # ── 질문 1 ──
+  - key: nested-kinds
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 Item과 Line은 각각 무엇일까요?
+    code: |-
+      class Order {
+        private int total = 10000;
+
+        class Item {
+          int share() { return total / 2; }
+        }
+
+        static class Line { }
+      }
+    choices:
+      - Item은 내부 클래스, Line은 static 중첩 클래스
+      - Item은 static 중첩 클래스, Line은 내부 클래스
+      - 둘 다 내부 클래스
+      - 둘 다 지역 클래스
+    answer: "1"
+    explanation: |-
+      **Item은 내부 클래스, Line은 static 중첩 클래스예요.** static이 붙었는지가 갈라요.
+
+      - static이 없는 Item은 바깥 Order 객체에 딸려요
+      - 메서드 안에 선언했다면 지역 클래스예요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  - key: nested-record-static
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: class Cart { record Line(String name, int qty) {} }에서 Line을 바깥 Cart 객체 없이 new Cart.Line("펜", 2)로 만들 수 있을까요?
+    choices:
+      - 만들 수 없다. static이 없다
+      - 만들 수 있다. 중첩된 record는 언제나 static이다
+      - Cart가 record일 때만 만들 수 있다
+      - Cart의 인스턴스 메서드 안에서만 만들 수 있다
+    answer: "2"
+    explanation: |-
+      **만들 수 있어요.** 클래스 안에 선언한 record, enum, 인터페이스는 static을 쓰지 않아도 언제나 static이에요.
+
+      - 그래서 DTO 안의 작은 타입을 record로 두면 static을 빠뜨릴 일이 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  # ── 질문 2 ──
+  - key: nested-new-outside
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Item은 Order의 내부 클래스, Line은 Order의 static 중첩 클래스예요. Order 밖의 static 메서드에 아래 두 줄을 쓰면 어떻게 될까요?
+    code: |-
+      static void make() {
+        new Order.Item();
+        new Order.Line();
+      }
+    choices:
+      - 둘 다 컴파일된다
+      - Item 줄은 컴파일 오류, Line 줄은 컴파일된다
+      - Item 줄은 컴파일되고, Line 줄은 컴파일 오류
+      - 둘 다 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **Item 줄만 컴파일 오류예요.** 내부 클래스의 객체는 딸릴 바깥 객체가 있어야 만들어져요.
+
+      - order.new Item()처럼 바깥 객체를 정해 만들어요
+      - static 중첩 클래스는 바깥 객체 없이 만들어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.2
+  - key: nested-static-field
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드를 컴파일하면 어떻게 될까요?
+    code: |-
+      class Team {
+        String name;
+
+        static class Member {
+          String label() {
+            return name;
+          }
+        }
+      }
+    choices:
+      - 컴파일되고, label()은 바깥 Team의 name을 돌려준다
+      - 컴파일 오류. static 중첩 클래스는 바깥의 인스턴스 필드를 쓸 수 없다
+      - 컴파일되고, label()은 null을 돌려준다
+      - 실행할 때 NullPointerException이 난다
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** static 중첩 클래스에는 바깥 객체의 참조가 없어서 어느 Team의 name인지 알 수 없어요.
+
+      - 바깥의 상태가 필요하면 내부 클래스로 두거나, 필요한 값을 생성자로 받아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  # ── 질문 3 ──
+  - key: nested-listener-leak
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드를 실행한 뒤 GC가 돌았어요. Order 객체는 치워졌을까요?
+    code: |-
+      class Order {
+        byte[] data = new byte[10_000_000];
+
+        class Watcher implements Runnable {
+          public void run() {
+            print(data.length);
+          }
+        }
+      }
+
+      static List<Runnable> watchers =
+          new ArrayList<>();
+
+      Order order = new Order();
+      watchers.add(order.new Watcher());
+      order = null;
+    choices:
+      - 치워졌다. order에 null을 넣었다
+      - 치워지지 않았다. static 리스트의 Watcher가 Order를 가리킨다
+      - Watcher만 치워졌다
+      - 10MB 배열만 치워졌다
+    answer: "2"
+    explanation: |-
+      **치워지지 않았어요.** Watcher는 바깥의 data를 써서 Order의 참조를 숨은 필드로 가져요.
+
+      - static 리스트 → Watcher → Order로 닿는 길이 남아요
+      - 작은 리스너 하나가 10MB 배열까지 붙잡아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  - key: nested-listener-fixed
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 앞의 Watcher를 int size 하나만 생성자로 받는 static 중첩 클래스로 바꾸고, watchers.add(new Order.Watcher(order.data.length)); order = null;을 실행했어요. GC 뒤 Order 객체는 치워질 수 있을까요?
+    choices:
+      - 치워질 수 없다. Watcher가 Order 안에 선언됐다
+      - 치워질 수 있다. Watcher가 가진 것은 int 값뿐이다
+      - watchers를 비워야만 치워진다
+      - Watcher가 static이라 Order도 static이 되어 남는다
+    answer: "2"
+    explanation: |-
+      **치워질 수 있어요.** static 중첩 클래스에는 바깥 객체의 참조가 없고, Watcher가 가진 것은 값 하나예요.
+
+      - 어디에 선언됐는지는 상관없고, 무엇을 가리키는지가 중요해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
+  # ── 질문 4 ──
+  - key: nested-outer-this
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Order의 name은 "주문"이에요. 아래 익명 클래스의 run()이 출력하는 것은 무엇일까요?
+    code: |-
+      Runnable a = new Runnable() {
+        String name = "익명";
+        public void run() {
+          print(Order.this.name);
+        }
+      };
+    choices:
+      - 익명
+      - 주문
+      - 컴파일 오류
+      - "null"
+    answer: "2"
+    explanation: |-
+      **주문이에요.** Order.this는 익명 클래스를 감싼 바깥 Order 객체예요.
+
+      - 그냥 this.name이었다면 익명 클래스 자기 필드인 "익명"이에요
+      - 람다 안의 this는 처음부터 바깥 객체예요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.5
+  - key: nested-shadow
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 같은 메서드 안에서 int count = 1; 아래에 r1과 r2를 썼어요. 컴파일하면 어떻게 될까요?
+    code: |-
+      int count = 1;
+
+      Runnable r1 = () -> {
+        int count = 2;
+      };
+
+      Runnable r2 = new Runnable() {
+        public void run() {
+          int count = 2;
+        }
+      };
+    choices:
+      - 둘 다 컴파일된다
+      - r1은 컴파일 오류, r2는 컴파일된다
+      - r1은 컴파일되고, r2는 컴파일 오류
+      - 둘 다 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **r1만 컴파일 오류예요.** 람다는 바깥 메서드와 같은 범위라 이미 있는 이름을 다시 선언할 수 없어요.
+
+      - 익명 클래스는 클래스라서 새 범위를 열어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.27.2
+  - key: nested-jackson-dto
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 스프링 MVC 컨트롤러가 아래 OrderRequest를 @RequestBody로 받아요. {"lines":[{"name":"펜","qty":2}]}를 보내면 어떻게 될까요?
+    code: |-
+      class OrderRequest {
+        public List<Line> lines;
+
+        class Line {
+          public String name;
+          public int qty;
+        }
+      }
+    choices:
+      - 200. 잘 읽힌다
+      - 400. 요청 JSON이 잘못됐다
+      - 500. Jackson이 Line의 객체를 만들지 못한다
+      - lines가 null인 채로 200
+    answer: "3"
+    explanation: |-
+      **500이에요.** static이 없는 Line은 바깥 객체가 있어야 만들어지는데, Jackson은 넘겨줄 바깥 객체가 없어 InvalidDefinitionException을 던져요.
+
+      - 요청이 아니라 타입 정의의 잘못이라 스프링은 서버 오류로 답해요
+      - static class Line이나 중첩 record로 고쳐요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.9.2
+  # ── 면접 ──
+  - key: nested-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "내부 클래스와 static 중첩 클래스, 익명 클래스와 람다의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **내부 클래스는 바깥 객체의 참조를 숨겨 가지고, 익명 클래스는 자기 this를 가진 클래스이고 람다는 아니에요.**
+
+      - **네 가지:** static 중첩, 내부, 지역, 익명. 갈림은 static
+      - **내부 vs static:** 내부는 바깥 객체가 있어야 만들고 바깥 필드를 쓴다. static은 둘 다 아니다
+      - **문제:** 오래 사는 곳에 넘기면 바깥 객체가 남는다. DTO에 static을 빠뜨리면 Jackson이 못 만든다
+      - **익명 vs 람다:** this, 이름의 범위, 메서드 여럿, 필드. 지역 변수 규칙은 같다
+    checklist:
+      - 내부 클래스는 바깥 객체의 참조를 가진다고 말했다
+      - 바깥 객체 없이 만들 수 있는지, 바깥 필드를 쓰는지의 차이를 말했다
+      - 바깥 객체가 치워지지 않는 문제나 Jackson DTO 문제를 들었다
+      - 익명 클래스와 람다의 this가 다르다고 말했다
+      - 바깥이 필요 없으면 static이나 record로 둔다는 기준을 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.3
