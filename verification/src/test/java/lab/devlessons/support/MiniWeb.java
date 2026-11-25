@@ -89,6 +89,20 @@ public final class MiniWeb implements AutoCloseable {
         return context;
     }
 
+    /** 헤더와 메서드를 직접 정한 요청. 응답 헤더까지 본다 */
+    public HttpResponse<String> exchange(HttpRequest.Builder request) {
+        try {
+            return http.send(request.build(), HttpResponse.BodyHandlers.ofString(UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** exchange에 넘길 요청의 시작. 예: web.exchange(web.request("/orders/1").DELETE()) */
+    public HttpRequest.Builder request(String path) {
+        return HttpRequest.newBuilder(uri(path));
+    }
+
     public Reply get(String path) {
         return send(HttpRequest.newBuilder(uri(path)).GET().build());
     }
