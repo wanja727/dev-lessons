@@ -1,0 +1,164 @@
+# 옵저버 패턴과 이벤트 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/observer.yaml의 says).
+# 동작에 관한 정답은 verification의 ObserverTest로 확인했다 (자바 21, 스프링 프레임워크 6.2).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: observer
+  title: 옵저버 패턴과 이벤트
+  unit: 객체지향 설계와 패턴
+  order: 313
+concepts:
+  - key: core
+    name: 옵저버 패턴과 이벤트
+coreQuestions:
+  - key: q1
+    text: "옵저버 패턴은 무엇인가요?"
+  - key: q2
+    text: "알리는 쪽과 듣는 쪽을 떼어 놓으면 무엇을 얻고 무엇을 잃나요?"
+  - key: q3
+    text: "듣는 쪽이 예외를 던지거나 느리면 어떻게 되나요?"
+questions:
+  # ── 질문 1 ──
+  - key: ob-add-referral
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: SignupService는 List<SignupListener>를 생성자로 받고, 가입하면 SignedUp 이벤트를 만들어 목록의 모두에게 on(event)로 넘겨요. 추천인 포인트를 주는 일을 더할 때 바뀌는 것은?
+    choices:
+      - SignupService에 필드와 호출을 더한다
+      - ReferralPoint 리스너를 새로 만들고 조립하는 곳의 목록에 넣는다
+      - SignupListener 인터페이스에 메서드를 더한다
+    answer: "2"
+    explanation: |-
+      **새 리스너를 만들고 목록에 넣어요.** SignupService는 리스너 목록만 알아서 그대로예요.
+
+      - 직접 부르는 코드였다면 가입 서비스에 필드와 호출을 더해야 했어요
+  - key: ob-soldout
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 재고가 0이 되면 "품절 알림 신청자에게 메일", "상품 목록 캐시 지우기", "관리자 슬랙 알림"을 해야 해요. 옵저버 패턴으로 짜면 재고 서비스가 알아야 하는 것은 무엇일까요?
+    choices:
+      - 메일 서비스, 캐시, 슬랙 클라이언트
+      - 품절 이벤트와 리스너 인터페이스뿐
+      - 품절 알림 신청자 목록
+    answer: "2"
+    explanation: |-
+      **품절 이벤트와 리스너 인터페이스뿐이에요.** 할 일은 각 리스너가 알아요.
+
+      - 듣는 쪽이 이벤트와 인터페이스를 알고, 알리는 쪽은 듣는 쪽을 몰라요
+  # ── 질문 2 ──
+  - key: ob-duplicate-check
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 회원 가입에서 "이메일 중복 확인"과 "환영 메일 보내기" 가운데 이벤트 리스너로 떼기에 맞는 것은 무엇일까요?
+    choices:
+      - 이메일 중복 확인
+      - 환영 메일 보내기
+      - 둘 다
+    answer: "2"
+    explanation: |-
+      **환영 메일이에요.** 기준은 "그 일이 실패하면 가입도 실패해야 하는가"예요.
+
+      - 중복이면 가입이 실패해야 하니 중복 확인은 가입의 일부라 직접 불러요
+      - 메일은 가입 뒤에 따라오는 일이에요
+  - key: ob-payment
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문을 저장한 뒤 "결제 승인"과 "주문 완료 푸시 알림"을 해요. 결제 승인이 실패하면 주문도 실패해야 해요. 이벤트로 떼면 안 되는 것은?
+    choices:
+      - 결제 승인
+      - 주문 완료 푸시 알림
+      - 둘 다 떼도 된다
+    answer: "1"
+    explanation: |-
+      **결제 승인이에요.** 실패하면 주문도 실패해야 하는 일은 주문의 일부라 직접 불러요.
+
+      - 이벤트로 떼면 코드만 봐서는 무엇이 실행되는지 보이지 않는 비용도 있어요
+  # ── 질문 3 ──
+  - key: ob-failing
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 가입 서비스가 for 문으로 리스너 셋(환영 메일, 쿠폰 지급, 가입 통계)을 차례로 불러요. 쿠폰 지급이 예외를 던지면 어떻게 될까요?
+    choices:
+      - 메일과 통계는 실행되고 가입은 성공한다
+      - 메일만 실행되고 signup이 그 예외로 끝난다
+      - 아무것도 실행되지 않는다
+    answer: "2"
+    explanation: |-
+      **메일만 실행되고 signup이 예외로 끝나요.** 리스너는 for 문 안의 평범한 메서드 호출이라 예외가 for 문을 깨고 올라가요.
+
+      - 떼어 놓은 것은 코드의 의존이지 실행이 아니에요
+  - key: ob-slow-sum
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 리스너 셋이 각각 0.1초, 0.3초, 0.2초 걸려요. 리스너를 for 문으로 차례로 부르는 기본 옵저버 모양에서 알리는 메서드는 대략 얼마 걸릴까요?
+    choices:
+      - 0.3초쯤
+      - 0.6초 이상
+      - 0초에 가깝다
+    answer: "2"
+    explanation: |-
+      **0.6초 이상이에요.** 같은 스레드에서 차례로 실행되니 시간이 더해져요.
+
+      - 느린 리스너 하나가 알리는 쪽 전체를 늦춰요
+  - key: ob-spring-listener
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스프링에서 가입 서비스가 publishEvent(new SignedUp(email))로 알리고, 쿠폰 빈의 @EventListener 메서드가 예외를 던져요. @Async나 @TransactionalEventListener는 쓰지 않았어요. 가입 서비스의 signup은 어떻게 될까요?
+    choices:
+      - 리스너는 다른 스레드에서 돌아서 signup은 성공한다
+      - signup이 그 예외를 받는다
+      - 스프링이 예외를 삼키고 로그만 남긴다
+    answer: "2"
+    explanation: |-
+      **signup이 그 예외를 받아요.** @EventListener는 기본으로 publishEvent를 부른 스레드에서 실행돼요.
+
+      - 트랜잭션 안이었다면 가입도 롤백돼요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events
+  # ── 세 질문을 하나로 ──
+  - key: ob-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "옵저버 패턴과 스프링 이벤트를 설명하고, 쓸 때 주의할 점을 말해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **알리는 쪽이 듣는 쪽 목록에 이벤트를 넘기는 패턴이고, 기본은 같은 스레드에서 차례로 실행된다는 것을 조심해요.**
+
+      - **구조:** 리스너 인터페이스 목록, 불변 이벤트, 알리는 쪽은 듣는 쪽을 모른다
+      - **효과와 비용:** 할 일을 더해도 알리는 쪽은 그대로. 흐름이 코드에 안 보인다
+      - **기준:** 실패하면 본 작업도 실패해야 하면 직접 부르고, 따라오는 일만 뗀다
+      - **주의:** 리스너의 예외와 느림이 알리는 쪽에 전해진다. 스프링도 기본은 동기
+    checklist:
+      - 알리는 쪽이 리스너 목록에 이벤트를 넘긴다고 말했다
+      - 리스너를 더해도 알리는 쪽을 고치지 않는다고 말했다
+      - 코드만 봐서는 흐름이 안 보이는 비용을 말했다
+      - 기본은 같은 스레드라 리스너의 예외가 알리는 쪽으로 올라간다고 말했다
+      - 실패하면 본 작업도 실패해야 하는 일은 직접 부른다고 말했다

@@ -1,7 +1,9 @@
-# 옵저버 패턴과 이벤트 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 옵저버 패턴과 이벤트
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/observer.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 옵저버 패턴과 이벤트
+description: 옵저버 패턴이 무엇인지, 알리는 쪽과 듣는 쪽을 떼어 놓으면 무엇을 얻고 잃는지, 듣는 쪽이 예외를 던지거나 느리면 어떻게 되는지. 세 가지 질문에 스스로 답할 수 있게 회원 가입 뒤에 따라오는 일들로 배우는 대화형 레슨.
+minutes: 18
 unit: 객체지향 설계와 패턴
 roadmap: O13
 type: 설계
@@ -40,6 +42,9 @@ covers:
     where: '다루지 않음: 스프링 이벤트(S13), @Async(S14)'
   - topic: '서버 밖으로 알리는 메시지 큐'
     where: '다루지 않음: 메시지 큐(A8)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
+  springEvents: https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events
 codes:
   direct: |-
     class SignupService {
@@ -104,9 +109,63 @@ codes:
       @EventListener
       void on(SignedUp e) {...}
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  observerMark: |-
+    record SignedUp(String email) {}
+
+    interface SignupListener {
+      void on(SignedUp event);
+    }
+
+    class SignupService {
+      private final⤶
+          List<SignupListener> listeners;
+
+      void signup(String email) {
+        // 회원 저장
+        var event = new SignedUp(email);
+        [[for (var l : listeners)]] {
+          [[l.on(event)]];
+        }
+      }
+    }
+  referral: |-
+    class ReferralPoint
+        implements SignupListener {
+      public void on(SignedUp e) {
+        points.give(e.email(), 1000);
+      }
+    }
+
+    // 조립하는 곳
+    new SignupService(List.of(
+        new WelcomeMail(),
+        new SignupCoupon(),
+        new SignupStats(),
+        new ReferralPoint()));
+  springFail: |-
+    @Component
+    class SignupCoupon {
+      @EventListener
+      void on(SignedUp e) {
+        couponClient.give(e.email());
+      }
+    }
 predict:
-  text: '코드 failing은 듣는 쪽 셋을 등록했어요. 두 번째인 쿠폰 지급이 예외를 던져요. `signup("a@b.c")`을 부르면 어떻게 될까요? 보기: 메일과 통계는 실행되고 가입은 성공한다, 메일만 실행되고 `signup`이 예외로 끝난다, 아무것도 실행되지 않는다.'
-  answer: '메일만 실행되고 `signup`이 예외로 끝난다. 듣는 쪽은 알리는 쪽의 for 문 안에서 차례로 불리므로, 예외가 for 문을 깨고 `signup`까지 올라간다. 질문 3에서 밝힌다.'
+  title: 쿠폰 지급이 예외를 던지면?
+  text: '가입 서비스가 듣는 쪽 셋(환영 메일, 쿠폰 지급, 가입 통계)에게 차례로 알려요. 두 번째인 쿠폰 지급이 예외를 던져요. `signup("a@b.c")`을 부르면 어떻게 될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: failing
+  label: 내 예측
+  options:
+    - value: rest
+      label: 메일과 통계는 실행되고 가입은 성공한다
+    - value: stop
+      label: 메일만 실행되고 signup이 예외로 끝난다
+    - value: none
+      label: 아무것도 실행되지 않는다
+  answer: stop
+  storageKey: observer-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 옵저버 패턴은 무엇인가요?
@@ -123,6 +182,43 @@ questions:
     asks:
       - '본문의 예시: 코드 observer에 추천인 포인트를 더할 때 고치는 파일 가운데 `SignupService`가 있나 (없다. 새 리스너와 조립하는 곳만)'
       - '옮긴 상황: 재고가 0이 되면 "품절 알림 신청자에게 메일", "상품 목록 캐시 지우기", "관리자 슬랙 알림"을 해야 한다. 옵저버 패턴으로 짜면 재고 서비스가 아는 것은 무엇인가 (품절 이벤트와 리스너 인터페이스뿐)'
+    body:
+      - p: '처음 가입 서비스는 가입 뒤에 할 일을 모두 직접 불러요.'
+      - code: direct
+      - p: '마케팅팀이 "추천인에게 포인트를 주자"고 하면 가입 서비스에 필드를 더하고 `signup`을 고쳐요. 가입 뒤에 할 일이 늘 때마다 가입 서비스가 바뀌어요.'
+      - p: '**옵저버 패턴**은 알리는 쪽(주제)이 듣는 쪽(옵저버)의 목록을 인터페이스로 들고 있다가, 일이 생기면 목록을 돌며 알리는 패턴이에요.'
+      - code: observerMark
+        notes:
+          - mark: for (var l : listeners)
+            as: code
+            text: '가입 서비스는 `SignupListener` 목록만 알아요. 메일인지 쿠폰인지 몰라요.'
+          - mark: l.on(event)
+            as: code
+            text: '"가입했다"는 이벤트를 넘기기만 해요. 할 일은 듣는 쪽이 정해요.'
+      - code: listener
+      - p: '추천인 포인트를 더해 볼게요.'
+      - code: referral
+      - ci:
+          key: add
+          label: 두 코드에서 고친 파일 보기
+          source: ObserverTest.addingListener
+      - p: '옵저버 코드에서는 `ReferralPoint`를 새로 만들고 조립하는 곳의 목록에 넣어요. **가입 서비스는 그대로예요.**'
+      - p: '이벤트 `SignedUp`은 "가입했다"는 지나간 사실이라 record로 만들어 바꿀 수 없게 해요. 한 듣는 쪽이 이벤트를 바꿔서 다음 듣는 쪽이 다른 값을 보는 일이 없어요.'
+      - p: '의존의 방향도 봐요. 듣는 쪽이 `SignupListener`와 `SignedUp`을 알고, 가입 서비스는 메일과 쿠폰을 몰라요. [의존 역전 원칙과 의존성 주입](lesson:dip-di)에서 본 방향 뒤집기와 같아요.'
+      - more:
+          summary: 이벤트에는 무엇을 담나요?
+          body:
+            - p: '필요한 값을 이벤트에 다 담아 보내는 것을 push 방식, 이벤트에는 id만 담고 듣는 쪽이 필요한 값을 꺼내 가는 것을 pull 방식이라고 해요. push는 듣는 쪽이 따로 조회하지 않아도 되고, pull은 이벤트가 작고 듣는 쪽이 최신 값을 읽어요.'
+      - quiz:
+          q: '재고가 0이 되면 "품절 알림 신청자에게 메일", "상품 목록 캐시 지우기", "관리자 슬랙 알림"을 해야 해요. 옵저버 패턴으로 짜면 재고 서비스가 아는 것은 무엇일까요?'
+          options:
+            - 메일 서비스, 캐시, 슬랙 클라이언트
+            - 품절 이벤트와 리스너 인터페이스뿐
+            - 아무것도 모른다
+          answer: 2
+          explain: '재고 서비스는 품절 이벤트를 만들어 리스너 목록에 넘기기만 해요. 할 일은 각 리스너가 알아요.'
+      - next: '떼어 놓으면 좋기만 할까요?'
+    recall: '알리는 쪽이 듣는 쪽의 목록을 인터페이스로 들고 있다가, 일이 생기면 목록을 돌며 이벤트를 넘기는 패턴이에요. 가입 서비스는 `SignupListener` 목록만 알아서, 추천인 포인트 같은 할 일을 더해도 새 리스너와 조립하는 곳만 바뀌고 가입 서비스는 그대로예요. 이벤트는 지나간 사실이라 record로 만들어요.'
   - id: q2
     title: 알리는 쪽과 듣는 쪽을 떼어 놓으면 무엇을 얻고 무엇을 잃나요?
     conclusion:
@@ -139,6 +235,46 @@ questions:
     asks:
       - '본문의 예시: "이메일 중복 확인"과 "환영 메일" 가운데 이벤트 리스너로 떼기에 맞는 것은 (환영 메일)'
       - '옮긴 상황: 주문을 저장한 뒤 "결제 승인"과 "주문 완료 푸시 알림"을 한다. 결제 승인이 실패하면 주문도 실패해야 한다. 둘 가운데 이벤트로 떼면 안 되는 것은 (결제 승인)'
+    body:
+      - p: '**얻는 것:** 가입 서비스는 가입만 알아요. 마케팅팀의 일이 늘어도 가입 서비스를 고치지 않고, 듣는 쪽마다 따로 테스트해요.'
+      - p: '**잃는 것:** `signup`을 읽어도 메일이 나가는지 알 수 없어요. `SignupListener`를 구현한 클래스를 찾아봐야 해요. 흐름을 따라가기 어려워져요.'
+      - p: '그래서 모든 호출을 이벤트로 바꾸지 않아요. 고르는 기준은 하나예요. **"그 일이 실패하면 가입도 실패해야 하는가?"** 그렇다면 가입의 일부라 직접 불러요. 아니라면 가입 뒤에 따라오는 일이라 이벤트로 떼요.'
+      - p: '아래 일들을 분류해 보세요.'
+      - widget:
+          kind: classify
+          categories:
+            - '가입의 일부: 직접 부른다'
+            - '따라오는 일: 이벤트로 뗀다'
+          items:
+            - text: 이메일이 이미 있는지 확인하기
+              answer: 1
+              explain: 중복이면 가입이 실패해야 해요. 가입의 일부예요.
+            - text: 비밀번호를 암호화해서 회원 저장하기
+              answer: 1
+              explain: 저장이 실패하면 가입도 실패예요.
+            - text: 환영 메일 보내기
+              answer: 2
+              explain: 메일이 늦거나 실패해도 가입은 된 거예요.
+            - text: 가입 쿠폰 주기
+              answer: 2
+              explain: 쿠폰은 나중에 다시 줄 수 있어요. 가입 뒤에 따라오는 일이에요.
+            - text: 가입 통계 올리기
+              answer: 2
+              explain: 통계가 실패했다고 가입을 막을 이유가 없어요.
+            - text: 추천인에게 포인트 주기
+              answer: 2
+              explain: 가입이 끝난 뒤 따라오는 일이에요.
+      - callout: '**듣는 쪽이 하나뿐이고 바뀔 일이 없으면 직접 부르는 것이 읽기 쉬워요.** 이벤트는 듣는 쪽이 늘거나 바뀌는 일에 써요.'
+      - quiz:
+          q: '주문을 저장한 뒤 "결제 승인"과 "주문 완료 푸시 알림"을 해요. 결제 승인이 실패하면 주문도 실패해야 해요. 이벤트로 떼면 안 되는 것은 무엇일까요?'
+          options:
+            - 결제 승인
+            - 주문 완료 푸시 알림
+            - 둘 다 떼도 된다
+          answer: 1
+          explain: '실패하면 주문도 실패해야 하는 일은 주문의 일부라 직접 불러요. 푸시 알림은 따라오는 일이에요.'
+      - next: '그런데 이벤트로 뗀 일이 실패하면 정말 가입과 상관없을까요?'
+    recall: '일을 더하고 빼기 쉬워지는 대신, 가입 코드만 봐서는 가입 뒤에 무엇이 실행되는지 보이지 않아요. 고르는 기준은 "그 일이 실패하면 가입도 실패해야 하는가"예요. 중복 확인과 회원 저장 같은 가입의 일부는 직접 부르고, 메일, 쿠폰, 통계처럼 가입 뒤에 따라오는 일만 이벤트로 떼요.'
   - id: q3
     title: 듣는 쪽이 예외를 던지거나 느리면 어떻게 되나요?
     conclusion:
@@ -158,21 +294,104 @@ questions:
       - '본문의 예시: 코드 failing에서 통계 리스너를 첫째로 옮기면 무엇이 실행되나 (통계, 메일. 쿠폰에서 예외)'
       - '옮긴 상황: 리스너 셋이 각각 0.1초, 0.3초, 0.2초 걸린다. 기본 옵저버 모양에서 알리는 메서드는 대략 얼마 걸리나 (0.6초 이상)'
       - '실무 구역: 스프링의 `@EventListener` 메서드가 예외를 던지면 `publishEvent`를 부른 서비스 메서드는 (그 예외를 받는다)'
+    body:
+      - p: '옵저버 코드의 `signup`을 다시 보세요. 듣는 쪽의 `on`은 가입 서비스의 for 문 안에서 불리는 **평범한 메서드 호출**이에요. 같은 스레드에서 차례로 실행돼요.'
+      - p: '아래에서 한 단계씩 실행해 보세요.'
+      - widget:
+          kind: steps
+          layout: [selector, buttons, log, verdict]
+          selector:
+            label: 경우
+            options:
+              - {value: ok, label: 모두 성공}
+              - {value: fail, label: 쿠폰이 예외}
+          scenarios:
+            ok:
+              - log: '회원 저장'
+              - log: 'SignedUp 이벤트 만들기'
+              - log: '환영 메일 on → 성공'
+              - log: '쿠폰 지급 on → 성공'
+              - log: '가입 통계 on → 성공'
+                verdict: 'signup이 정상으로 끝나요.'
+            fail:
+              - log: '회원 저장'
+              - log: 'SignedUp 이벤트 만들기'
+              - log: '환영 메일 on → 성공'
+              - log: '쿠폰 지급 on → IllegalStateException'
+              - log: {note: '가입 통계 on → 실행되지 않음'}
+                verdict: '예외가 for 문을 깨고 signup까지 올라가요. 가입 서비스를 부른 쪽은 예외를 받아요.'
+      - ci:
+          key: failing
+          label: 실제로 돌린 결과 보기
+          source: ObserverTest.listenerExceptionStopsTheRest
+      - p: '처음에 예측한 답은 **메일만 실행되고 signup이 예외로 끝난다**예요. 예외가 for 문을 깨고 가입 서비스까지 올라가서, 뒤의 통계는 실행되지 않아요. {{predict-result}}'
+      - h3: 느린 듣는 쪽이 알리는 쪽을 늦춰요
+      - p: '통계 리스너가 0.5초 걸리면 가입도 그만큼 늦어져요.'
+      - ci:
+          key: slow
+          label: 걸린 시간 보기
+          source: ObserverTest.slowListenerSlowsPublisher
+      - callout: '**떼어 놓은 것은 코드의 의존이지 실행이 아니에요.** 기본 옵저버 모양에서는 듣는 쪽의 예외와 느림이 그대로 알리는 쪽에 전해져요.'
+      - p: '듣는 쪽끼리 **순서에 기대지 않아요.** 목록의 순서는 조립하는 곳이 정하고, 바뀔 수 있어요.'
+      - p: '알리는 쪽을 지키려면 듣는 쪽마다 예외를 잡아 로그로 남기거나, 다른 스레드에서 실행해요. 스프링에서 하는 법은 스프링 이벤트 레슨과 @Async 레슨에서 다뤄요.'
+      - more:
+          summary: 듣는 쪽 등록을 풀지 않으면?
+          body:
+            - p: '알리는 쪽이 목록에 듣는 쪽을 넣고 빼지 않으면, 알리는 쪽이 살아 있는 동안 듣는 쪽도 치워지지 않아요. 화면처럼 듣는 쪽이 먼저 사라지는 곳에서는 메모리 누수가 돼요. [가비지 컬렉션](lesson:garbage-collection)에서 본 "닿을 수 있는 객체"가 계속 남는 경우예요.'
+      - quiz:
+          q: '리스너 셋이 각각 0.1초, 0.3초, 0.2초 걸려요. 기본 옵저버 모양(for 문으로 차례로 부르기)에서 알리는 메서드는 대략 얼마 걸릴까요?'
+          options:
+            - 0.3초쯤
+            - 0.6초 이상
+            - 0초에 가깝다
+          answer: 2
+          explain: '같은 스레드에서 차례로 실행되니 세 시간을 더한 만큼 걸려요.'
+    recall: '기본 모양에서는 듣는 쪽이 알리는 쪽의 스레드에서 for 문 안의 평범한 호출로 차례로 실행돼요. 그래서 쿠폰 리스너의 예외는 가입 서비스까지 올라가고 뒤의 통계 리스너는 실행되지 않아요. 0.5초 걸리는 리스너가 있으면 가입도 0.5초 넘게 걸려요. 떼어 놓은 것은 코드의 의존이지 실행이 아니에요.'
 practice:
+  title: 스프링의 ApplicationEventPublisher와 @EventListener
   says:
     - '스프링에서는 `ApplicationEventPublisher.publishEvent(new SignedUp(email))`로 알리고, 빈의 메서드에 `@EventListener`를 붙여 듣는다. 듣는 쪽 목록을 스프링이 들고 있어서 코드 observer의 for 문을 쓰지 않는다. 이벤트는 아무 객체(record)나 된다'
     - '기본은 질문 3과 같다. 듣는 메서드는 `publishEvent`를 부른 스레드에서 실행되고, 예외는 `publishEvent`를 부른 쪽으로 올라간다. `AnnotationConfigApplicationContext`로 스레드 이름과 예외를 확인한다'
     - '흔한 실수: 이벤트로 뗐으니 메일 발송이 실패해도 가입은 상관없다고 믿는다. 실제로는 리스너의 예외로 가입 메서드가 실패하고, 트랜잭션 안이었다면 가입도 롤백된다. 고치는 방법(커밋 뒤에 듣기, 다른 스레드에서 듣기)은 스프링 이벤트(S13)에서 다룬다. 여기서는 예외가 올라오는 것까지만 보인다'
     - '여러 리스너의 순서가 필요하면 `@Order`를 붙인다. 그래도 순서에 기대는 설계는 피한다(공식 문서 근거)'
+  body:
+    - p: '스프링에서는 `ApplicationEventPublisher.publishEvent()`로 알리고, 빈의 메서드에 `@EventListener`를 붙여 들어요. 듣는 쪽 목록은 스프링이 들고 있어서 질문 1의 for 문을 쓰지 않아요. 이벤트는 아무 객체(record)나 돼요([스프링 문서](link:springEvents)).'
+    - code: spring
+    - p: '기본 동작은 질문 3과 같아요. 듣는 메서드는 `publishEvent`를 부른 스레드에서 실행되고, 예외는 부른 쪽으로 올라가요.'
+    - code: springFail
+    - ci:
+        key: spring
+        label: 작은 스프링 컨텍스트로 확인한 결과 보기
+        source: ObserverTest.springEventsAreSynchronous
+    - h3: '흔한 실수: 이벤트로 뗐으니 실패해도 상관없다고 믿는다'
+    - p: '쿠폰 지급을 `@EventListener`로 뗐어도, 쿠폰 서버가 오류를 내면 가입 메서드가 그 예외로 실패해요. 가입이 트랜잭션 안이었다면 회원 저장까지 롤백돼요. 커밋된 뒤에 듣는 `@TransactionalEventListener`와 다른 스레드에서 듣는 `@Async`가 이것을 바꾸는 방법이고, 스프링 이벤트 레슨에서 다뤄요.'
+    - muted: '여러 리스너의 순서가 필요하면 `@Order`를 붙일 수 있어요. 그래도 순서에 기대는 설계는 피해요.'
+interview:
+  question: 옵저버 패턴과 스프링 이벤트를 설명하고, 쓸 때 주의할 점을 말해 주세요
+  model:
+    - label: 정의
+      text: 옵저버 패턴은 알리는 쪽이 듣는 쪽의 목록을 인터페이스로 들고 있다가, 일이 생기면 목록을 돌며 알리는 패턴입니다. 스프링에서는 ApplicationEventPublisher로 이벤트를 발행하고 @EventListener로 듣습니다.
+    - label: 원리
+      text: 알리는 쪽은 듣는 쪽의 구체 클래스를 모르고 이벤트만 넘기므로, 가입 뒤에 할 일을 더해도 가입 서비스를 고치지 않고 새 리스너만 더합니다. 이벤트는 지나간 사실이라 불변 객체로 만듭니다. 대신 가입 코드만 봐서는 뒤에 무엇이 실행되는지 보이지 않습니다.
+    - label: 주의할 점
+      text: 기본으로는 듣는 쪽이 알리는 쪽의 스레드에서 차례로 실행되어, 리스너의 예외가 발행한 쪽까지 올라가고 뒤의 리스너는 실행되지 않으며 느린 리스너가 전체를 늦춥니다. 실패하면 본 작업도 실패해야 하는 일은 직접 부르고, 따라오는 일만 이벤트로 뗍니다. 커밋 뒤에 듣거나 다른 스레드에서 들으려면 @TransactionalEventListener나 @Async를 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 가입 뒤 쿠폰과 메일을 이벤트 리스너로 떼면서, 쿠폰 오류로 가입이 롤백되던 것을 커밋 뒤에 듣도록 바꿨습니다.'
+verified: '이 레슨의 고친 파일, 실행된 리스너, 걸린 시간, 스프링 리스너의 스레드와 예외는 짐작이 아니라 자바 21과 스프링 프레임워크 6.2에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([ObserverTest](link:test))가 다시 돌아요.'
+footer: '근거: 스프링 이벤트와 @EventListener(기본은 같은 스레드)는 [스프링 공식 문서](link:springEvents). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 observer에 리스너를 더하면 `SignupService`는 그대로이고, 코드 direct는 `SignupService`가 바뀐다'
     how: '바꾸기 전후 패키지를 비교한다'
+    test: ObserverTest.addingListener
   - claim: '코드 failing에서 메일만 실행되고 `signup`이 그 예외로 끝난다'
     how: '리스너마다 실행 기록을 남기고 예외를 확인한다'
+    test: ObserverTest.listenerExceptionStopsTheRest
   - claim: '0.5초 걸리는 리스너가 있으면 `signup`이 0.5초 넘게 걸린다'
     how: '걸린 시간을 잰다'
+    test: ObserverTest.slowListenerSlowsPublisher
   - claim: '스프링 `@EventListener`는 `publishEvent`를 부른 스레드에서 실행되고, 리스너의 예외가 `publishEvent`를 부른 쪽으로 올라간다'
     how: '`AnnotationConfigApplicationContext`로 스레드 이름과 예외를 확인한다'
+    test: ObserverTest.springEventsAreSynchronous
 sources:
   - '옵저버 패턴: GoF, Design Patterns(1994)의 Observer. 용어 설명 https://refactoring.guru/design-patterns/observer'
   - '스프링 이벤트와 @EventListener(기본은 동기): 스프링 공식 문서 https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events'
