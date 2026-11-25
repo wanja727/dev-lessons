@@ -1,0 +1,251 @@
+# 힙과 우선순위 큐 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/heap-priority-queue.yaml의 says).
+# 동작에 관한 정답은 verification의 HeapPriorityQueueTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: heap-priority-queue
+  title: 힙과 우선순위 큐
+  unit: 자료구조와 알고리즘
+  order: 63
+concepts:
+  - key: core
+    name: 힙과 우선순위 큐
+coreQuestions:
+  - key: q1
+    text: "우선순위 큐는 가장 작은 것을 어떻게 바로 꺼내나요?"
+  - key: q2
+    text: "넣고 꺼낼 때 힙은 어떻게 규칙을 지키나요?"
+  - key: q3
+    text: "PriorityQueue를 출력하면 왜 정렬되어 있지 않나요?"
+  - key: q4
+    text: "상위 k개를 구할 때 힙은 왜 정렬보다 나은가요?"
+questions:
+  # ── 질문 1 ──
+  - key: heap-index
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 힙을 배열에 담았어요. 3번 칸 원소의 부모와 자식은 각각 몇 번 칸일까요? 칸 번호는 0부터 세요.
+    choices:
+      - 부모 1번, 자식 7번과 8번
+      - 부모 2번, 자식 6번과 7번
+      - 부모 1번, 자식 6번과 7번
+      - 부모 0번, 자식 4번과 5번
+    answer: "1"
+    explanation: |-
+      **부모는 1번, 자식은 7번과 8번 칸이에요.** 부모는 (i - 1) / 2, 자식은 2i + 1과 2i + 2예요.
+
+      - 힙은 위층부터 왼쪽부터 빈틈없이 채워서 배열에 빈칸 없이 담겨요
+      - 그래서 노드에 참조를 두지 않고 계산으로 찾아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  - key: heap-valid
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "배열 [2, 5, 3, 9, 6]을 최소 힙(부모가 자식보다 작거나 같은 힙)으로 볼 수 있을까요? 볼 수 있다면 peek()은 무엇을 돌려줄까요?"
+    choices:
+      - 볼 수 없다. 5와 3이 정렬되어 있지 않다
+      - 볼 수 있다. peek()은 2
+      - 볼 수 있다. peek()은 9
+      - 볼 수 없다. 9가 6보다 앞에 있다
+    answer: "2"
+    explanation: |-
+      **최소 힙이 맞고 peek()은 2예요.** 0번 칸 2는 자식 5, 3보다 작고, 1번 칸 5는 자식 9, 6보다 작아요.
+
+      - 힙은 부모와 자식 사이만 봐요. 형제인 5와 3, 9와 6 사이에는 순서가 없어도 돼요
+      - 가장 작은 값은 늘 0번 칸이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  # ── 질문 2 ──
+  - key: heap-offer-zero
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "힙 배열 [1, 2, 4, 5, 3]에 0을 넣어요. 0은 자리를 몇 번 바꾸고, 어느 칸에 놓일까요?"
+    choices:
+      - 0번 바꾸고 5번 칸
+      - 1번 바꾸고 2번 칸
+      - 2번 바꾸고 0번 칸
+      - 5번 바꾸고 0번 칸
+    answer: "3"
+    explanation: |-
+      **2번 바꾸고 0번 칸에 놓여요.** 맨 끝 5번 칸에 두고, 부모보다 작은 동안 부모와 바꾸며 올라가요.
+
+      - 5번 칸의 부모는 2번 칸의 4. 0이 작아 바꿔요
+      - 2번 칸의 부모는 0번 칸의 1. 0이 작아 바꿔 뿌리가 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  - key: heap-poll-thousand
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 원소 1천 개가 든 최소 힙에서 poll()을 한 번 해요. 자리를 바꾸는 횟수는 최대 몇 번 남짓일까요?
+    choices:
+      - 1번
+      - 9번 남짓
+      - 500번 남짓
+      - 1천 번
+    answer: "2"
+    explanation: |-
+      **9번 남짓이에요.** 꺼낼 때는 뿌리에서 맨 아래까지 한 줄만 내려가고, 1천 개의 힙은 높이가 10층 남짓이에요.
+
+      - 힙은 빈틈없이 채워서 넣는 순서와 상관없이 높이가 log₂ n 남짓이에요
+      - 그래서 poll과 offer는 O(log n)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  # ── 질문 3 ──
+  - key: heap-for-order
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드의 두 줄은 무엇을 출력할까요?
+    code: |-
+      Queue<Integer> pq = new PriorityQueue<>();
+      pq.offer(5);
+      pq.offer(1);
+      pq.offer(4);
+      pq.offer(2);
+      pq.offer(3);
+      System.out.println(pq);
+      System.out.println(pq.poll());
+    choices:
+      - "[1, 2, 3, 4, 5]와 1"
+      - "[1, 2, 4, 5, 3]와 1"
+      - "[5, 1, 4, 2, 3]와 5"
+      - "[1, 2, 4, 5, 3]와 3"
+    answer: "2"
+    explanation: |-
+      **[1, 2, 4, 5, 3]와 1이에요.** 출력은 안쪽 힙 배열을 칸 순서대로 보여 주고, 꺼내는 것은 가장 작은 1이에요.
+
+      - 힙은 첫 칸이 가장 작다는 것만 약속하고 나머지는 정렬하지 않아요
+      - 정렬된 순서는 poll을 되풀이해야 나와요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  - key: heap-max-first
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 점수가 가장 높은 회원부터 꺼내려고 new PriorityQueue<Integer>()에 70, 95, 82를 넣었어요. 처음 poll()이 돌려주는 값과 고치는 방법은 무엇일까요?
+    choices:
+      - 95. 고칠 것이 없다
+      - 70. Comparator.reverseOrder()를 줘서 만든다
+      - 70. 넣기 전에 점수를 정렬한다
+      - 82. 처음 넣은 것이 먼저 나온다
+    answer: "2"
+    explanation: |-
+      **70이 나와요. Comparator.reverseOrder()를 주면 95부터 나와요.** PriorityQueue는 작은 것이 먼저예요.
+
+      - 넣는 순서나 넣기 전의 정렬은 꺼내는 순서를 바꾸지 않아요
+      - 기준을 뒤집으면 큰 값을 "작은 것"으로 봐요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  # ── 질문 4 ──
+  - key: heap-topk-trace
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: k가 3이고 scores가 7, 2, 9, 4, 8 순서예요. 반복이 끝났을 때 top에 남는 점수는 무엇일까요?
+    code: |-
+      Queue<Integer> top = new PriorityQueue<>();
+      for (int score : scores) {
+        top.offer(score);
+        if (top.size() > k) {
+          top.poll();
+        }
+      }
+    choices:
+      - 2, 4, 7
+      - 7, 8, 9
+      - 7, 2, 9
+      - 4, 8, 9
+    answer: "2"
+    explanation: |-
+      **7, 8, 9가 남아요.** 크기가 k를 넘을 때마다 가장 작은 것을 버리니 가장 큰 3개가 남아요.
+
+      - 4를 넣으면 2를, 8을 넣으면 4를 버려요
+      - 원소마다 O(log k)라 전체 O(n log k)이고 메모리는 k개만 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  - key: heap-cheapest
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 상품 1천만 개 가운데 가장 싼 상품 5개를 크기 5의 힙으로 구해요. 어떤 힙을 써야 할까요?
+    choices:
+      - 작은 것이 먼저인 힙(new PriorityQueue<>())
+      - 큰 것이 먼저인 힙(Comparator.reverseOrder())
+      - 둘 다 같은 결과가 나온다
+      - 힙으로는 구할 수 없고 정렬해야 한다
+    answer: "2"
+    explanation: |-
+      **큰 것이 먼저인 힙이에요.** 남긴 다섯 개 가운데 가장 비싼 것을 빨리 버려야 하기 때문이에요.
+
+      - 뿌리가 "가장 싼 5개에 들기 위한 문턱"이 돼요
+      - 상위 k개를 구할 때 최소 힙을 쓰는 것과 같은 생각을 거꾸로 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  - key: heap-mutable
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 우선순위가 a는 5, b는 3, c는 8인 작업을 차례로 넣은 뒤 c를 급하게 바꿨어요. 무엇이 출력될까요?
+    code: |-
+      Queue<Job> jobs = new PriorityQueue<>(
+          Comparator.comparingInt(
+              (Job j) -> j.priority));
+      jobs.offer(a);
+      jobs.offer(b);
+      jobs.offer(c);
+      c.priority = 1;
+      System.out.println(jobs.poll().name);
+    choices:
+      - c
+      - b
+      - a
+      - ConcurrentModificationException이 난다
+    answer: "2"
+    explanation: |-
+      **b가 나와요.** 힙은 넣을 때와 꺼낼 때만 자리를 맞추고, 넣은 뒤 바뀐 필드는 몰라요.
+
+      - c는 우선순위 8일 때의 자리에 그대로 있어 뿌리가 아니에요
+      - remove(c)로 꺼내고, 바꾸고, offer(c)로 다시 넣으면 c가 나와요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
+  # ── 네 질문을 하나로 ──
+  - key: heap-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "우선순위 큐는 어떻게 동작하고, 언제 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **힙에 담아 가장 작은 것을 뿌리에 두는 큐이고, 넣고 꺼내기가 O(log n)이라 급한 것부터 처리하거나 상위 k개를 구할 때 써요.**
+
+      - **힙:** 부모가 자식보다 작거나 같은 완전 이진 트리. 배열에 담고 가장 작은 값이 0번 칸
+      - **연산:** 끝에 넣고 올리기, 뿌리를 꺼내고 끝 원소를 내리기. 둘 다 O(log n), peek은 O(1)
+      - **주의:** 출력과 반복자는 정렬되어 있지 않다. 넣은 뒤 우선순위 필드를 바꾸면 안 된다
+      - **쓰임:** 마감 순 작업, 예약 실행, 크기 k 힙으로 상위 k개를 O(n log k)
+    checklist:
+      - 부모가 자식보다 작거나 같은 힙이라 가장 작은 것이 맨 위에 있다고 말했다
+      - offer와 poll이 O(log n)이고 그 이유(높이만큼 움직인다)를 말했다
+      - 출력이나 반복자는 정렬된 순서가 아니라고 말했다
+      - 상위 k개를 크기 k의 힙으로 구한다고 말했다
+      - 넣은 뒤 우선순위를 바꾸면 자리가 갱신되지 않는다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
