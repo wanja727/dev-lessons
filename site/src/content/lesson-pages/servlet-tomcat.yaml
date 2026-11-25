@@ -6,7 +6,7 @@ unit: 스프링
 roadmap: S1
 type: 동작 확인
 prerequisites:
-  - {slug: http-request-response, title: HTTP 요청과 응답}
+  - {slug: http-basics, title: HTTP 요청과 응답}
   - {slug: thread-pool, title: 스레드 풀}
 assume: '자바 21, 스프링 부트 3.5(내장 톰캣 10.1). HTTP 요청이 메서드, 경로, 헤더, 본문으로 이루어진다는 것(HTTP 요청과 응답 레슨). 스레드 풀이 정해진 수의 스레드로 작업을 나눠 받고, 다 바쁘면 작업이 큐에서 기다린다는 것(스레드 풀 레슨). 스프링 MVC는 몰라도 돼요.'
 example: '주문 조회 API `GET /orders/{id}` 하나를 띄운 스프링 부트 앱. 요청마다 처리하는 스레드의 이름을 응답에 담아 보고, 톰캣의 스레드 수를 2로 줄여 느린 요청 세 개를 함께 보내 봐요.'
