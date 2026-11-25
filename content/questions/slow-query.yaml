@@ -1,0 +1,219 @@
+# 느린 쿼리 고치기 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/slow-query.yaml의 says).
+# 동작에 관한 정답은 verification의 SlowQueryTest로 확인했다 (PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: slow-query
+  title: 느린 쿼리 고치기
+  unit: DB
+  order: 614
+concepts:
+  - key: core
+    name: 느린 쿼리 고치기
+coreQuestions:
+  - key: q1
+    text: "느린 쿼리는 어떻게 찾나요?"
+  - key: q2
+    text: "실행계획에서 원인을 어떻게 읽나요?"
+  - key: q3
+    text: "고친 뒤에는 어떻게 다시 재나요?"
+  - key: q4
+    text: "흔한 원인은 무엇이고 어떻게 고치나요?"
+questions:
+  # ── 질문 1 ──
+  - key: slow-log-threshold
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 1
+    body: "`log_min_duration_statement`를 200ms로 두면 150ms 걸린 쿼리도 서버 로그에 남는다."
+    answer: X
+    explanation: |-
+      **X. 200ms보다 오래 걸린 쿼리만 남아요.**
+
+      - 테스트에서 0.3초짜리는 남고 0.05초짜리는 남지 않았어요
+      - 로그에는 걸린 시간(duration)과 SQL이 함께 남아요
+    source: https://www.postgresql.org/docs/16/runtime-config-logging.html
+  - key: slow-total-time
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "A 쿼리는 평균 3초에 하루 20번, B 쿼리는 평균 30ms에 하루 50만 번 불려요. 하나만 고칠 수 있다면 먼저 볼 것은?"
+    choices:
+      - A. 한 번이 100배 느리다
+      - B. 총 시간이 훨씬 크다
+      - 둘 다 고칠 필요가 없다
+      - 둘 다 같다
+    answer: "2"
+    explanation: |-
+      **B예요.** A는 하루 60초, B는 1만 5천 초를 써요.
+
+      - 쿼리별 호출 수 × 평균 시간, 곧 총 시간으로 우선순위를 정해요
+      - pg_stat_statements가 이 값을 모아 줘요
+    source: https://www.postgresql.org/docs/16/pgstatstatements.html
+  # ── 질문 2 ──
+  - key: slow-stale-stats
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "실행계획에 `(cost=... rows=1 ...) (actual rows=500000 ...)`이 나왔어요. 어림한 행 수와 실제 행 수가 크게 달라요. 먼저 해 볼 것은?"
+    choices:
+      - 인덱스를 지운다
+      - ANALYZE로 통계를 새로 만들고 다시 본다
+      - work_mem을 올린다
+      - 테이블을 나눈다
+    answer: "2"
+    explanation: |-
+      **ANALYZE예요.** 어림이 크게 틀린 것은 통계가 낡았다는 신호예요.
+
+      - 테스트에서 ANALYZE 전에는 100건을 수천 건으로 어림했고, 뒤에는 100건으로 맞혔어요
+      - 대량으로 넣거나 지운 뒤에는 ANALYZE를 해요
+    source: https://www.postgresql.org/docs/16/planner-stats.html
+  - key: slow-external-merge
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "실행계획에 `Sort Method: external merge  Disk: 80000kB`가 나왔어요. 무슨 뜻인가요?"
+    choices:
+      - 인덱스로 정렬했다
+      - 정렬할 데이터가 work_mem보다 커서 디스크에 나눠 정렬했다
+      - 정렬을 하지 않았다
+      - 디스크가 가득 찼다
+    answer: "2"
+    explanation: |-
+      **work_mem이 모자라 디스크로 정렬했어요.** 메모리 안의 정렬(quicksort Memory)보다 느려요.
+
+      - work_mem을 키우면 Memory로 바뀌지만, 연결마다 정렬마다 쓰므로 함부로 올리지 않아요
+      - 정말 다 정렬해야 하는지(페이지네이션, 인덱스 순서)를 먼저 봐요
+    source: https://www.postgresql.org/docs/16/runtime-config-resource.html
+  # ── 질문 3 ──
+  - key: slow-cache-effect
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "인덱스를 만들기 전에 쿼리를 한 번 쟀더니 3초, 만든 뒤 한 번 쟀더니 0.5초였어요. 고치기 전 측정이 오래 안 읽은 테이블의 첫 실행이었어요. 이 비교로 알 수 있는 것은?"
+    choices:
+      - 인덱스가 6배 빠르게 했다
+      - 아직 모른다. 첫 실행은 디스크에서 읽어 느렸을 수 있으니 같은 캐시 상태로 여러 번 다시 재야 한다
+      - 인덱스가 오히려 느리게 했다
+      - 측정은 필요 없다
+    answer: "2"
+    explanation: |-
+      **아직 몰라요.** 첫 실행은 디스크(shared read), 그 뒤는 메모리(shared hit)에서 읽어 시간이 달라요.
+
+      - 둘 다 데운 뒤 여러 번 재서 가운데 값을 비교해요
+      - `explain (analyze, buffers)`로 캐시에서 읽었는지 봐요
+    source: https://www.postgresql.org/docs/16/using-explain.html
+  - key: slow-one-change
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "느린 API를 고치려고 인덱스 둘을 만들고, 쿼리를 바꾸고, work_mem을 올렸더니 빨라졌어요. 무엇이 문제인가요?"
+    choices:
+      - 문제없다. 빨라졌다
+      - 무엇이 효과였는지 몰라 쓸모없는 인덱스와 설정이 남는다
+      - 인덱스는 하나만 만들 수 있다
+      - work_mem은 바꿀 수 없다
+    answer: "2"
+    explanation: |-
+      **무엇이 효과였는지 몰라요.** 한 번에 하나만 바꾸고 다시 재요.
+
+      - 쓰이지 않는 인덱스는 쓰기만 느리게 해요
+      - 올린 work_mem은 연결이 많을 때 메모리를 모자라게 할 수 있어요
+    source: https://www.postgresql.org/docs/16/using-explain.html
+  # ── 질문 4 ──
+  - key: slow-recent-index
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`where member_id = ? order by created_at desc limit 5`가 주문 100만 건을 Seq Scan으로 읽고 Sort해요. 가장 알맞은 고침은?"
+    choices:
+      - 인덱스 (created_at)
+      - 인덱스 (member_id, created_at)
+      - work_mem을 올린다
+      - limit을 지운다
+    answer: "2"
+    explanation: |-
+      **(member_id, created_at)이에요.** 같음 조건 열을 앞에, 정렬 열을 뒤에 두면 회원 한 명의 구간을 날짜순으로 바로 읽어요.
+
+      - 테스트에서 Sort가 사라지고 5행만 읽어 가운데 값이 수백 배 줄었어요
+    source: https://www.postgresql.org/docs/16/indexes-ordering.html
+  - key: slow-n-plus-one
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "로그에 `select * from member where id = ?`가 한 요청에 300번 찍혀요. 하나는 1ms예요. 원인과 고침은?"
+    choices:
+      - 인덱스가 없다. id에 인덱스를 만든다
+      - N+1이다. 목록을 조인이나 IN으로 한 번에 읽는다
+      - 통계가 낡았다. ANALYZE한다
+      - work_mem이 모자라다
+    answer: "2"
+    explanation: |-
+      **N+1이에요.** 쿼리 하나는 빨라도 왕복 300번이 쌓여요.
+
+      - 기본 키라 인덱스는 이미 있어요
+      - 회원을 조인하거나 `where id in (...)`로 한 번에 읽어요
+    source: https://www.postgresql.org/docs/16/using-explain.html
+  - key: slow-explain-update
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "운영 DB 콘솔에서 느린 UPDATE를 보려고 `explain analyze update orders set status = 'CANCELED' where id = 1;`을 자동 커밋으로 실행했어요. 무슨 일이 생기나요?"
+    choices:
+      - 실행계획만 보이고 데이터는 그대로다
+      - 실제로 실행되어 주문 1이 취소된다
+      - 오류가 난다
+      - 다음 커밋 때 실행된다
+    answer: "2"
+    explanation: |-
+      **실제로 실행돼요.** ANALYZE는 쿼리를 돌려서 실제 시간과 행 수를 재요.
+
+      - `begin; explain analyze ...; rollback;`으로 감싸면 바뀐 것이 남지 않아요
+      - ANALYZE 없는 `explain`은 실행하지 않아요
+    source: https://www.postgresql.org/docs/16/sql-explain.html
+  # ── 면접 질문 ──
+  - key: slow-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 3
+    body: 면접에서 "느린 쿼리를 어떻게 찾고 고치나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **찾고, 실행계획으로 원인을 읽고, 하나만 고치고, 같은 조건으로 다시 재요.**
+
+      - **찾기:** 느린 쿼리 로그와 pg_stat_statements. 총 시간이 큰 것부터
+      - **읽기:** 어림과 실제 rows의 차이, 버린 행, 디스크 정렬, 반복 횟수
+      - **고치기:** 인덱스, 범위 조건, ANALYZE, 필요한 것만 읽기, N+1 없애기
+      - **재기:** 같은 캐시 상태와 값으로 여러 번. 한 번에 하나만 바꾼다
+    checklist:
+      - 느린 쿼리 로그나 쿼리 통계로 찾는다고 말했다
+      - EXPLAIN ANALYZE에서 원인을 읽는 방법을 하나 이상 말했다
+      - 흔한 원인과 고침을 하나 이상 말했다
+      - 같은 조건과 캐시 상태로 다시 잰다고 말했다
+      - 한 번에 하나만 바꾼다고 말했다
+    source: https://www.postgresql.org/docs/16/using-explain.html

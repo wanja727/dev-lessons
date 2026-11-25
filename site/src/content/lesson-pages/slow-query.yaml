@@ -1,7 +1,8 @@
-# 느린 쿼리 고치기 (설계서)
+# 느린 쿼리 고치기
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
 title: 느린 쿼리 고치기
+description: 느린 쿼리는 어떻게 찾는지, 실행계획에서 원인을 어떻게 읽는지, 고친 뒤에는 어떻게 다시 재는지, 흔한 원인은 무엇이고 어떻게 고치는지. 네 가지 질문에 스스로 답할 수 있게 주문 100만 건에서 느린 쿼리를 찾고 고치는 과정을 한 바퀴 도는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D14
 type: 동작 확인
@@ -33,6 +34,14 @@ covers:
     where: '질문 4. 인덱스는 D7, N+1은 조인(D2)과 JPA N+1(P5)'
   - topic: '부하 테스트로 재기'
     where: '다루지 않음: 부하 테스트(T9)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/slowquery/SlowQueryTest.java
+  explain: https://www.postgresql.org/docs/16/using-explain.html
+  stats: https://www.postgresql.org/docs/16/planner-stats.html
+  logging: https://www.postgresql.org/docs/16/runtime-config-logging.html
+  resource: https://www.postgresql.org/docs/16/runtime-config-resource.html
+  pgss: https://www.postgresql.org/docs/16/pgstatstatements.html
+  bootLogging: https://docs.spring.io/spring-boot/reference/features/logging.html
 codes:
   predict: |-
     -- 주문 100만 건을 넣고
@@ -44,9 +53,51 @@ codes:
   slowLog: |-
     set log_min_duration_statement
         = '200ms';
+  recent: |-
+    select id, amount, created_at
+      from orders
+     where member_id = 123
+     order by created_at desc
+     limit 5;
+  fixIndex: |-
+    create index
+        orders_member_created
+        on orders (member_id,
+                   created_at);
+  sortQuery: |-
+    select id, amount
+      from orders
+     order by amount desc, id;
+  pgss: |-
+    select query, calls,
+           total_exec_time,
+           mean_exec_time
+      from pg_stat_statements
+     order by total_exec_time desc
+     limit 10;
+  bindLog: |-
+    logging:
+      level:
+        org.hibernate.SQL: debug
+        org.hibernate.orm.jdbc.bind: trace
+  safeExplain: |-
+    begin;
+    explain analyze
+      update orders
+         set status = 'CANCELED'
+       where id = 1;
+    rollback;
 predict:
-  text: '빈 테이블에서 ANALYZE를 한 뒤 주문 100만 건을 넣었어요. 그중 CANCELED는 100건뿐이에요. 다시 ANALYZE하지 않고 실행계획을 보면, 플래너가 어림한 rows는 실제 100에 가까울까요? 보기: 가깝다, 크게 다르다.'
-  answer: '크게 다르다. 통계가 빈 테이블 때 것이라 행 수와 값의 분포를 모른다. 질문 2에서 밝힌다.'
+  title: 통계가 낡으면 어림은?
+  text: '빈 테이블에서 ANALYZE를 한 뒤 주문 100만 건을 넣었어요. 그중 CANCELED는 100건뿐이에요. 다시 ANALYZE하지 않고 `explain analyze`로 보면, 플래너가 어림한 행 수는 실제 100에 가까울까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: near, label: 가깝다}
+    - {value: far, label: 크게 다르다}
+  answer: far
+  storageKey: slow-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 느린 쿼리는 어떻게 찾나요?
@@ -60,6 +111,30 @@ questions:
     asks:
       - '본문의 예시: log_min_duration_statement를 200ms로 두었다. 150ms 걸린 쿼리는 로그에 남나 (남지 않는다)'
       - '옮긴 상황: A 쿼리는 평균 3초에 하루 20번, B 쿼리는 평균 30ms에 하루 50만 번 불린다. 먼저 볼 것은 (B. 총 시간이 1만 5천 초로 A의 60초보다 훨씬 크다)'
+    body:
+      - p: '"가끔 느리다"는 말만으로는 고칠 수 없어요. 먼저 **어떤 SQL이** 느린지 찾아요. 방법은 둘이에요.'
+      - h3: 느린 쿼리 로그
+      - p: '`log_min_duration_statement`를 두면, 그 시간보다 오래 걸린 SQL을 걸린 시간과 함께 서버 로그에 남겨요.'
+      - code: slowLog
+      - ci:
+          key: slow-log
+          label: 0.3초짜리와 0.05초짜리를 보낸 뒤의 서버 로그
+          source: SlowQueryTest.slowLog
+      - p: '0.3초 걸린 쿼리만 로그에 남고, 0.05초짜리는 남지 않았어요.'
+      - h3: 쿼리별 누적 시간
+      - p: '`pg_stat_statements` 확장은 같은 모양의 쿼리(값만 다른 것)를 묶어 호출 수, 총 시간, 평균 시간을 모아요. 서버를 켤 때 미리 불러와야 하는 확장이라 이 레슨에서는 테스트하지 않고 [문서](link:pgss)를 근거로 보여요.'
+      - code: pgss
+      - p: '**총 시간**으로 순서를 정해요. 한 번에 2초 걸리는 쿼리가 하루 10번이면 20초, 20ms 걸리는 쿼리가 하루 100만 번이면 2만 초예요. 눈에 띄는 느린 쿼리보다, 조금 느리지만 아주 자주 불리는 쿼리가 더 큰 문제일 때가 많아요.'
+      - quiz:
+          q: 'A 쿼리는 평균 3초에 하루 20번, B 쿼리는 평균 30ms에 하루 50만 번 불려요. 먼저 볼 것은?'
+          options:
+            - 'A. 한 번이 훨씬 느리다'
+            - 'B. 총 시간이 훨씬 크다'
+            - '둘 다 고칠 필요 없다'
+          answer: 2
+          explain: 'A는 60초, B는 1만 5천 초예요. 총 시간으로 우선순위를 정해요.'
+      - next: '느린 쿼리를 찾았어요. 이제 왜 느린지 실행계획에서 읽어요.'
+    recall: 'DB가 정한 시간보다 오래 걸린 SQL을 로그에 남기게 하고(log_min_duration_statement), 쿼리마다 호출 수와 누적 시간을 모아(pg_stat_statements) 총 시간이 큰 것부터 봐요. 한 번 느린 쿼리보다 조금 느리지만 아주 자주 불리는 쿼리가 더 큰 문제일 때가 많아요.'
   - id: q2
     title: 실행계획에서 원인을 어떻게 읽나요?
     conclusion:
@@ -76,6 +151,59 @@ questions:
     asks:
       - '본문의 예시: 실행계획에 `rows=1`(어림)과 `actual rows=500000`(실제)이 함께 나왔다. 먼저 해 볼 것은 (ANALYZE로 통계를 새로 만들고 다시 본다)'
       - '옮긴 상황: 실행계획에 `Sort Method: external merge Disk: 80000kB`가 나왔다. 무슨 뜻인가 (정렬할 데이터가 work_mem보다 커서 디스크에 나눠 정렬했다)'
+    body:
+      - p: '[인덱스와 실행계획](lesson:index-explain)에서 Seq Scan과 Index Scan을 읽었어요. 원인을 찾을 때는 네 곳을 더 봐요.'
+      - table:
+          head: [실행계획에서 보이는 것, 의심할 것]
+          rows:
+            - ['어림한 `rows`와 `actual rows`가 크게 다름', '통계가 낡았다']
+            - ['`Rows Removed by Filter`가 아주 큼', '인덱스가 없거나 못 쓴다']
+            - ['`Sort Method: external merge Disk`', '정렬할 메모리가 모자라다']
+            - ['안쪽 노드의 `loops`가 수만', '조인 한쪽이 그만큼 반복된다']
+      - h3: 낡은 통계
+      - p: '처음 예측의 답은 **크게 다르다**예요. {{predict-result}}'
+      - ci:
+          key: stale
+          label: ANALYZE 전과 뒤
+          source: SlowQueryTest.staleStatistics
+          code: predict
+      - p: 'ANALYZE 전에는 실제 100건을 수천 건으로 어림했어요. 플래너는 통계(값의 분포, 행 수)로 비용을 어림하는데, 통계가 빈 테이블 때 것이라 CANCELED가 얼마나 드문지 몰라요. 어림이 틀리면 Seq Scan이 나은 곳에 인덱스를, 그 반대를 고를 수 있어요. **대량으로 넣거나 지운 뒤에는 `analyze`를 해요.** autovacuum이 대개 해 주지만 바로 하지는 않아요.'
+      - h3: 메모리가 모자란 정렬
+      - code: sortQuery
+      - ci:
+          key: work-mem
+          label: work_mem에 따른 정렬 방법
+          source: SlowQueryTest.workMemSort
+      - p: '정렬할 데이터가 `work_mem`보다 크면 디스크에 나눠 정렬해요(`external merge Disk`). 메모리를 키우자 `quicksort Memory`로 바뀌고 빨라졌어요. 다만 운영에서 `work_mem`을 함부로 올리지 않아요. **연결마다, 정렬마다** 그만큼 쓸 수 있어서 연결이 많으면 메모리가 모자라요. 먼저 정말 100만 행을 정렬해야 하는지(페이지네이션, 인덱스 정렬)를 봐요.'
+      - widget:
+          kind: classify
+          categories:
+            - 통계가 낡음
+            - 인덱스가 없거나 못 씀
+            - 메모리가 모자람
+          items:
+            - text: '`(cost=... rows=1 ...) (actual rows=200000 ...)`'
+              answer: 1
+              explain: 어림과 실제가 20만 배 달라요. ANALYZE를 먼저 해 봐요.
+            - text: '`Seq Scan on orders ... Rows Removed by Filter: 999990`'
+              answer: 2
+              explain: 10행을 찾으려고 거의 다 읽고 버렸어요. 조건 열의 인덱스를 봐요.
+            - text: '`Sort Method: external merge  Disk: 80000kB`'
+              answer: 3
+              explain: 정렬이 work_mem을 넘어 디스크를 썼어요.
+            - text: '`date(created_at) = ...`가 있는 쿼리가 `Parallel Seq Scan`'
+              answer: 2
+              explain: 열에 함수를 씌워 인덱스를 못 써요. 범위 조건으로 고쳐요.
+      - quiz:
+          q: '실행계획에 `rows=1`(어림)과 `actual rows=500000`(실제)이 함께 나왔어요. 먼저 해 볼 것은?'
+          options:
+            - '인덱스를 지운다'
+            - 'ANALYZE로 통계를 새로 만들고 다시 본다'
+            - 'work_mem을 올린다'
+          answer: 2
+          explain: '어림이 크게 틀린 것은 통계가 낡았다는 신호예요. 통계를 새로 만들면 플래너가 다른 실행계획을 고를 수 있어요.'
+      - next: '원인을 찾아 고쳤어요. 그런데 정말 빨라졌는지는 어떻게 알까요?'
+    recall: '어림한 rows와 실제 rows가 크게 다른 곳(통계가 낡음, ANALYZE), 많이 읽고 버린 곳(인덱스), 디스크를 쓴 정렬(work_mem이나 쿼리), 많이 반복한 곳(조인)을 찾아요. 실행계획의 숫자가 원인을 가리켜요.'
   - id: q3
     title: 고친 뒤에는 어떻게 다시 재나요?
     conclusion:
@@ -89,6 +217,29 @@ questions:
     asks:
       - '본문의 예시: 인덱스를 만든 직후 쿼리를 한 번 재서 3초가 0.5초로 줄었다. 이 숫자를 믿기 전에 볼 것은 (고치기 전의 3초가 캐시가 비어 있던 첫 실행이었는지. 같은 캐시 상태로 여러 번 다시 잰다)'
       - '옮긴 상황: 느린 API를 고치려고 인덱스 둘을 만들고 쿼리를 바꾸고 work_mem을 올렸더니 빨라졌다. 무엇이 문제인가 (무엇이 효과였는지 모른다. 쓸모없는 인덱스와 설정이 남는다)'
+    body:
+      - p: '같은 쿼리도 **처음 읽을 때와 두 번째 읽을 때** 시간이 달라요. DB는 읽은 페이지를 메모리(공유 버퍼)에 두고, 다음에는 디스크 대신 거기서 읽어요. `explain (analyze, buffers)`가 그것을 보여 줘요. `shared hit`은 메모리에서, `shared read`는 디스크에서 읽은 페이지 수예요.'
+      - ci:
+          key: buffers
+          label: 같은 쿼리를 두 번
+          source: SlowQueryTest.bufferCache
+      - p: '이 테스트에서는 방금 넣은 데이터라 이미 메모리에 있어서 **첫 번째부터 모두 hit**였어요. 운영에서 오래 안 읽은 데이터라면 첫 실행은 `read`가 많고 느려요. 그래서 고치기 전의 "3초"가 캐시가 비어 있던 첫 실행이고, 고친 뒤의 "0.5초"가 두 번째 실행이라면, 고친 효과가 아니라 캐시 효과일 수 있어요.'
+      - h3: 다시 재는 규칙
+      - ul:
+          - '**같은 캐시 상태로:** 둘 다 몇 번 돌려 데운 뒤 재요.'
+          - '**여러 번 재서 가운데 값:** 한 번은 우연이 섞여요. 다섯 번 재서 가운데 값을 써요.'
+          - '**같은 값으로:** 맞는 행이 적은 값과 많은 값은 실행계획이 다를 수 있어요(선택도).'
+          - '**한 번에 하나만 바꿔요.** 인덱스, 쿼리, 설정을 한꺼번에 바꾸면 무엇이 효과였는지 몰라요. 쓸모없는 인덱스와 설정이 남아요.'
+      - quiz:
+          q: '느린 API를 고치려고 인덱스 둘을 만들고, 쿼리를 바꾸고, work_mem을 올렸더니 빨라졌어요. 무엇이 문제인가요?'
+          options:
+            - '문제없다. 빨라졌다'
+            - '무엇이 효과였는지 몰라, 쓸모없는 인덱스와 설정이 남는다'
+            - 'work_mem은 바꿀 수 없다'
+          answer: 2
+          explain: '한 번에 하나씩 바꾸고 다시 재야 무엇이 효과였는지 알아요. 쓰이지 않는 인덱스는 쓰기만 느리게 해요.'
+      - next: '찾고, 읽고, 재는 법을 봤어요. 마지막으로 흔한 원인 하나를 처음부터 끝까지 고쳐 봐요.'
+    recall: '고치기 전과 같은 값, 같은 데이터, 같은 캐시 상태로 여러 번 재서 가운데 값을 비교해요. 처음 읽기는 디스크(shared read)라 느리고 그 뒤는 메모리(shared hit)라 빨라서, 섞어 비교하면 고친 것처럼 보이기만 해요. 한 번에 하나만 바꿔요.'
   - id: q4
     title: 흔한 원인은 무엇이고 어떻게 고치나요?
     conclusion:
@@ -100,11 +251,70 @@ questions:
     asks:
       - '본문의 예시: "회원별 최근 주문"이 Seq Scan으로 100만 행을 읽고 있다. 조건은 `member_id = ? order by created_at desc limit 5`다. 고침은 (인덱스 (member_id, created_at))'
       - '옮긴 상황: 로그에 `select * from member where id = ?`가 한 요청에 300번 찍힌다. 하나는 1ms다. 원인과 고침은 (N+1. 목록을 조인이나 IN으로 한 번에 읽는다)'
+    body:
+      - table:
+          head: [흔한 원인, 실행계획의 흔적, 고침]
+          rows:
+            - ['인덱스 없음', 'Seq Scan, 많이 버림', '조건 열에 인덱스 (D7)']
+            - ['열에 함수', '인덱스가 있는데 Seq Scan', '범위 조건이나 함수 인덱스 (D7)']
+            - ['낡은 통계', '어림과 실제가 크게 다름', 'ANALYZE']
+            - ['많이 읽기', '큰 OFFSET, 필요 없는 열', '커서 페이지네이션 (D8), 필요한 열만']
+            - ['N+1', '짧은 같은 쿼리가 아주 많이', '조인이나 IN으로 한 번에 (D2)']
+      - p: '"회원별 최근 주문 5건" 화면을 처음부터 고쳐 볼게요.'
+      - code: recent
+      - ci:
+          key: fix
+          label: 고치기 전과 뒤 (각각 다섯 번 잰 가운데 값)
+          source: SlowQueryTest.fixRecentOrders
+      - p: '**찾기:** 이 쿼리가 화면마다 불려 총 시간이 커요. **읽기:** 실행계획이 100만 행을 Seq Scan으로 읽고 회원 123의 행을 골라 Sort해요. 조건과 정렬 열에 맞는 인덱스가 없어요. **고치기:** 같음 조건 열을 앞에, 정렬 열을 뒤에 둔 인덱스 하나만 만들어요.'
+      - code: fixIndex
+      - p: '**다시 재기:** 같은 값으로 다섯 번씩 잰 가운데 값이 수백 배 줄었어요. 실행계획도 Index Scan Backward로 5행만 읽고 Sort가 사라졌어요.'
+      - quiz:
+          q: '로그에 `select * from member where id = ?`가 한 요청에 300번 찍혀요. 하나는 1ms예요. 원인과 고침은?'
+          options:
+            - '인덱스가 없다. id에 인덱스를 만든다'
+            - 'N+1이다. 목록을 조인이나 IN으로 한 번에 읽는다'
+            - '통계가 낡았다. ANALYZE한다'
+          answer: 2
+          explain: '쿼리 하나는 빨라도 300번의 왕복이 쌓여요. 기본 키라 인덱스는 이미 있어요.'
+    recall: '인덱스가 없거나 못 쓰는 조건, 낡은 통계, 필요 없이 많이 읽기, 쿼리가 데이터 수만큼 나가는 N+1이 대부분이에요. 원인마다 실행계획에 남는 흔적이 달라서, 흔적으로 원인을 고르고 하나만 고친 뒤 같은 조건으로 다시 재요.'
 practice:
   says:
     - '스프링에서 실제 SQL과 바인딩 값을 보는 법: `logging.level.org.hibernate.SQL=debug`와 `org.hibernate.orm.jdbc.bind=trace`(하이버네이트 6). 그 SQL을 DB 콘솔에서 `explain (analyze, buffers)`로 돌린다(스프링 부트, 하이버네이트 문서 근거)'
     - '흔한 실수: 운영 DB 콘솔에서 `explain analyze`로 UPDATE나 DELETE를 돌린다. ANALYZE는 실제로 실행한다. 고친 것: `begin; explain analyze ...; rollback;`. 테스트로 롤백하면 남지 않는 것을 보인다'
     - '흔한 실수 둘: 개발 DB의 100건으로 잰 시간을 믿는다. 운영과 같은 양의 데이터(`generate_series`로 만든 100만 건)로 재야 실행계획이 같아진다'
+  title: 스프링에서는 이렇게 써요
+  body:
+    - h3: 실제로 나간 SQL과 값 보기
+    - p: 'JPA가 만든 SQL은 코드에 없어요. 하이버네이트 6의 로그를 켜면 SQL과 바인딩 값이 함께 나와요. 그 SQL의 `?`에 값을 넣어 DB 콘솔에서 `explain (analyze, buffers)`로 돌려요.'
+    - code: bindLog
+      notes:
+        - mark: 'org.hibernate.orm.jdbc.bind: trace'
+          as: code
+          text: '`?`에 들어간 값을 찍어요. 운영에서는 개인정보가 찍힐 수 있으니 잠깐만 켜요.'
+    - h3: '흔한 실수: 운영 DB에서 UPDATE를 explain analyze'
+    - p: '`explain analyze`는 쿼리를 **실제로 실행해요.** UPDATE나 DELETE에 그대로 쓰면 데이터가 바뀌어요. 트랜잭션으로 감싸고 롤백해요.'
+    - code: safeExplain
+    - ci:
+        key: rollback
+        label: 실제로 바뀌었다가 롤백되는 것
+        source: SlowQueryTest.explainAnalyzeExecutes
+    - h3: '흔한 실수 둘: 개발 DB의 100건으로 재기'
+    - p: '개발 DB의 100건에서는 Seq Scan이 오히려 빨라서 실행계획부터 달라요. `generate_series`로 운영과 비슷한 양(100만 건)을 만들어 재요. 이 레슨의 테스트가 모두 그렇게 했어요.'
+    - muted: '근거: 로그 설정은 [스프링 부트 문서](link:bootLogging), `pg_stat_statements`는 [PostgreSQL 문서](link:pgss). 나머지는 테스트로 확인했어요.'
+interview:
+  question: 느린 쿼리를 어떻게 찾고 고치나요?
+  model:
+    - label: 정의
+      text: 느린 쿼리 고치기는 찾고, 실행계획에서 원인을 읽고, 하나만 고치고, 같은 조건으로 다시 재는 과정입니다. 찾을 때는 log_min_duration_statement와 pg_stat_statements로 총 시간이 큰 쿼리부터 봅니다.
+    - label: 원리
+      text: EXPLAIN ANALYZE에서 어림과 실제 행 수의 차이는 낡은 통계를, 많이 버린 행은 인덱스 문제를, external merge는 메모리 부족을, 많은 loops는 조인 반복을 가리킵니다. BUFFERS로 캐시에서 읽었는지 디스크에서 읽었는지 봅니다.
+    - label: 주의할 점
+      text: 캐시 상태와 바인딩 값을 맞춰 여러 번 재고, 한 번에 하나만 바꿉니다. 운영에서 UPDATE를 explain analyze할 때는 트랜잭션으로 감싸 롤백하고, 개발 DB의 적은 데이터로 잰 결과를 믿지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 회원별 최근 주문 조회가 Seq Scan과 Sort를 하는 것을 실행계획으로 찾아 (member_id, created_at) 인덱스로 고치고, 같은 조건으로 다섯 번 재서 효과를 확인했습니다.'
+verified: 이 레슨의 실행계획과 시간은 짐작이 아니라 PostgreSQL 16 컨테이너에 주문 100만 건을 넣고 받은 값이에요. 느린 쿼리 로그는 컨테이너의 서버 로그에서 읽었어요. 코드가 바뀔 때마다 테스트([SlowQueryTest](link:test))가 다시 돌아요.
+footer: '근거: EXPLAIN의 ANALYZE와 BUFFERS는 [PostgreSQL 16 문서](link:explain), 통계는 [플래너 통계](link:stats), 느린 쿼리 로그는 [로그 설정](link:logging), work_mem은 [자원 설정](link:resource). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 'log_min_duration_statement보다 오래 걸린 쿼리가 서버 로그에 남는다'
     how: '컨테이너 로그(`getLogs()`)에서 duration 줄을 찾는다. 컨테이너 설정이 어려우면 세션 설정과 `pg_sleep`으로 확인한다'
