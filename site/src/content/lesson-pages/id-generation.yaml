@@ -1,0 +1,123 @@
+# 식별자 생성 전략 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 식별자 생성 전략
+unit: JPA
+roadmap: P9
+type: 동작 확인
+prerequisites:
+  - {slug: jpa-persistence-context, title: 영속성 컨텍스트}
+assume: '스프링 부트 3.5, Hibernate 6.6, PostgreSQL 16. 쓰기 지연과 flush(영속성 컨텍스트 레슨), 기본 키와 identity 열(키와 제약 조건 레슨).'
+example: '주문 로그 `OrderLog` 1,000건을 한 트랜잭션에서 저장한다. 같은 엔티티를 IDENTITY와 SEQUENCE로 두고, id를 언제 받는지와 DB에 보낸 문장 수를 견준다.'
+intro:
+  - '주문 로그 1만 건을 저장하는 배치에 JDBC 배치 설정을 켰는데 하나도 빨라지지 않았어요. 엔티티의 `@GeneratedValue(strategy = IDENTITY)` 한 줄 때문이에요.'
+  - 'JPA 엔티티는 저장하기 전에 id가 있어야 영속 상태가 돼요. id를 DB가 INSERT할 때 만드는지, 미리 받아 오는지에 따라 INSERT를 언제 보낼 수 있는지가 달라져요. 개발자는 엔티티마다 이 전략을 골라요.'
+  - '이 레슨에서는 같은 저장을 두 전략으로 돌려 INSERT가 나가는 때, 시퀀스를 부르는 횟수, 배치로 묶이는지를 확인해요.'
+covers:
+  - topic: 'IDENTITY는 INSERT할 때 DB가 id를 만든다. 그래서 `persist` 즉시 INSERT해야 id를 안다'
+    where: '질문 1'
+  - topic: 'SEQUENCE는 INSERT 전에 시퀀스에서 id를 받아 온다. 그래서 INSERT를 flush까지 미룰 수 있다'
+    where: '질문 1'
+  - topic: '`allocationSize`(기본 50): 시퀀스에서 번호를 한 번에 50개씩 예약해 시퀀스 호출을 줄인다. DB 시퀀스의 증가값과 맞아야 한다'
+    where: '질문 2'
+  - topic: '앱을 다시 띄우면 예약해 둔 번호가 버려져 id에 구멍이 생긴다'
+    where: '질문 2'
+  - topic: 'JDBC 배치(`hibernate.jdbc.batch_size`)는 같은 INSERT를 묶어 한 번에 보낸다. IDENTITY는 INSERT마다 id를 받아야 해서 배치로 묶이지 않는다'
+    where: '질문 3'
+  - topic: '`hibernate.order_inserts`는 여러 엔티티가 섞일 때 같은 INSERT끼리 모은다'
+    where: '질문 3의 더 알아보기'
+  - topic: '롤백해도 받은 번호는 돌아오지 않는다. id는 연속이 아니다'
+    where: '질문 4 (DB 과정 D1에서 넘겨받음)'
+  - topic: 'id를 순번이나 건수로 쓰지 않는다. 밖에 보이는 번호는 따로 둔다(주문 번호)'
+    where: '질문 4'
+  - topic: 'UUID를 id로 쓸 때의 장단점'
+    where: '실무에서는'
+  - topic: '`GenerationType.AUTO`는 Hibernate 6에서 SEQUENCE를 고른다'
+    where: '실무에서는'
+codes:
+  predict: |-
+    // IDENTITY 전략인 OrderLog
+    em.persist(new OrderLog("A"));
+    em.persist(new OrderLog("B"));
+    em.persist(new OrderLog("C"));
+    // 여기까지 INSERT는 몇 번?
+    em.flush();
+  seq: |-
+    @Id
+    @GeneratedValue(
+        strategy = GenerationType.SEQUENCE,
+        generator = "log_seq")
+    @SequenceGenerator(name = "log_seq",
+        sequenceName = "log_seq",
+        allocationSize = 50)
+    private Long id;
+predict:
+  text: '코드 predict는 IDENTITY 전략인 주문 로그 셋을 `persist`해요. flush 전까지 INSERT는 몇 번 나갈까요? 보기: 0번, 1번, 3번.'
+  answer: '3번. IDENTITY는 INSERT해야 id를 받으므로 persist할 때마다 INSERT한다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: IDENTITY와 SEQUENCE는 id를 언제 얻나요?
+    conclusion:
+      lead: 'IDENTITY는 INSERT할 때 DB에서 얻고, SEQUENCE는 INSERT하기 전에 시퀀스에서 미리 얻어요.'
+      sub: '영속 상태가 되려면 id가 있어야 하니, IDENTITY는 `persist` 즉시 INSERT하고 SEQUENCE는 INSERT를 flush까지 미뤄요.'
+    says:
+      - '코드 predict를 IDENTITY로 돌리면 flush 전 INSERT 3번이다. 같은 코드를 SEQUENCE로 돌리면 0번이고 시퀀스 SELECT만 나간다. 실제 SQL로 보인다'
+      - '영속성 컨텍스트는 id로 엔티티를 담는다(P2). id가 없으면 담을 수 없다'
+      - 'IDENTITY는 PostgreSQL의 identity 열, MySQL의 AUTO_INCREMENT다. SEQUENCE는 DB의 시퀀스 객체를 쓴다'
+    asks:
+      - '본문의 예시: SEQUENCE 전략인 엔티티 셋을 `persist`했다. flush 전 INSERT는 (0번)'
+      - '옮긴 상황: MySQL에서 AUTO_INCREMENT id(IDENTITY)인 회원을 `persist`한 직후 `member.getId()`를 읽었다. 값은 (null이 아니다. persist가 바로 INSERT해 id를 받았다)'
+  - id: q2
+    title: allocationSize는 무엇을 아끼나요?
+    conclusion:
+      lead: '시퀀스를 부르는 횟수를 아껴요. 번호를 50개씩 한 번에 예약해 두고 메모리에서 나눠 줘요.'
+      sub: '그래서 1,000건을 저장해도 시퀀스는 20번 남짓만 불러요. 대신 앱이 다시 뜨면 남은 예약 번호가 버려져 id에 구멍이 생겨요.'
+    says:
+      - '`allocationSize = 50`인 엔티티 1,000건을 저장하면 시퀀스 SELECT가 몇 번인지 센다. `allocationSize = 1`과 견준다'
+      - 'Hibernate는 시퀀스의 증가값이 allocationSize와 같다고 본다. `ddl-auto`가 만든 시퀀스는 `increment by 50`이다. 직접 만든 시퀀스의 증가값이 1이면 id가 겹칠 수 있어 Hibernate가 시작할 때 막는다'
+      - '예약한 번호를 다 쓰기 전에 앱이 꺼지면 남은 번호는 쓰이지 않는다'
+    asks:
+      - '본문의 예시: allocationSize 50인 엔티티 120건을 저장했다. 시퀀스 호출은 대략 몇 번인가 (3~4번)'
+      - '옮긴 상황: allocationSize 50인 엔티티를 저장하던 앱이 id 1~10을 쓰고 다시 시작됐다. 다음 id는 11인가 (아니다. 예약해 둔 나머지가 버려져 더 큰 번호부터 쓴다)'
+  - id: q3
+    title: 한꺼번에 많이 넣을 때 왜 차이가 나나요?
+    conclusion:
+      lead: 'SEQUENCE는 INSERT를 모아 두었다가 JDBC 배치로 묶어 보낼 수 있지만, IDENTITY는 하나씩 보내야 해요.'
+      sub: 'IDENTITY는 INSERT할 때마다 id를 돌려받아야 해서 Hibernate가 배치를 쓰지 않아요.'
+    says:
+      - '`hibernate.jdbc.batch_size: 50`을 켜고 1,000건을 저장한다. SEQUENCE는 DB로 보낸 배치 수가 20번이고 IDENTITY는 1,000번이다. 배치 수를 세는 방법은 테스트에서 정하고 실제 출력으로 보인다'
+      - '걸린 시간을 함께 보인다. 컨테이너 DB라 차이가 작을 수 있고, 네트워크가 먼 운영에서는 더 벌어진다고 적는다'
+      - '더 알아보기: 엔티티 두 종류를 번갈아 저장하면 배치가 끊긴다. `hibernate.order_inserts: true`가 같은 엔티티끼리 모은다'
+    asks:
+      - '본문의 예시: batch_size 50을 켜고 IDENTITY 엔티티 1,000건을 저장했다. 배치로 묶여 나가나 (아니다. 1,000번 따로 나간다)'
+      - '옮긴 상황: 대량 저장이 느려 batch_size를 100으로 켰는데 그대로다. 엔티티의 id는 IDENTITY다. 무엇을 바꾸나 (id 전략을 SEQUENCE로 바꾼다. 또는 대량 저장은 JdbcTemplate의 batchUpdate로 한다)'
+  - id: q4
+    title: 롤백하면 받은 번호는 돌아오나요?
+    conclusion:
+      lead: '돌아오지 않아요. 시퀀스와 identity는 트랜잭션과 상관없이 한 번 준 번호를 다시 주지 않아요.'
+      sub: '그래서 id에는 구멍이 생겨요. id를 순번이나 건수로 쓰지 말고, 밖에 보일 번호는 따로 만들어요.'
+    says:
+      - '주문 로그 하나를 저장하고 롤백한 뒤 다시 저장하면 id가 건너뛴다. 두 전략 모두 테스트로 보인다'
+      - '번호를 돌려주려면 다른 트랜잭션이 끝날 때까지 기다려야 해서, DB는 번호를 트랜잭션에 묶지 않는다'
+      - '"오늘 주문 수 = 마지막 id - 처음 id"처럼 쓰면 틀린다. 건수는 `count`로 센다'
+    asks:
+      - '본문의 예시: SEQUENCE 전략으로 id 7을 받은 저장이 롤백됐다. 다음 저장의 id는 7인가 (아니다)'
+      - '옮긴 상황: 주문 화면에 "N번째 주문"을 보여 주려고 주문 id를 그대로 썼다. 무엇이 문제인가 (롤백과 예약으로 번호가 건너뛰어 순번이 아니다)'
+practice:
+  says:
+    - '실무 설정: 대량 저장이 있는 엔티티는 SEQUENCE와 `hibernate.jdbc.batch_size`를 쓴다. MySQL처럼 시퀀스가 없는 DB는 IDENTITY를 쓰고, 대량 저장은 JdbcTemplate의 `batchUpdate`로 한다'
+    - '`GenerationType.AUTO`는 Hibernate 6에서 SEQUENCE를 고른다. 예전 버전에서 옮긴 프로젝트는 테이블 전략이 될 수도 있었다(Hibernate 문서 근거)'
+    - '흔한 실수: 직접 만든 시퀀스가 `increment by 1`인데 `allocationSize`를 기본 50으로 둔다. Hibernate가 시작할 때 맞지 않는다고 실패한다. 고친 코드는 둘을 맞춘다. 테스트나 문서로 확인한다'
+    - 'UUID id는 미리 만들 수 있어 서버 여러 대가 따로 만들어도 겹치지 않는다. 대신 16바이트라 인덱스가 크고, 무작위 UUID는 B-tree 인덱스의 아무 자리에나 끼어든다. 문서 근거로 짧게 적는다'
+claims:
+  - claim: 'IDENTITY는 persist마다 INSERT, SEQUENCE는 flush 전 INSERT 0번'
+    how: '`SqlCapture`로 센다'
+  - claim: 'allocationSize 50으로 1,000건을 저장하면 시퀀스 호출이 약 20번이다'
+    how: '`nextval`이 든 SQL을 센다'
+  - claim: 'batch_size를 켜면 SEQUENCE는 배치로 묶이고 IDENTITY는 묶이지 않는다'
+    how: '이 테스트만 batch_size를 켠 컨텍스트로 띄우고, Hibernate 통계나 JDBC 배치 로그로 배치 수를 센다'
+  - claim: '롤백한 저장의 번호는 다음 저장에 다시 쓰이지 않는다'
+    how: '`TransactionTemplate`에서 롤백 뒤 다시 저장한다'
+sources:
+  - '식별자 생성과 배치: Hibernate 6.6 문서 https://docs.hibernate.org/orm/6.6/userguide/html_single/#identifiers-generators'
+  - '시퀀스는 롤백되지 않는다: PostgreSQL 문서 https://www.postgresql.org/docs/16/functions-sequence.html'
