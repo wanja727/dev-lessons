@@ -1,0 +1,188 @@
+# 리스코프 치환과 인터페이스 분리 원칙 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 리스코프 치환과 인터페이스 분리 원칙
+unit: 객체지향 설계와 패턴
+roadmap: O4
+type: 설계
+prerequisites:
+  - {slug: srp-ocp, title: 단일 책임과 개방 폐쇄 원칙}
+assume: '자바 21. 인터페이스 구현과 오버라이딩, 다형성으로 호출하는 쪽을 고치지 않는 것(단일 책임과 개방 폐쇄 원칙 레슨). `UnsupportedOperationException`은 "이 객체는 이 일을 하지 않는다"는 런타임 예외예요.'
+example: '쇼핑몰의 결제 수단(카드, 포인트, 상품권). 모든 결제 수단에 결제, 전액 환불, 부분 환불을 요구하는 인터페이스 `Payment`가 있고, 상품권은 부분 환불을 할 수 없어서 예외를 던져요. 환불 코드가 이 예외로 깨지는 것을 보고 두 원칙으로 고쳐요.'
+intro:
+  - '주문 취소 기능을 배포한 날, 상품권으로 산 주문의 부분 취소만 500 에러가 났어요. 상품권 결제 클래스가 `partialRefund()`에서 `UnsupportedOperationException`을 던지고 있었어요. 컴파일은 잘됐고, 카드로 테스트할 때는 아무 문제가 없었어요.'
+  - '자바의 타입 검사는 "이 메서드가 있다"까지만 확인해요. 그 메서드가 부모가 약속한 대로 동작하는지는 확인하지 않아요. 자식을 부모 자리에 넣어도 되는지, 인터페이스를 얼마나 크게 만들지를 정하는 기준이 이 두 원칙이에요. 스프링에서 `List.of()`로 만든 목록에 `add`했다가 예외를 만나는 것도 같은 이야기예요.'
+  - '이 레슨에서는 같은 환불 코드에 결제 수단 셋을 넣어 돌려 보고, 인터페이스를 나눴을 때 컴파일러가 실수를 미리 잡아 주는 것을 확인해요.'
+covers:
+  - topic: '리스코프 치환 원칙(LSP): 부모 타입을 쓰는 코드에 자식 객체를 넣어도 그 코드가 맞게 동작해야 한다'
+    where: '질문 1'
+  - topic: '컴파일되는 것(문법상 하위 타입)과 대신할 수 있는 것(행동상 하위 타입)은 다르다'
+    where: '질문 1'
+  - topic: '자식이 부모의 약속을 깨는 모양: 지원하지 않는다며 예외를 던짐, 받는 조건을 더 까다롭게, 결과를 덜 보장'
+    where: '질문 2'
+  - topic: '원칙을 어긴 신호: 부르는 쪽에 instanceof나 타입 확인이 생긴다'
+    where: '질문 2'
+  - topic: '자식이 부모를 대신할 수 없는 상속은 상속 관계를 다시 짠다'
+    where: '질문 2. 조합으로 바꾸는 법은 상속보다 조합(O6)'
+  - topic: '인터페이스 분리 원칙(ISP): 쓰지 않는 메서드에 기대지 않게, 쓰는 쪽에 맞춰 인터페이스를 작게 나눈다'
+    where: '질문 3'
+  - topic: '큰 인터페이스를 억지로 구현하면 LSP를 어기는 구현이 생긴다. 두 원칙의 관계'
+    where: '질문 3'
+  - topic: '나눈 인터페이스의 효과: 할 수 없는 일을 컴파일 오류로 막고, 바뀔 때 영향받는 클래스가 줄고, 테스트용 가짜 객체가 작아진다'
+    where: '질문 4'
+  - topic: '자바 컬렉션의 선택 연산: List.of가 돌려준 목록의 add는 UnsupportedOperationException'
+    where: '실무에서는'
+  - topic: '스프링 데이터의 작은 리포지토리 인터페이스(Repository, CrudRepository, ListCrudRepository)'
+    where: '실무에서는'
+  - topic: '계약에 의한 설계(선행 조건, 후행 조건, 불변식)'
+    where: '질문 2의 더 알아보기'
+  - topic: '정사각형과 직사각형처럼 상태를 바꾸는 메서드가 상속을 깨는 경우'
+    where: '질문 2의 더 알아보기'
+  - topic: '오버라이딩의 문법 규칙(접근 범위, 예외, 반환 타입)'
+    where: '다루지 않음: 상속과 다형성(J7)'
+  - topic: '상속 대신 필드로 갖고 위임하기'
+    where: '다루지 않음: 상속보다 조합(O6)'
+codes:
+  fat: |-
+    interface Payment {
+      void pay(int amount);
+      void refund();
+      void partialRefund(int amount);
+    }
+
+    class GiftCardPayment
+        implements Payment {
+      public void pay(int amount) {...}
+      public void refund() {...}
+      public void partialRefund(int amount) {
+        throw new⤶
+            UnsupportedOperationException();
+      }
+    }
+  cancel: |-
+    void cancelItem(Payment payment,
+                    int itemPrice) {
+      payment.partialRefund(itemPrice);
+    }
+  instanceofFix: |-
+    if (payment instanceof GiftCardPayment) {
+      payment.refund();
+    } else {
+      payment.partialRefund(itemPrice);
+    }
+  minAmount: |-
+    class Coupon {
+      int apply(int price) {
+        return price - 1000;
+      }
+    }
+
+    class BigOrderCoupon extends Coupon {
+      int apply(int price) {
+        if (price < 50000) {
+          throw new IllegalArgumentException();
+        }
+        return price - 5000;
+      }
+    }
+  split: |-
+    interface Payment {
+      void pay(int amount);
+      void refund();
+    }
+
+    interface PartialRefundable {
+      void partialRefund(int amount);
+    }
+
+    class CardPayment implements⤶
+        Payment, PartialRefundable {...}
+
+    class GiftCardPayment
+        implements Payment {...}
+  cancelSplit: |-
+    void cancelItem(
+        PartialRefundable payment,
+        int itemPrice) {
+      payment.partialRefund(itemPrice);
+    }
+predict:
+  text: '코드 cancel은 주문 상품 하나를 취소해 그 금액만 환불해요. 카드 결제, 포인트 결제, 코드 fat의 상품권 결제를 차례로 넣어 돌리면 어떻게 될까요? 보기: 셋 다 성공, 상품권에서 컴파일 오류, 상품권에서 실행 중 예외.'
+  answer: '상품권에서 실행 중 예외. 컴파일은 된다. `GiftCardPayment`도 `Payment`라서 넘길 수 있지만 부분 환불 약속을 지키지 못한다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 리스코프 치환 원칙은 무엇인가요?
+    conclusion:
+      lead: '부모 타입을 쓰는 코드에 자식 객체를 넣어도 그 코드가 맞게 동작해야 한다는 원칙이에요.'
+      sub: '컴파일되는 것으로는 부족해요. 자식이 부모 메서드의 약속(무엇을 하는가)을 지켜야 대신할 수 있어요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 cancel에 카드와 포인트는 성공하고, 상품권은 `UnsupportedOperationException`이 난다. 컴파일은 셋 다 된다'
+      - '리스코프 치환 원칙(LSP)은 "S가 T의 하위 타입이면, T를 쓰는 곳에 S를 넣어도 프로그램이 맞게 동작해야 한다"이다. 바바라 리스코프가 1987년에 말했다'
+      - '자바 컴파일러는 메서드가 있는지만 본다. `partialRefund`가 예외만 던져도 메서드는 있다. 그래서 이 원칙은 사람이 지킨다'
+      - '`Payment`의 `partialRefund`가 약속한 것은 "그 금액만큼 돌려준다"이다. 상품권은 이 약속을 지키지 못하므로 `Payment`를 대신할 수 없다'
+    asks:
+      - '본문의 예시: 코드 fat의 `GiftCardPayment`를 코드 cancel에 넘기는 코드는 컴파일되나, 실행하면 어떻게 되나 (컴파일된다. `UnsupportedOperationException`)'
+      - '옮긴 상황: `Bird`에 `fly()`가 있고 `Penguin extends Bird`가 `fly()`에서 예외를 던진다. 새 목록을 돌며 모두 날리는 코드에 펭귄이 섞이면 어떻게 되고, 어느 원칙을 어겼나 (실행 중 예외. 리스코프 치환 원칙)'
+  - id: q2
+    title: 어떤 상속이 리스코프 치환 원칙을 깨고, 어떻게 알아보나요?
+    conclusion:
+      lead: '자식이 부모의 약속을 깨는 상속이에요. 지원하지 않는다며 예외를 던지거나, 받는 값을 더 까다롭게 고르거나, 결과를 덜 보장할 때예요.'
+      sub: '부르는 쪽에 `instanceof`로 자식을 가려내는 코드가 생기면 원칙이 깨졌다는 신호예요.'
+    says:
+      - '깨는 모양 셋: (1) 지원하지 않는다며 예외를 던진다(코드 fat). (2) 받는 조건을 더 까다롭게 한다. 코드 minAmount의 `Coupon.apply`는 어떤 금액이든 받지만 `BigOrderCoupon`은 5만 원 미만이면 예외다. (3) 결과를 덜 보장한다. 부모가 "음수를 돌려주지 않는다"고 했는데 자식이 음수를 돌려준다'
+      - '코드 minAmount에서 3만 원 주문에 쿠폰 목록을 적용하는 코드는 `Coupon`일 때 29000을 받고, `BigOrderCoupon`이 섞이면 예외가 난다'
+      - '원칙을 어긴 신호: 코드 instanceofFix처럼 부르는 쪽이 자식을 가려낸다. 새 결제 수단이 부분 환불을 못 하면 이 `if`를 또 고쳐야 해서 개방 폐쇄 원칙도 함께 깨진다'
+      - '고치는 방향: 자식이 지킬 수 없는 약속을 부모에서 빼고 타입 관계를 다시 짠다. 이 레슨에서는 인터페이스를 나눈다(질문 3). 클래스 상속이면 조합으로 바꾸기도 한다(상속보다 조합, O6)'
+      - '더 알아보기: 계약에 의한 설계로 말하면, 자식은 선행 조건(받는 조건)을 강하게 할 수 없고 후행 조건(돌려주는 보장)을 약하게 할 수 없다'
+      - '더 알아보기: 정사각형을 직사각형의 자식으로 두면 `setWidth(5); setHeight(4)` 뒤 넓이가 20이라고 믿는 코드가 정사각형에서 16을 받는다. 상태를 바꾸는 메서드가 있으면 수학의 "정사각형은 직사각형이다"가 코드에서는 맞지 않는다'
+    asks:
+      - '본문의 예시: 코드 minAmount의 쿠폰 목록 `[Coupon, BigOrderCoupon]`을 3만 원 주문에 차례로 적용하면 어떻게 되나 (첫 쿠폰은 29000, 둘째에서 `IllegalArgumentException`)'
+      - '옮긴 상황: 파일 저장소 `Storage.save(file)`의 약속은 "파일을 저장한다"이다. 읽기 전용 저장소 `ReadOnlyStorage`가 `save`에서 아무 일도 하지 않고 조용히 끝난다. 저장 후 읽어 확인하는 코드는 어떻게 되고, 이것도 원칙을 어긴 것인가 (읽으면 없다. 예외가 없어도 약속을 어겼으니 어긴 것이다)'
+  - id: q3
+    title: 인터페이스 분리 원칙은 무엇이고, 리스코프 치환 원칙과 어떻게 이어지나요?
+    conclusion:
+      lead: '쓰지 않는 메서드에 기대지 않게, 인터페이스를 쓰는 쪽에 맞춰 작게 나누라는 원칙이에요.'
+      sub: '큰 인터페이스를 모든 구현이 억지로 구현하면, 할 수 없는 메서드에서 예외를 던지는 구현이 생겨 리스코프 치환 원칙도 깨져요.'
+    says:
+      - '인터페이스 분리 원칙(ISP)은 "클라이언트는 쓰지 않는 메서드에 기대게 해서는 안 된다"이다'
+      - '코드 fat의 `Payment`는 결제, 전액 환불, 부분 환불을 한데 묶었다. 상품권은 부분 환불을 할 수 없는데도 구현해야 해서 예외를 던졌다. 큰 인터페이스가 LSP 위반을 만들었다'
+      - '코드 split은 부분 환불을 `PartialRefundable`로 뺐다. 카드는 둘 다 구현하고 상품권은 `Payment`만 구현한다'
+      - '나누는 기준은 구현이 아니라 쓰는 쪽이다. 결제 화면은 `pay`만, 상품 취소는 `partialRefund`만 쓴다'
+    asks:
+      - '본문의 예시: 코드 split에서 상품권 결제를 만들 때 구현해야 하는 메서드는 (`pay`, `refund`)'
+      - '옮긴 상황: `Printer` 인터페이스에 `print`, `scan`, `fax`가 있고 흑백 프린터는 `scan`과 `fax`에서 예외를 던진다. 인터페이스 분리 원칙대로 고치면 흑백 프린터는 무엇을 구현하나 (`print`만 있는 인터페이스)'
+  - id: q4
+    title: 인터페이스를 나누면 무엇이 좋아지나요?
+    conclusion:
+      lead: '할 수 없는 일을 시키는 코드가 실행 전에 컴파일 오류로 잡혀요.'
+      sub: '바뀔 때 영향받는 클래스도 줄어요. 부분 환불 메서드가 바뀌어도 상품권 결제는 고치지 않아요.'
+    says:
+      - '코드 cancelSplit은 `PartialRefundable`을 받는다. 상품권 결제를 넘기면 컴파일 오류다. 질문 1에서 실행 중에 나던 예외가 컴파일 시점으로 앞당겨졌다'
+      - '`partialRefund(int)`를 `partialRefund(long)`으로 바꾸면 코드 fat에서는 상품권까지 모든 구현을 고치고, 코드 split에서는 `PartialRefundable`을 구현한 클래스만 고친다. 테스트로 컴파일 오류 파일을 센다'
+      - '테스트용 가짜 객체도 작아진다. 상품 취소를 테스트할 때 `PartialRefundable` 하나만 구현하면 된다'
+      - '너무 잘게 나누면 인터페이스가 늘어 읽기 어렵다. 나누는 때는 구현 가운데 일부가 그 메서드를 할 수 없을 때, 쓰는 쪽이 서로 다른 메서드 묶음만 쓸 때다'
+    asks:
+      - '본문의 예시: 코드 cancelSplit에 상품권 결제 객체를 넘기면 언제 무엇이 일어나나 (컴파일 오류)'
+      - '옮긴 상황: 결제 수단이 카드, 포인트, 상품권, 계좌이체 넷이고 부분 환불은 카드와 계좌이체만 된다. 부분 환불 메서드의 매개변수를 바꿀 때 코드 fat 모양과 코드 split 모양에서 각각 고칠 구현 클래스 수는 (4개, 2개)'
+      - '실무 구역: `List<String> tags = List.of("a", "b")`를 받은 메서드가 `tags.add("c")`를 하면 언제 무엇이 일어나나 (실행 중 `UnsupportedOperationException`)'
+practice:
+  says:
+    - '자바 컬렉션도 이 문제를 안고 있다. `List` 인터페이스의 `add`는 API 문서에 "선택 연산(optional operation)"으로 적혀 있다. `List.of(...)`가 돌려준 목록에 `add`하면 컴파일은 되고 실행 중에 `UnsupportedOperationException`이 난다. 테스트로 확인한다'
+    - '흔한 실수: 서비스가 `List<Long> ids = List.of(1L, 2L)`을 받아 그 목록에 추가하려 한다. 고친 코드: 바꿀 목록이 필요하면 `new ArrayList<>(ids)`로 복사해서 쓴다. 반대로 바꾸지 않을 목록을 돌려줄 때는 `List.of`나 `List.copyOf`가 맞다'
+    - '스프링 데이터는 인터페이스를 나눠 두었다. 조회만 할 리포지토리는 `Repository`를 상속하고 쓸 메서드만 선언할 수 있다. 저장과 삭제가 필요하면 `CrudRepository`나 `ListCrudRepository`를 쓴다. 공식 문서가 근거다'
+claims:
+  - claim: '코드 cancel에 상품권 결제를 넘기면 컴파일되고 실행 중 `UnsupportedOperationException`이 난다. 카드와 포인트는 성공한다'
+    how: '세 구현으로 돌린다'
+  - claim: '코드 minAmount의 쿠폰 목록을 3만 원에 적용하면 첫 쿠폰은 29000, 둘째에서 `IllegalArgumentException`'
+    how: '돌려서 확인한다'
+  - claim: '코드 cancelSplit에 상품권 결제를 넘기면 컴파일 오류다'
+    how: '`JavaSource`로 컴파일한다'
+  - claim: '부분 환불의 매개변수를 바꾸면 코드 fat에서는 모든 구현이, 코드 split에서는 `PartialRefundable` 구현만 컴파일이 깨진다'
+    how: '`JavaSource`로 바꾼 인터페이스와 구현을 컴파일하고 오류 파일을 센다'
+  - claim: '`List.of(...)`의 `add`는 `UnsupportedOperationException`, `new ArrayList<>(list)`는 된다'
+    how: '돌려서 확인한다'
+sources:
+  - 'LSP: Barbara Liskov, Jeannette Wing, A Behavioral Notion of Subtyping (1994) https://dl.acm.org/doi/10.1145/197320.197383'
+  - 'ISP와 LSP의 정의: Robert C. Martin, The Interface Segregation Principle (1996) https://web.archive.org/web/20150905081110/http://www.objectmentor.com/resources/articles/isp.pdf'
+  - '`List`의 선택 연산: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/List.html'
+  - '스프링 데이터 리포지토리 정의: https://docs.spring.io/spring-data/commons/reference/repositories/definition.html'

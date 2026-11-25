@@ -1,0 +1,193 @@
+# 상속보다 조합 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 상속보다 조합
+unit: 객체지향 설계와 패턴
+roadmap: O6
+type: 설계
+prerequisites:
+  - {slug: lsp-isp, title: 리스코프 치환과 인터페이스 분리 원칙}
+assume: '자바 21. 클래스 상속, 오버라이딩, `super`(상속과 다형성 레슨). 자식이 부모 자리에서 약속을 지켜야 한다는 것(리스코프 치환과 인터페이스 분리 원칙 레슨).'
+example: '쇼핑몰의 장바구니 `Cart`(상품을 하나씩 넣는 `add`, 여럿을 한 번에 넣는 `addAll`). 담은 상품 수만큼 적립 예정 포인트를 세는 `PointCart`를 상속으로 만들었다가 숫자가 두 배로 나오고, 부모를 고치자 또 틀리는 것을 봐요. 같은 기능을 조합으로 다시 만들어요. JDK의 `Stack`도 함께 봐요.'
+intro:
+  - '장바구니에 상품 세 개를 한 번에 담았는데 적립 예정 포인트가 여섯 개 몫으로 나왔어요. 자식 클래스는 잘못이 없어 보였어요. 원인은 부모 클래스의 `addAll`이 안에서 `add`를 부르고 있었다는, 부모의 내부 구현이었어요. 몇 달 뒤 누군가 부모의 `addAll`을 빠르게 고치자 이번에는 포인트가 0으로 나왔어요.'
+  - '코드를 재사용하려고 `extends`를 쓰는 일은 흔해요. 공통 기능을 `BaseService`에 두고 서비스들이 상속하는 식이에요. 그런데 상속은 부모의 public 메서드를 모두 물려받고, 부모가 자기 메서드를 어떻게 부르는지까지 자식이 알아야 하는 강한 결합이에요. 그래서 "상속보다 조합"이 면접의 단골 질문이에요.'
+  - '이 레슨에서는 같은 장바구니를 상속과 조합 두 방식으로 만들고, 부모 클래스를 한 줄 고쳤을 때 어느 쪽이 깨지는지 테스트로 확인해요.'
+covers:
+  - topic: '상속으로 재사용하면 자식이 부모의 내부 구현(자기 메서드를 어떻게 부르는지)에 기대게 된다'
+    where: '질문 1'
+  - topic: '취약한 부모 클래스 문제: 부모를 고치면 자식 코드는 그대로인데 동작이 깨진다'
+    where: '질문 1'
+  - topic: '부모의 public 메서드를 모두 물려받아서 원치 않는 메서드까지 열린다. JDK의 Stack이 Vector를 상속해 중간에 넣을 수 있는 예'
+    where: '질문 2'
+  - topic: '물려받은 메서드가 자식의 규칙을 깬다. 리스코프 치환 원칙과의 관계'
+    where: '질문 2'
+  - topic: '조합: 상속 대신 필드로 갖고 필요한 메서드만 위임한다'
+    where: '질문 3'
+  - topic: '조합은 부모의 public 약속에만 기대서 부모의 내부가 바뀌어도 깨지지 않는다'
+    where: '질문 3'
+  - topic: '조합은 실행 중에 갖는 객체를 바꿀 수 있다. 인터페이스로 받으면 여러 구현과 함께 쓴다'
+    where: '질문 3'
+  - topic: '상속을 써도 되는 때: 진짜 is-a 관계이고, 부모가 상속을 위해 설계되고 문서화되었을 때'
+    where: '질문 4'
+  - topic: '상속을 막는 final 클래스, 상속을 위한 설계(오버라이드할 메서드가 내부에서 불리는지 문서에 적기)'
+    where: '질문 4'
+  - topic: '조합의 비용: 위임 코드를 써야 한다'
+    where: '질문 4'
+  - topic: '스프링에서: 공통 기능을 BaseService 상속 대신 주입받는 컴포넌트로 두기, Stack 대신 ArrayDeque'
+    where: '실무에서는'
+  - topic: '인터페이스 구현(타입 상속)과 클래스 상속(구현 상속)의 차이'
+    where: '질문 1의 더 알아보기'
+  - topic: '상속으로 뼈대를 두는 템플릿 메서드 패턴'
+    where: '다루지 않음: 템플릿 메서드 패턴(O8)'
+  - topic: '같은 인터페이스로 감싸 기능을 덧붙이는 데코레이터'
+    where: '다루지 않음: 프록시와 데코레이터 패턴(O12)'
+codes:
+  cart: |-
+    class Cart {
+      private final List<Item> items =
+          new ArrayList<>();
+
+      void add(Item item) {
+        items.add(item);
+      }
+
+      void addAll(List<Item> list) {
+        for (Item i : list) {
+          [[add(i)]];
+        }
+      }
+    }
+  pointCart: |-
+    class PointCart extends Cart {
+      private int count = 0;
+
+      @Override
+      void add(Item item) {
+        count++;
+        super.add(item);
+      }
+
+      @Override
+      void addAll(List<Item> list) {
+        count += list.size();
+        super.addAll(list);
+      }
+    }
+  cartFast: |-
+    void addAll(List<Item> list) {
+      items.addAll(list);
+    }
+  stack: |-
+    Stack<String> stack = new Stack<>();
+    stack.push("A");
+    stack.push("B");
+    stack.add(0, "X");
+    stack.pop();
+    stack.pop();
+    stack.pop();
+  composed: |-
+    class PointCart {
+      private final Cart cart;
+      private int count = 0;
+
+      PointCart(Cart cart) {
+        this.cart = cart;
+      }
+
+      void add(Item item) {
+        count++;
+        cart.add(item);
+      }
+
+      void addAll(List<Item> list) {
+        count += list.size();
+        cart.addAll(list);
+      }
+    }
+predict:
+  text: '코드 pointCart로 만든 장바구니에 `addAll`로 상품 세 개를 한 번에 넣었어요. `count`는 얼마일까요? 보기: 3, 6, 0.'
+  answer: '6. 자식의 `addAll`이 3을 더하고, 부모의 `addAll`이 안에서 `add`를 세 번 부르는데 그 `add`가 자식의 것이라 3을 또 더한다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 상속으로 코드를 재사용하면 어떤 문제가 생기나요?
+    conclusion:
+      lead: '자식이 부모의 내부 구현에 기대게 돼요. 부모가 자기 메서드를 어떻게 부르는지에 따라 자식의 결과가 달라져요.'
+      sub: '그래서 부모를 고치면 자식 코드는 한 줄도 안 바뀌었는데 동작이 깨져요. 이것을 취약한 부모 클래스 문제라고 해요.'
+    says:
+      - '예측의 답을 밝힌다. 상품 세 개를 `addAll`하면 `count`는 6이다. 부모 `Cart.addAll`이 안에서 `add(i)`를 부르고, 오버라이딩 때문에 자식의 `add`가 불려 한 번 더 센다'
+      - '자식을 쓴 사람은 부모의 `addAll`이 `add`를 부른다는 것을 알아야 맞게 짤 수 있다. 이것은 부모의 공개 약속이 아니라 내부 구현이다'
+      - '그럼 자식의 `addAll`에서 세는 줄을 지우면 될까? 그러면 3이 맞게 나온다. 그런데 부모가 코드 cartFast처럼 `items.addAll(list)`로 바뀌면 `add`가 불리지 않아 0이 된다. 자식 코드는 그대로인데 결과가 바뀐다'
+      - '취약한 부모 클래스 문제: 부모 클래스의 내부를 고치면 그것을 상속한 클래스가 깨진다. 부모를 고치는 사람은 어떤 자식이 있는지 모르기 쉽다'
+      - '더 알아보기: 인터페이스를 구현하는 것은 타입만 물려받아서 이 문제가 없다. 문제는 구현까지 물려받는 클래스 상속에서 생긴다'
+    widget:
+      kind: steps
+      note: '`pointCart.addAll([A, B, C])`를 한 단계씩 실행한다. 단계마다 지금 실행 중인 메서드(자식 addAll, 부모 addAll, 자식 add, 부모 add)와 count 값을 보여 준다. 시나리오를 "부모가 add를 부를 때"와 "부모가 items.addAll로 바뀐 뒤(자식에서 세는 줄을 지운 경우)"로 고른다. 마지막 count가 6과 0으로 나온다'
+    asks:
+      - '본문의 예시: 코드 pointCart에 `add`로 하나, `addAll`로 둘을 넣으면 `count`는 (1 + 2 + 2 = 5)'
+      - '옮긴 상황: 부모 `Logger`의 `logAll(list)`가 안에서 `log(msg)`를 부른다. 자식 `CountingLogger`가 `log`와 `logAll`을 모두 오버라이딩해 센다. `logAll`로 메시지 4개를 넣으면 몇이 세어지나 (8)'
+  - id: q2
+    title: 부모의 메서드를 모두 물려받으면 무엇이 문제인가요?
+    conclusion:
+      lead: '자식에게 맞지 않는 메서드까지 열려서, 자식의 규칙을 깨는 호출을 막을 수 없어요.'
+      sub: 'JDK의 `Stack`은 `Vector`를 상속해서 `add(0, x)`로 맨 아래에 끼워 넣을 수 있어요. 스택의 "마지막에 넣은 것이 먼저 나온다"가 깨져요.'
+    says:
+      - '`Stack`은 `Vector`를 상속한다. 그래서 `push`와 `pop`뿐 아니라 `Vector`의 `add(int, E)`, `remove(int)`, `get(int)`도 쓸 수 있다'
+      - '코드 stack에서 A, B를 넣고 `add(0, "X")`로 맨 아래에 X를 넣은 뒤 셋을 꺼내면 B, A, X가 나온다. 넣은 순서의 반대(X, B, A)가 아니다'
+      - '스택의 규칙은 `Stack`이 지켜야 하는데, 물려받은 메서드가 그 규칙을 건너뛰는 길을 낸다. 객체지향의 네 가지 특징에서 본 캡슐화가 깨진 것이다'
+      - '부모 타입으로 쓰면 리스코프 치환 원칙 문제도 생긴다. `Vector`를 받는 코드는 아무 자리에나 넣어도 된다고 믿지만, 스택에서는 그러면 안 된다'
+      - '`Stack`의 API 문서는 스택이 필요하면 `Deque`를 쓰라고 한다'
+    asks:
+      - '본문의 예시: 코드 stack에서 마지막 `pop()` 셋이 꺼내는 순서 (B, A, X)'
+      - '옮긴 상황: `class Members extends ArrayList<Member>`로 회원 목록을 만들고 "같은 이메일은 두 번 넣지 않는다"를 `add`를 오버라이딩해 지켰다. `addAll`이나 `set(0, m)`은 오버라이딩하지 않았다. `set(0, 같은 이메일 회원)`을 하면 규칙이 지켜지나 (아니다. 물려받은 `set`은 검사하지 않는다)'
+  - id: q3
+    title: 조합으로 바꾸면 무엇이 달라지나요?
+    conclusion:
+      lead: '부모를 상속하지 않고 필드로 갖고, 필요한 메서드만 그 필드에게 넘겨요(위임). 그러면 부모의 공개 약속에만 기대요.'
+      sub: '`Cart`의 `addAll`이 안에서 `add`를 부르든 안 부르든 조합한 `PointCart`의 `count`는 3이에요.'
+    says:
+      - '코드 composed는 `Cart`를 필드로 갖고 `add`와 `addAll`을 위임한다. `cart.addAll()`이 안에서 `cart.add()`를 불러도 그것은 `Cart`의 `add`라서 `PointCart`가 다시 세지 않는다'
+      - '`Cart`를 코드 cartFast로 바꿔도 `count`는 3이다. 테스트로 `Cart` 두 버전에 상속판과 조합판을 각각 돌려 네 결과를 비교한다'
+      - '조합한 클래스는 연 메서드만 밖에 보인다. `PointCart`에는 `Cart`의 다른 메서드가 열리지 않는다. 스택을 조합으로 만들면 `add(0, x)`가 없다'
+      - '필드의 타입을 인터페이스로 두면 실행 중에 다른 구현을 넣을 수 있다. 상속은 컴파일할 때 부모가 정해진다'
+      - '조합은 "has-a"(가지고 있다), 상속은 "is-a"(이다)다'
+    widget:
+      kind: compare
+      note: '왼쪽 칸은 상속판 PointCart, 오른쪽 칸은 조합판 PointCart다. 버튼(Cart.addAll을 items.addAll로 바꾸기)을 고르면 양쪽 칸 아래에 `addAll([A, B, C])` 뒤의 count가 나온다. 바꾸기 전 상속판 6, 조합판 3. 바꾼 뒤 상속판(세는 줄을 지운 판) 0, 조합판 3. 양쪽 모두 PointCart 파일은 고치지 않았다고 표시한다'
+    asks:
+      - '본문의 예시: 코드 composed로 `addAll([A, B, C])`를 하면 `Cart`가 어느 버전이든 `count`는 (3)'
+      - '옮긴 상황: 질문 2의 회원 목록을 `ArrayList`를 필드로 가진 `Members`로 바꾸고 `add`와 `size`만 열었다. 밖에서 `set(0, m)`을 부를 수 있나 (없다. 컴파일 오류)'
+  - id: q4
+    title: 그러면 상속은 언제 쓰나요?
+    conclusion:
+      lead: '자식이 정말 부모의 한 종류이고(is-a), 부모가 상속을 위해 설계되고 문서화되었을 때 써요.'
+      sub: '그 밖에는 조합이 기본이에요. 조합의 비용은 위임 메서드를 직접 써야 한다는 것이에요.'
+    says:
+      - '상속을 써도 되는 조건 둘: 자식이 모든 자리에서 부모를 대신할 수 있다(리스코프 치환 원칙). 부모가 상속받을 것을 알고 만들어졌다'
+      - '상속을 위해 설계한 부모는 오버라이드해도 되는 메서드를 정하고, 그 메서드가 부모 안에서 언제 불리는지 문서에 적는다. 다음 레슨들의 템플릿 메서드 패턴(O8)이 이 모양이다'
+      - '상속을 위한 설계가 아니면 `final` 클래스로 막는다. `String`과 `Integer`는 `final`이다'
+      - '조합의 비용: 열 메서드마다 위임 코드를 쓴다. 메서드가 많으면 길어진다. 그래도 부모의 내부에 묶이는 것보다 낫다'
+      - '판단 질문: "자식이 부모의 모든 public 메서드를 그대로 열어도 괜찮은가?" 아니면 조합이다'
+    asks:
+      - '본문의 예시: `Cart`의 작성자가 `PointCart` 같은 상속을 막으려면 무엇을 하면 되나 (`final class Cart`)'
+      - '옮긴 상황: 다음 가운데 클래스 상속이 맞는 경우는? 보기: `Stack`이 `Vector`를 재사용하려고 / 추상 클래스 `PaymentProcessor`가 "이 단계만 오버라이드하라"고 문서화한 것을 구현할 때 / 서비스들이 로깅 헬퍼를 쓰려고 `BaseService`를 상속할 때 (둘째)'
+practice:
+  says:
+    - '흔한 실수: 여러 서비스가 공통 헬퍼(현재 로그인 회원 꺼내기, 공통 로깅)를 쓰려고 `extends BaseService`를 한다. `BaseService`의 메서드가 바뀌면 모든 서비스가 영향을 받고, 자바는 클래스 상속이 하나뿐이라 다른 부모를 둘 수 없다. 고친 코드: 헬퍼를 `@Component`로 만들고 필요한 서비스가 생성자로 주입받는다. 주입은 의존 역전 원칙과 의존성 주입(O5)에서 본 것과 같다'
+    - '`Stack` 대신 `ArrayDeque`를 `Deque` 타입으로 쓴다. `push`와 `pop`이 같고, 중간에 끼워 넣는 메서드가 없다. API 문서가 근거이고, 같은 순서로 넣고 꺼내 결과를 테스트로 확인한다'
+claims:
+  - claim: '코드 pointCart에 `addAll`로 셋을 넣으면 `count`는 6이다'
+    how: '돌려서 확인한다'
+  - claim: '자식에서 세는 줄을 지우고 부모를 코드 cartFast로 바꾸면 `count`는 0이다'
+    how: '`Cart` 두 버전을 패키지로 나눠 돌린다'
+  - claim: '코드 composed는 `Cart`의 두 버전 모두에서 3이다'
+    how: '같은 두 패키지로 돌린다'
+  - claim: '코드 stack의 `pop` 셋은 B, A, X 순서다'
+    how: '돌려서 확인한다'
+  - claim: '`ArrayDeque`에 A, B를 `push`하면 B, A 순서로 나오고 `add(0, x)` 같은 메서드가 `Deque`에 없다'
+    how: '돌리고 `JavaSource`로 `deque.add(0, "X")`를 컴파일해 오류를 본다'
+  - claim: '조합한 `Members`에서 `set`을 부르면 컴파일 오류다'
+    how: '`JavaSource`로 컴파일한다'
+sources:
+  - '`Stack`과 `Deque` 권장: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Stack.html'
+  - '상속과 조합: GoF, Design Patterns(1994)의 원칙 "클래스 상속보다 객체 조합" 소개 https://en.wikipedia.org/wiki/Composition_over_inheritance'

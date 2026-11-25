@@ -1,0 +1,186 @@
+# 의존 역전 원칙과 의존성 주입 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 의존 역전 원칙과 의존성 주입
+unit: 객체지향 설계와 패턴
+roadmap: O5
+type: 설계
+prerequisites:
+  - {slug: srp-ocp, title: 단일 책임과 개방 폐쇄 원칙}
+assume: '자바 21. 인터페이스와 구현 클래스, 다형성(상속과 다형성 레슨), 바뀌는 부분을 인터페이스로 빼는 것(단일 책임과 개방 폐쇄 원칙 레슨). 패키지와 `import`가 무엇인지 알고 있다고 봐요.'
+example: '회원 가입을 마치면 환영 메일을 보내는 `SignupService`. 처음에는 서비스 안에서 `new SmtpMailSender()`로 메일 발송 객체를 직접 만들어요. 이것을 인터페이스 `Notifier`에 기대게 바꾸고, 밖에서 넣어 주게 바꿔요. 실무 구역에서는 같은 코드를 스프링 생성자 주입으로 옮겨요.'
+intro:
+  - '회원 가입 서비스의 테스트를 돌릴 때마다 진짜 메일이 나가요. 메일 서버가 없는 CI에서는 테스트가 실패하고요. 알림을 메일에서 카카오 알림톡으로 바꾸자는 요구가 오자, 가입 서비스 코드를 열어 `new SmtpMailSender()`를 찾아 고쳐야 했어요.'
+  - '스프링을 쓰면 `@Autowired`나 생성자로 객체를 받는 코드를 매일 써요. 그런데 왜 직접 `new`하지 않고 받는지, 왜 구현 클래스가 아니라 인터페이스로 받는지를 설명하지 못하면 면접에서 "DI가 무엇인가요"에 "스프링이 넣어 주는 것"이라고만 답하게 돼요. 이 레슨이 그 이유예요.'
+  - '이 레슨에서는 같은 가입 서비스를 세 모양으로 바꿔 가며, 테스트에서 가짜 알림 객체로 바꿀 수 있는지, 알림 방식을 바꿀 때 고치는 파일이 무엇인지, 패키지의 `import` 방향이 어떻게 바뀌는지를 확인해요.'
+covers:
+  - topic: '의존한다는 것: A가 B를 부르거나 만들면 B가 바뀔 때 A도 영향을 받는다'
+    where: '질문 1'
+  - topic: '구체 클래스를 안에서 직접 만들면 바꿀 수 없다: 테스트에서 가짜로 바꿀 수 없고, 구현을 바꿀 때 쓰는 쪽을 고친다'
+    where: '질문 1'
+  - topic: '의존 역전 원칙(DIP): 상위 정책이 하위 구현에 기대지 않고 둘 다 추상에 기댄다'
+    where: '질문 2'
+  - topic: '무엇이 역전되나: 인터페이스를 쓰는 쪽(상위)이 가지면 소스 코드의 의존 방향이 구현에서 정책 쪽으로 바뀐다'
+    where: '질문 2'
+  - topic: '의존성 주입(DI): 필요한 객체를 스스로 만들지 않고 밖에서 받는다. 생성자 주입, setter 주입, 필드 주입'
+    where: '질문 3'
+  - topic: '조립하는 곳: 객체를 만들고 이어 주는 코드가 한 곳(main, 설정, 스프링 컨테이너)에 모인다'
+    where: '질문 3'
+  - topic: '주입받으면 테스트에서 가짜 객체를 넣을 수 있다'
+    where: '질문 3. 가짜 객체의 종류는 단위 테스트와 테스트 더블(T2)'
+  - topic: 'DIP와 DI는 같은 말이 아니다. 구체 클래스를 주입받으면 DI지만 DIP는 아니다'
+    where: '질문 4'
+  - topic: '생성자 주입을 권하는 이유: final 필드, 빠진 의존성을 만들 때 알 수 있다, 컨테이너 없이 테스트'
+    where: '실무에서는'
+  - topic: '필드 주입의 함정: new로 만들면 null'
+    where: '실무에서는'
+  - topic: '제어의 역전(IoC)과 서비스 로케이터'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링 컨테이너가 빈을 찾고 넣는 규칙(@Primary, @Qualifier, 컴포넌트 스캔)'
+    where: '다루지 않음: 스프링 빈과 의존성 주입(S2)'
+  - topic: '계층 사이의 의존 방향과 패키지 구조'
+    where: '다루지 않음: 계층형 아키텍처(A1), 헥사고날 아키텍처(A21)'
+codes:
+  direct: |-
+    class SignupService {
+      private final SmtpMailSender mail =
+          new SmtpMailSender();
+
+      void signup(String email) {
+        // 회원 저장
+        mail.send(email, "가입을 환영해요");
+      }
+    }
+  inverted: |-
+    // 패키지 member
+    interface Notifier {
+      void notify(String to, String msg);
+    }
+
+    class SignupService {
+      private final Notifier notifier;
+
+      SignupService(Notifier notifier) {
+        this.notifier = notifier;
+      }
+
+      void signup(String email) {
+        notifier.notify(email,
+            "가입을 환영해요");
+      }
+    }
+
+    // 패키지 infra
+    class SmtpNotifier implements Notifier {
+      public void notify(String to,
+                         String msg) {...}
+    }
+  assemble: |-
+    Notifier notifier = new SmtpNotifier();
+    SignupService service =
+        new SignupService(notifier);
+  fake: |-
+    class FakeNotifier implements Notifier {
+      List<String> sent = new ArrayList<>();
+      public void notify(String to,
+                         String msg) {
+        sent.add(to);
+      }
+    }
+
+    var fake = new FakeNotifier();
+    new SignupService(fake).signup("a@b.c");
+    // fake.sent → [a@b.c]
+  concreteDi: |-
+    class SignupService {
+      private final SmtpMailSender mail;
+
+      SignupService(SmtpMailSender mail) {
+        this.mail = mail;
+      }
+    }
+predict:
+  text: '코드 direct의 가입 서비스를 테스트하면서 메일이 실제로 나가지 않게 하고 싶어요. 가입 서비스 코드를 고치지 않고 테스트 코드만으로 할 수 있을까요? 보기: 할 수 있다, 할 수 없다.'
+  answer: '할 수 없다. 서비스가 안에서 `new SmtpMailSender()`를 직접 만들어서 밖에서 다른 객체로 바꿀 길이 없다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 구현 클래스를 안에서 직접 만들면 어떤 문제가 생기나요?
+    conclusion:
+      lead: '쓰는 쪽이 그 구현에 묶여서, 테스트에서 가짜로 바꿀 수 없고 구현을 바꿀 때마다 쓰는 쪽을 고쳐야 해요.'
+      sub: '코드 direct의 가입 서비스는 테스트할 때도 진짜 메일을 보내고, 알림톡으로 바꾸려면 가입 서비스를 열어야 해요.'
+    says:
+      - 'A가 B를 부르거나 만들면 A는 B에 의존한다. B가 바뀌면 A가 영향을 받는다'
+      - '예측의 답을 밝힌다. 코드 direct는 필드를 만들 때 `new SmtpMailSender()`를 한다. 테스트가 이 객체를 다른 것으로 바꿀 길이 없다. 테스트로 `signup`을 부르면 `SmtpMailSender.send`가 불린다'
+      - '알림을 알림톡으로 바꾸면 `SignupService`의 필드 타입과 `new`를 고친다. 알림을 보내는 곳이 주문, 배송, 가입 세 서비스면 세 파일을 고친다'
+      - '가입 서비스가 하는 일(회원을 저장하고 환영 알림을 보낸다)은 그대로인데, 알림을 어떻게 보내는지가 바뀔 때 가입 서비스를 고친다. 중요한 정책이 덜 중요한 세부에 묶였다'
+    asks:
+      - '본문의 예시: 코드 direct에서 메일 대신 알림톡으로 바꿀 때 `SignupService` 파일을 고쳐야 하나 (그렇다. 필드 타입과 `new`를 고친다)'
+      - '옮긴 상황: `OrderService`가 메서드 안에서 `new TossPaymentClient()`를 만들어 결제를 요청한다. 결제 실패를 테스트하려면 무엇이 필요한가 (실제 토스 서버에서 실패를 일으켜야 한다. 코드를 고치지 않으면 가짜로 바꿀 수 없다)'
+  - id: q2
+    title: 의존 역전 원칙은 무엇이고, 무엇이 역전되나요?
+    conclusion:
+      lead: '상위 정책이 하위 구현에 기대지 않고, 둘 다 추상(인터페이스)에 기대게 하라는 원칙이에요.'
+      sub: '인터페이스를 쓰는 쪽 패키지에 두면 `import`의 방향이 구현에서 정책 쪽으로 뒤집혀요.'
+    says:
+      - '의존 역전 원칙(DIP)은 두 문장이다. 상위 모듈은 하위 모듈에 기대지 않고 둘 다 추상에 기댄다. 추상은 세부에 기대지 않고 세부가 추상에 기댄다'
+      - '상위 정책은 "가입하면 환영 알림을 보낸다", 하위 구현은 "SMTP로 메일을 보낸다"이다'
+      - '코드 inverted: `SignupService`는 `Notifier`만 안다. `SmtpNotifier`는 `Notifier`를 구현한다'
+      - '역전되는 것: 코드 direct에서는 `member` 패키지가 메일 구현을 `import`했다. 코드 inverted에서는 `Notifier`가 `member` 패키지에 있고 `infra`의 `SmtpNotifier`가 `member.Notifier`를 `import`한다. 실행 중 호출은 여전히 가입 서비스가 메일 구현을 부르지만, 소스 코드의 의존은 반대로 바뀌었다'
+      - '그래서 `member` 패키지는 `infra` 없이 컴파일된다. 테스트로 두 패키지를 따로 컴파일한다'
+      - '인터페이스의 이름과 메서드는 쓰는 쪽의 말로 짓는다. `SmtpSender.sendMime()`이 아니라 `Notifier.notify()`다'
+    widget:
+      kind: compare
+      note: '왼쪽 칸은 코드 direct, 오른쪽 칸은 코드 inverted다. 칸의 항목은 패키지 member와 infra의 클래스다. "import 방향 보기"를 고르면 다른 패키지를 import하는 클래스에 "import" 태그와 대상이 붙는다(왼쪽은 SignupService가 infra를, 오른쪽은 SmtpNotifier가 member를). "알림톡으로 바꾸기"를 고르면 고치는 파일과 새로 만드는 파일이 붙는다(왼쪽은 SignupService 고침, 오른쪽은 KakaoNotifier 새로 만듦과 조립 코드 고침)'
+    asks:
+      - '본문의 예시: 코드 inverted에서 `Notifier` 인터페이스는 어느 패키지에 두고, `import`는 어느 쪽에서 어느 쪽으로 하나 (`member`에 둔다. `infra`가 `member`를 import한다)'
+      - '옮긴 상황: 주문 정책(`OrderService`)이 결제 대행사 SDK의 `TossClient`를 직접 import한다. 의존 역전 원칙대로 고치면 새로 생기는 것과 그것을 두는 곳은 (`PaymentGateway` 같은 인터페이스를 주문 쪽에 두고, 토스용 구현이 그것을 구현한다)'
+  - id: q3
+    title: 의존성 주입은 무엇이고, 무엇이 좋아지나요?
+    conclusion:
+      lead: '객체가 필요한 것을 스스로 만들지 않고 밖에서 받는 것이에요. 보통 생성자로 받아요.'
+      sub: '만들고 잇는 코드가 조립하는 곳 한 곳에 모여서, 테스트에서는 가짜를, 운영에서는 진짜를 넣을 수 있어요.'
+    says:
+      - '의존성 주입(DI)은 쓸 객체를 생성자, setter, 필드로 받는 것이다. 코드 inverted는 생성자로 받는다'
+      - '누가 만드나: 코드 assemble처럼 조립하는 곳이 `SmtpNotifier`를 만들어 넘긴다. 작은 프로그램은 `main`, 스프링에서는 컨테이너가 이 일을 한다'
+      - '테스트: 코드 fake처럼 가짜 알림을 넣으면 메일은 나가지 않고 누구에게 보냈는지만 남는다. 질문 1에서 할 수 없던 것이다'
+      - '알림톡으로 바꾸기: `KakaoNotifier`를 새로 만들고 조립하는 곳의 `new` 한 줄을 고친다. `SignupService`는 그대로다. 바꾸기 전후 파일을 비교한다'
+      - '생성자로 받으면 빠진 의존성은 객체를 만들 때 컴파일 오류나 예외로 드러난다. 필드를 `final`로 둘 수 있다'
+    asks:
+      - '본문의 예시: 코드 fake로 `signup("a@b.c")`를 부른 뒤 `fake.sent`에는 무엇이 있나 (`[a@b.c]`)'
+      - '옮긴 상황: 알림을 쓰는 서비스가 가입, 주문, 배송 셋이고 모두 `Notifier`를 생성자로 받는다. SMTP를 알림톡으로 바꿀 때 세 서비스 가운데 고치는 파일 수는 (0개. 새 구현과 조립 코드만 바뀐다)'
+  - id: q4
+    title: 의존 역전 원칙과 의존성 주입은 같은 것인가요?
+    conclusion:
+      lead: '아니요. DIP는 무엇에 기댈지(추상)에 대한 원칙이고, DI는 기댈 객체를 어떻게 얻을지(밖에서 받기)에 대한 방법이에요.'
+      sub: '구체 클래스를 생성자로 받으면 DI지만 DIP는 아니에요. 둘을 함께 써야 구현을 바꿀 때 쓰는 쪽을 고치지 않아요.'
+    says:
+      - '코드 concreteDi는 생성자로 받으니 DI다. 하지만 받는 타입이 `SmtpMailSender`라서 알림톡으로 바꾸면 여전히 `SignupService`를 고친다'
+      - '반대로 인터페이스에 기대면서 스스로 찾아오는 코드도 있다(`Notifier n = Registry.get(Notifier.class)`). DIP는 지켰지만 주입받지 않는다'
+      - '둘을 함께 쓴 코드 inverted만 "구현을 바꿀 때 쓰는 쪽을 고치지 않는다"와 "테스트에서 바꿔 넣는다"를 둘 다 한다'
+      - '더 알아보기: 제어의 역전(IoC)은 내 코드가 흐름을 쥐지 않고 프레임워크가 내 코드를 부르는 것이다. DI는 IoC의 한 모양이다. 서비스 로케이터는 주입 대신 찾아오는 방법이고, 쓰는 쪽이 로케이터를 알아야 한다'
+    asks:
+      - '본문의 예시: 코드 concreteDi에서 알림톡으로 바꿀 때 `SignupService`를 고쳐야 하나, 그리고 이 코드는 DI인가 DIP인가 (고쳐야 한다. DI이고 DIP는 아니다)'
+      - '옮긴 상황: 다음 가운데 맞는 말은? 보기: 스프링을 쓰면 DIP가 저절로 지켜진다 / 생성자 주입만 쓰면 DIP를 지킨 것이다 / 인터페이스 타입으로 주입받아야 구현을 바꿀 때 쓰는 쪽을 고치지 않는다 (셋째)'
+practice:
+  says:
+    - '스프링에서는 `@Component`(또는 `@Service`)를 붙인 클래스의 생성자가 하나면 그 생성자로 주입한다. 필드는 `private final`이고 `@Autowired`는 생략한다. `Notifier` 구현이 `@Component`인 `SmtpNotifier` 하나면 그것이 들어간다. 작은 `AnnotationConfigApplicationContext`로 확인한다'
+    - '흔한 실수: 필드 주입(`@Autowired private Notifier notifier;`)으로 쓴 서비스를 테스트에서 `new SignupService()`로 만들면 `notifier`가 null이라 `signup`에서 `NullPointerException`이 난다. 컨테이너를 띄워야만 테스트할 수 있다. 고친 코드: 생성자 주입으로 바꾸면 `new SignupService(fake)`로 바로 테스트한다'
+    - '스프링 공식 문서도 필수 의존성에는 생성자 주입을 권한다(공식 문서 근거)'
+    - '구현이 둘 이상일 때 어느 것을 넣는지의 규칙은 스프링 빈과 의존성 주입(S2)에서 다룬다'
+claims:
+  - claim: '코드 direct의 `signup`은 진짜 `SmtpMailSender.send`를 부른다. 테스트에서 바꿀 수 없다'
+    how: '`SmtpMailSender`가 보낸 횟수를 static 카운터로 세어 확인한다'
+  - claim: '코드 inverted에서 `member` 패키지는 `infra` 없이 컴파일되고, `infra`는 `member`가 있어야 컴파일된다'
+    how: '`JavaSource`로 패키지별로 컴파일한다'
+  - claim: '코드 fake를 넣으면 `sent`에 받는 사람이 남고 메일은 나가지 않는다'
+    how: '돌려서 확인한다'
+  - claim: '알림톡으로 바꾸면 코드 direct는 `SignupService`를, 코드 inverted는 조립 코드를 고치고 `KakaoNotifier`가 새로 생긴다'
+    how: '바꾸기 전후 패키지를 비교한다'
+  - claim: '스프링이 생성자 하나인 `@Component`에 `Notifier` 구현을 넣는다'
+    how: '`AnnotationConfigApplicationContext`로 빈을 꺼내 확인한다'
+  - claim: '필드 주입 서비스를 `new`로 만들어 부르면 `NullPointerException`'
+    how: '돌려서 확인한다'
+sources:
+  - 'DIP의 정의: Robert C. Martin, The Dependency Inversion Principle (1996) https://web.archive.org/web/20110714224327/http://www.objectmentor.com/resources/articles/dip.pdf'
+  - '의존성 주입과 생성자 주입 권장: 스프링 공식 문서 https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html'
+  - '용어 DI와 IoC: Martin Fowler, Inversion of Control Containers and the Dependency Injection pattern https://martinfowler.com/articles/injection.html'

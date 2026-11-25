@@ -1,0 +1,199 @@
+# 빌더 패턴 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 빌더 패턴
+unit: 객체지향 설계와 패턴
+roadmap: O10
+type: 설계
+prerequisites:
+  - {slug: immutable-object, title: 불변 객체}
+assume: '자바 21. final 필드와 불변 객체, record(불변 객체 레슨), static 중첩 클래스가 바깥 클래스의 private 생성자를 부를 수 있다는 것. 정적 팩토리 메서드를 알면 좋지만 몰라도 돼요.'
+example: '쇼핑몰의 상품 `Product`. 이름과 가격은 꼭 있어야 하고, 재고, 카테고리, 할인율, 설명, 노출 여부는 없어도 돼요. 인자가 일곱 개인 생성자, setter로 채우는 방식, 빌더를 차례로 써 보며 각각 어떤 실수를 허용하는지 봐요.'
+intro:
+  - '상품 등록 API에서 가격이 100원이고 재고가 25000개인 상품이 만들어졌어요. 원래는 가격 25000원에 재고 100개였어요. `new Product("머그컵", 100, 25000, ...)`에서 두 `int` 인자의 순서가 바뀌었는데, 타입이 같아서 컴파일러는 아무 말도 하지 않았어요.'
+  - '필드가 많은 객체는 실무에서 흔해요. 요청 DTO, 응답 객체, 테스트 데이터, 설정 객체가 그래요. 롬복의 `@Builder`를 붙이면 바로 쓸 수 있어서 많이 쓰지만, 빌더가 무엇을 막아 주고 무엇은 못 막는지, 언제 생성자로 충분한지를 알아야 제대로 써요.'
+  - '이 레슨에서는 같은 상품을 세 방식으로 만들며, 인자 순서 실수, 다 채우기 전의 상태, 빠진 필수값이 각각 어디서 잡히는지 테스트로 확인해요.'
+covers:
+  - topic: '인자가 많은 생성자의 문제: 같은 타입 인자의 순서를 바꿔도 컴파일된다, 무엇이 무엇인지 읽히지 않는다'
+    where: '질문 1'
+  - topic: '점층적 생성자: 선택 인자마다 생성자가 늘어난다'
+    where: '질문 1'
+  - topic: '자바빈즈 방식(기본 생성자와 setter)의 문제: 다 채우기 전의 불완전한 객체가 보인다, 불변으로 만들 수 없다'
+    where: '질문 2. 불변의 이점은 불변 객체(J9)'
+  - topic: '빌더 패턴: 값을 이름 붙은 메서드로 하나씩 받고, build()에서 검사한 뒤 불변 객체를 한 번에 만든다'
+    where: '질문 3'
+  - topic: '빌더 구현: static 중첩 Builder, 자기 자신을 돌려주는 메서드로 이어 부르기, private 생성자'
+    where: '질문 3'
+  - topic: '필수값을 build()에서 검사하면 빠진 값은 실행 중에 잡힌다. 생성자 인자로 받으면 컴파일 때 잡힌다'
+    where: '질문 4'
+  - topic: '빌더를 쓸 때와 쓰지 않을 때: 필드 수, 선택 인자, record의 정식 생성자'
+    where: '질문 4'
+  - topic: '빌더는 다른 컬렉션 필드의 방어적 복사를 build()에서 한다'
+    where: '질문 3의 더 알아보기'
+  - topic: '롬복 @Builder와 @Builder.Default의 함정'
+    where: '실무에서는'
+  - topic: '자바 API의 빌더: StringBuilder, HttpRequest.newBuilder(), Stream.builder()'
+    where: '실무에서는'
+  - topic: '이름 있는 정적 메서드로 만드는 방법'
+    where: '다루지 않음: 팩토리(O9)'
+codes:
+  ctor: |-
+    new Product("머그컵", 100, 25000,
+        "주방", 0, null, true);
+  telescoping: |-
+    Product(String name, int price) {
+      this(name, price, 0);
+    }
+    Product(String name, int price,
+            int stock) {
+      this(name, price, stock, null);
+    }
+    // ... 인자가 하나씩 는 생성자들
+  beans: |-
+    Product p = new Product();
+    p.setName("머그컵");
+    p.setPrice(25000);
+    repository.save(p);
+    p.setStock(100);
+  builder: |-
+    final class Product {
+      private final String name;
+      private final int price;
+      private final int stock;
+
+      private Product(Builder b) {
+        this.name = b.name;
+        this.price = b.price;
+        this.stock = b.stock;
+      }
+
+      static Builder builder() {
+        return new Builder();
+      }
+
+      static final class Builder {
+        private String name;
+        private int price;
+        private int stock;
+
+        Builder name(String v) {
+          name = v; return this;
+        }
+        Builder price(int v) {
+          price = v; return this;
+        }
+        Builder stock(int v) {
+          stock = v; return this;
+        }
+
+        Product build() {
+          if (name == null) {
+            throw new IllegalStateException(
+                "name은 꼭 있어야 해요");
+          }
+          return new Product(this);
+        }
+      }
+    }
+  use: |-
+    Product mug = Product.builder()
+        .name("머그컵")
+        .price(25000)
+        .stock(100)
+        .build();
+  required: |-
+    static Builder builder(String name,
+                           int price) {
+      return new Builder(name, price);
+    }
+
+    Product.builder("머그컵", 25000)
+        .stock(100)
+        .build();
+  lombokDefault: |-
+    @Builder
+    class Product {
+      private String name;
+      private boolean visible = true;
+    }
+
+    Product.builder().name("컵").build()
+        .isVisible();
+predict:
+  text: '상품의 가격은 25000원, 재고는 100개예요. 코드 ctor는 두 값을 반대로 넣었어요. 이 코드는 어떻게 될까요? 보기: 컴파일 오류, 실행 중 예외, 가격 100원과 재고 25000개인 상품이 만들어진다.'
+  answer: '가격 100원과 재고 25000개인 상품이 만들어진다. 두 인자가 모두 int라서 컴파일러가 순서를 구별하지 못한다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 인자가 많은 생성자는 무엇이 문제인가요?
+    conclusion:
+      lead: '같은 타입의 인자 순서를 바꿔도 컴파일되고, 호출하는 코드만 봐서는 값이 무엇인지 알 수 없어요.'
+      sub: '선택 인자마다 생성자를 하나씩 더하면(점층적 생성자) 생성자 수가 늘고, 원하는 조합이 없으면 쓰지 않을 값까지 넣어야 해요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 ctor는 컴파일되고 가격 100, 재고 25000인 상품이 된다. 자바는 인자를 이름이 아니라 순서와 타입으로 맞춘다'
+      - '코드 ctor의 `0, null, true`는 무엇인지 보이지 않는다. 생성자 선언을 열어 봐야 할인율, 설명, 노출 여부인 것을 안다'
+      - '점층적 생성자(코드 telescoping): 필수 인자만 받는 생성자부터 하나씩 늘린다. 선택 인자가 다섯이면 생성자가 여섯 개다. 재고와 노출 여부만 주고 싶어도 그 사이의 카테고리, 할인율, 설명까지 넣는 생성자를 골라야 한다'
+    asks:
+      - '본문의 예시: `new Product("머그컵", 100, 25000, "주방", 0, null, true)`는 컴파일되나, 가격은 얼마인가 (된다. 100원)'
+      - '옮긴 상황: `new Transfer(fromId, toId, amount)`에서 `fromId`와 `toId`가 모두 `long`이다. 둘을 바꿔 넣으면 무엇이 일어나나 (컴파일되고 돈이 반대 방향으로 간다)'
+  - id: q2
+    title: setter로 하나씩 채우면 해결되나요?
+    conclusion:
+      lead: '순서 실수는 사라지지만, 다 채우기 전의 불완전한 객체가 밖에 보이고 객체를 불변으로 만들 수 없어요.'
+      sub: '코드 beans는 재고를 넣기 전에 저장해서, 저장된 상품의 재고가 0이에요.'
+    says:
+      - '자바빈즈 방식: 기본 생성자로 빈 객체를 만들고 setter로 채운다. `setPrice(25000)`처럼 이름이 있어 순서 실수가 없다'
+      - '문제 하나, 불완전한 상태: 코드 beans는 `setStock`보다 저장이 먼저다. 저장 시점의 재고는 0이다. 객체가 "다 만들어졌다"는 때가 없다'
+      - '문제 둘, 불변 불가: setter가 있으면 필드가 `final`일 수 없다. 만든 뒤에도 누구나 값을 바꾼다. 불변 객체 레슨에서 본 이점(공유해도 안전, 해시 키로 써도 안전)을 잃는다'
+      - '문제 셋, 검사할 곳이 없다: "이름은 꼭 있어야 한다"를 어느 setter에서 검사할지 정할 수 없다. 다 채운 뒤를 알 수 없기 때문이다'
+    asks:
+      - '본문의 예시: 코드 beans에서 `repository.save(p)` 시점의 재고는 (0)'
+      - '옮긴 상황: 설정 객체 `MailConfig`를 setter로 채우고 여러 스레드가 함께 쓴다. 한 스레드가 `setHost`를 바꾸면 다른 스레드는 (바뀐 값을 본다. 불변이 아니라서 공유가 안전하지 않다)'
+  - id: q3
+    title: 빌더 패턴은 어떻게 이 문제를 푸나요?
+    conclusion:
+      lead: '값을 이름 붙은 메서드로 하나씩 받아 두었다가, `build()`에서 한 번에 검사하고 불변 객체를 만들어요.'
+      sub: '순서 실수가 없고, 다 만들어지기 전의 객체는 밖에 나오지 않고, 만든 객체의 필드는 `final`이에요.'
+    says:
+      - '코드 builder의 구조: `Product`의 생성자는 `private`이고 `Builder`만 부른다. `Builder`는 값을 필드에 모은다. 값을 받는 메서드는 `return this`로 자기 자신을 돌려줘서 이어 부를 수 있다'
+      - '코드 use: `.name("머그컵").price(25000).stock(100)`처럼 이름으로 넣어서 순서가 바뀌어도 결과가 같다. `.stock(100).price(25000)`로 써도 가격은 25000이다'
+      - '`build()`가 검사하는 곳이다. 이름 없이 `build()`하면 `IllegalStateException`이 나고 상품은 만들어지지 않는다. 다 채우기 전의 `Product`는 존재하지 않는다'
+      - '`Product`에는 setter가 없고 필드가 `final`이다. 불변 객체다'
+      - '더 알아보기: 빌더가 리스트(태그 목록)를 받으면 `build()`에서 `List.copyOf`로 복사해 넘긴다. 빌더에 넣은 원래 리스트를 밖에서 바꿔도 만든 상품은 그대로다'
+    asks:
+      - '본문의 예시: `Product.builder().stock(100).price(25000).name("컵").build()`의 가격은 (25000)'
+      - '옮긴 상황: 빌더로 만든 `Coupon`의 `build()`가 "할인율은 0에서 100 사이"를 검사한다. `discountRate(150)`을 넣고 `build()`하면 (예외가 나고 쿠폰은 만들어지지 않는다)'
+  - id: q4
+    title: 빌더는 언제 쓰고, 무엇은 막지 못하나요?
+    conclusion:
+      lead: '필드가 많고 선택 인자가 여럿일 때 써요. 빠진 필수값은 `build()`가 실행될 때 잡히고, 컴파일할 때는 잡히지 않아요.'
+      sub: '필수값을 컴파일 때 잡고 싶으면 `builder(name, price)`처럼 필수값만 빌더를 만들 때 받아요. 필드가 서너 개면 생성자나 record로 충분해요.'
+    says:
+      - '코드 builder에서 `name`을 빠뜨린 코드는 컴파일된다. 실행해야 예외가 난다. 빌더는 실수를 실행 시점으로 미룬다'
+      - '코드 required: 필수값은 `builder("머그컵", 25000)`의 인자로 받는다. 빠뜨리면 컴파일 오류다. 선택 값만 메서드로 받는다'
+      - '쓰는 때: 필드가 대략 넷 이상이고 선택 인자가 여럿, 같은 타입 인자가 이어진다, 테스트에서 일부 값만 바꾼 객체를 많이 만든다'
+      - '쓰지 않는 때: 필드가 둘셋이고 모두 필수다. `record Money(long amount, Currency currency)`는 정식 생성자로 충분하다. 빌더는 클래스 하나를 더 쓰는 비용이 있다'
+      - 'record에도 빌더를 붙일 수 있다. record 안에 static 중첩 빌더를 두고 `build()`에서 정식 생성자를 부른다'
+    asks:
+      - '본문의 예시: 코드 builder에서 `Product.builder().price(25000).build()`는 컴파일되나, 실행하면 (컴파일된다. `IllegalStateException`)'
+      - '옮긴 상황: `record Point(int x, int y)`에 빌더를 만들어야 할까 (아니다. 필드 둘이 모두 필수라 정식 생성자로 충분하다)'
+      - '실무 구역: 롬복 `@Builder` 클래스에서 `private boolean visible = true;`로 기본값을 두고 빌더에서 `visible`을 넣지 않았다. `isVisible()`은 (false. `@Builder.Default`가 없으면 초기값이 무시된다)'
+practice:
+  says:
+    - '롬복 `@Builder`를 붙이면 코드 builder의 `Builder` 클래스를 컴파일할 때 만들어 준다. 검사가 필요하면 `build()` 대신 생성자나 정적 팩토리에서 한다. 이 저장소의 검증 코드에는 롬복이 없어서 롬복 공식 문서가 근거다'
+    - '흔한 실수: 코드 lombokDefault처럼 필드에 기본값을 두고 `@Builder`를 쓰면, 빌더로 만들 때 그 기본값이 쓰이지 않는다. `visible`은 `true`가 아니라 `false`다. 고친 코드: 필드에 `@Builder.Default`를 붙인다. 롬복 문서가 이 동작을 적어 두었다'
+    - '자바 API에도 빌더가 있다: `HttpRequest.newBuilder().uri(...).GET().build()`, `Stream.builder()`, `StringBuilder`. `HttpRequest`의 `build()`는 URI가 없으면 `IllegalStateException`을 던진다. 테스트로 확인한다'
+claims:
+  - claim: '코드 ctor는 컴파일되고 가격 100, 재고 25000인 상품이 된다'
+    how: '같은 생성자를 가진 클래스로 돌린다'
+  - claim: '코드 beans에서 저장 시점의 재고는 0이다'
+    how: '저장하는 곳을 가짜 리포지토리로 두고 받은 객체의 값을 기록한다'
+  - claim: '빌더는 메서드 순서와 상관없이 같은 결과이고, 이름 없이 `build()`하면 `IllegalStateException`이고, 만든 상품의 필드는 final이다'
+    how: '돌리고 리플렉션으로 필드의 `final`을 본다'
+  - claim: '코드 required에서 필수값을 빠뜨리면 컴파일 오류다'
+    how: '`JavaSource`로 컴파일한다'
+  - claim: '`HttpRequest.newBuilder().build()`는 `IllegalStateException`'
+    how: '돌려서 확인한다'
+sources:
+  - '롬복 @Builder와 @Builder.Default: https://projectlombok.org/features/Builder'
+  - '`HttpRequest.Builder.build()`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.net.http/java/net/http/HttpRequest.Builder.html'
+  - '빌더 패턴: GoF, Design Patterns(1994)의 Builder. 용어 설명 https://refactoring.guru/design-patterns/builder'

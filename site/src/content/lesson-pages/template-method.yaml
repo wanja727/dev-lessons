@@ -1,0 +1,180 @@
+# 템플릿 메서드 패턴 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 템플릿 메서드 패턴
+unit: 객체지향 설계와 패턴
+roadmap: O8
+type: 설계
+prerequisites:
+  - {slug: composition-over-inheritance, title: 상속보다 조합}
+  - {slug: strategy-pattern, title: 전략 패턴}
+assume: '자바 21. 추상 클래스와 인터페이스의 차이(상속과 다형성 레슨), 상속이 부모의 내부에 묶인다는 것(상속보다 조합 레슨), 바뀌는 부분을 인터페이스로 빼는 전략 패턴(전략 패턴 레슨).'
+example: '주문 목록을 파일로 내보내는 `OrderExporter`. 순서(머리말 쓰기, 주문마다 한 줄 쓰기, 꼬리말 쓰기)는 같고, CSV와 HTML이 각 단계의 모양만 달라요. 실무 구역에서는 스프링의 `OncePerRequestFilter`가 같은 모양이라는 것을 봐요.'
+intro:
+  - '주문 내보내기를 CSV와 HTML 두 가지로 만들었더니, 두 클래스에 "머리말 쓰고, 주문을 돌며 한 줄씩 쓰고, 꼬리말 쓰기"가 똑같이 들어 있어요. 취소된 주문은 빼라는 요구가 오자 두 곳을 고쳤고, 엑셀용을 더하면서 한 곳에는 빠뜨렸어요.'
+  - '템플릿 메서드는 이런 "순서는 같고 몇 단계만 다른" 코드의 순서를 부모에 한 번만 두는 패턴이에요. 스프링 코드에서 자주 만나요. 필터를 만들 때 상속하는 `OncePerRequestFilter`, 예전 `JdbcTemplate`의 이름도 여기서 왔어요. 전략 패턴과 무엇이 다른지는 면접에서 함께 묻는 질문이에요.'
+  - '이 레슨에서는 두 내보내기 코드를 템플릿 메서드로 합친 뒤 요구를 바꿔 고칠 곳을 세고, 같은 일을 전략 패턴으로 했을 때 클래스 수가 어떻게 다른지 확인해요.'
+covers:
+  - topic: '템플릿 메서드 패턴: 부모의 메서드 하나가 단계의 순서를 정하고, 바뀌는 단계는 자식이 채운다'
+    where: '질문 1'
+  - topic: '순서를 한 곳에 두면 순서에 대한 요구(취소 주문 빼기)를 한 곳에서 고친다'
+    where: '질문 1'
+  - topic: '할리우드 원칙: 자식이 부모를 부르지 않고 부모가 자식의 단계를 부른다'
+    where: '질문 1'
+  - topic: '뼈대를 추상 클래스에 두는 이유: 템플릿 메서드를 final로 막고, 단계는 protected abstract로 둔다'
+    where: '질문 2'
+  - topic: '인터페이스의 default 메서드로 뼈대를 두면 구현이 뼈대를 덮어쓸 수 있다(final 불가). 상태(필드)도 둘 수 없다'
+    where: '질문 2. 문법은 상속과 다형성(J7)'
+  - topic: '훅 메서드: 기본 동작이 있어 자식이 필요할 때만 오버라이드하는 단계'
+    where: '질문 2'
+  - topic: '전략 패턴과의 차이: 상속과 조합, 바꾸는 때(컴파일할 때와 실행 중), 바뀌는 축이 둘일 때의 클래스 수'
+    where: '질문 3'
+  - topic: '상속의 문제를 그대로 가진다: 부모가 바뀌면 자식이 영향을 받고, 클래스 상속은 하나뿐이다'
+    where: '질문 3. 상속의 문제는 상속보다 조합(O6)'
+  - topic: '템플릿과 콜백: 바뀌는 단계를 람다로 넘기는 모양(JdbcTemplate과 RowMapper)'
+    where: '질문 3의 더 알아보기'
+  - topic: '스프링의 OncePerRequestFilter: doFilter는 final, 자식은 doFilterInternal을 채운다'
+    where: '실무에서는'
+  - topic: '필터가 실행되는 위치와 순서'
+    where: '다루지 않음: 필터와 인터셉터(S7)'
+codes:
+  exporter: |-
+    abstract class OrderExporter {
+      final String export(List<Order> os) {
+        StringBuilder sb =⤶
+            new StringBuilder();
+        sb.append(header());
+        for (Order o : os) {
+          sb.append(row(o));
+        }
+        sb.append(footer());
+        return sb.toString();
+      }
+
+      protected abstract String header();
+      protected abstract String row(Order o);
+      protected String footer() {
+        return "";
+      }
+    }
+  csv: |-
+    class CsvExporter extends OrderExporter {
+      protected String header() {
+        return "id,total\n";
+      }
+      protected String row(Order o) {
+        return o.id() + "," + o.total()
+            + "\n";
+      }
+    }
+  html: |-
+    class HtmlExporter extends OrderExporter {
+      protected String header() {
+        return "<table>";
+      }
+      protected String row(Order o) {
+        return "<tr><td>" + o.id()
+            + "</td></tr>";
+      }
+      protected String footer() {
+        return "</table>";
+      }
+    }
+  skipCanceled: |-
+    for (Order o : os) {
+      [[if (o.canceled()) continue;]]
+      sb.append(row(o));
+    }
+  defaultSkeleton: |-
+    interface OrderExporter {
+      default String export(
+          List<Order> os) {
+        ...
+      }
+      String header();
+      String row(Order o);
+    }
+  strategyExporter: |-
+    interface RowFormat {
+      String header();
+      String row(Order o);
+      String footer();
+    }
+
+    class Exporter {
+      private final RowFormat format;
+      Exporter(RowFormat format) {
+        this.format = format;
+      }
+      String export(List<Order> os) {...}
+    }
+predict:
+  text: '코드 exporter와 코드 csv로 주문 두 건(id 1은 1000원, id 2는 2000원)을 내보내요. `new CsvExporter().export(orders)`가 돌려주는 글은 몇 줄일까요? 보기: 2줄, 3줄, 4줄.'
+  answer: '3줄. 머리말 `id,total`, 주문마다 한 줄씩 두 줄. CSV는 `footer()`를 오버라이드하지 않아서 부모의 기본값 빈 글이 붙는다. 질문 1과 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 템플릿 메서드 패턴은 무엇인가요?
+    conclusion:
+      lead: '부모 클래스의 메서드 하나가 단계의 순서를 정하고, 단계마다 달라지는 부분은 자식 클래스가 채우는 패턴이에요.'
+      sub: '순서가 부모 한 곳에 있어서, 순서에 대한 요구는 부모 하나만 고쳐요.'
+    says:
+      - '코드 exporter의 `export`가 템플릿 메서드다. 머리말, 주문마다 한 줄, 꼬리말 순서를 정한다. 무엇을 쓸지는 `header()`, `row()`, `footer()`가 정한다'
+      - '코드 csv와 코드 html은 단계만 채운다. 순서를 다시 쓰지 않는다'
+      - '예측의 답을 밝힌다. CSV로 두 건을 내보내면 `id,total`, `1,1000`, `2,2000` 세 줄이다'
+      - '"취소된 주문은 뺀다"는 순서에 대한 요구다. 코드 skipCanceled처럼 부모의 반복에 한 줄을 더하면 CSV와 HTML 모두에 적용된다. 템플릿 메서드가 없던 때에는 두 클래스를 고쳤다. 바꾸기 전후 패키지를 비교한다'
+      - '자식이 부모를 부르지 않고, 부모가 자식의 단계를 부른다. 이것을 할리우드 원칙("전화하지 마세요, 우리가 할게요")이라고 부른다'
+    asks:
+      - '본문의 예시: 코드 html로 주문 두 건을 내보내면 결과의 맨 앞과 맨 끝은 무엇인가 (`<table>`과 `</table>`)'
+      - '옮긴 상황: 정산 배치 `SettlementJob`의 `run()`이 "데이터 읽기, 계산, 저장, 알림" 순서를 정하고 카드와 계좌 정산이 `calculate()`만 다르게 채운다. "저장 전에 검증 단계를 넣는다"는 요구가 오면 어디를 고치나 (부모의 `run()` 하나)'
+  - id: q2
+    title: 뼈대는 왜 추상 클래스에 두고, 무엇을 막아 두나요?
+    conclusion:
+      lead: '템플릿 메서드를 `final`로 막아 자식이 순서를 바꾸지 못하게 하려고요. 인터페이스의 default 메서드는 `final`로 막을 수 없어요.'
+      sub: '자식이 꼭 채울 단계는 `abstract`로, 기본 동작이 있는 단계(훅)는 일반 메서드로 둬요.'
+    says:
+      - '코드 exporter의 `export`는 `final`이다. 자식이 `export`를 오버라이드하면 컴파일 오류다. 순서를 지키는 것이 이 패턴의 목적이라 막는다'
+      - '`header()`와 `row()`는 `protected abstract`다. 자식이 꼭 채워야 하고, 밖에서 단계만 따로 부르지 못한다'
+      - '`footer()`는 기본값(빈 글)이 있는 훅 메서드다. CSV는 그대로 두고 HTML만 오버라이드한다. 예측에서 CSV가 세 줄인 이유다'
+      - '코드 defaultSkeleton처럼 인터페이스의 default 메서드로 뼈대를 두면, 구현 클래스가 `export`를 덮어써도 컴파일된다. default 메서드에는 `final`을 붙일 수 없다. 단계를 `protected`로 숨길 수도 없다(인터페이스 메서드는 public)'
+      - '추상 클래스는 필드를 가질 수 있어서 단계 사이에 상태(줄 번호)를 넘길 수 있다'
+    asks:
+      - '본문의 예시: `CsvExporter`가 `export`를 오버라이드하면 무슨 일이 생기나 (컴파일 오류. `final`이다)'
+      - '옮긴 상황: 뼈대 메서드를 인터페이스의 `default`로 두고 `final`을 붙였다. 컴파일되나 (안 된다. default 메서드에는 final을 붙일 수 없다)'
+  - id: q3
+    title: 템플릿 메서드와 전략 패턴은 무엇이 다른가요?
+    conclusion:
+      lead: '템플릿 메서드는 상속으로 단계를 바꾸고, 전략은 조합으로 방법을 바꿔요.'
+      sub: '템플릿 메서드는 컴파일할 때 자식이 정해지고 부모에 묶여요. 바뀌는 축이 둘이면 자식이 곱만큼 늘어서 전략이 나아요.'
+    says:
+      - '같은 내보내기를 전략으로 쓰면 코드 strategyExporter다. `Exporter`가 순서를 갖고 `RowFormat`을 받는다'
+      - '차이 하나, 바꾸는 때: 템플릿 메서드는 `new CsvExporter()`를 만들 때 정해진다. 전략은 실행 중에 다른 `RowFormat`을 넣을 수 있다'
+      - '차이 둘, 묶임: 템플릿 메서드의 자식은 부모의 내부(어느 단계가 언제 불리는지)에 기댄다. 상속보다 조합에서 본 문제가 그대로 있다. 자바는 부모를 하나만 둘 수 있다'
+      - '차이 셋, 바뀌는 축이 둘일 때: 형식(CSV, HTML)과 압축(없음, gzip)을 함께 바꾸면 템플릿 메서드는 자식이 2 곱하기 2로 4개, 전략은 형식 2개와 압축 2개로 4개지만 축이 3개씩이면 9개와 6개다. 테스트로 클래스 수를 세지 않고 식으로 보인다'
+      - '템플릿 메서드가 나은 때: 단계가 여럿이고 서로 상태를 나누며, 바뀔 일이 적고, 프레임워크가 뼈대를 정해 두는 경우'
+      - '더 알아보기: 템플릿과 콜백. `JdbcTemplate.query(sql, rowMapper)`는 순서(연결, 실행, 결과 돌기, 닫기)를 갖고 한 줄을 객체로 바꾸는 단계만 람다로 받는다. 상속 대신 전략처럼 넘기는 템플릿 메서드다'
+    widget:
+      kind: compare
+      note: '왼쪽 칸은 템플릿 메서드판, 오른쪽 칸은 전략판이다. 요구(엑셀 형식 더하기, 실행 중에 형식 바꾸기, 압축 여부를 새 축으로 더하기)를 고르면 양쪽에서 새로 만들 클래스와 고칠 클래스, 할 수 있는지가 나온다. 실행 중 바꾸기는 템플릿 메서드판에서 새 객체를 만들어야 한다고 표시한다'
+    asks:
+      - '본문의 예시: 형식 셋(CSV, HTML, 엑셀)과 압축 셋(없음, gzip, zip)을 모두 조합하려면 템플릿 메서드로는 자식 클래스가 몇 개, 전략으로는 구현 클래스가 몇 개 필요한가 (9개, 6개)'
+      - '옮긴 상황: 다음 가운데 템플릿 메서드 패턴의 특징은? 보기: 실행 중에 방법을 바꿔 끼운다 / 상속으로 단계를 채우고 순서는 부모가 정한다 / 바뀌는 부분을 생성자로 받는다 (둘째)'
+      - '실무 구역: `OncePerRequestFilter`를 상속한 필터에서 `doFilter`를 오버라이드하면 무엇이 일어나나 (컴파일 오류. `doFilter`는 final이고 `doFilterInternal`을 채워야 한다)'
+practice:
+  says:
+    - '스프링의 `OncePerRequestFilter`가 템플릿 메서드다. `doFilter`는 `final`이고, "이 요청에서 이미 실행했나"를 확인한 뒤 자식의 `doFilterInternal`을 부른다. 자식은 요청마다 한 번 할 일만 채운다'
+    - '흔한 실수: 필터를 만들며 `doFilter`를 오버라이드하려다 컴파일 오류를 만난다. 또는 `Filter`를 직접 구현해서, 같은 요청 안의 포워드나 에러 디스패치 때 다시 실행된다. 고친 코드: `OncePerRequestFilter`를 상속하고 `doFilterInternal`을 채운다'
+    - '`MockHttpServletRequest`와 `MockFilterChain`으로 필터를 직접 불러 `doFilterInternal`이 불리는 것을 테스트한다. `doFilter` 오버라이드가 컴파일 오류인 것은 `JavaSource`로 확인한다'
+    - '필터가 요청 흐름의 어디에서 실행되는지는 필터와 인터셉터(S7)에서 다룬다'
+claims:
+  - claim: '코드 csv로 주문 두 건을 내보내면 세 줄, 코드 html은 `<table>`로 시작해 `</table>`로 끝난다'
+    how: '돌려서 확인한다'
+  - claim: '취소 주문 빼기는 템플릿 메서드판에서 부모 한 파일, 합치기 전 판에서 두 파일을 고친다'
+    how: '바꾸기 전후 패키지를 비교한다'
+  - claim: '`final export`를 오버라이드하면 컴파일 오류, default 메서드에 `final`을 붙이면 컴파일 오류, default 뼈대는 구현이 덮어쓸 수 있다'
+    how: '`JavaSource`로 세 소스를 컴파일한다'
+  - claim: '`OncePerRequestFilter`의 `doFilter`는 final이고, 상속한 필터의 `doFilterInternal`이 요청마다 한 번 불린다'
+    how: '`JavaSource`로 오버라이드를 컴파일하고, 목 요청으로 필터를 부른다'
+sources:
+  - '템플릿 메서드의 정의: GoF, Design Patterns(1994)의 Template Method. 용어 설명 https://refactoring.guru/design-patterns/template-method'
+  - 'default 메서드에 final을 쓸 수 없다: 자바 언어 명세 9.4 https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html#jls-9.4'
+  - '`OncePerRequestFilter`: 스프링 API 문서 https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/filter/OncePerRequestFilter.html'

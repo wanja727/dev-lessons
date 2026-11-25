@@ -1,0 +1,202 @@
+# 프록시와 데코레이터 패턴 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 프록시와 데코레이터 패턴
+unit: 객체지향 설계와 패턴
+roadmap: O12
+type: 설계
+prerequisites:
+  - {slug: strategy-pattern, title: 전략 패턴}
+assume: '자바 21. 인터페이스로 받고 구현을 갈아 끼우는 것(전략 패턴 레슨), 조합으로 필드에 갖고 위임하는 것(상속보다 조합 레슨). 리플렉션의 `Method.invoke`를 본 적이 있으면 질문 4가 쉬워요(리플렉션과 어노테이션 레슨).'
+example: '쇼핑몰의 상품 가격 조회 `PriceService`. 진짜 구현은 외부 가격 API를 불러 느려요. 같은 인터페이스로 감싸 캐시를 붙이고(프록시), 걸린 시간을 찍고(데코레이터), 둘을 겹쳐요. 마지막에는 감싸는 클래스를 직접 쓰지 않고 JDK 동적 프록시로 만들어요.'
+intro:
+  - '상품 목록 화면이 느려서 보니 같은 상품의 가격을 외부 API로 몇 번씩 묻고 있었어요. 가격 서비스 코드를 고치지 않고 캐시를 붙이고 싶고, 걸린 시간도 찍고 싶어요. 서비스를 쓰는 컨트롤러 열 곳도 고치고 싶지 않아요.'
+  - '이럴 때 쓰는 것이 "같은 인터페이스로 감싸기"예요. 감싼 객체는 진짜와 같은 타입이라 쓰는 쪽은 바뀐 줄 몰라요. 스프링의 `@Transactional`, `@Cacheable`, AOP가 모두 이 원리로 동작하고, JPA의 지연 로딩도 프록시예요. 그래서 "`@Transactional`이 붙은 메서드를 같은 클래스 안에서 부르면 왜 트랜잭션이 안 걸리나요"라는 질문도 이 레슨에서 답이 나와요.'
+  - '이 레슨에서는 가격 서비스를 감싸는 클래스를 직접 만들어 진짜 API가 불린 횟수를 세고, 감싸는 순서를 바꾸면 결과가 어떻게 달라지는지, 자기 메서드를 부를 때 감싼 것을 건너뛰는 것을 테스트로 확인해요.'
+covers:
+  - topic: '같은 인터페이스로 감싸기: 감싸는 객체가 진짜 객체를 필드로 갖고 같은 인터페이스를 구현해 호출을 넘긴다'
+    where: '질문 1'
+  - topic: '쓰는 쪽은 인터페이스만 알아서 감싼 것인지 모른다. 쓰는 쪽 코드를 고치지 않고 기능을 붙인다'
+    where: '질문 1'
+  - topic: '프록시: 진짜 객체로 가는 접근을 다룬다. 캐시, 지연 로딩, 권한 확인. 진짜를 부르지 않기도 한다'
+    where: '질문 2'
+  - topic: '데코레이터: 진짜 객체에 기능을 덧붙인다. 항상 넘기고 앞뒤에 일을 더한다. 겹쳐 쌓는다'
+    where: '질문 2'
+  - topic: '두 패턴은 구조가 같고 의도가 다르다'
+    where: '질문 2'
+  - topic: '겹쳐 감쌀 때 순서에 따라 결과가 달라진다'
+    where: '질문 3'
+  - topic: '자바 I/O의 데코레이터: BufferedReader가 Reader를 감싼다'
+    where: '질문 3의 더 알아보기'
+  - topic: 'JDK 동적 프록시: Proxy.newProxyInstance와 InvocationHandler로 실행 중에 구현 클래스를 만든다. 인터페이스만 된다'
+    where: '질문 4. 리플렉션은 리플렉션과 어노테이션(J17)'
+  - topic: '클래스를 상속해 만드는 프록시(CGLIB)와 final 메서드'
+    where: '질문 4의 더 알아보기. 스프링이 고르는 방식은 AOP(S9)'
+  - topic: '자기 자신의 메서드를 부르면(this.method) 프록시를 지나지 않는다'
+    where: '질문 4, 실무에서는'
+  - topic: '스프링의 ProxyFactory와 MethodInterceptor로 같은 일 하기'
+    where: '실무에서는'
+  - topic: '어드바이스, 포인트컷, 어드바이스 순서'
+    where: '다루지 않음: AOP(S9)'
+  - topic: '@Transactional이 프록시로 트랜잭션을 여닫는 방법'
+    where: '다루지 않음: @Transactional 동작 원리(S10)'
+  - topic: 'JPA 지연 로딩의 프록시 엔티티'
+    where: '다루지 않음: 프록시와 지연 로딩(P4)'
+  - topic: '인터페이스가 맞지 않는 객체를 잇는 어댑터'
+    where: '다루지 않음: 어댑터와 퍼사드 패턴(O14)'
+codes:
+  service: |-
+    interface PriceService {
+      int price(long productId);
+    }
+
+    class ApiPriceService
+        implements PriceService {
+      public int price(long productId) {
+        // 외부 가격 API를 부른다
+      }
+    }
+  cache: |-
+    class CachingPriceService
+        implements PriceService {
+      private final PriceService target;
+      private final Map<Long, Integer>⤶
+          cache = new HashMap<>();
+
+      CachingPriceService(PriceService t) {
+        this.target = t;
+      }
+
+      public int price(long productId) {
+        return cache.computeIfAbsent(
+            productId, target::price);
+      }
+    }
+  timing: |-
+    class TimingPriceService
+        implements PriceService {
+      private final PriceService target;
+
+      public int price(long productId) {
+        long start = System.nanoTime();
+        int p = target.price(productId);
+        log(System.nanoTime() - start);
+        return p;
+      }
+    }
+  stack: |-
+    PriceService a =
+        new TimingPriceService(
+            new CachingPriceService(api));
+
+    PriceService b =
+        new CachingPriceService(
+            new TimingPriceService(api));
+  dynamic: |-
+    PriceService proxy = (PriceService)
+        Proxy.newProxyInstance(
+            loader,
+            new Class<?>[] {
+                PriceService.class },
+            (p, method, args) -> {
+              log(method.getName());
+              return method.invoke(
+                  api, args);
+            });
+  selfCall: |-
+    class ApiPriceService
+        implements PriceService {
+      public int price(long id) {...}
+
+      public int total(List<Long> ids) {
+        int sum = 0;
+        for (long id : ids) {
+          sum += [[this.price(id)]];
+        }
+        return sum;
+      }
+    }
+predict:
+  text: '코드 cache로 감싼 가격 서비스에서 같은 상품(id 1)의 가격을 세 번, 다른 상품(id 2)의 가격을 한 번 물어요. 진짜 가격 API(`ApiPriceService.price`)는 몇 번 불릴까요? 보기: 4번, 2번, 1번.'
+  answer: '2번. 상품마다 처음 한 번만 진짜에게 넘기고, 다음부터는 캐시에서 답한다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 같은 인터페이스로 감싼다는 것은 무엇이고, 무엇이 좋은가요?
+    conclusion:
+      lead: '감싸는 객체가 진짜 객체를 필드로 갖고, 같은 인터페이스를 구현해서 호출을 받은 뒤 진짜에게 넘기는 것이에요.'
+      sub: '쓰는 쪽은 인터페이스만 알아서, 진짜를 받았는지 감싼 것을 받았는지 몰라요. 쓰는 쪽과 진짜 객체를 고치지 않고 기능을 붙여요.'
+    says:
+      - '코드 cache의 `CachingPriceService`는 `PriceService`를 구현하고, 진짜 `PriceService`를 생성자로 받는다. `price`를 받으면 캐시에 없을 때만 진짜에게 넘긴다'
+      - '예측의 답을 밝힌다. id 1을 세 번, id 2를 한 번 물으면 진짜 API는 두 번 불린다. 결과 가격은 감싸기 전과 같다'
+      - '컨트롤러는 `PriceService` 타입으로 받는다. 조립하는 곳에서 `new CachingPriceService(new ApiPriceService())`를 넘기면 컨트롤러는 그대로다. 바꾸기 전후 파일을 비교한다'
+      - '`ApiPriceService`도 그대로다. 캐시라는 일이 따로 한 클래스에 모였다'
+      - '이것은 상속보다 조합에서 본 위임이다. 다른 점은 감싸는 쪽이 진짜와 같은 인터페이스를 구현해서 진짜 자리에 들어간다는 것이다'
+    asks:
+      - '본문의 예시: 코드 cache에서 id 1, 2, 1, 3, 2 순서로 물으면 진짜 API는 몇 번 불리나 (3번)'
+      - '옮긴 상황: `MemberRepository`를 감싸 `findById` 결과를 로그로 남기는 클래스를 만들었다. `MemberService`는 `MemberRepository` 타입으로 받는다. `MemberService`를 고쳐야 하나 (아니다. 조립하는 곳에서 감싼 것을 넘긴다)'
+  - id: q2
+    title: 프록시와 데코레이터는 무엇이 다른가요?
+    conclusion:
+      lead: '구조는 같고 의도가 달라요. 프록시는 진짜로 가는 접근을 다루고, 데코레이터는 진짜에 기능을 덧붙여요.'
+      sub: '프록시는 캐시처럼 진짜를 부르지 않기도 해요. 데코레이터는 항상 진짜에게 넘기고 앞뒤에 일을 더하며, 여러 겹으로 쌓아요.'
+    says:
+      - '프록시(대리인): 진짜 객체 앞에 서서 접근을 다룬다. 캐시 프록시는 답을 알면 진짜를 부르지 않는다. 지연 로딩 프록시는 처음 쓸 때 진짜를 만든다. 권한 프록시는 권한이 없으면 막는다'
+      - '데코레이터(장식): 진짜의 결과는 그대로 두고 일을 더한다. 코드 timing은 늘 진짜에게 넘기고 걸린 시간을 찍는다. 시간 찍기, 로그, 재시도처럼 하나씩 덧붙여 쌓는다'
+      - '두 클래스는 코드 모양이 같다. 같은 인터페이스 구현, 진짜를 필드로, 넘기기. 그래서 이름은 무엇을 하려고 감쌌는지로 붙인다'
+      - '구별하는 질문: "이 감싸는 객체가 진짜를 부르지 않는 경우가 있는가, 진짜에게 가는 길을 다루는가?"면 프록시, "진짜는 그대로 부르고 무언가를 더하는가?"면 데코레이터'
+    asks:
+      - '본문의 예시: 코드 timing으로 감싸 id 1을 세 번 물으면 진짜 API는 몇 번 불리나 (3번. 데코레이터는 늘 넘긴다)'
+      - '옮긴 상황: 관리자가 아니면 `delete`를 막고 예외를 던지는 감싸는 클래스는 프록시와 데코레이터 가운데 어느 의도에 가깝나 (프록시. 진짜로 가는 접근을 다룬다)'
+  - id: q3
+    title: 여러 겹으로 감싸면 순서가 중요한가요?
+    conclusion:
+      lead: '네. 바깥 것이 먼저 호출을 받아서, 감싸는 순서에 따라 무엇을 재고 무엇을 건너뛰는지가 달라져요.'
+      sub: '시간 재기를 캐시 바깥에 두면 캐시에서 답한 빠른 호출까지 재고, 안쪽에 두면 진짜 API를 부른 느린 호출만 재요.'
+    says:
+      - '코드 stack의 a는 시간 재기가 바깥, b는 캐시가 바깥이다. 같은 상품을 세 번 물었을 때 a는 시간 로그가 3번, b는 1번 찍힌다. 진짜 API는 둘 다 1번이다'
+      - '호출은 바깥에서 안으로 들어가고, 결과는 안에서 바깥으로 나온다. b에서 캐시가 답하면 안쪽의 시간 재기까지 호출이 가지 않는다'
+      - '무엇을 알고 싶은지로 순서를 정한다. 사용자가 느낀 시간이면 a, 외부 API가 걸린 시간이면 b'
+      - '더 알아보기: 자바 I/O가 데코레이터를 쓴다. `new BufferedReader(new InputStreamReader(in))`은 바이트를 글자로 바꾸는 것 위에 버퍼를 얹는다. 모두 `Reader`다'
+    widget:
+      kind: toggle
+      note: 'a(시간 재기가 바깥)와 b(캐시가 바깥)를 고르고 "같은 상품 세 번 묻기"를 누르면 호출이 지나는 겹(TimingPriceService, CachingPriceService, ApiPriceService)을 줄로 보여 준다. 숫자는 검증 테스트가 센 값: 시간 로그 횟수 a 3번, b 1번, 진짜 API 둘 다 1번'
+    asks:
+      - '본문의 예시: 코드 stack의 b로 같은 상품을 다섯 번 물으면 시간 로그는 몇 번 찍히나 (1번)'
+      - '옮긴 상황: 권한 확인 프록시와 로그 데코레이터를 겹친다. 권한이 없는 호출도 로그에 남기려면 무엇을 바깥에 두나 (로그 데코레이터)'
+  - id: q4
+    title: 감싸는 클래스를 매번 만들지 않을 수는 없나요?
+    conclusion:
+      lead: '있어요. JDK 동적 프록시는 실행 중에 인터페이스의 구현 클래스를 만들고, 모든 호출을 `InvocationHandler` 하나로 보내요.'
+      sub: '감싼 것은 바깥에서 들어오는 호출만 받아요. 진짜 객체가 안에서 `this.method()`로 자기 메서드를 부르면 프록시를 지나지 않아요.'
+    says:
+      - '코드 dynamic: `Proxy.newProxyInstance`에 인터페이스 목록과 핸들러를 준다. 돌려받은 객체는 `PriceService`이고, 어떤 메서드를 불러도 핸들러가 받는다. 핸들러가 `method.invoke(api, args)`로 진짜에게 넘긴다'
+      - '메서드가 열 개인 인터페이스도 핸들러 하나로 모든 메서드에 로그를 붙인다. 감싸는 클래스를 직접 쓰면 메서드 열 개를 다 위임해야 한다'
+      - '실제 클래스 이름은 `jdk.proxy1.$Proxy...` 같은 실행 중에 만든 이름이다. JDK 동적 프록시는 인터페이스만 감싼다. 인터페이스가 없는 클래스는 `IllegalArgumentException`이다'
+      - '자기 호출: 코드 selfCall에서 프록시로 `total([1, 2])`를 부르면 핸들러는 `total` 한 번만 받는다. `total` 안의 `this.price`는 진짜 객체의 메서드를 바로 부르기 때문이다. 캐시 프록시였다면 `price`에 캐시가 걸리지 않는다'
+      - '더 알아보기: 인터페이스가 없을 때는 클래스를 상속해 메서드를 오버라이드하는 프록시를 만든다(CGLIB, ByteBuddy). 그래서 `final` 메서드와 `private` 메서드는 감쌀 수 없다(상속과 다형성 레슨). 스프링이 어느 쪽을 고르는지는 AOP(S9)'
+    asks:
+      - '본문의 예시: 코드 dynamic의 프록시로 `price(1)`을 두 번 부르면 핸들러가 받는 호출은 몇 번인가 (2번)'
+      - '옮긴 상황: 동적 프록시로 감싼 `OrderService`의 `placeOrder()`가 안에서 `this.validate()`를 부른다. 핸들러는 `validate` 호출을 받나 (아니다. this로 부른 것은 프록시를 지나지 않는다)'
+      - '실무 구역: 스프링 빈의 `@Transactional` 없는 메서드 `a()`가 같은 클래스의 `@Transactional` 메서드 `b()`를 부른다. 컨트롤러가 `a()`를 부르면 `b()`에 트랜잭션이 걸리나 (안 걸린다. 자기 호출은 프록시를 지나지 않는다)'
+practice:
+  says:
+    - '스프링 AOP는 질문 4의 동적 프록시를 만들어 주는 도구다. `ProxyFactory`에 진짜 객체와 `MethodInterceptor`를 넣으면 프록시가 나온다. 인터셉터의 `invocation.proceed()`가 진짜에게 넘기는 줄이다. 테스트로 호출 횟수를 센다'
+    - '흔한 실수: `@Transactional`이나 `@Cacheable`이 붙은 메서드를 같은 클래스의 다른 메서드에서 부른다. 질문 4의 자기 호출이라 프록시를 지나지 않아 트랜잭션이나 캐시가 걸리지 않는다. `ProxyFactory`로 같은 상황을 만들어 인터셉터가 받지 못하는 것을 보인다. 고친 코드: 그 메서드를 다른 빈으로 옮기고 주입받아 부른다'
+    - '`@Transactional`이 프록시로 하는 일은 @Transactional 동작 원리(S10)에서, 어드바이스와 포인트컷은 AOP(S9)에서 다룬다'
+claims:
+  - claim: '코드 cache에서 id 1 세 번, id 2 한 번을 물으면 진짜 API는 2번'
+    how: '진짜 구현에서 호출 횟수를 센다'
+  - claim: '감싼 것을 넘겨도 컨트롤러와 `ApiPriceService` 파일은 그대로다'
+    how: '바꾸기 전후 패키지를 비교한다'
+  - claim: '코드 stack에서 같은 상품 세 번: a는 시간 로그 3번, b는 1번, 진짜는 둘 다 1번'
+    how: '로그와 호출 횟수를 센다'
+  - claim: '동적 프록시는 모든 메서드 호출을 핸들러로 보내고, 클래스 이름은 `$Proxy`를 담고, 인터페이스가 아닌 클래스를 주면 `IllegalArgumentException`'
+    how: '돌려서 확인한다'
+  - claim: '자기 호출은 핸들러를 지나지 않는다'
+    how: '`total`을 부르고 핸들러가 받은 메서드 이름을 기록한다'
+  - claim: '`ProxyFactory`와 `MethodInterceptor`로도 자기 호출은 인터셉터를 지나지 않는다'
+    how: '스프링 `ProxyFactory`로 같은 상황을 만든다'
+sources:
+  - '`java.lang.reflect.Proxy`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/Proxy.html'
+  - '스프링 AOP 프록시와 자기 호출: 스프링 공식 문서 https://docs.spring.io/spring-framework/reference/core/aop/proxying.html'
+  - '프록시와 데코레이터 패턴: GoF, Design Patterns(1994). 용어 설명 https://refactoring.guru/design-patterns/proxy'

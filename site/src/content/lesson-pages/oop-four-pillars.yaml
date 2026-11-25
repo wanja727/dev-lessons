@@ -1,0 +1,201 @@
+# 객체지향의 네 가지 특징 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 객체지향의 네 가지 특징
+unit: 객체지향 설계와 패턴
+roadmap: O1
+type: 설계
+prerequisites:
+  - {slug: inheritance-polymorphism, title: 상속과 다형성}
+assume: '자바 21. 클래스와 객체, 인터페이스와 `implements`, 오버라이딩(상속과 다형성 레슨). `private`과 `public`이 무엇을 막는지는 문법으로 알고 있다고 봐요.'
+example: '쇼핑몰의 포인트 지갑 `PointWallet`(잔액을 쓰고 채운다)과 결제 수단(카드, 포인트). 결제 코드 `checkout`이 결제 수단을 몰라도 되게 바꿔 가며 네 가지 특징을 하나씩 코드에서 찾아요.'
+intro:
+  - '포인트 잔액이 마이너스인 회원이 나왔어요. 찾아보니 잔액을 바꾸는 코드가 서비스 세 곳에 흩어져 있었고, 그 가운데 한 곳이 잔액을 확인하지 않고 빼고 있었어요. 필드를 `public`으로 열어 두거나 setter로 아무 값이나 넣게 해 두면 이런 일이 생겨요.'
+  - '면접에서 "객체지향의 특징을 말해 보세요"라고 물으면 캡슐화, 상속, 다형성, 추상화를 외워서 답하기 쉬워요. 하지만 실무에서 필요한 것은 이 넷이 코드에서 무엇을 막고 무엇을 쉽게 하는지예요. 엔티티에 setter를 둘지, 서비스가 구현 클래스를 알아도 되는지를 정할 때 이 기준을 써요.'
+  - '이 레슨에서는 포인트 지갑과 결제 코드를 고쳐 가며, 규칙을 한 곳에 모으면 잘못된 값이 들어가지 않는 것과, 결제 수단을 하나 더해도 결제 코드를 고치지 않는 것을 테스트로 확인해요.'
+covers:
+  - topic: '캡슐화: 데이터와 그 데이터를 바꾸는 규칙을 한 객체에 두고, 밖에서는 메서드로만 바꾸게 한다'
+    where: '질문 1'
+  - topic: '접근 제어자가 캡슐화에서 하는 일: private 필드는 규칙을 건너뛰는 길을 막는다'
+    where: '질문 1. 접근 제어자 네 가지의 문법은 상속과 다형성(J7)'
+  - topic: '캡슐화하면 규칙을 고칠 곳이 한 곳이 된다'
+    where: '질문 1'
+  - topic: 'getter와 setter를 모두 열면 private이어도 캡슐화가 아니다. 묻고 꺼내서 계산하지 말고 객체에 시킨다'
+    where: '질문 2'
+  - topic: '내부 컬렉션을 그대로 돌려주는 getter는 밖에서 안을 바꾸게 한다. 바꿀 수 없는 보기를 돌려준다'
+    where: '질문 2'
+  - topic: '추상화: 쓰는 쪽이 알아야 할 것만 남기고 세부를 감춘 타입을 만든다. 자바에서는 인터페이스와 추상 클래스'
+    where: '질문 3'
+  - topic: '추상화의 수준: 이름과 메서드가 "무엇을 하나"를 말하고 "어떻게 하나"를 말하지 않는다'
+    where: '질문 3'
+  - topic: '상속(구현)은 같은 타입으로 묶는 수단이고, 다형성은 같은 호출이 실제 객체에 따라 다르게 동작하는 것이다'
+    where: '질문 4'
+  - topic: '다형성 덕분에 새 종류를 더해도 호출하는 쪽을 고치지 않는다. if와 instanceof로 나눈 코드와 비교'
+    where: '질문 4. 원칙으로서는 단일 책임과 개방 폐쇄 원칙(O3)'
+  - topic: '네 가지가 서로 기대는 관계: 추상화한 타입을 상속으로 구현하고, 다형성으로 부르고, 캡슐화로 세부를 감춘다'
+    where: '질문 4'
+  - topic: '절차지향 코드와의 차이: 데이터를 꺼내 바깥 함수가 처리하는가, 데이터를 가진 객체가 처리하는가'
+    where: '질문 2의 더 알아보기'
+  - topic: '엔티티에 setter를 열지 않고 의미 있는 메서드를 두기'
+    where: '실무에서는'
+  - topic: '상속으로 재사용할 때의 문제'
+    where: '다루지 않음: 상속보다 조합(O6)'
+  - topic: '부모 자리에 자식을 넣어도 맞게 동작해야 한다는 원칙'
+    where: '다루지 않음: 리스코프 치환과 인터페이스 분리 원칙(O4)'
+  - topic: '한 곳을 고치면 다른 곳이 깨지는 정도'
+    where: '다루지 않음: 결합도와 응집도(O2)'
+  - topic: 'JPA 엔티티의 기본 생성자와 접근 수준'
+    where: '다루지 않음: ORM과 JPA(P1)'
+codes:
+  publicWallet: |-
+    class PointWallet {
+      public int balance;
+    }
+
+    // 주문 서비스
+    wallet.balance -= 3000;
+  wallet: |-
+    class PointWallet {
+      private int balance;
+
+      void use(int amount) {
+        if (amount > balance) {
+          throw new IllegalStateException(
+              "잔액 부족");
+        }
+        balance -= amount;
+      }
+
+      void charge(int amount) {
+        balance += amount;
+      }
+    }
+  setterWallet: |-
+    class PointWallet {
+      private int balance;
+      int getBalance() { return balance; }
+      void setBalance(int b) { balance = b; }
+    }
+
+    // 주문 서비스
+    int b = wallet.getBalance();
+    wallet.setBalance(b - 3000);
+  history: |-
+    private final List<Long> history =
+        new ArrayList<>();
+
+    List<Long> getHistory() {
+      return history;
+    }
+  payment: |-
+    interface Payment {
+      void pay(int amount);
+    }
+
+    class CardPayment implements Payment {
+      public void pay(int amount) { ... }
+    }
+
+    class PointPayment implements Payment {
+      private final PointWallet wallet;
+      public void pay(int amount) {
+        wallet.use(amount);
+      }
+    }
+  checkoutIf: |-
+    void checkout(String method, int amount) {
+      if (method.equals("CARD")) {
+        cardApi.approve(amount);
+      } else if (method.equals("POINT")) {
+        wallet.use(amount);
+      }
+    }
+  checkout: |-
+    void checkout(Payment payment,
+                  int amount) {
+      payment.pay(amount);
+    }
+predict:
+  text: '포인트 지갑의 잔액이 1000점이에요. 코드 publicWallet처럼 잔액 필드가 `public`이고, 주문 서비스가 `wallet.balance -= 3000`을 실행해요. 무슨 일이 일어날까요? 보기: 컴파일 오류, 실행 중 예외, 잔액이 -2000이 된다.'
+  answer: '잔액이 -2000이 된다. 필드가 열려 있으면 "잔액보다 많이 쓸 수 없다"는 규칙을 아무도 확인하지 않는다. 질문 1에서 밝힌다.'
+questions:
+  - id: q1
+    title: 캡슐화는 무엇이고, 무엇을 막아 주나요?
+    conclusion:
+      lead: '데이터와 그 데이터를 바꾸는 규칙을 한 객체에 두고, 밖에서는 메서드로만 바꾸게 하는 것이에요.'
+      sub: '필드를 `private`으로 닫으면 규칙을 건너뛰는 길이 없어져서, 잘못된 값이 들어가는 것을 한 곳에서 막아요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 publicWallet에서 잔액 1000점에 3000을 빼면 -2000이 된다. 컴파일도 실행도 막지 않는다'
+      - '규칙("잔액보다 많이 쓸 수 없다")이 필드를 바꾸는 모든 곳에 흩어진다. 서비스 세 곳이 잔액을 바꾸면 세 곳 모두 확인해야 하고, 하나라도 빠지면 잘못된 값이 들어간다'
+      - '코드 wallet은 필드를 `private`으로 닫고 `use()`에서만 뺀다. 1000점에서 3000을 쓰면 `IllegalStateException`이 나고 잔액은 1000 그대로다'
+      - '접근 제어자는 캡슐화의 도구다. `private`은 "이 클래스 밖에서는 이 필드를 직접 못 바꾼다"를 컴파일러가 지키게 한다. 지갑 밖에서 `wallet.balance -= 3000`을 쓰면 컴파일 오류다'
+      - '규칙이 바뀌어도 고칠 곳이 `use()` 하나다. 예를 들어 "한 번에 5만 점까지만 쓸 수 있다"를 더할 때 지갑 클래스만 고친다'
+    asks:
+      - '본문의 예시: 코드 wallet에서 잔액 1000점일 때 `use(3000)`을 부르면 어떻게 되나 (예외가 나고 잔액은 1000)'
+      - '옮긴 상황: 재고 `Stock` 클래스의 `quantity` 필드가 public이다. 재고를 줄이는 코드가 다섯 곳에 있을 때 "재고는 0 밑으로 내려가지 않는다"를 지키려면 몇 곳을 확인해야 하나. private으로 닫고 `decrease()`에 두면 몇 곳인가 (5곳, 1곳)'
+  - id: q2
+    title: 필드를 private으로 두고 getter와 setter를 열면 캡슐화인가요?
+    conclusion:
+      lead: '아니요. setter로 아무 값이나 넣을 수 있으면 규칙은 여전히 밖에 있어요.'
+      sub: '값을 꺼내 밖에서 계산하지 말고, 데이터를 가진 객체에게 일을 시켜요. 컬렉션은 바꿀 수 없는 보기로 돌려줘요.'
+    says:
+      - '코드 setterWallet은 필드가 private이지만, 주문 서비스가 잔액을 꺼내 빼고 다시 넣는다. 1000점에서 3000을 빼면 -2000이 된다. 코드 publicWallet과 결과가 같다'
+      - 'setter는 필드를 연 것과 같은 길을 낸다. 규칙을 확인하는 코드는 여전히 서비스에 있어야 한다'
+      - '고치는 방법: 꺼내서 계산하지 말고 시킨다. `wallet.use(3000)`처럼 객체가 자기 데이터로 판단하게 한다'
+      - '컬렉션 필드: 코드 history의 getter는 내부 리스트를 그대로 준다. 밖에서 `getHistory().add(...)`나 `clear()`를 하면 지갑의 기록이 바뀐다'
+      - '`Collections.unmodifiableList(history)`나 `List.copyOf(history)`를 돌려주면 밖에서 `add`할 때 `UnsupportedOperationException`이 난다'
+      - '더 알아보기: 절차지향 코드는 데이터를 꺼내 바깥 함수가 처리한다. 객체지향 코드는 데이터를 가진 객체가 처리한다. getter와 setter만 있는 클래스는 데이터 묶음이고, 규칙은 서비스에 있다'
+    widget:
+      kind: compare
+      note: '왼쪽 칸은 코드 setterWallet을 쓰는 주문 서비스, 오른쪽 칸은 코드 wallet을 쓰는 주문 서비스다. 요구(잔액 확인 규칙 더하기, 한 번에 5만 점 제한 더하기)를 고르면 고쳐야 하는 곳에 "고침"이 붙는다. 왼쪽은 잔액을 바꾸는 서비스 셋(주문, 환불, 이벤트) 모두, 오른쪽은 `PointWallet` 하나다'
+    asks:
+      - '본문의 예시: 코드 setterWallet에서 잔액이 1000점이고 서비스가 `wallet.setBalance(wallet.getBalance() - 3000)`을 실행하면 잔액은 얼마인가 (-2000)'
+      - '옮긴 상황: 장바구니가 `private final List<Item> items`를 두고 `getItems()`로 그대로 돌려준다. 밖에서 `cart.getItems().clear()`를 하면 장바구니는 어떻게 되나 (비워진다)'
+  - id: q3
+    title: 추상화는 무엇인가요?
+    conclusion:
+      lead: '쓰는 쪽이 알아야 할 것만 남기고 세부를 감춘 타입을 만드는 것이에요.'
+      sub: '결제 코드는 `Payment.pay(amount)`만 알면 돼요. 카드사 API를 부르는지 포인트를 빼는지는 감춰져요.'
+    says:
+      - '코드 payment의 `Payment`는 "금액을 결제한다"만 말한다. 카드 결제는 카드사 API를 부르고, 포인트 결제는 지갑에서 뺀다. 이 차이는 구현 클래스 안에 있다'
+      - '자바에서 추상화한 타입은 인터페이스나 추상 클래스로 만든다'
+      - '이름과 메서드는 "무엇을 하나"를 말한다. `pay(amount)`는 좋은 이름이고, `callCardApiOrUsePoint()`는 "어떻게"를 드러내서 나쁜 이름이다'
+      - '추상화는 감추는 것이라는 점에서 캡슐화와 닮았다. 캡슐화는 데이터와 규칙을 감추고, 추상화는 쓰는 쪽에게 보이는 모양을 정한다'
+    asks:
+      - '본문의 예시: 결제 코드가 `Payment`만 알 때, 포인트 결제의 잔액 확인 규칙이 바뀌면 고칠 곳은 어디인가 (`PointWallet`. 결제 코드는 그대로)'
+      - '옮긴 상황: 알림을 보내는 인터페이스의 메서드 이름 후보 `send(message)`와 `sendBySmtpOrKakao(message)` 가운데 추상화가 잘된 것은 무엇이고 왜인가 (`send`. 어떻게 보내는지는 구현이 정한다)'
+  - id: q4
+    title: 상속과 다형성은 무엇이고, 무엇을 쉽게 해 주나요?
+    conclusion:
+      lead: '상속(인터페이스 구현 포함)은 여러 클래스를 같은 타입으로 묶고, 다형성은 같은 호출이 실제 객체에 따라 다르게 동작하게 해요.'
+      sub: '그래서 결제 수단을 하나 더해도 `checkout`을 고치지 않고 새 클래스만 더해요.'
+    says:
+      - '코드 checkoutIf는 결제 수단을 문자열로 나눈다. 카카오페이를 더하려면 `checkout`에 `else if`를 더해야 한다'
+      - '코드 checkout은 `Payment` 타입으로 받는다. 카드든 포인트든 `payment.pay(amount)` 한 줄이다. 어느 `pay`가 실행될지는 넘긴 객체가 정한다(상속과 다형성 레슨의 오버라이딩)'
+      - '카카오페이를 더하면 `KakaoPayment implements Payment` 파일 하나가 생기고 `checkout`은 그대로다. 테스트로 두 코드에 결제 수단을 더하기 전후의 파일을 비교한다'
+      - '네 가지가 이어진다: 추상화로 `Payment`를 정하고, 구현(상속)으로 같은 타입에 묶고, 다형성으로 부르고, 캡슐화로 각 결제의 세부를 클래스 안에 둔다'
+      - '여기서 쓴 상속은 인터페이스 구현이다. 클래스 상속으로 코드를 물려받는 재사용은 다른 문제가 있어서 상속보다 조합(O6)에서 다룬다'
+    asks:
+      - '본문의 예시: 코드 checkout에 계좌이체 결제를 더할 때 고치는 파일과 새로 만드는 파일 (고치는 파일 없음. `BankTransferPayment` 새로 만듦. 넘겨 주는 곳은 제외)'
+      - '옮긴 상황: 도형의 넓이를 구하는 코드가 `if (shape instanceof Circle) ... else if (shape instanceof Square) ...`로 되어 있다. 삼각형을 더할 때 이 코드를 고치지 않으려면 어떻게 바꾸나 (`Shape`에 `area()`를 두고 각 도형이 구현한다)'
+practice:
+  says:
+    - 'JPA 엔티티에서 흔한 실수: 모든 필드에 setter를 연다(롬복 `@Setter`). 서비스가 `member.setPoint(member.getPoint() - 3000)`처럼 규칙을 밖에서 계산한다. 고친 코드: setter를 두지 않고 `member.usePoint(3000)` 같은 메서드에서 확인한다. 엔티티 없이 같은 모양의 클래스로 테스트한다'
+    - '엔티티의 컬렉션 getter도 같다. `order.getItems().add(item)` 대신 `order.addItem(item)`에서 주문 금액을 함께 맞춘다'
+    - '스프링 서비스는 구현 클래스가 아니라 인터페이스를 받는다. 어느 구현을 넘길지는 스프링이 정하고, 그 원리는 의존 역전 원칙과 의존성 주입(O5)에서 다룬다'
+claims:
+  - claim: '코드 publicWallet에서 잔액 1000에 3000을 빼면 -2000이 된다'
+    how: '같은 클래스를 만들어 돌린다'
+  - claim: '코드 wallet에서 `use(3000)`은 `IllegalStateException`을 던지고 잔액은 1000 그대로다'
+    how: '예외와 잔액을 확인한다'
+  - claim: 'private 필드를 클래스 밖에서 바꾸면 컴파일 오류다'
+    how: '`JavaSource`로 `wallet.balance -= 3000`을 다른 클래스에서 컴파일한다'
+  - claim: '코드 setterWallet도 -2000이 된다'
+    how: '같은 클래스를 만들어 돌린다'
+  - claim: '내부 리스트를 그대로 돌려주면 밖의 `clear()`가 안을 비우고, `List.copyOf`나 `unmodifiableList`를 돌려주면 `add`에서 `UnsupportedOperationException`이 난다'
+    how: '두 getter로 확인한다'
+  - claim: '코드 checkout에 결제 수단을 더하면 고친 파일 없이 새 파일 하나만 생기고, 코드 checkoutIf는 `checkout`이 든 파일을 고친다'
+    how: '더하기 전후 패키지를 나란히 두고 파일을 비교한다 (srp-ocp의 `SrpOcpChangeTest` 방식)'
+sources:
+  - '접근 제어: 자바 언어 명세 6.6 https://docs.oracle.com/javase/specs/jls/se21/html/jls-6.html#jls-6.6'
+  - '`Collections.unmodifiableList`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html'
