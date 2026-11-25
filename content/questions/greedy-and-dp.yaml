@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/greedy-and-dp.yaml의 says).
 # 동작에 관한 정답은 verification의 GreedyAndDpTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 동전 단위가 500, 100, 50, 10원이에요. 1,280원을 큰 동전부터 될 수 있는 만큼 쓰는 그리디로 거슬러 주면 동전은 모두 몇 개일까요?
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 회의 (1~4시), (3~5시), (0~6시), (5~7시), (8~9시), (5~9시)를 회의실 하나에 겹치지 않게 넣어요. 끝나는 시각이 이른 회의부터 고르면 몇 개가 들어갈까요? 끝나는 시각과 다음 회의의 시작 시각이 같으면 넣을 수 있어요.
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 단위가 1, 3, 4일 때 큰 단위부터 고르는 그리디로 8을 만들면 몇 개이고, 그것이 가장 적은 개수와 같을까요?
     choices:
@@ -89,7 +90,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 동전 단위가 1, 5, 6원인 나라에서 10원을 큰 동전부터 고르는 그리디로 거슬러 줘요. 그리디가 고르는 개수와 가장 적은 개수는 각각 얼마일까요?
     choices:
@@ -109,7 +110,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 minCoins를 단위 {1, 3, 4}와 금액 7로 불러요. dp[7]은 얼마일까요? 0~6칸은 0, 1, 2, 1, 1, 2, 2예요.
     code: |-
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 계단을 한 번에 1칸이나 2칸 올라요. n칸을 오르는 방법의 수 ways(n)을 더 작은 문제의 답으로 나타낸 식으로 맞는 것은 무엇일까요?
     choices:
@@ -160,7 +161,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 동전 단위 1, 3, 4로 금액을 가장 적은 개수로 만드는 문제에 그리디가 아니라 동적 계획법을 써야 하는 이유는 무엇일까요?
     choices:
@@ -179,7 +180,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"정수 배열을 병합 정렬할 때, 나눈 두 절반의 정렬 결과를 표에 저장해 두면 동적 계획법이 되어 빨라진다\""
     answer: X
@@ -193,7 +194,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 메모이제이션을 짧게 쓰려고 computeIfAbsent에 재귀를 넣었어요. 자바 21에서 fib(30)을 부르면 어떻게 될까요?
     code: |-
@@ -221,7 +222,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "그리디와 동적 계획법은 어떻게 다르고, 각각 언제 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

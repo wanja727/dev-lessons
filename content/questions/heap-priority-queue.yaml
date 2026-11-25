@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/heap-priority-queue.yaml의 says).
 # 동작에 관한 정답은 verification의 HeapPriorityQueueTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 힙을 배열에 담았어요. 3번 칸 원소의 부모와 자식은 각각 몇 번 칸일까요? 칸 번호는 0부터 세요.
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "배열 [2, 5, 3, 9, 6]을 최소 힙(부모가 자식보다 작거나 같은 힙)으로 볼 수 있을까요? 볼 수 있다면 peek()은 무엇을 돌려줄까요?"
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "힙 배열 [1, 2, 4, 5, 3]에 0을 넣어요. 0은 자리를 몇 번 바꾸고, 어느 칸에 놓일까요?"
     choices:
@@ -89,7 +90,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 원소 1천 개가 든 최소 힙에서 poll()을 한 번 해요. 자리를 바꾸는 횟수는 최대 몇 번 남짓일까요?
     choices:
@@ -109,7 +110,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 코드의 두 줄은 무엇을 출력할까요?
     code: |-
@@ -137,7 +138,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 점수가 가장 높은 회원부터 꺼내려고 new PriorityQueue<Integer>()에 70, 95, 82를 넣었어요. 처음 poll()이 돌려주는 값과 고치는 방법은 무엇일까요?
     choices:
@@ -157,7 +158,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: k가 3이고 scores가 7, 2, 9, 4, 8 순서예요. 반복이 끝났을 때 top에 남는 점수는 무엇일까요?
     code: |-
@@ -184,7 +185,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 상품 1천만 개 가운데 가장 싼 상품 5개를 크기 5의 힙으로 구해요. 어떤 힙을 써야 할까요?
     choices:
@@ -203,7 +204,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 우선순위가 a는 5, b는 3, c는 8인 작업을 차례로 넣은 뒤 c를 급하게 바꿨어요. 무엇이 출력될까요?
     code: |-
@@ -232,7 +233,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "우선순위 큐는 어떻게 동작하고, 언제 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
