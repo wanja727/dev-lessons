@@ -6,7 +6,7 @@ const lessons = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/lessons' }),
   schema: z.object({
     title: z.string(),
-    unit: z.enum(['자바 언어', 'Spring', 'JPA', 'DB', '운영체제', '동시성·분산', '네트워크와 웹', '객체지향 설계와 패턴']),
+    unit: z.enum(['자바 언어', 'Spring', 'JPA', 'DB', '운영체제', '동시성·분산', '네트워크와 웹', '객체지향 설계와 패턴', '자료구조와 알고리즘']),
     // 배우는 순서(선수 레슨을 지키는 순서)와 첫 화면에서 묶는 단계
     order: z.number().int().positive(),
     stage: z.enum(['기초', '동시성', '트랜잭션과 JPA', 'DB와 운영', '실무 시스템']),

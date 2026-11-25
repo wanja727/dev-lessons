@@ -1,0 +1,249 @@
+# 이진 탐색 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/binary-search.yaml의 says).
+# 동작에 관한 정답은 verification의 BinarySearchTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: binary-search
+  title: 이진 탐색
+  unit: 자료구조와 알고리즘
+  order: 61
+concepts:
+  - key: core
+    name: 이진 탐색
+coreQuestions:
+  - key: q1
+    text: "이진 탐색은 어떻게 찾을 범위를 줄이나요?"
+  - key: q2
+    text: "이진 탐색은 언제 쓸 수 있나요?"
+  - key: q3
+    text: "찾는 값이 없으면 자바의 binarySearch는 무엇을 돌려주나요?"
+  - key: q4
+    text: "이진 탐색을 직접 짜면 어디서 틀리기 쉽나요?"
+questions:
+  # ── 질문 1 ──
+  - key: bs-thousand
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 정렬된 원소 1천 개가 든 배열에서 이진 탐색으로 배열에 없는 값을 찾아요. 가운데 값과 비교하는 일은 최대 몇 번 남짓일까요?
+    choices:
+      - 약 10번
+      - 약 100번
+      - 약 500번
+      - 1천 번
+    answer: "1"
+    explanation: |-
+      **약 10번이에요.** 비교할 때마다 남은 범위가 절반이 되고, 2를 열 번 곱하면 1024예요.
+
+      - 1천 → 500 → 250 → ... 열 번이면 1보다 작아져 범위가 비어요
+      - 처음부터 하나씩 보면 없는 값을 확인하는 데 1천 번이 들어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: bs-double-size
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 정렬된 회원 번호 100만 개에서 이진 탐색은 최대 20번 남짓 비교해요. 회원이 400만 명으로 늘면 최대 몇 번 남짓일까요?
+    choices:
+      - 약 22번
+      - 약 40번
+      - 약 80번
+      - 약 400만 번
+    answer: "1"
+    explanation: |-
+      **약 22번이에요.** n이 두 배가 될 때마다 비교는 한 번만 늘어요.
+
+      - 100만에서 200만으로 한 번, 400만으로 또 한 번 늘어요
+      - 이진 탐색은 O(log n)이라 n에 비례해 늘지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  # ── 질문 2 ──
+  - key: bs-unsorted-array
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드의 결과에 대해 맞는 것은 무엇일까요?
+    code: |-
+      int[] a = {9, 2, 7, 4, 5};
+      int i = Arrays.binarySearch(a, 9);
+    choices:
+      - i는 0이다. 9가 맨 앞에 있다
+      - 배열이 정렬되지 않아 예외가 난다
+      - 결과를 믿을 수 없다. 9가 있어도 음수가 나올 수 있고 예외는 없다
+      - 컴파일 오류가 난다
+    answer: "3"
+    explanation: |-
+      **결과를 믿을 수 없어요.** 정렬되지 않은 배열의 결과는 정해지지 않았고, 자바는 정렬 여부를 검사하지 않아요.
+
+      - 실제로 돌리면 -6이 나와요. 가운데 7보다 크니 오른쪽만 봤는데 9는 맨 왼쪽에 있어요
+      - 절반을 버리는 근거가 "정렬되어 있다"였기 때문이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: bs-search-once
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 정렬되지 않은 회원 1만 명의 목록에서 이메일 하나를 딱 한 번 찾아요. 어느 쪽이 더 빠를까요?
+    choices:
+      - 목록을 정렬한 뒤 이진 탐색한다
+      - 처음부터 하나씩 본다
+      - 둘은 걸리는 시간이 같다
+    answer: "2"
+    explanation: |-
+      **처음부터 하나씩 보는 쪽이 빨라요.** 정렬에만 O(n log n)이 들어서 처음부터 보는 O(n)보다 커요.
+
+      - 이진 탐색 자체는 O(log n)이지만 정렬된 데이터가 있어야 해요
+      - 같은 목록에서 여러 번 찾을 때 정렬 한 번의 비용을 나눠 가져서 값어치가 생겨요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  # ── 질문 3 ──
+  - key: bs-insertion-point
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 배송비 경계값 배열이에요. 아래 코드의 i는 얼마일까요?
+    code: |-
+      int[] bounds = {0, 10_000, 30_000, 50_000};
+      int i = Arrays.binarySearch(bounds, 60_000);
+    choices:
+      - "-1"
+      - "3"
+      - "-4"
+      - "-5"
+    answer: "4"
+    explanation: |-
+      **-5예요.** 못 찾으면 넣을 위치 p를 써서 -p - 1을 돌려줘요.
+
+      - 60,000은 맨 끝, 위치 4에 들어가야 해요. -4 - 1 = -5
+      - 1을 빼는 것은 넣을 위치가 0일 때도 음수가 되게 하려는 거예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: bs-minus-one
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "정렬된 배열 {10, 20, 30}에서 Arrays.binarySearch가 -1을 돌려줬어요. 찾은 값에 대해 맞는 것은 무엇일까요?"
+    choices:
+      - 10보다 작다
+      - 10과 20 사이다
+      - 30보다 크다
+      - 배열에 있지만 첫 칸이다
+    answer: "1"
+    explanation: |-
+      **10보다 작은 값이에요.** -1 = -0 - 1이라 넣을 위치가 0, 맨 앞이에요.
+
+      - 넣을 위치는 "이 값보다 큰 첫 칸"이에요. 첫 칸 10이 그 값보다 커요
+      - 찾았다면 0 이상이 나와요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: bs-broken-list
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 정렬된 코드 목록이었는데 누군가 끝에 원소를 add해서 아래 모양이 됐어요. i는 어떻게 될까요?
+    code: |-
+      List<String> codes = new ArrayList<>(
+          List.of("C10", "A20", "B30"));
+      int i = Collections.binarySearch(
+          codes, "C10");
+    choices:
+      - "0"
+      - "2"
+      - 음수. "C10"이 있는데도 못 찾는다
+      - 정렬되지 않아 예외가 난다
+    answer: "3"
+    explanation: |-
+      **음수예요.** 실제로 돌리면 -4가 나와요. 리스트가 정렬되어 있지 않아서 결과를 믿을 수 없고 예외도 없어요.
+
+      - 가운데 "A20"보다 "C10"이 크니 오른쪽만 보고, 맨 앞의 "C10"을 지나쳐요
+      - 넣을 위치에 add해서 정렬을 지키거나, 찾기 전에 정렬하거나, TreeSet을 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collections.html
+  # ── 질문 4 ──
+  - key: bs-buggy-one
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "직접 짠 이진 탐색이에요. a가 {5}이고 key가 5면 무엇을 돌려줄까요?"
+    code: |-
+      int low = 0;
+      int high = a.length - 1;
+      while (low < high) {
+        int mid = (low + high) / 2;
+        if (a[mid] < key) low = mid + 1;
+        else if (a[mid] > key) high = mid - 1;
+        else return mid;
+      }
+      return -1;
+    choices:
+      - "0"
+      - "-1"
+      - 끝나지 않는다
+      - ArrayIndexOutOfBoundsException
+    answer: "2"
+    explanation: |-
+      **-1이에요.** low와 high가 처음부터 둘 다 0이라 반복 조건 low < high가 거짓이에요.
+
+      - low와 high가 둘 다 범위에 들어가는 닫힌 범위인데 low == high인 원소 하나를 확인하지 않아요
+      - 같은 이유로 맨 끝 원소도 못 찾아요. 조건을 low <= high로 고쳐요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: bs-mid-overflow
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 mid는 어떻게 될까요?
+    code: |-
+      int low = 1_500_000_000;
+      int high = 1_600_000_000;
+      int mid = (low + high) / 2;
+    choices:
+      - "1550000000"
+      - 음수가 된다
+      - ArithmeticException이 난다
+      - 컴파일 오류가 난다
+    answer: "2"
+    explanation: |-
+      **음수가 돼요.** low + high가 int의 최댓값(약 21억)을 넘어 오버플로하고, 그 음수를 2로 나눠요.
+
+      - 실제로 돌리면 -597483648이에요. 예외는 나지 않아요
+      - (low + high) >>> 1이나 low + (high - low) / 2로 구하면 1550000000이에요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.2.2
+  # ── 네 질문을 하나로 ──
+  - key: bs-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "이진 탐색은 어떻게 동작하고, 쓸 때 무엇을 조심해야 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **정렬된 데이터에서 가운데와 비교해 절반을 버리는 O(log n) 탐색이고, 정렬과 경계와 오버플로를 조심해요.**
+
+      - **동작:** 가운데보다 작으면 왼쪽이 모두 작으니 버린다. 100만 개에서 20번 남짓
+      - **조건:** 찾는 기준으로 정렬되어 있고 가운데를 바로 읽을 수 있어야 한다. 아니면 예외 없이 틀린 답
+      - **반환값:** 못 찾으면 -(넣을 위치) - 1. 구간 찾기에 쓴다
+      - **직접 짤 때:** 반복 조건과 갱신을 범위의 뜻에 맞추고, 가운데는 (low + high) >>> 1로 구한다
+    checklist:
+      - 가운데 값과 비교해 절반을 버린다고 말했다
+      - O(log n), 100만 개에서 20번 남짓이라고 말했다
+      - 정렬되어 있어야 하고 아니면 예외 없이 틀린 답이 나온다고 말했다
+      - 못 찾으면 넣을 위치를 담은 음수를 돌려준다고 말했다
+      - 경계 조건이나 가운데의 오버플로를 조심한다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
