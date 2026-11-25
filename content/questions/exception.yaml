@@ -1,0 +1,288 @@
+# 예외 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/exception.yaml의 says).
+# 동작에 관한 정답은 verification의 ExceptionTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: exception
+  title: 예외
+  unit: 자바 언어
+  order: 46
+concepts:
+  - key: core
+    name: 예외
+coreQuestions:
+  - key: q1
+    text: "예외에는 어떤 종류가 있고, 체크 예외와 언체크 예외는 무엇이 다른가요?"
+  - key: q2
+    text: "예외가 던져지면 실행은 어디로 가나요?"
+  - key: q3
+    text: "try-with-resources는 무엇을 해 주나요?"
+  - key: q4
+    text: "예외를 잡고 아무것도 하지 않으면 어떤 일이 생기나요?"
+questions:
+  # ── 질문 1 ──
+  - key: exc-checked-compile
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Files.readString은 IOException을 던질 수 있어요. 아래 메서드를 컴파일하면 어떻게 될까요?
+    code: |-
+      String read(Path path) {
+        return Files.readString(path);
+      }
+    choices:
+      - 컴파일되고, 실행할 때 파일이 없으면 예외가 난다
+      - 컴파일 오류. IOException은 체크 예외라 잡거나 throws로 선언해야 한다
+      - 컴파일되지만 경고가 난다
+      - 컴파일되고 파일이 없으면 null을 돌려준다
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** IOException은 RuntimeException이 아닌 Exception이라 체크 예외예요.
+
+      - try-catch로 잡거나 메서드에 throws IOException을 붙여야 컴파일돼요
+      - 언체크 예외는 이런 강제가 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-11.html#jls-11.2
+  - key: exc-unchecked-which
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 'class OrderNotFoundException extends RuntimeException과 class FileFormatException extends Exception이 있어요. 던지는 메서드에 throws를 쓰지 않아도 컴파일되는 것은 무엇일까요?'
+    choices:
+      - OrderNotFoundException
+      - FileFormatException
+      - 둘 다
+      - 둘 다 아니다
+    answer: "1"
+    explanation: |-
+      **OrderNotFoundException이에요.** RuntimeException의 자식은 언체크 예외예요.
+
+      - FileFormatException은 RuntimeException이 아닌 Exception이라 체크 예외예요
+      - 차이는 컴파일러의 검사뿐이고 실행할 때 던져지는 방식은 같아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-11.html#jls-11.1.1
+  # ── 질문 2 ──
+  - key: exc-propagation
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: controller()를 부르면 출력되는 것은 무엇일까요?
+    code: |-
+      void controller() {
+        try {
+          service();
+          print("OK");
+        } catch (IllegalStateException e) {
+          print("ERR");
+        }
+      }
+      void service() {
+        print("S1");
+        client();
+        print("S2");
+      }
+      void client() {
+        print("C1");
+        throw new IllegalStateException();
+      }
+    choices:
+      - S1, C1, S2, OK
+      - S1, C1, ERR
+      - S1, C1, S2, ERR
+      - S1, ERR
+    answer: "2"
+    explanation: |-
+      **S1, C1, ERR이에요.** 예외가 던져지면 그 자리에서 멈추고 받는 catch를 찾아 거슬러 올라가요.
+
+      - service의 S2와 controller의 OK는 건너뛰어요
+      - controller의 catch가 받아서 그 블록부터 이어서 실행해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.20
+  - key: exc-finally-return
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: f()를 부르면 F가 출력될까요, 그리고 반환값은 무엇일까요?
+    code: |-
+      int f() {
+        try {
+          return 1;
+        } finally {
+          print("F");
+        }
+      }
+    choices:
+      - F는 출력되지 않고 1을 반환한다
+      - F가 출력되고 1을 반환한다
+      - F가 출력되고 0을 반환한다
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **F가 출력되고 1을 반환해요.** finally는 try에서 return해도 실행된 뒤에 돌아가요.
+
+      - 예외가 나든 안 나든, 잡히든 안 잡히든 실행돼요
+      - finally 안에서 return하면 던져지던 예외가 사라지니 그렇게 쓰지 않아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.20.2
+  # ── 질문 3 ──
+  - key: exc-twr-no-error
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Res는 닫힐 때 "이름 닫힘"을 출력해요. 아래 코드에서 예외가 나지 않으면 출력의 순서는 어떻게 될까요?
+    code: |-
+      try (Res a = new Res("A");
+           Res b = new Res("B")) {
+        print("본문");
+      } catch (IllegalStateException e) {
+        print("catch");
+      } finally {
+        print("finally");
+      }
+    choices:
+      - 본문, finally, B 닫힘, A 닫힘
+      - 본문, B 닫힘, A 닫힘, finally
+      - 본문, A 닫힘, B 닫힘, finally
+      - 본문, finally
+    answer: "2"
+    explanation: |-
+      **본문, B 닫힘, A 닫힘, finally예요.** 블록을 나갈 때 나중에 연 자원부터 닫고, 그다음 finally가 실행돼요.
+
+      - 예외가 났다면 닫은 뒤 catch, 그다음 finally예요
+      - 자원은 catch보다 먼저 닫혀서 catch 안에서는 쓸 수 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.20.3
+  - key: exc-suppressed
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 'try (Res r = new Res("R")) { throw new IllegalStateException("본문"); }에서 Res의 close()도 IllegalArgumentException("닫기")를 던져요. try 밖에서 잡히는 예외의 타입과, 그 예외의 getSuppressed() 길이는 무엇일까요?'
+    choices:
+      - IllegalArgumentException, 0
+      - IllegalStateException, 1
+      - IllegalStateException, 0
+      - IllegalArgumentException, 1
+    answer: "2"
+    explanation: |-
+      **IllegalStateException이고 길이는 1이에요.** 실패의 원인인 본문의 예외가 나가고, close의 예외는 suppressed로 붙어요.
+
+      - finally에서 손으로 닫으면 close의 예외가 본문의 예외를 덮어 원래 원인을 잃어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Throwable.html#getSuppressed()
+  # ── 질문 4 ──
+  - key: exc-swallow
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: client.request(orderId)가 IOException을 던졌어요. pay를 부른 쪽은 무엇을 받을까요?
+    code: |-
+      boolean pay(long orderId) {
+        try {
+          client.request(orderId);
+        } catch (Exception e) {
+          log.error("결제 실패");
+        }
+        return true;
+      }
+    choices:
+      - "true"
+      - "false"
+      - IOException
+      - RuntimeException으로 바뀐 예외
+    answer: "1"
+    explanation: |-
+      **true예요.** catch가 예외를 삼켜서 호출한 쪽에 실패가 전해지지 않아요.
+
+      - 호출한 쪽은 성공한 줄 알고 주문을 "결제 완료"로 저장해요
+      - 복구할 수 없으면 잡지 않거나, 원인을 붙여 다시 던져요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.20
+  - key: exc-no-cause
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드가 던진 예외를 밖에서 잡아 getCause()를 부르면 무엇이 나올까요?
+    code: |-
+      try {
+        repository.save(order);
+      } catch (SQLException e) {
+        throw new IllegalStateException("저장 실패");
+      }
+    choices:
+      - 원래의 SQLException
+      - 'null'
+      - IllegalStateException 자신
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **null이에요.** 원인을 넘기지 않아서 SQLException이 어디서 왜 났는지가 사라졌어요.
+
+      - new IllegalStateException("저장 실패", e)처럼 마지막 인자로 넘기면 getCause()가 원래 예외를 줘요
+      - 스택 트레이스에도 Caused by로 원래 예외가 이어져요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Throwable.html#getCause()
+  - key: exc-log-throwable
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 두 catch 블록이 있어요. 로그에 IOException의 스택 트레이스가 남는 쪽은 어느 것일까요? (SLF4J와 Logback)
+    code: |-
+      // 1
+      catch (IOException e) {
+        log.error("결제 실패: " + e.getMessage());
+      }
+      // 2
+      catch (IOException e) {
+        log.error("결제 실패 orderId={}", orderId, e);
+      }
+    choices:
+      - "1"
+      - "2"
+      - 둘 다
+      - 둘 다 아니다
+    answer: "2"
+    explanation: |-
+      **2예요.** SLF4J는 마지막 인자가 예외면 스택 트레이스를 함께 남겨요.
+
+      - 1은 예외의 메시지만 글자로 이어 붙여서 어느 줄에서 났는지 알 수 없어요
+      - 그리고 둘 다 예외를 삼켰어요. 복구할 수 없으면 원인을 붙여 다시 던져요
+    source: https://www.slf4j.org/faq.html#paramException
+  # ── 네 질문을 하나로 ──
+  - key: exc-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "체크 예외와 언체크 예외의 차이, 그리고 예외를 다루는 원칙을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **체크 예외는 컴파일러가 처리를 강제하고 언체크 예외는 그렇지 않으며, 예외는 복구할 수 있는 곳에서만 잡고 아니면 원인을 붙여 올려 보내요.**
+
+      - **종류:** RuntimeException이 아닌 Exception은 체크, RuntimeException과 자식은 언체크. Error는 잡지 않는다
+      - **전파:** 던져지면 맞는 catch까지 거슬러 올라가고 그 사이 줄은 실행되지 않는다. finally는 실행된다
+      - **자원:** try-with-resources가 반대 순서로, catch보다 먼저 닫는다
+      - **삼키지 않기:** 삼키면 호출한 쪽은 성공한 줄 안다. 원인을 넘겨 던지고, 로그에는 예외 객체를 넘긴다
+    checklist:
+      - 체크 예외는 잡거나 throws로 선언해야 컴파일된다고 말했다
+      - RuntimeException과 그 자식이 언체크 예외라고 말했다
+      - 예외가 던져지면 맞는 catch까지 거슬러 올라간다고 말했다
+      - 예외를 삼키면 호출한 쪽이 실패를 모른다고 말했다
+      - 다시 던질 때 원인을 넘기고 로그에 예외 객체를 남긴다고 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-11.html
