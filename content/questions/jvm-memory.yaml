@@ -1,0 +1,260 @@
+# JVM 메모리 구조 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/jvm-memory.yaml의 says).
+# 동작에 관한 정답은 verification의 JvmMemoryTest로 확인했다 (자바 21, HotSpot).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: jvm-memory
+  title: JVM 메모리 구조
+  unit: 자바 언어
+  order: 50
+concepts:
+  - key: core
+    name: JVM 메모리 구조
+coreQuestions:
+  - key: q1
+    text: "JVM은 메모리를 어떤 영역으로 나눠 쓰나요?"
+  - key: q2
+    text: "메서드를 부르면 스택에서 어떤 일이 일어나나요?"
+  - key: q3
+    text: "객체는 어디에 놓이고, 변수와는 어떤 관계인가요?"
+  - key: q4
+    text: "OutOfMemoryError는 언제 나고 StackOverflowError와 무엇이 다른가요?"
+questions:
+  # ── 질문 1 ──
+  - key: jvm-local-per-thread
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 스레드 둘이 같은 메서드를 동시에 실행하고 있어요. 그 메서드의 지역 변수 int tax는 스레드마다 따로 있을까요, 하나를 함께 쓸까요?
+    choices:
+      - 스레드마다 따로 있다. 각자의 스택에 놓인다
+      - 하나를 함께 쓴다. 힙에 놓인다
+      - 하나를 함께 쓴다. 메서드 영역에 놓인다
+      - 먼저 실행한 스레드만 가진다
+    answer: "1"
+    explanation: |-
+      **스레드마다 따로 있어요.** 지역 변수는 그 스레드의 스택 프레임에 놓이고, 스택은 스레드마다 하나씩 있어요.
+
+      - 그래서 요청마다 스레드가 다른 서버에서 지역 변수는 서로 섞이지 않아요
+      - 힙과 메서드 영역은 모든 스레드가 함께 써요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5
+  - key: jvm-area-count
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 톰캣의 요청 처리 스레드 200개가 일하는 서버에서 힙, 스택, 메서드 영역은 각각 몇 개일까요? 요청 처리 스레드만 세요.
+    choices:
+      - 1, 1, 1
+      - 1, 200, 1
+      - 200, 200, 1
+      - 200, 200, 200
+    answer: "2"
+    explanation: |-
+      **힙 1개, 스택 200개, 메서드 영역 1개예요.** 스택만 스레드마다 하나씩 있어요.
+
+      - 모든 요청이 함께 쓰는 것은 힙이고, 요청마다 따로인 것은 스택이에요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5
+  # ── 질문 2 ──
+  - key: jvm-soe-frames
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 dive()를 실행하면 어떻게 될까요?
+    code: |-
+      static int depth = 0;
+
+      static void dive() {
+        depth++;
+        dive();
+      }
+    choices:
+      - 멈추지 않고 영원히 돈다
+      - OutOfMemoryError가 난다
+      - StackOverflowError가 난다
+      - 컴파일 오류
+    answer: "3"
+    explanation: |-
+      **StackOverflowError가 나요.** 부를 때마다 dive의 프레임이 스택에 쌓이고, 스택의 한도를 넘으면 에러가 나요.
+
+      - 스택 트레이스에 같은 줄이 끝없이 되풀이돼요
+      - 스택을 늘리지 않고 끝나는 조건을 고쳐요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.2
+  - key: jvm-sum-frames
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: sum(3)을 불렀어요. 가장 깊이 들어갔을 때 스택에 sum의 프레임은 몇 개 쌓여 있을까요?
+    code: |-
+      static int sum(int n) {
+        if (n == 0) return 0;
+        return n + sum(n - 1);
+      }
+    choices:
+      - "1"
+      - "3"
+      - "4"
+      - "6"
+    answer: "3"
+    explanation: |-
+      **4개예요.** n이 3, 2, 1, 0인 호출이 모두 아직 끝나지 않았어요.
+
+      - 같은 메서드라도 부를 때마다 프레임이 새로 생겨요
+      - 그래서 호출마다 지역 변수 n이 따로 있어요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.6
+  # ── 질문 3 ──
+  - key: jvm-frame-gone
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: main이 Order o = createOrder(10000);으로 아래 메서드를 불렀어요. createOrder가 끝난 직후 사라진 것은 무엇일까요?
+    code: |-
+      static Order createOrder(int price) {
+        int tax = price / 10;
+        Order order = new Order(price + tax);
+        return order;
+      }
+    choices:
+      - tax만
+      - tax와 order 변수. Order 객체는 힙에 남는다
+      - tax, order 변수, Order 객체 모두
+      - 아무것도 사라지지 않는다
+    answer: "2"
+    explanation: |-
+      **지역 변수 tax와 order가 프레임과 함께 사라지고, Order 객체는 힙에 남아요.**
+
+      - return order는 참조를 main의 o로 복사했어요
+      - main의 o가 가리키니 객체는 살아 있어요. 객체의 수명은 만든 메서드와 상관없어요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.3
+  - key: jvm-field-on-heap
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 'class Point { int x; int y; }의 객체를 메서드 안에서 Point p = new Point();로 만들었어요. p와 p.x는 각각 어디에 있을까요?'
+    choices:
+      - 둘 다 스택
+      - p는 그 메서드의 스택 프레임, p.x는 힙의 객체 안
+      - 둘 다 힙
+      - p는 힙, p.x는 스택
+    answer: "2"
+    explanation: |-
+      **p는 스택의 프레임, p.x는 힙의 객체 안이에요.** 지역 변수는 스택에, 객체의 필드는 객체와 함께 힙에 있어요.
+
+      - p.x가 기본형 int여도 객체의 일부라 힙에 있어요
+      - "기본형은 스택에"가 아니라 "지역 변수는 스택에"가 맞아요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.3
+  # ── 질문 4 ──
+  - key: jvm-churn
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 최대 힙이 64MB인 JVM에서 아래 코드를 돌려요. 1MB 배열을 1024개(1024MB) 만들지만 어디에도 담지 않아요. 어떻게 될까요?
+    code: |-
+      for (int i = 0; i < 1024; i++) {
+        byte[] b = new byte[1024 * 1024];
+      }
+    choices:
+      - 64개쯤 만든 뒤 OutOfMemoryError
+      - OutOfMemoryError 없이 끝까지 돈다
+      - StackOverflowError
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **끝까지 돌아요.** 만든 배열을 아무도 가리키지 않아서 가비지 컬렉터가 치우고 그 자리를 다시 써요.
+
+      - 리스트에 담으면 모든 배열을 가리키게 되어 OutOfMemoryError: Java heap space가 나요
+      - OOM은 많이 만들어서가 아니라 놓지 않는 객체가 쌓여서 나요
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5.3
+  - key: jvm-xmx-soe
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: '서버 로그에 Exception in thread "http-nio-8080-exec-3" java.lang.StackOverflowError가 찍혔어요. 가득 찬 것은 무엇이고, -Xmx를 두 배로 늘리면 풀릴까요?'
+    choices:
+      - 힙이 찼다. 늘리면 풀린다
+      - 그 스레드의 스택이 찼다. -Xmx는 힙의 크기라 풀리지 않는다
+      - 메타스페이스가 찼다. 늘리면 풀린다
+      - 모든 스레드의 스택이 찼다. 늘리면 풀린다
+    answer: "2"
+    explanation: |-
+      **그 스레드의 스택이 찼고, -Xmx로는 풀리지 않아요.** -Xmx는 힙의 최대 크기예요.
+
+      - StackOverflowError는 대개 끝나지 않는 호출이라 코드를 고쳐요
+      - 스택 하나의 크기는 -Xss로 정해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html
+  - key: jvm-tostring-loop
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 회원과 주문이 서로를 가리키게 만든 뒤 log.info("{}", member)로 회원을 로그에 찍었어요. 어떻게 될까요?
+    code: |-
+      class Member {
+        List<Order> orders = new ArrayList<>();
+        public String toString() {
+          return "Member(orders=" + orders + ")";
+        }
+      }
+      class Order {
+        Member member;
+        public String toString() {
+          return "Order(member=" + member + ")";
+        }
+      }
+    choices:
+      - Member(orders=[Order(member=...)])가 찍힌다
+      - StackOverflowError
+      - OutOfMemoryError
+      - NullPointerException
+    answer: "2"
+    explanation: |-
+      **StackOverflowError가 나요.** 두 toString이 서로를 끝없이 불러서 스택이 넘쳐요.
+
+      - 롬복의 @ToString이나 @Data를 양방향 연관의 양쪽에 붙이면 이 코드가 만들어져요
+      - 한쪽에서 연관을 빼요(@ToString.Exclude, 또는 id만 출력)
+    source: https://projectlombok.org/features/ToString
+  # ── 네 질문을 하나로 ──
+  - key: jvm-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "JVM의 메모리 구조와 두 메모리 에러의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **힙, 스택, 메서드 영역으로 나뉘고, 스택이 호출로 차면 StackOverflowError, 힙이 객체로 차면 OutOfMemoryError예요.**
+
+      - **영역:** 힙(객체, 모두가 공유), 스택(프레임, 스레드마다), 메서드 영역(클래스 정보, 공유)
+      - **스택:** 호출마다 프레임이 쌓이고 끝나면 사라진다. 끝나지 않는 재귀는 StackOverflowError
+      - **힙:** new로 만든 객체가 놓이고 변수에는 참조만 있다. 가리키는 객체가 쌓이면 OutOfMemoryError
+      - **설정:** -Xmx로 힙, -Xss로 스택. 컨테이너에서는 힙 밖 메모리에 여유를 둔다
+    checklist:
+      - 힙, 스택, 메서드 영역과 각각에 놓이는 것을 말했다
+      - 힙은 공유하고 스택은 스레드마다 따로라고 말했다
+      - 메서드 호출마다 프레임이 쌓이고 끝나면 사라진다고 말했다
+      - StackOverflowError와 OutOfMemoryError가 각각 어느 영역이 찬 것인지 말했다
+      - -Xmx 같은 설정이나 실무에서 만난 원인을 들었다
+    source: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5

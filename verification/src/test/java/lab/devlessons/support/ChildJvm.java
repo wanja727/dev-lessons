@@ -33,6 +33,9 @@ public final class ChildJvm {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         List<String> command = new ArrayList<>();
         command.add(java);
+        // 출력을 UTF-8로 읽으므로 자식도 UTF-8로 쓰게 한다 (윈도우의 기본값은 UTF-8이 아니다)
+        command.add("-Dstdout.encoding=UTF-8");
+        command.add("-Dstderr.encoding=UTF-8");
         command.addAll(jvmOptions);
         command.add("-cp");
         command.add(classPath);
