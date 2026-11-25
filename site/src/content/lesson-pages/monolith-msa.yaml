@@ -1,8 +1,9 @@
-# 모놀리스와 마이크로서비스 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 모놀리스와 마이크로서비스
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/monolith-msa.yaml에 있다.
 title: 모놀리스와 마이크로서비스
+description: 모놀리스가 무엇이고 커지면 무엇이 힘든지, 마이크로서비스로 나누면 얻고 잃는 것, 서비스를 나누면 트랜잭션이 어떻게 되는지, 언제 나누고 나누지 않을 때 무엇을 지키는지. 같은 주문 처리를 메서드 호출과 HTTP 호출로 돌려 비교하는 대화형 레슨.
 unit: 시스템 설계와 아키텍처
+minutes: 20
 roadmap: A9
 type: 개념 설명
 prerequisites:
@@ -53,11 +54,19 @@ codes:
       stockClient.decrease(itemId, qty);
       payment.approve(itemId, qty);
     }
+  predictMark: |-
+    @Transactional
+    void order(long itemId, int qty) {
+      orders.save(new Order(itemId, qty));
+      [[stockClient.decrease(itemId, qty);]]
+      payment.approve(itemId, qty);
+    }
   local: |-
     @Transactional
     void order(long itemId, int qty) {
       orders.save(new Order(itemId, qty));
-      stockService.decrease(itemId, qty);
+      [[stockService.decrease(itemId, qty);]]
+      payment.approve(itemId, qty);
     }
   remote: |-
     void decrease(long itemId, int qty) {
@@ -67,14 +76,71 @@ codes:
           .retrieve()
           .toBodilessEntity();
     }
+  modules: |-
+    com.shop
+      order/
+        OrderService       ← 공개
+        internal/
+          OrderRepository  ← 모듈 안에서만
+      stock/
+        StockService       ← 공개
+        internal/
+          StockRepository  ← 모듈 안에서만
+  badModule: |-
+    @Service
+    class OrderService {
+      private final [[StockRepository]] stock;
+      ...
+    }
   restClient: |-
+    SimpleClientHttpRequestFactory f =
+        new SimpleClientHttpRequestFactory();
+    f.[[setConnectTimeout]](1_000);
+    f.[[setReadTimeout]](500);
     RestClient rest = RestClient.builder()
         .baseUrl("http://stock-service")
-        .requestFactory(factory)
+        .requestFactory(f)
         .build();
+  timeoutRun: |-
+    RestClient plain =
+        RestClient.create(base);
+    plain.post()...;   // 2초 늦는 서버
+
+    RestClient guarded = RestClient
+        .builder().baseUrl(base)
+        .requestFactory(f).build();
+    guarded.post()...; // 읽기 0.5초
+  badJoin: |-
+    @Entity
+    class Order {
+      [[@ManyToOne]]
+      private Stock stock;
+    }
+  goodJoin: |-
+    @Entity
+    class Order {
+      private Long stockItemId;
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/monolith/MonolithMsaTest.java
+  microservices: https://martinfowler.com/articles/microservices.html
+  monolithFirst: https://martinfowler.com/bliki/MonolithFirst.html
+  restClient: https://docs.spring.io/spring-framework/reference/integration/rest-clients.html
 predict:
-  text: '코드 predict에서 `stockClient`는 재고 서버를 HTTP로 불러요. 재고는 재고 서버의 DB에서 줄었어요. 그다음 `payment.approve`가 예외를 던져 주문 서버의 트랜잭션이 롤백돼요. 재고 서버의 재고는 어떻게 될까요? 보기: 함께 되돌아간다, 줄어든 채로 남는다, 재고 서버가 알아서 기다렸다가 되돌린다.'
-  answer: '줄어든 채로 남는다. 재고 서버는 자기 DB에 이미 커밋했고, 주문 서버의 롤백은 다른 서버의 DB에 닿지 않는다. 질문 3에서 밝힌다.'
+  title: 롤백하면 재고도 돌아올까요?
+  text: '코드 predict에서 `stockClient`는 재고 서버를 HTTP로 불러요. 재고는 재고 서버의 DB에서 줄었어요. 그다음 `payment.approve`가 예외를 던져 주문 서버의 트랜잭션이 롤백돼요. 재고 서버의 재고는 어떻게 될까요? 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: back
+      label: 함께 되돌아간다
+    - value: stays
+      label: 줄어든 채로 남는다
+    - value: waits
+      label: 재고 서버가 알아서 기다렸다가 되돌린다
+  answer: stays
+  storageKey: msa-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 모놀리스는 무엇이고, 커지면 무엇이 힘들어지나요?
@@ -89,6 +155,36 @@ questions:
     asks:
       - '본문의 예시: 모놀리스의 `@Transactional` 메서드에서 주문을 저장하고 재고를 줄인 뒤 예외가 났다. 주문과 재고는 (둘 다 롤백된다)'
       - '옮긴 상황: 개발자 4명이 만드는 사내 예약 서비스. 하루 요청 1만 건, 기능은 예약과 회원 두 가지다. 모놀리스로 둘 때 힘든 점이 크게 드러나나 (아니다. 배포와 늘리기가 묶여도 문제될 크기가 아니다)'
+    body:
+      - p: '**모놀리스**(monolith)는 "한 덩어리"라는 뜻이에요. 주문, 재고, 회원, 결제가 스프링 부트 애플리케이션 **하나**에 들어 있고, DB 하나를 쓰고, 한 번에 배포해요. 대부분의 서비스가 이렇게 시작해요.'
+      - code: local
+        notes:
+          - mark: stockService.decrease(itemId, qty);
+            as: code
+            text: '재고 서비스도 같은 애플리케이션 안의 빈이라 메서드로 불러요. 같은 DB 연결, 같은 트랜잭션이에요.'
+      - p: '같은 JVM 안의 메서드 호출이라 빠르고, 네트워크가 끊겨 실패할 일이 없어요. 무엇보다 **트랜잭션 하나**로 묶여요. 주문을 저장하고 재고를 줄인 뒤 결제가 실패하면 둘 다 롤백돼요.'
+      - ci:
+          key: local
+          label: 실제 결과 보기
+          source: MonolithMsaTest.localTransactionRollsBackBoth
+      - p: '배포할 것도 하나, 모니터링할 것도 하나예요. 작은 팀의 작은 서비스에는 모놀리스가 가장 빠르게 만들고 운영하는 구조예요.'
+      - h3: 커지면 생기는 일
+      - ul:
+          - '**배포가 묶여요.** 알림 문구 한 줄을 고쳐도 주문, 결제까지 통째로 다시 배포해요. 빌드와 테스트도 점점 오래 걸려요.'
+          - '**늘리기가 묶여요.** 검색만 바쁜데 검색만 늘릴 수 없어서 전체를 여러 대로 띄워요([서버를 늘리는 방법](lesson:scale-out)).'
+          - '**장애가 묶여요.** 한 기능의 메모리 누수가 같은 JVM의 모든 기능을 멈춰요.'
+          - '**팀이 묶여요.** 다섯 팀이 한 저장소에서 일하면 서로의 코드를 건드리고 배포 일정을 맞춰야 해요.'
+      - p: '이것들은 **크기와 팀 수**의 문제예요. 코드가 작고 팀이 하나면 드러나지 않아요. 모놀리스가 나쁜 구조인 것이 아니라, 커지면 묶인 것들이 불편해지는 거예요.'
+      - quiz:
+          q: '모놀리스의 `@Transactional` 메서드에서 주문을 저장하고 재고 서비스를 불러 재고를 줄인 뒤 결제가 예외를 던졌어요. 주문과 재고는?'
+          options:
+            - '주문만 롤백되고 재고는 줄어든 채 남는다'
+            - '둘 다 롤백된다'
+            - '둘 다 커밋된다'
+          answer: 2
+          explain: '같은 애플리케이션, 같은 DB의 한 트랜잭션이라 함께 롤백돼요.'
+      - next: '묶인 것이 불편하면 기능별로 나누면 될까요? 나누면 무엇을 얻고 무엇을 잃을까요?'
+    recall: '모놀리스는 주문, 재고, 결제 같은 모든 기능을 한 애플리케이션으로 만들어 DB 하나를 쓰고 한 번에 배포하는 구조예요. 호출이 메서드라 빠르고 실패가 없으며 트랜잭션 하나로 함께 커밋하고 롤백해요. 커지면 한 줄을 고쳐도 전체를 배포하고, 한 기능만 바빠도 전체를 늘리고, 한 기능의 장애가 전체를 멈추고, 여러 팀이 한 코드에서 서로를 막아요.'
   - id: q2
     title: 마이크로서비스로 나누면 무엇을 얻고 무엇을 잃나요?
     conclusion:
@@ -107,6 +203,76 @@ questions:
     asks:
       - '본문의 예시: 주문 서버가 재고 서버를 HTTP로 부르는데 재고 서버가 꺼져 있다. 타임아웃과 다른 대책이 없으면 주문 요청은 (실패한다)'
       - '옮긴 상황: 상품 상세 페이지 서버가 리뷰 서버를 HTTP로 불러 리뷰를 붙인다. 리뷰 서버가 응답을 5초 늦게 하면 상세 페이지는 어떻게 되나 (상세 페이지도 5초 넘게 걸린다)'
+    body:
+      - p: '**마이크로서비스**는 기능별로 나눈 작은 서비스들이에요. 주문 서버와 재고 서버가 따로 배포되고, 각자 자기 DB를 갖고, 서로 HTTP나 메시지로 대화해요([마틴 파울러와 제임스 루이스의 글](link:microservices)).'
+      - p: '같은 재고 차감이 이제 HTTP 요청이 돼요.'
+      - code: remote
+      - h3: 얻는 것
+      - ul:
+          - '**따로 배포해요.** 재고 로직을 고치면 재고 서버만 배포해요.'
+          - '**따로 늘려요.** 주문이 몰리면 주문 서버만 늘려요.'
+          - '**팀이 서비스를 맡아요.** 재고 팀은 다른 팀의 배포 일정에 묶이지 않아요.'
+          - '**장애를 가둘 수 있어요.** 재고 서버의 메모리 누수가 주문 서버의 JVM을 멈추지는 않아요. 다만 아래에서 보듯 저절로 갇히지는 않아요.'
+      - h3: 잃는 것 하나. 호출이 네트워크를 타요
+      - p: '메서드 호출과 HTTP 호출을 1,000번씩 해 봤어요. 재고 서버는 같은 컴퓨터에 띄웠는데도 차이가 커요.'
+      - ci:
+          key: speed
+          label: 실제 결과 보기
+          source: MonolithMsaTest.remoteCallIsSlower
+      - p: 'HTTP 호출은 요청을 직렬화하고, 연결을 거쳐 보내고, 상대가 처리해 응답을 돌려줄 때까지 기다려요. 서버가 다른 컴퓨터에 있으면 그만큼 더 느려져요. 그리고 **실패할 수 있어요.**'
+      - ci:
+          key: spread
+          label: 실제 결과 보기
+          source: MonolithMsaTest.downOrSlowServerSpreads
+      - p: '재고 서버가 늦으면 주문 요청도 그만큼 늦고, 꺼져 있으면 주문 요청이 예외로 실패해요. 한 서비스의 문제가 부르는 쪽으로 **번지는** 거예요. 그래서 다른 서비스를 부를 때는 타임아웃을 꼭 둬요(실무 구역). 재시도와 서킷 브레이커까지 써서 번지는 것을 막는 방법은 심화 레슨 "타임아웃, 재시도, 서킷 브레이커"에서 다뤄요.'
+      - p: '세 상황을 골라 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, log, verdict]
+          selector:
+            label: 재고를 부르는 방식과 상황
+            options:
+              - {value: local, label: 메서드 호출}
+              - {value: ok, label: 'HTTP, 정상'}
+              - {value: slow, label: 'HTTP, 재고 서버 3초 지연'}
+              - {value: down, label: 'HTTP, 재고 서버 꺼짐'}
+          scenes:
+            local:
+              log:
+                - '주문 저장 → 재고 차감(같은 JVM) → 응답'
+                - {note: '재고 차감에 마이크로초 단위'}
+              verdict: '빠르고, 실패할 네트워크가 없어요. 대신 늘리기와 배포가 묶여요.'
+            ok:
+              log:
+                - '주문 저장 → POST /stock/1/decrease → 200 → 응답'
+                - {note: '재고 차감에 밀리초 단위 (같은 컴퓨터에서도)'}
+              verdict: '되긴 하지만 호출마다 네트워크 시간이 더해져요.'
+            slow:
+              log:
+                - '주문 저장 → POST /stock/1/decrease → (3초 대기) → 200 → 응답'
+                - {note: '주문 요청도 3초 넘게 걸림'}
+              verdict: '상대가 느리면 부르는 쪽도 느려요. 요청 스레드가 묶여 다른 주문까지 밀려요.'
+            down:
+              log:
+                - '주문 저장 → POST /stock/1/decrease → 연결 실패 (ResourceAccessException)'
+                - {note: '주문 요청 실패'}
+              verdict: '상대가 죽으면 부르는 쪽도 실패해요. 장애가 번져요.'
+      - p: '그래서 서비스 사이의 호출은 둘로 나눠 골라요. 결과가 그 자리에서 필요하면 **HTTP(동기)**, 조금 뒤에 해도 되면 **메시지(비동기)**로 넘겨요([메시지 큐](lesson:kafka-basics)). 메시지로 넘기면 재고 서버가 죽어도 주문은 성공해요.'
+      - more:
+          summary: 서비스가 많아지면 생기는 것들
+          body:
+            - p: '서비스가 열 개, 스무 개가 되면 앱이 서비스마다 주소를 알 수 없어요. 그래서 앞에 **API 게이트웨이**를 두고 한 주소로 받아 알맞은 서비스로 보내요. 인증 같은 공통 일도 게이트웨이가 맡아요.'
+            - p: '서비스마다 서버가 늘고 줄며 주소가 바뀌니, 지금 살아 있는 서버의 주소를 알려 주는 **서비스 찾기**(service discovery)도 써요. 운영할 것이 그만큼 늘어나요.'
+      - quiz:
+          q: '상품 상세 페이지 서버가 리뷰 서버를 HTTP로 불러 리뷰를 붙여요(타임아웃 없음). 리뷰 서버가 응답을 5초 늦게 하면 상세 페이지는?'
+          options:
+            - '리뷰 없이 바로 뜬다'
+            - '상세 페이지도 5초 넘게 걸린다'
+            - '리뷰 서버가 알아서 빨라진다'
+          answer: 2
+          explain: '부르는 쪽은 응답이 올 때까지 기다려요. 상대의 지연이 그대로 번져요. 타임아웃을 두고, 늦으면 리뷰 없이 보여 주게 해요.'
+      - next: '느리고 실패할 수 있는 것은 타임아웃으로 다룬다 해도, 재고를 줄인 뒤 주문이 실패하면 어떻게 될까요?'
+    recall: '서비스마다 따로 배포하고 따로 늘리며, 팀이 서비스를 하나씩 맡아 서로의 일정에 묶이지 않아요. 대신 메서드 호출이 네트워크 호출이 되어 같은 컴퓨터 안에서도 훨씬 느리고, 상대가 느리면 부르는 쪽도 느려지고, 상대가 죽으면 부르는 쪽도 실패해요. 그래서 타임아웃을 두고, 결과가 바로 필요한 일은 HTTP로, 조금 뒤에 해도 되는 일은 메시지로 넘겨요.'
   - id: q3
     title: 서비스를 나누면 트랜잭션은 어떻게 되나요?
     conclusion:
@@ -121,6 +287,34 @@ questions:
     asks:
       - '본문의 예시: 주문 서버가 재고 서버를 HTTP로 불러 재고를 줄인 뒤, 주문 저장에서 예외가 나 롤백했다. 재고 서버의 재고는 (줄어든 채로 남는다)'
       - '옮긴 상황: 회원 서버와 포인트 서버가 나뉘어 있다. 탈퇴할 때 회원 서버가 회원을 지우고 포인트 서버에 포인트 삭제를 요청했는데 포인트 서버가 실패했다. 한 트랜잭션처럼 되돌릴 수 있나 (없다. 회원 삭제는 이미 커밋됐다. 포인트 삭제를 다시 시도하거나 보상을 설계한다)'
+    body:
+      - p: '처음 예측의 코드를 돌려 봤어요. 주문을 저장하고, 재고 서버를 HTTP로 불러 재고를 줄이고, 결제가 실패해요.'
+      - code: predictMark
+        notes:
+          - mark: stockClient.decrease(itemId, qty);
+            as: code
+            text: '재고 서버는 이 요청을 받아 **자기 트랜잭션**으로 재고를 줄이고 커밋한 뒤 응답해요.'
+      - ci:
+          key: remote
+          label: 실제 결과 보기
+          source: MonolithMsaTest.remoteCallIsNotRolledBack
+      - p: '답은 **줄어든 채로 남는다**예요. {{predict-result}} 주문 서버의 `@Transactional`은 **주문 서버가 연 DB 연결 하나**의 트랜잭션이에요. 재고 서버의 DB는 다른 서버의 다른 연결이라, 주문 서버가 롤백해도 닿지 않아요. 재고 서버는 이미 커밋하고 응답까지 했어요.'
+      - p: '그 결과 주문은 없는데 재고는 2개 줄어 있어요. 모놀리스에서는 롤백 한 번으로 끝나던 일이 이제 **한쪽만 성공한 상태**로 남아요. 이것을 다루는 방법이 두 가지 있어요.'
+      - ul:
+          - '**보상 요청:** 결제가 실패하면 재고 서버에 "재고 2개 되돌리기"를 요청해요. 앞서 성공한 일을 취소하는 이 요청을 **보상 트랜잭션**이라고 해요. 보상 요청도 실패할 수 있어서 다시 시도할 장치가 필요해요. 심화 레슨 "분산 트랜잭션과 사가"에서 다뤄요.'
+          - '**메시지로 나중에 맞추기:** 주문 서버는 주문을 저장하며 "주문이 생겼다" 메시지를 남기고, 재고 서버가 그 메시지를 받아 재고를 줄여요. 잠깐 어긋나도 결국 맞춰져요. 주문 저장과 메시지 발행이 어긋나지 않게 하는 방법은 심화 레슨 "트랜잭셔널 아웃박스"에서 다뤄요.'
+      - h3: DB도 서비스마다 따로
+      - p: '두 서비스가 DB 하나를 함께 쓰면 트랜잭션 문제가 사라질 것 같아요. 하지만 그러면 재고 테이블의 칸을 바꿀 때 재고 서버와 그 테이블을 읽는 주문 서버를 **함께** 고치고 배포해야 해요. 나눈 의미가 사라져요. 그래서 서비스마다 자기 DB를 갖고, 다른 서비스의 데이터는 그 서비스의 API로만 얻어요.'
+      - quiz:
+          q: '회원 서버가 탈퇴한 회원을 지우고 커밋한 뒤 포인트 서버에 포인트 삭제를 요청했는데, 포인트 서버가 실패했어요. 회원 삭제를 한 트랜잭션처럼 되돌릴 수 있나요?'
+          options:
+            - '있다. 회원 서버의 @Transactional이 포인트 서버까지 묶는다'
+            - '없다. 회원 삭제는 이미 커밋됐다. 포인트 삭제를 다시 시도하거나 보상을 설계한다'
+            - '포인트 서버가 알아서 회원을 되살린다'
+          answer: 2
+          explain: '서비스마다 DB와 트랜잭션이 따로예요. 한쪽만 성공한 상태를 다시 시도나 보상으로 맞춰요.'
+      - next: '나누면 얻는 것도 크지만 잃는 것도 컸어요. 그럼 언제 나누고, 나누지 않을 때는 무엇을 지킬까요?'
+    recall: '서비스마다 자기 DB를 가져서 트랜잭션 하나로 묶을 수 없어요. 주문 서버의 `@Transactional`은 자기 DB 연결의 트랜잭션이라, 재고 서버를 HTTP로 불러 재고를 줄인 뒤 주문 서버가 롤백해도 재고는 줄어든 채로 남아요. 그래서 실패하면 재고 되돌리기 같은 보상 요청을 보내거나, 메시지로 넘겨 결국 맞춰지게 해요. DB를 함께 쓰면 함께 배포해야 해서 나눈 의미가 사라져요.'
   - id: q4
     title: 언제 나누고, 나누지 않는다면 무엇을 지키나요?
     conclusion:
@@ -138,22 +332,117 @@ questions:
     asks:
       - '본문의 예시: 모듈러 모놀리스에서 주문 모듈이 재고 모듈의 `StockRepository`를 직접 주입받아 쓴다. 무엇을 어겼나 (모듈의 경계. 재고 모듈의 공개 서비스로 불러야 한다)'
       - '옮긴 상황: 동영상 서비스에서 업로드한 영상을 변환하는 기능만 CPU를 많이 써서, 변환이 몰리면 재생 API까지 느려진다. 나눌 신호인가 (그렇다. 그 기능만 따로 늘려야 한다)'
+    body:
+      - p: '처음부터 마이크로서비스로 시작하면 **경계를 잘못 긋기** 쉬워요. 서비스를 만들기 전에는 무엇이 함께 바뀌는지 잘 모르니까요. 늘 함께 바뀌는 둘을 다른 서비스에 두면, 기능 하나를 고칠 때마다 두 서비스를 함께 고치고 배포하고, 그 사이의 HTTP 호출과 트랜잭션 문제까지 떠안아요. 그래서 모놀리스로 시작하고 필요할 때 떼어 내라는 조언이 많아요([마틴 파울러의 글](link:monolithFirst)).'
+      - h3: 나눌 신호
+      - ul:
+          - '여러 팀이 같은 코드와 배포 일정 때문에 서로를 기다린다'
+          - '한 기능만 부하가 커서 그것만 따로 늘려야 한다'
+          - '한 기능의 장애가 다른 기능까지 멈추게 한다'
+      - h3: 모듈러 모놀리스
+      - p: '나눌 때가 아니라면 **모듈러 모놀리스**로 둬요. 배포는 하나인데, 코드 안에서 기능별 모듈의 경계를 서비스처럼 지키는 거예요.'
+      - code: modules
+      - ul:
+          - '다른 모듈은 **공개한 서비스**로만 불러요. 주문 모듈은 `StockService`를 부르고, `StockRepository`나 재고 엔티티를 직접 쓰지 않아요.'
+          - '다른 모듈의 **테이블을 직접 읽지 않아요.** 필요한 데이터는 그 모듈의 서비스에 물어요.'
+          - '함께 바뀌고 한 트랜잭션에서 지켜야 하는 것은 **같은 모듈**에 둬요. [도메인 모델과 트랜잭션 스크립트](lesson:domain-model)의 애그리거트가 단위가 돼요.'
+      - p: '경계가 지켜져 있으면 나중에 재고 모듈을 서비스로 떼어 낼 때, `StockService`의 구현을 HTTP 클라이언트로 바꾸면 돼요. 경계 없이 서로의 리포지토리와 테이블을 쓰던 코드는 떼어 내기 전에 그 얽힘부터 풀어야 해요.'
+      - code: badModule
+        notes:
+          - mark: StockRepository
+            as: code
+            text: '다른 모듈의 리포지토리를 직접 주입받았어요. 경계를 어겼어요. `StockService`로 불러야 해요.'
+      - table:
+          head: [ '', 모놀리스, 모듈러 모놀리스, 마이크로서비스]
+          rows:
+            - ['배포', '하나', '하나', '서비스마다']
+            - ['다른 기능 부르기', '아무 클래스나', '공개한 서비스로만', 'HTTP나 메시지']
+            - ['트랜잭션', '하나로 묶임', '하나로 묶임', '서비스마다 따로. 보상이나 메시지']
+            - ['운영할 것', '적다', '적다', '많다 (게이트웨이, 서비스 찾기, 서비스마다 모니터링)']
+      - p: '상황마다 골라 보세요.'
+      - widget:
+          kind: classify
+          categories: [모놀리스로 두기, 모듈러 모놀리스, 서비스로 떼기]
+          items:
+            - {text: '개발자 3명이 처음 만드는 서비스', answer: 1, explain: '아직 무엇이 함께 바뀌는지 몰라요. 가장 단순하게 시작해요.'}
+            - {text: '기능은 많지만 팀이 하나이고, 배포가 서로를 막지 않는 서비스', answer: 2, explain: '나눌 신호는 없지만 커질 준비로 모듈의 경계를 지켜요.'}
+            - {text: '50명 다섯 팀이 한 저장소에서 늘 배포 충돌을 겪는 서비스', answer: 3, explain: '팀과 배포가 서로를 막아요. 나눌 신호예요.'}
+            - {text: '이미지 변환만 CPU를 많이 써서 몰리면 다른 API까지 느려지는 서비스', answer: 3, explain: '그 기능만 따로 늘려야 해요. 변환 기능을 떼어 내요.'}
+      - quiz:
+          q: '모듈러 모놀리스에서 주문 모듈의 `OrderService`가 재고 모듈의 `StockRepository`를 직접 주입받아 써요. 무엇이 문제인가요?'
+          options:
+            - '문제없다. 같은 애플리케이션이니 아무 빈이나 써도 된다'
+            - '모듈의 경계를 어겼다. 재고 모듈의 공개 서비스로 불러야 나중에 떼어 낼 수 있다'
+            - '트랜잭션이 걸리지 않는다'
+          answer: 2
+          explain: '다른 모듈의 리포지토리를 직접 쓰면 두 모듈이 얽혀요. 공개한 서비스로만 부르면 그 서비스를 HTTP 클라이언트로 바꿔 떼어 낼 수 있어요.'
+      - next: '원리는 여기까지예요. 이제 스프링에서 다른 서비스를 부르는 코드와, 가장 흔한 실수를 볼게요.'
+    recall: '여러 팀이 같은 코드와 배포 일정에 막히거나, 한 기능만 따로 늘려야 하거나, 한 기능의 장애가 전체를 멈출 때 나눠요. 처음부터 나누면 함께 바뀌는 것을 갈라놓기 쉬워요. 그 전에는 모듈러 모놀리스로 두어, 배포는 하나지만 모듈은 다른 모듈의 공개한 서비스로만 부르고 남의 리포지토리와 테이블을 직접 쓰지 않아요. 함께 바뀌는 것(애그리거트)은 같은 모듈에 두고, 경계가 지켜져 있으면 나중에 떼어 내기 쉬워요.'
 practice:
+  title: 스프링에서 다른 서비스를 부를 때
   says:
     - '다른 서비스를 HTTP로 부르는 스프링 코드: 스프링 6.1부터 있는 `RestClient`. 코드 restClient처럼 `baseUrl`과 요청 팩토리를 정하고, `post().uri(...).body(...).retrieve()`로 부른다. 테스트에서 `MiniWeb`으로 띄운 재고 서버를 부른다'
-    - '흔한 실수: 타임아웃을 정하지 않는다. `RestClient`의 기본 요청 팩토리는 JDK의 `HttpURLConnection`을 쓰고 기본 읽기 타임아웃이 없다(0, 끝없이 기다림). 재고 서버가 응답하지 않으면 주문 서버의 요청 스레드가 묶인다. 고친 코드: `SimpleClientHttpRequestFactory`에 `setConnectTimeout`, `setReadTimeout`을 준다. 응답이 늦은 서버에서 타임아웃 예외가 나는 것을 테스트로 보인다'
+    - '흔한 실수: 타임아웃을 정하지 않는다. 기본 설정에는 읽기 타임아웃이 없어 상대가 응답하지 않으면 끝없이 기다린다. 재고 서버가 응답하지 않으면 주문 서버의 요청 스레드가 묶인다. 고친 코드: `SimpleClientHttpRequestFactory`에 `setConnectTimeout`, `setReadTimeout`을 준다. 응답이 늦은 서버에서 타임아웃 예외가 나는 것을 테스트로 보인다'
     - '흔한 실수 둘: 모듈러 모놀리스에서 다른 모듈의 엔티티를 연관관계(`@ManyToOne`)로 직접 잇는다. 모듈을 떼어 낼 때 끊기 어렵다. 다른 모듈은 id로 가리킨다(A2)'
+  body:
+    - h3: RestClient
+    - p: '스프링 6.1부터 HTTP 클라이언트로 `RestClient`를 써요([스프링 문서](link:restClient)). 이 레슨의 테스트도 `RestClient`로 재고 서버를 불렀어요.'
+    - code: remote
+    - h3: 흔한 실수 하나
+    - p: '타임아웃을 정하지 않는 거예요. 기본 설정의 `RestClient`에는 읽기 타임아웃이 없어서, 상대가 응답하지 않으면 끝없이 기다려요. 그동안 주문 서버의 요청 스레드가 하나씩 묶이고, 쌓이면 주문 서버 전체가 멈춰요. 연결 타임아웃과 읽기 타임아웃을 줘요.'
+    - code: restClient
+      notes:
+        - mark: setConnectTimeout
+          as: code
+          text: '연결을 맺기까지 기다리는 한도예요.'
+        - mark: setReadTimeout
+          as: code
+          text: '연결된 뒤 응답을 기다리는 한도예요. 넘으면 `SocketTimeoutException`을 품은 `RestClientException`이 나요.'
+    - p: '2초 늦게 응답하는 재고 서버에 두 클라이언트로 요청해 봤어요.'
+    - ci:
+        key: timeout
+        label: 실제 결과 보기
+        source: MonolithMsaTest.readTimeout
+        code: timeoutRun
+    - p: '기본 클라이언트는 2초를 다 기다렸고, 읽기 타임아웃을 준 클라이언트는 0.5초쯤에 포기했어요. 타임아웃으로 실패한 뒤 다시 시도할지, 대신 무엇을 보여 줄지는 심화 레슨 "타임아웃, 재시도, 서킷 브레이커"에서 다뤄요.'
+    - h3: 흔한 실수 둘
+    - p: '모듈러 모놀리스에서 다른 모듈의 엔티티를 JPA 연관관계로 직접 잇는 거예요.'
+    - code: badJoin
+      notes:
+        - mark: '@ManyToOne'
+          as: anno
+          text: '주문 엔티티가 재고 모듈의 엔티티를 직접 들고 있어요. 재고 모듈을 떼어 내면 이 연관관계와 조인이 모두 깨져요.'
+    - p: '다른 모듈(다른 애그리거트)은 객체 대신 **id로** 가리켜요. 필요한 정보는 그 모듈의 서비스에 물어요.'
+    - code: goodJoin
+interview:
+  question: 모놀리스와 마이크로서비스는 무엇이 다르고, 언제 나누나요?
+  model:
+    - label: 정의
+      text: 모놀리스는 모든 기능을 한 애플리케이션으로 만들어 한 번에 배포하고 DB 하나를 씁니다. 마이크로서비스는 기능별 작은 서비스로 나눠 따로 배포하고, 서비스마다 DB를 가지며 HTTP나 메시지로 대화합니다.
+    - label: 트레이드오프
+      text: 모놀리스는 호출이 빠르고 트랜잭션 하나로 묶여 단순하지만, 커지면 배포와 늘리기와 장애와 팀이 묶입니다. 마이크로서비스는 따로 배포하고 따로 늘리지만, 호출이 네트워크라 느리고 실패하며 상대의 장애가 번지고, 트랜잭션을 하나로 묶을 수 없어 보상이나 메시지로 맞춰야 합니다.
+    - label: 언제
+      text: 팀과 배포가 서로를 막거나 한 기능만 따로 늘려야 할 때 나눕니다. 그 전에는 모듈러 모놀리스로 모듈은 공개한 서비스로만 부르고 남의 테이블과 엔티티를 직접 쓰지 않아, 나중에 떼어 내기 쉽게 둡니다. 다른 서비스를 부를 때는 타임아웃을 꼭 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 한 애플리케이션 안에서 주문 모듈이 재고 테이블을 직접 읽던 코드를 재고 서비스 호출로 바꿔 모듈 경계를 세웠습니다.'
+verified: 롤백, 호출 시간, 서버가 늦거나 꺼질 때, 타임아웃의 결과는 PostgreSQL 16과 내장 톰캣으로 띄운 재고 서버에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([MonolithMsaTest](link:test))가 다시 돌아요.
+footer: '근거: 마이크로서비스의 정의는 [마틴 파울러와 제임스 루이스의 글](link:microservices), 모놀리스로 시작하기는 [마틴 파울러의 글](link:monolithFirst), `RestClient`는 [스프링 문서](link:restClient). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '같은 애플리케이션 안에서 `@Transactional`로 주문과 재고를 바꾸다 예외가 나면 둘 다 롤백된다'
-    how: 'PostgreSQL 컨테이너와 `@SpringBootTest`(테스트에 트랜잭션 없음)'
-  - claim: '재고를 HTTP로 부르는 서버가 자기 DB에 커밋한 뒤 주문 서버가 롤백해도 재고는 줄어든 채 남는다'
-    how: '`MiniWeb`으로 재고 서버를 띄우고 재고를 메모리나 별도 테이블에 둔다'
-  - claim: 'HTTP 호출은 메서드 호출보다 몇십 배 이상 느리다'
-    how: '각각 1,000번 부른 시간을 잰다. 배수는 단정하지 않고 실측을 보인다'
+  - claim: '같은 애플리케이션 안에서 한 트랜잭션으로 주문과 재고를 바꾸다 예외가 나면 둘 다 롤백된다'
+    how: 'PostgreSQL 컨테이너와 TransactionTemplate. 설계 때는 @SpringBootTest로 적었으나, 스프링 부트 테스트 컨텍스트 없이 DataSource와 트랜잭션 매니저를 직접 만들었다'
+    test: MonolithMsaTest.localTransactionRollsBackBoth
+  - claim: '재고를 HTTP로 부르는 서버가 자기 저장소에 반영한 뒤 주문 서버가 롤백해도 재고는 줄어든 채 남는다'
+    how: '`MiniWeb`으로 재고 서버를 띄우고 재고를 그 서버의 메모리에 둔다'
+    test: MonolithMsaTest.remoteCallIsNotRolledBack
+  - claim: 'HTTP 호출은 메서드 호출보다 훨씬 느리다'
+    how: '각각 1,000번 부른 시간을 잰다. 열 배 넘게 느린 것만 단정하고 실측을 보인다'
+    test: MonolithMsaTest.remoteCallIsSlower
   - claim: '재고 서버가 꺼져 있으면 호출이 예외로 실패하고, 응답이 늦으면 부르는 쪽도 그만큼 늦다'
-    how: '`MiniWeb`을 닫은 뒤 부르기, 일부러 늦게 답하는 컨트롤러'
-  - claim: '읽기 타임아웃을 준 `RestClient`는 늦은 응답에서 타임아웃 예외를 던진다'
-    how: '`SimpleClientHttpRequestFactory.setReadTimeout`'
+    how: '`MiniWeb`을 닫은 뒤 부르기, 1.5초 늦게 답하는 컨트롤러'
+    test: MonolithMsaTest.downOrSlowServerSpreads
+  - claim: '읽기 타임아웃을 준 `RestClient`는 늦은 응답에서 타임아웃 예외를 던지고, 기본 설정은 끝까지 기다린다'
+    how: '타임아웃 예외는 응답 본문을 읽다 나서 `ResourceAccessException`이 아니라 `RestClientException`(원인 `SocketTimeoutException`)이었다. `SimpleClientHttpRequestFactory.setReadTimeout(500)`과 기본 `RestClient.create`를 2초 늦는 서버에 보낸다. 설계 때는 기본 요청 팩토리를 HttpURLConnection이라 적었으나 확인하지 않은 내용이라 "기본 설정에는 읽기 타임아웃이 없다"로 고쳤다'
+    test: MonolithMsaTest.readTimeout
 sources:
   - '마이크로서비스의 정의: Martin Fowler와 James Lewis https://martinfowler.com/articles/microservices.html'
   - '모놀리스를 먼저: https://martinfowler.com/bliki/MonolithFirst.html'
