@@ -1,7 +1,8 @@
-# 관계형 DB와 NoSQL (설계서)
+# 관계형 DB와 NoSQL
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
 title: 관계형 DB와 NoSQL
+description: 관계형 DB는 무엇을 약속하는지, NoSQL은 무엇을 다르게 하는지, 함께 읽는 것을 한 문서에 담으면 무엇을 얻고 잃는지, 언제 무엇을 고르는지. 네 가지 질문에 스스로 답할 수 있게 같은 주문을 테이블과 JSON 문서 두 모양으로 담아 비교하며 배우는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D12
 type: 개념 설명
@@ -41,6 +42,12 @@ covers:
     where: '다루지 않음: Redis(A5)'
   - topic: '캐시를 둘 때의 무효화'
     where: '다루지 않음: 캐시 전략과 무효화(A4)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nosql/RdbVsNosqlTest.java
+  json: https://www.postgresql.org/docs/16/datatype-json.html
+  mongoTx: https://www.mongodb.com/docs/manual/core/transactions/
+  springRepos: https://docs.spring.io/spring-data/commons/reference/repositories.html
+  hibernate: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html
 codes:
   predict: |-
     -- 주문 1만 건을 문서로 저장
@@ -79,9 +86,33 @@ codes:
       List<OrderDoc> findByMemberId(
           Long id);
     }
+  kinds: |-
+    키-값    session:abc → {userId: 7}
+    문서     {orderId: 1, items: [...]}
+    와이드   행마다 열이 다를 수 있는 큰 표
+    그래프   (kim)-[친구]->(lee)
+  jsonType: |-
+    @Entity
+    class Product {
+      @Id Long id;
+      String name;
+      long price;
+
+      [[@JdbcTypeCode(SqlTypes.JSON)]]
+      Map<String, Object> attributes;
+    }
 predict:
-  text: '코드 predict처럼 주문 문서마다 회원 이름을 복사해 두었어요. kim의 주문은 1만 건 가운데 300건이에요. kim이 이름을 바꾸면 무엇을 고쳐야 할까요? 보기: 회원 문서 하나, kim의 주문 문서 300개, 모든 주문 문서 1만 개.'
-  answer: 'kim의 주문 문서 300개. 이름이 문서마다 복사되어 있어서다. 관계형이면 회원 행 하나다. 질문 3에서 밝힌다.'
+  title: 이름을 바꾸면 무엇을 고칠까?
+  text: '주문 문서 1만 개마다 회원 이름을 복사해 두었어요. kim의 주문은 그 가운데 300개예요. kim이 이름을 바꾸면 무엇을 고쳐야 할까요? 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: one, label: 회원 문서 하나}
+    - {value: '300', label: kim의 주문 문서 300개}
+    - {value: all, label: 모든 주문 문서 1만 개}
+  answer: '300'
+  storageKey: nosql-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 관계형 DB는 무엇을 약속하나요?
@@ -96,6 +127,28 @@ questions:
     asks:
       - '본문의 예시: 관계형 DB의 `orders`에 없는 열 `memo`를 넣는 INSERT를 보내면 (DB가 거절한다. 스키마에 없는 열이다)'
       - '옮긴 상황: 주문을 넣고 재고를 빼는 두 일이 반드시 함께 되거나 함께 안 되어야 한다. 관계형 DB가 이것을 보장하는 기능은 (여러 문장을 묶는 트랜잭션)'
+    body:
+      - p: '앞 레슨들에서 본 것을 한 장으로 모으면, 그것이 관계형 DB가 약속하는 것이에요.'
+      - table:
+          head: [약속, 무엇을 하나, 본 레슨]
+          rows:
+            - ['스키마와 제약', '열의 이름과 타입이 정해져 있고, 잘못된 값은 DB가 막아요', '[키와 제약 조건](lesson:keys-constraints)']
+            - ['나눠 담기', '사실 하나를 한 곳에만 두어 어긋나지 않게 해요', '[정규화](lesson:normalization)']
+            - ['조인', '나눠 담은 것을 쿼리로 다시 붙여요', '[조인](lesson:sql-join)']
+            - ['트랜잭션', '여러 행, 여러 테이블의 변경을 함께 성공하거나 함께 실패하게 묶어요', '[트랜잭션 기초](lesson:tx-basics)']
+      - p: '스키마는 **쓰기 전에** 정해져 있어요. 그래서 "쓸 때 검사하는 스키마"라고 불러요. 수량 칸에 글자를 넣거나 0을 넣으면 DB가 거절해요. 질문 3에서 직접 봐요.'
+      - p: '대가도 있어요. 열을 더하거나 타입을 바꾸려면 스키마를 바꿔야 해요. 큰 테이블에서는 그 자체가 일이에요(심화 D16).'
+      - p: '그리고 큰 장점 하나. 관계형은 **데이터를 어떻게 읽을지 미리 몰라도 돼요.** 나눠 두고, 필요한 조합을 그때그때 쿼리로 만들어요. 새 통계 화면이 생겨도 테이블은 그대로 두고 쿼리만 써요.'
+      - quiz:
+          q: '주문을 넣고 재고를 빼는 두 일이 반드시 함께 되거나 함께 안 되어야 해요. 관계형 DB가 이것을 보장하는 기능은?'
+          options:
+            - '외래 키'
+            - '여러 문장을 묶는 트랜잭션'
+            - '인덱스'
+          answer: 2
+          explain: '트랜잭션은 여러 행, 여러 테이블의 변경을 함께 커밋하거나 함께 롤백해요.'
+      - next: '관계형이 아닌 저장소는 이 가운데 무엇을 다르게 할까요?'
+    recall: '관계형 DB는 데이터를 정해진 열의 테이블에 나눠 담고, 스키마와 제약 조건, 조인, 여러 행에 걸친 트랜잭션을 약속해요. 잘못된 데이터는 쓸 때 DB가 막고, 나눠 담은 것은 조인으로 다시 붙이고, 여러 테이블을 고치는 일은 한 트랜잭션으로 묶어요. 어떻게 읽을지 미리 몰라도 쿼리로 조합해요.'
   - id: q2
     title: NoSQL은 무엇을 다르게 하나요?
     conclusion:
@@ -112,6 +165,32 @@ questions:
     asks:
       - '본문의 예시: 로그인 세션을 세션 id로 찾아 읽기만 한다. NoSQL의 네 종류 가운데 맞는 것은 (키-값)'
       - '옮긴 상황: 문서 저장소에 회원 문서를 넣는데 한 문서는 `phone`, 다른 문서는 `phoneNumber`로 넣었다. 저장소가 막아 주나 (아니다. 읽을 때 해석하는 스키마라 둘 다 들어간다)'
+    body:
+      - p: '**NoSQL**은 기술 하나의 이름이 아니라 "SQL 관계형 DB가 아닌 저장소"를 묶어 부르는 말이에요. 크게 넷이에요.'
+      - code: kinds
+      - table:
+          head: [종류, 담는 모양, 예]
+          rows:
+            - ['키-값', '키 하나에 값 하나', 'Redis']
+            - ['문서', 'JSON 같은 문서 하나에 관련 데이터를 함께', 'MongoDB']
+            - ['와이드 컬럼', '행마다 열이 다를 수 있는 아주 큰 표', 'Cassandra']
+            - ['그래프', '점(노드)과 선(관계)', 'Neo4j']
+      - p: '종류마다 다르지만 대개 이런 쪽을 골랐어요.'
+      - ul:
+          - '**함께 읽는 것을 한 덩어리(값, 문서)에 담아요.** 조인 없이 키 하나로 한 번에 읽어요.'
+          - '**덩어리마다 키가 있어서, 키로 나눠 여러 서버에 담기 쉬워요.** 데이터가 한 서버에 다 들어가지 않을 때 늘리기 편해요.'
+          - '**스키마는 읽을 때 해석해요.** 문서마다 필드가 달라도 들어가요. 모양이 자주 바뀌거나 제각각인 데이터(이벤트 로그, 상품마다 다른 속성)에 편해요.'
+      - p: '그 대신 **덜 약속하던 것**이 있어요. 덩어리 사이의 조인, 여러 덩어리를 한 번에 고치는 트랜잭션, 쓸 때의 검사예요. 다만 제품과 버전마다 달라요. MongoDB는 4.0부터 여러 문서를 묶는 트랜잭션을 지원해요([MongoDB 문서](link:mongoTx)).'
+      - quiz:
+          q: '로그인 세션을 세션 id로 찾아 읽기만 해요. NoSQL의 네 종류 가운데 가장 맞는 것은?'
+          options:
+            - '키-값'
+            - '그래프'
+            - '와이드 컬럼'
+          answer: 1
+          explain: '키 하나로 값 하나를 빠르게 읽는 일이에요. Redis 같은 키-값 저장소가 맞아요.'
+      - next: '함께 읽는 것을 한 덩어리에 담으면 정말 좋기만 할까요? 같은 주문을 두 모양으로 담아 비교해 볼게요.'
+    recall: 'NoSQL은 관계형이 아닌 저장소(키-값, 문서, 와이드 컬럼, 그래프)를 묶어 부르는 말이고, 대개 함께 읽는 데이터를 한 덩어리로 담아 키로 빠르게 읽고 여러 서버로 나눠 담기 쉽게 만들었어요. 스키마는 읽을 때 해석해요. 그 대신 조인과 여러 덩어리에 걸친 트랜잭션, 쓸 때의 검사를 덜 약속하던 제품이 많아요.'
   - id: q3
     title: 함께 읽는 것을 한 문서에 담으면 무엇을 얻고 잃나요?
     conclusion:
@@ -128,6 +207,84 @@ questions:
     asks:
       - '본문의 예시: 주문 문서 1만 개 가운데 kim의 주문이 300개다. 회원 이름이 문서마다 복사되어 있을 때 kim의 이름을 바꾸려면 고쳐야 하는 문서 수는 (300개)'
       - '옮긴 상황: 블로그 글 문서에 댓글을 모두 넣었다. 인기 글에 댓글이 수만 개 달린다. 생기는 문제는 (글 문서 하나가 계속 커지고, 댓글 하나를 달 때마다 큰 문서를 고친다. 댓글을 따로 두는 편이 낫다)'
+    body:
+      - p: '같은 주문 1만 건을 두 모양으로 담았어요. 관계형은 회원, 주문, 주문 항목 테이블로 나눴고, 문서 모델은 PostgreSQL의 `jsonb` 열에 주문 한 건을 문서 하나로 담았어요. 문서 저장소를 따로 띄우지 않고 같은 DB 안에서 흉내 냈어요.'
+      - code: doc
+      - ci:
+          key: same
+          label: 주문 1을 두 모양으로 읽은 결과
+          source: RdbVsNosqlTest.sameOrder
+      - p: '문서는 **행 하나**를 읽으면 회원 이름과 항목까지 다 있어요. 관계형은 테이블 셋을 조인해서 같은 내용을 만들어요. 주문 화면처럼 늘 함께 읽는 것은 문서가 편해요.'
+      - h3: 바꿀 때
+      - p: '처음 예측의 답은 **kim의 주문 문서 300개**예요. {{predict-result}}'
+      - code: rename
+      - ci:
+          key: rename
+          label: 실제로 고친 행 수
+          source: RdbVsNosqlTest.renameCost
+      - p: '이름이 문서마다 복사되어 있어서 300개를 고쳐야 해요. 관계형은 `member` 한 행이에요. 300개 가운데 일부만 고치면 어떻게 될까요?'
+      - ci:
+          key: partial
+          label: 일부만 고쳤을 때
+          source: RdbVsNosqlTest.partialRename
+      - p: '같은 회원의 이름이 둘이 됐어요. [정규화](lesson:normalization) 질문 1의 **갱신 이상이 그대로 돌아왔어요.** 문서 모델은 정규화를 풀고 얻은 읽기 편의의 대가를 앱이 떠안는 모양이에요.'
+      - p: '그래서 문서 모델에서도 **회원은 따로 두고 주문에는 회원 id만** 두는 설계를 해요. 반대로 주문 항목처럼 주문과 함께 만들어지고, 함께 읽히고, 따로 바뀌지 않는 것은 한 문서에 넣기 좋아요. 주문할 때의 이름이 필요하면 그것은 "그때의 사실"이라 복사해도 돼요(정규화 질문 4).'
+      - h3: 넣을 때
+      - ci:
+          key: schema
+          label: 잘못된 수량을 넣어 본 결과
+          source: RdbVsNosqlTest.schemaCheck
+      - p: '`jsonb` 문서에는 수량을 문자열 `"two"`로 넣어도 들어가요. 관계형의 `qty int check (qty > 0)`은 글자도 0도 막아요. 스키마가 없다는 것은 **검사를 앱이 한다**는 뜻이에요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 해 볼 일
+            options:
+              - {value: read, label: 주문 한 건 읽기}
+              - {value: rename, label: 회원 이름 바꾸기}
+              - {value: bad, label: 잘못된 수량 넣기}
+          sides:
+            - label: 관계형 (테이블 셋)
+              items:
+                - {name: member, note: 회원 이름은 여기 한 곳}
+                - {name: orders, note: 회원 id만}
+                - {name: order_item, note: 'qty int check (qty > 0)'}
+            - label: 문서 (주문 문서)
+              items:
+                - {name: order 문서, note: '회원 이름과 항목을 함께 담음'}
+          scenes:
+            read:
+              sides:
+                - marks: [{name: member, tag: 조인}, {name: orders, tag: 조인}, {name: order_item, tag: 조인}]
+                  result: [{k: 읽는 곳, v: 테이블 셋을 조인}]
+                - marks: [{name: order 문서, tag: 읽음}]
+                  result: [{k: 읽는 곳, v: 문서 하나}]
+              verdict: '함께 읽는 것은 문서가 한 번에 읽어요.'
+            rename:
+              sides:
+                - marks: [{name: member, tag: 고침}]
+                  result: [{k: 고친 행, v: '1'}]
+                - marks: [{name: order 문서, tag: 고침, mark: bad}]
+                  result: [{k: 고친 문서, v: '300', mark: bad}]
+              verdict: '복사해 둔 값은 복사한 곳을 모두 고쳐야 해요. 빠뜨리면 이름이 둘이 돼요.'
+            bad:
+              sides:
+                - marks: [{name: order_item, tag: 거절}]
+                  result: [{k: "qty 'two'", v: 22P02 오류}]
+                - marks: [{name: order 문서, tag: 들어감, mark: bad}]
+                  result: [{k: 'qty "two"', v: 들어감, mark: bad}]
+              verdict: '스키마가 없으면 검사는 앱의 몫이에요.'
+      - quiz:
+          q: '블로그 글 문서에 댓글을 모두 넣었어요. 인기 글에는 댓글이 수만 개 달려요. 어떤 문제가 생기나요?'
+          options:
+            - '문제없다. 한 번에 읽으니 늘 빠르다'
+            - '글 문서가 계속 커지고, 댓글 하나를 달 때마다 큰 문서를 고친다'
+            - '댓글을 더 달 수 없다'
+          answer: 2
+          explain: '함께 읽는다고 다 한 문서에 넣으면, 따로 계속 늘어나는 것까지 끌어안아요. 댓글은 따로 두는 편이 나아요.'
+      - next: '얻는 것과 잃는 것을 봤어요. 그러면 실제로는 어떻게 고를까요?'
+    recall: '주문을 회원 이름과 항목까지 한 문서에 담으면 조인 없이 한 번에 읽지만, 여러 문서에 복사한 값을 바꿀 때는 그 문서를 모두 고쳐야 하고 빠뜨리면 값이 어긋나요. 스키마가 없어 잘못된 값의 검사도 앱이 해요. 그래서 문서 모델은 함께 읽고 함께 바뀌는 것만 한 문서에 넣어요.'
   - id: q4
     title: 언제 무엇을 고르나요?
     conclusion:
@@ -142,11 +299,91 @@ questions:
     asks:
       - '본문의 예시: 결제와 포인트 차감이 함께 되어야 하는 데이터를 둘 곳은 (관계형 DB. 여러 행을 한 트랜잭션으로 묶는다)'
       - '옮긴 상황: 상품 상세 페이지의 조회수가 초당 수천 번 오르고, 몇 개를 잃어도 큰일은 아니다. 관계형 DB에 매번 UPDATE하는 대신 고를 만한 것은 (Redis 같은 키-값 저장소에서 올리고 가끔 DB에 옮긴다)'
+    body:
+      - p: '하나만 고르는 문제가 아니에요. 대부분의 서비스는 **관계형 DB를 주 저장소로 두고, 맞는 곳에 NoSQL을 더해요.** 데이터마다 어디에 둘지 골라 보세요.'
+      - widget:
+          kind: classify
+          categories:
+            - 관계형 DB
+            - 키-값 (Redis)
+            - 문서
+          items:
+            - text: 주문과 결제. 금액이 맞아야 하고 회원, 상품과 이어져 있다
+              answer: 1
+              explain: 제약과 트랜잭션, 조인이 필요해요.
+            - text: 로그인 세션. 세션 id로만 찾고, 잃어도 다시 로그인하면 된다
+              answer: 2
+              explain: 키 하나로 빠르게 읽고 쓰는 일이에요.
+            - text: 상품마다 속성이 다른 카탈로그(옷은 사이즈와 색, 노트북은 CPU와 메모리)
+              answer: 3
+              explain: 모양이 제각각이고 상품 하나를 한 덩어리로 읽어요. 관계형의 jsonb 열로도 할 수 있어요.
+            - text: 회원과 회원 등급, 포인트
+              answer: 1
+              explain: 서로를 가리키고 포인트가 돈처럼 오가요.
+            - text: 실시간 인기 상품 순위
+              answer: 2
+              explain: 아주 자주 바뀌고 빠르게 읽어야 해요. Redis의 정렬된 집합이 맞아요.
+            - text: 서비스가 남기는 이벤트 로그. 종류마다 필드가 다르고, 한 건씩 쌓기만 한다
+              answer: 3
+              explain: 모양이 제각각이고 한 건을 한 덩어리로 쌓아요.
+      - ul:
+          - '**관계가 많고 정합성이 중요한 데이터**(주문, 결제, 회원)는 관계형이에요. 제약과 트랜잭션이 필요해요.'
+          - '**키로만 찾고 아주 빨라야 하거나, 잃어도 다시 만들 수 있는 데이터**(세션, 캐시, 순위)는 키-값이에요. [Redis](lesson:redis-ranking)에서 다뤄요.'
+          - '**모양이 제각각이고 한 덩어리로 읽는 데이터**(카탈로그 속성, 이벤트 로그)는 문서가 편해요. PostgreSQL의 `jsonb` 열 하나로 그 부분만 문서로 두기도 해요.'
+          - '**한 서버에 담기지 않을 만큼 큰 데이터**는 나눠 담기 쉬운 NoSQL이 맞을 수 있어요. 관계형도 복제와 샤딩으로 늘리지만 조인과 트랜잭션이 어려워져요(DB 복제와 샤딩 A15). 대부분의 서비스는 그 크기에 닿기 전에 다른 문제를 먼저 만나요.'
+      - more:
+          summary: '더 알아보기: 경계는 흐려졌어요'
+          body:
+            - p: 'PostgreSQL은 `jsonb`와 그 안을 찾는 인덱스(GIN)를 지원하고([PostgreSQL 문서](link:json)), MongoDB는 여러 문서 트랜잭션과 스키마 검사를 지원해요. 그래서 "관계형은 느리고 NoSQL은 빠르다" 같은 말은 맞지 않아요. 무엇을 약속받아야 하고 어떤 모양으로 읽는지로 골라요.'
+      - quiz:
+          q: '상품 상세 페이지의 조회수가 초당 수천 번 올라요. 몇 개를 잃어도 큰일은 아니에요. 관계형 DB에 매번 UPDATE하는 대신 고를 만한 것은?'
+          options:
+            - 'Redis 같은 키-값 저장소에서 올리고 가끔 DB에 옮긴다'
+            - '그래프 DB에 담는다'
+            - '조회수마다 새 테이블을 만든다'
+          answer: 1
+          explain: '자주 바뀌고 정확도보다 속도가 중요한 값이에요. 키-값 저장소가 빠르게 받아 주고, 주기적으로 DB에 모아 옮겨요.'
+    recall: '관계가 많고 정합성이 중요한 데이터는 관계형에, 키로만 찾고 아주 빨라야 하거나 모양이 제각각인 데이터는 NoSQL에 둬요. 대부분의 서비스는 관계형 DB를 주 저장소로 두고, 캐시와 세션, 순위, 로그처럼 맞는 곳에 NoSQL을 더해요. 하나만 고르는 문제가 아니에요.'
 practice:
   says:
     - '스프링 데이터는 저장소마다 같은 모양의 리포지토리를 준다. 코드 springData의 `JpaRepository`와 `MongoRepository`는 메서드 이름만으로 조회를 만드는 것까지 같다. 하지만 약속은 다르다. JPA 쪽은 조인과 트랜잭션, 제약이 DB에 있고, 몽고 쪽은 문서 하나가 단위다(스프링 데이터 문서 근거. 몽고는 의존성을 더해야 해서 테스트하지 않는다)'
     - 'PostgreSQL의 `jsonb` 열은 엔티티 하나에 모양이 제각각인 속성을 둘 때 쓴다. 하이버네이트 6은 `@JdbcTypeCode(SqlTypes.JSON)`으로 `Map`이나 record를 `jsonb`에 담는다(하이버네이트 문서 근거). 테스트는 SQL로 넣고 읽는다'
     - '흔한 실수: 스키마를 정하기 귀찮아서 엔티티의 모든 속성을 `jsonb` 하나에 넣는다. 금액과 상태처럼 조건으로 찾고 제약이 필요한 값까지 들어가면 질문 3의 문제가 모두 돌아온다. 고친 것: 찾고 검사할 값은 열로, 제각각인 부가 속성만 `jsonb`로'
+  title: 스프링에서는 이렇게 써요
+  body:
+    - p: '스프링 데이터는 저장소가 달라도 같은 모양의 리포지토리를 줘요. 메서드 이름만으로 조회를 만드는 것까지 같아요.'
+    - code: springData
+      notes:
+        - mark: JpaRepository<Order, Long>
+          as: code
+          text: '관계형(JPA)이에요. 조인과 트랜잭션, 제약이 DB에 있어요.'
+        - mark: 'MongoRepository<OrderDoc,'
+          as: code
+          text: '문서 저장소예요. 문서 하나가 단위이고, 회원 이름을 복사해 두었다면 바꿀 때 문서를 모두 고쳐야 해요.'
+    - p: '**코드 모양이 같다고 약속까지 같지는 않아요.** 리포지토리를 바꿔 끼우는 것보다, 데이터를 어떤 모양으로 담을지가 먼저예요.'
+    - h3: 관계형 안에 문서 칸 하나
+    - p: '상품마다 다른 속성만 `jsonb` 열 하나에 두는 방법이 있어요. 하이버네이트 6은 `@JdbcTypeCode(SqlTypes.JSON)`으로 `Map`이나 record를 `jsonb`에 담아요.'
+    - code: jsonType
+      notes:
+        - mark: '@JdbcTypeCode(SqlTypes.JSON)'
+          as: anno
+          text: '이 필드를 JSON 열로 담아요. 이름과 가격처럼 찾고 검사할 값은 그대로 열로 둬요.'
+    - h3: '흔한 실수: 모든 것을 jsonb 하나에'
+    - p: '스키마를 정하기 귀찮아서 엔티티의 모든 속성을 `jsonb` 하나에 넣어요. 금액과 상태처럼 조건으로 찾고 제약이 필요한 값까지 들어가면, 질문 3에서 본 문제(검사가 없고, 복사본이 어긋남)가 모두 돌아와요. 찾고 검사할 값은 열로, 제각각인 부가 속성만 `jsonb`로 둬요.'
+    - muted: '근거: 리포지토리는 [스프링 데이터 문서](link:springRepos), JSON 매핑은 [하이버네이트 문서](link:hibernate). MongoDB는 의존성을 더해야 해서 테스트하지 않았어요. 문서 모델의 동작은 PostgreSQL의 `jsonb`로 흉내 내서 확인했어요.'
+interview:
+  question: 관계형 DB와 NoSQL의 차이와, 언제 무엇을 쓰는지 설명해 주세요
+  model:
+    - label: 정의
+      text: 관계형 DB는 정해진 스키마의 테이블에 데이터를 나눠 담고, 제약 조건과 조인, 여러 행에 걸친 트랜잭션을 약속합니다. NoSQL은 키-값, 문서, 와이드 컬럼, 그래프처럼 관계형이 아닌 저장소를 묶어 부르는 말입니다.
+    - label: 원리
+      text: NoSQL은 대개 함께 읽는 데이터를 한 덩어리로 담아 키로 빠르게 읽고 여러 서버로 나눠 담기 쉽게 만들었고, 스키마를 읽을 때 해석합니다. 대신 덩어리 사이의 조인과 트랜잭션, 쓸 때의 검사를 덜 약속하고, 복사해 둔 값을 바꿀 때 모든 복사본을 고쳐야 합니다.
+    - label: 주의할 점
+      text: 주문과 결제처럼 관계가 많고 정합성이 중요한 데이터는 관계형에, 세션과 캐시처럼 키로 빠르게 읽는 데이터는 키-값에, 모양이 제각각인 데이터는 문서에 둡니다. 대부분은 관계형을 주 저장소로 두고 NoSQL을 더하며, PostgreSQL의 jsonb처럼 경계도 흐려졌습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문과 회원은 PostgreSQL에 두고, 로그인 세션과 인기 상품 순위는 Redis에 두었습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에 같은 주문을 테이블과 jsonb 문서 두 모양으로 담고 쿼리를 실행해 받은 값이에요. 코드가 바뀔 때마다 테스트([RdbVsNosqlTest](link:test))가 다시 돌아요.
+footer: '근거: jsonb는 [PostgreSQL 16 문서](link:json), MongoDB의 여러 문서 트랜잭션은 [MongoDB 문서](link:mongoTx), 스프링 데이터의 리포지토리는 [스프링 데이터 문서](link:springRepos), JSON 매핑은 [하이버네이트 문서](link:hibernate). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '문서 하나로 읽은 주문과 테이블 넷을 조인한 주문이 같다'
     how: 'PostgreSQL 16 컨테이너에 두 모양으로 넣고 결과를 비교한다'
