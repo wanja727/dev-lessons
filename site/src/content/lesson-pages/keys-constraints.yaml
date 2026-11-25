@@ -1,8 +1,9 @@
-# 키와 제약 조건 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 키와 제약 조건
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/keys-constraints.yaml에 있다.
 title: 키와 제약 조건
+description: 기본 키는 무엇이고 왜 의미 없는 번호를 쓰는지, 외래 키는 무엇을 막는지, NOT NULL과 UNIQUE와 CHECK는 각각 무엇을 지키는지, 앱에서 미리 확인하는데도 왜 DB 제약이 필요한지. 네 가지 질문에 스스로 답할 수 있게 회원과 주문 두 테이블로 배우는 대화형 레슨.
 unit: DB
+minutes: 20
 roadmap: D1
 type: 동작 확인
 prerequisites: []
@@ -43,6 +44,12 @@ covers:
     where: '다루지 않음: 멱등성과 중복 요청 방지(A6)'
   - topic: '제약 조건을 운영 중인 큰 테이블에 더하는 방법(NOT VALID, 잠금)'
     where: '다루지 않음: 스키마 변경과 마이그레이션(D16)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/keys/KeysConstraintsTest.java
+  constraints: https://www.postgresql.org/docs/16/ddl-constraints.html
+  errcodes: https://www.postgresql.org/docs/16/errcodes-appendix.html
+  dao: https://docs.spring.io/spring-framework/reference/data-access/dao.html
+  jpa: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
 codes:
   predict: |-
     -- member.email에 UNIQUE 없음
@@ -79,9 +86,74 @@ codes:
         DataIntegrityViolationException e) {
       throw new EmailTakenException();
     }
+  dupPk: |-
+    insert into member(email, name)
+    values ('kim@a.com', 'kim');
+    -- 같은 이메일로 한 번 더
+    insert into member(email, name)
+    values ('kim@a.com', 'kim2');
+  onDelete: |-
+    member_id bigint
+      references member(id)
+      [[on delete cascade]]
+  nulls: |-
+    create table coupon_owner (
+      email text [[unique]]
+    );
+    insert into coupon_owner
+    values (null), (null), (null);
+  composite: |-
+    create table review (
+      member_id bigint,
+      product_id bigint,
+      [[unique (member_id, product_id)]]
+    );
+  entity: |-
+    @Entity
+    class Member {
+      @Id @GeneratedValue(
+          strategy = IDENTITY)
+      Long id;
+
+      [[@Column(unique = true,]]
+      [[    nullable = false)]]
+      String email;
+    }
+  migration: |-
+    -- V1__create_member.sql
+    create table member (
+      id bigint generated always
+         as identity primary key,
+      email text not null,
+      [[constraint member_email_key]]
+      [[  unique (email)]]
+    );
+  catchAll: |-
+    } catch (
+        [[DataIntegrityViolationException]] e) {
+      throw new EmailTakenException();
+    }
+  catchDupFixed: |-
+    try {
+      memberRepository.save(member);
+    } catch ([[DuplicateKeyException]] e) {
+      throw new EmailTakenException();
+    }
 predict:
-  text: '코드 predict는 회원 가입의 "이메일이 있는지 세어 보고, 0이면 넣기"예요. `email`에 UNIQUE가 없을 때 같은 이메일로 두 요청이 동시에 이 코드를 돌리면, 회원은 몇 명 생길까요? 보기: 1명, 2명, 둘 다 실패해서 0명.'
-  answer: '2명. 두 요청 모두 아직 아무도 넣지 않은 때 세어서 0을 보고 둘 다 넣는다. 질문 4에서 밝힌다.'
+  title: 동시에 가입하면 회원은 몇 명?
+  text: '회원 가입 코드는 "이메일이 있는지 세어 보고, 0이면 넣기"예요. `email`에 UNIQUE가 없을 때, 같은 이메일로 두 요청이 거의 동시에 이 코드를 돌렸어요. 회원은 몇 명 생길까요? 감으로 골라 보세요. 답은 질문 4에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: one
+      label: 1명
+    - value: two
+      label: 2명
+    - value: zero
+      label: 둘 다 실패해서 0명
+  answer: two
+  storageKey: kc-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 기본 키는 무엇이고, 왜 의미 없는 번호를 쓰나요?
@@ -97,6 +169,39 @@ questions:
     asks:
       - '본문의 예시: `member`의 기본 키 id에 이미 있는 값 1로 또 넣으면 어떻게 되나 (23505 오류로 실패한다)'
       - '옮긴 상황: 상품 테이블의 기본 키를 상품 코드(`SKU-001`)로 두었는데 상품 코드 체계가 바뀌었다. 무엇을 고쳐야 하나 (그 상품을 가리키는 주문 항목, 장바구니 같은 모든 외래 키 값. 대리 키였으면 상품 행 하나만)'
+    body:
+      - p: '레슨 전체에서 쓰는 두 테이블이에요. 회원은 이메일로 가입하고, 주문은 회원 id를 가져요.'
+      - code: tables
+        notes:
+          - mark: primary key
+            as: code
+            text: '행 하나를 가리키는 **기본 키**예요. PostgreSQL은 기본 키에 NOT NULL과 UNIQUE를 함께 걸고, 찾기 위한 인덱스도 만들어요.'
+          - mark: generated always
+            as: code
+            text: 'DB가 1, 2, 3 순서로 번호를 매겨 줘요. 직접 id를 넣으려 하면 막아요(428C9 오류).'
+      - p: '기본 키는 **겹칠 수 없고 비어 있을 수 없어요.** 같은 id를 두 번 넣으면 23505 오류가 나요. 숫자 다섯 자리는 오류의 종류를 알려 주는 **SQLState**예요. 질문 4에서 모아 볼게요.'
+      - h3: 이메일을 키로 쓰면 안 되나요?
+      - p: '이메일은 이미 회원마다 다르니 키로 쓸 수 있을 것 같아요. 업무에 원래 있는 값으로 만든 키를 **자연 키**, 행을 가리키려고만 만든 번호를 **대리 키**라고 해요.'
+      - p: '문제는 자연 키가 **바뀔 수 있다**는 거예요. 회원이 이메일을 바꾸면, 그 이메일을 외래 키로 들고 있는 주문, 결제, 리뷰의 값을 모두 고쳐야 해요. 대리 키는 뜻이 없으니 바뀔 일이 없어요. 그래서 대리 키를 기본 키로 두고, 이메일에는 겹치지 않게 **UNIQUE**를 걸어요. 코드 tables가 그렇게 했어요.'
+      - more:
+          summary: '더 알아보기: 번호가 비는 이유'
+          body:
+            - p: '`identity`는 번호를 시퀀스에서 받아요. 넣다가 롤백해도 받은 번호는 돌려주지 않아요. kim(1), lee(2) 다음에 park을 넣다가 롤백하고 choi를 넣었어요.'
+            - ci:
+                key: gap
+                label: 실제 결과 보기
+                source: KeysConstraintsTest.identityGap
+            - p: '3번이 비었어요. 동시에 넣는 요청이 서로 기다리지 않게 하려는 설계라, 번호가 이어진다고 기대하면 안 돼요. 식별자를 만드는 방법은 식별자 생성 전략(P9)에서 더 다뤄요.'
+      - quiz:
+          q: '상품 테이블의 기본 키를 상품 코드(`SKU-001`)로 두었는데 코드 체계가 바뀌었어요. 일련번호를 기본 키로 둔 경우와 비교해 무엇이 더 일이 되나요?'
+          options:
+            - '상품 행 하나만 고치면 되니 차이가 없다'
+            - '그 상품 코드를 가리키는 주문 항목, 장바구니 같은 외래 키 값까지 모두 고쳐야 한다'
+            - '기본 키는 바꿀 수 없으니 상품을 새로 만들어야 한다'
+          answer: 2
+          explain: '자연 키를 기본 키로 쓰면 그 값을 가리키는 모든 외래 키가 함께 바뀌어야 해요. 일련번호를 키로 두면 상품 행의 `sku` 열 하나만 고쳐요.'
+      - next: '기본 키로 행을 가리킬 수 있게 됐어요. 그러면 주문이 가리키는 회원이 정말 있는지는 누가 지킬까요?'
+    recall: '기본 키는 테이블에서 행 하나를 가리키는 값이고, NULL일 수 없고 겹칠 수 없어요(NOT NULL과 UNIQUE). 이메일 같은 자연 키는 바뀔 수 있어서 그 값을 가리키는 외래 키를 모두 고쳐야 해요. 그래서 의미 없는 일련번호(대리 키)를 기본 키로 두고, 이메일에는 UNIQUE를 걸어요.'
   - id: q2
     title: 외래 키는 무엇을 막나요?
     conclusion:
@@ -114,6 +219,61 @@ questions:
       - '본문의 예시: 외래 키가 있는 `orders`에 없는 회원 999의 주문을 넣으면 어떻게 되나 (23503 오류로 실패한다)'
       - '옮긴 상황: 게시글과 댓글 테이블에서 댓글의 `post_id`가 `on delete cascade`다. 댓글 30개가 달린 글 하나를 지우면 댓글은 몇 개 남나 (0개)'
       - '실무 구역의 상황: 주문이 있는 회원을 기본 설정의 외래 키에서 지우면 (23503 오류. 스프링에서는 `DataIntegrityViolationException`)'
+    body:
+      - p: '`orders.member_id`의 `references member(id)`가 **외래 키**예요. "이 열의 값은 `member.id`에 꼭 있어야 한다"는 약속이에요. 없는 회원 999의 주문을 넣어 볼게요. 외래 키를 뺀 테이블에도 같은 것을 넣었어요.'
+      - ci:
+          key: orphan
+          label: 실제 결과 보기
+          source: KeysConstraintsTest.orphanWithoutFk
+          code: orphan
+      - p: '외래 키가 없으면 **그대로 들어가서** 주인 없는 주문이 생겨요. 주문 목록이 회원 이름을 찾다가 실패하는 도입부의 오류가 이것이에요. 외래 키가 있으면 23503 오류로 막아요.'
+      - h3: 부모를 지울 때
+      - p: '반대 방향도 지켜요. 주문이 남은 회원을 지우면 그 주문은 주인을 잃어요. 그래서 외래 키는 부모를 지울 때 어떻게 할지 정해요.'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 외래 키의 삭제 규칙
+            options:
+              - {value: noaction, label: 기본 (NO ACTION)}
+              - {value: cascade, label: ON DELETE CASCADE}
+              - {value: setnull, label: ON DELETE SET NULL}
+          scenes:
+            noaction:
+              duo:
+                - {label: member (kim을 지운 뒤), rows: [{k: '1', v: kim}, {k: '2', v: lee}]}
+                - {label: orders, rows: [{k: 주문 1, v: 'member_id 1'}, {k: 주문 2, v: 'member_id 1'}]}
+              verdict: 'delete가 23503 오류로 실패해요. kim과 주문 둘이 그대로 있어요.'
+            cascade:
+              duo:
+                - {label: member (kim을 지운 뒤), rows: [{k: '2', v: lee}]}
+                - {label: orders, text: 비어 있음, state: dim}
+              verdict: 'kim을 지우자 kim의 주문 둘도 함께 지워졌어요.'
+            setnull:
+              duo:
+                - {label: member (kim을 지운 뒤), rows: [{k: '2', v: lee}]}
+                - {label: orders, rows: [{k: 주문 1, v: 'member_id NULL', mark: changed}, {k: 주문 2, v: 'member_id NULL', mark: changed}]}
+              verdict: '주문은 남고 회원과의 연결만 끊겼어요. 이 열은 NULL을 받아야 해요.'
+      - ci:
+          key: on-delete
+          label: 세 규칙을 실제로 돌린 결과 보기
+          source: KeysConstraintsTest.onDelete
+          code: onDelete
+      - p: '`cascade`는 편하지만 회원 한 명을 지우면 주문, 결제, 리뷰가 줄줄이 사라질 수 있어요. 주문처럼 남겨야 하는 기록에는 쓰지 않고, 회원은 지우는 대신 탈퇴 표시를 하는 일이 많아요.'
+      - more:
+          summary: '더 알아보기: 외래 키 열에는 인덱스가 저절로 생기지 않아요'
+          body:
+            - p: 'PostgreSQL은 기본 키와 UNIQUE에는 인덱스를 만들지만, 외래 키 열에는 만들지 않아요. 회원을 지울 때 DB는 "이 회원을 가리키는 주문이 있나"를 찾아야 하는데, 인덱스가 없으면 주문 테이블 전체를 읽어요. 그래서 외래 키 열에는 대개 인덱스를 직접 만들어요. 인덱스는 [인덱스와 실행계획](lesson:index-explain)에서 다뤄요.'
+      - quiz:
+          q: '댓글의 `post_id`가 `on delete cascade`로 글을 가리켜요. 댓글 30개가 달린 글 하나를 지우면 그 글의 댓글은 몇 개 남나요?'
+          options:
+            - '30개'
+            - '0개'
+            - '글을 지울 수 없어 30개'
+          answer: 2
+          explain: 'CASCADE는 부모를 지울 때 그 부모를 가리키는 자식도 함께 지워요.'
+      - next: '외래 키는 "가리키는 값이 있는가"를 지켰어요. 값 자체가 있어야 하는지, 겹쳐도 되는지, 범위 안인지는 무엇이 지킬까요?'
+    recall: '외래 키는 없는 부모를 가리키는 자식 행을 막아요. 없는 회원의 주문을 넣으면 23503 오류예요. 부모를 지울 때 기본(NO ACTION)은 자식이 있으면 막고, CASCADE는 자식도 지우고, SET NULL은 자식의 외래 키를 비워요. 외래 키가 없으면 주인 없는 주문이 조용히 들어가요.'
   - id: q3
     title: NOT NULL, UNIQUE, CHECK는 각각 무엇을 지키나요?
     conclusion:
@@ -128,6 +288,40 @@ questions:
     asks:
       - '본문의 예시: `email text unique`(NOT NULL 없음)인 열에 이메일 없이 회원을 세 번 넣으면 몇 명이 들어가나 (3명. NULL끼리는 겹친다고 보지 않는다)'
       - '옮긴 상황: 좋아요 테이블에 `unique (member_id, post_id)`가 있다. (1, 10), (1, 11), (2, 10), (1, 10)을 차례로 넣으면 몇 번째가 실패하나 (네 번째)'
+    body:
+      - p: '세 제약은 열 하나의 값에 거는 규칙이에요.'
+      - table:
+          head: [제약, 지키는 것, 어기면]
+          rows:
+            - ['`not null`', '값이 꼭 있다 (이름 없는 회원 없음)', '23502']
+            - ['`unique`', '값이 겹치지 않는다 (같은 이메일 없음)', '23505']
+            - ['`check (amount > 0)`', '값이 정한 범위에 있다 (0원 주문 없음)', '23514']
+      - p: '규칙을 테이블에 적어 두는 것이라 **어느 코드가 넣든** DB가 같은 규칙으로 막아요. 관리자 기능이든, 배치든, 누가 SQL을 직접 쳐도요.'
+      - h3: UNIQUE와 NULL
+      - p: '이메일이 선택 항목이라 `not null` 없이 `unique`만 걸었어요. 이메일 없이 세 번 넣으면 어떻게 될까요?'
+      - ci:
+          key: unique-null
+          label: 실제 결과 보기
+          source: KeysConstraintsTest.uniqueAndNull
+          code: nulls
+      - p: '**셋 다 들어가요.** SQL에서 NULL은 "모르는 값"이라, NULL과 NULL을 같다고 보지 않아요. 그래서 UNIQUE는 NULL끼리를 겹친다고 하지 않아요. 막으려면 `not null`을 함께 걸거나, PostgreSQL 15부터 있는 `unique nulls not distinct`를 써요. 아래 결과의 둘째 줄이 그 경우예요.'
+      - h3: 두 열을 합쳐서 겹치지 않게
+      - code: composite
+        notes:
+          - mark: unique (member_id, product_id)
+            as: code
+            text: '두 열의 **조합**이 겹치지 않아요. 회원 한 명이 상품 하나에 리뷰를 하나만 써요. 같은 회원이 다른 상품에, 다른 회원이 같은 상품에 쓰는 건 돼요.'
+      - p: '(1, 10), (1, 11), (2, 10)은 들어가고, (1, 10)을 다시 넣는 네 번째만 23505로 실패해요.'
+      - quiz:
+          q: '좋아요 테이블에 `unique (member_id, post_id)`가 있어요. (1, 10), (1, 11), (2, 10), (1, 10)을 차례로 넣으면 몇 번째가 실패하나요?'
+          options:
+            - '두 번째'
+            - '세 번째'
+            - '네 번째'
+          answer: 3
+          explain: '두 열의 조합이 같은 것은 네 번째 (1, 10)뿐이에요. 한 열만 같은 것은 괜찮아요.'
+      - next: '앱에서도 "이미 가입한 이메일인지" 미리 확인하는데, DB에 UNIQUE까지 걸어야 할까요?'
+    recall: 'NOT NULL은 값이 꼭 있게, UNIQUE는 값이 겹치지 않게, CHECK는 값이 정한 범위에 있게 지켜요. 규칙이 테이블에 있어서 어느 코드가 넣든 DB가 막아요. UNIQUE는 NULL끼리를 같다고 보지 않아 NULL을 여러 개 받아요. 여러 열의 조합에도 UNIQUE를 걸 수 있어요.'
   - id: q4
     title: 앱에서 미리 확인하는데도 왜 DB 제약이 필요한가요?
     conclusion:
@@ -145,12 +339,114 @@ questions:
     asks:
       - '본문의 예시: UNIQUE가 있는 `email`에 두 요청이 동시에 "세고 0이면 넣기"를 하면 결과는 (1명이 들어가고 한 요청은 23505 오류)'
       - '옮긴 상황: 쿠폰 발급 코드가 "이 회원이 이 쿠폰을 받았는지 조회 → 없으면 발급 행 INSERT"다. 제약 없이 같은 회원의 요청 두 개가 동시에 오면 (두 장이 발급될 수 있다. `unique (member_id, coupon_id)`로 막는다)'
+    body:
+      - p: '처음 예측으로 돌아가요. UNIQUE 없는 테이블에서 두 요청이 "세고 0이면 넣기"를 동시에 하게 했어요. 두 요청이 모두 센 다음에 넣도록 맞췄어요. 답은 **2명**이에요. {{predict-result}}'
+      - widget:
+          kind: steps
+          layout: [selector, duo, buttons, log, verdict]
+          selector:
+            label: member.email에
+            options:
+              - {value: none, label: UNIQUE 없음}
+              - {value: unique, label: UNIQUE 있음}
+          initial:
+            duo:
+              - {label: 요청 A가 본 값, text: 아직 안 셈, state: dim}
+              - {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '0'}]}
+          scenarios:
+            none:
+              - log: 'A: count → 0'
+                duo: [{label: 요청 A가 본 값, rows: [{k: A, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '0'}]}]
+              - log: 'B: count → 0 (A가 아직 넣지 않았어요)'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '0'}]}]
+              - log: 'A: insert → 성공'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '1', mark: changed}]}]
+              - log: 'B: insert → 성공'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '2', mark: bad}]}]
+                verdict: '둘 다 0을 봤으니 둘 다 넣었어요. 같은 이메일 회원이 2명이에요.'
+            unique:
+              - log: 'A: count → 0'
+                duo: [{label: 요청 A가 본 값, rows: [{k: A, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '0'}]}]
+              - log: 'B: count → 0'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '0'}]}]
+              - log: 'A: insert → 성공'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '1', mark: changed}]}]
+              - log: 'B: insert → 23505 오류'
+                duo: [{label: 두 요청이 본 값, rows: [{k: A, v: '0'}, {k: B, v: '0'}]}, {label: 'member의 kim@a.com', rows: [{k: 회원 수, v: '1'}]}]
+                verdict: 'B도 0을 봤지만, 넣는 순간 DB가 UNIQUE로 검사해서 막았어요. 회원은 1명이에요.'
+      - ci:
+          key: race
+          label: 두 스레드로 실제로 돌린 결과 보기
+          source: KeysConstraintsTest.checkThenInsertRace
+      - p: '세는 것과 넣는 것은 **따로 실행되는 두 문장**이에요. 그 사이에 다른 요청이 끼어들 틈이 있어요. 첫 요청이 넣기 전에 둘째 요청이 세면 둘 다 0을 봐요. 트랜잭션으로 묶어도 마찬가지예요. 기본 격리 수준에서는 남이 아직 커밋하지 않은 INSERT가 보이지 않거든요([격리 수준과 이상 현상](lesson:isolation-level)).'
+      - p: 'UNIQUE는 **넣는 그 순간** DB가 인덱스로 검사해요. 그래서 둘 중 하나는 반드시 23505로 실패해요.'
+      - callout: '**앱의 확인은 지우지 않아요.** 평소에는 앱이 먼저 확인해서 "이미 가입한 이메일이에요" 같은 알맞은 메시지를 줘요. DB 제약은 동시 요청과 실수를 막는 마지막 방어예요. 둘을 함께 둬요.'
+      - h3: 오류는 SQLState로 구분해요
+      - p: '제약을 어기면 PostgreSQL은 다섯 자리 SQLState를 줘요. 앞의 23은 "무결성 위반" 묶음이에요.'
+      - ci:
+          key: states
+          label: 다섯 가지 위반을 실제로 낸 결과 보기
+          source: KeysConstraintsTest.sqlStates
+      - quiz:
+          q: '쿠폰 발급 코드가 "이 회원이 이 쿠폰을 받았는지 조회하고, 없으면 발급 행을 넣기"예요. 제약 없이 같은 회원의 요청 두 개가 동시에 오면 어떻게 될 수 있나요?'
+          options:
+            - '앱이 미리 확인하니 한 장만 발급된다'
+            - '두 장이 발급될 수 있다'
+            - '두 요청 모두 실패한다'
+          answer: 2
+          explain: '두 요청 모두 아직 아무도 넣지 않은 때 조회하면 둘 다 "없음"을 보고 넣어요. `unique (member_id, coupon_id)`를 걸면 하나만 남아요.'
+    recall: '앱의 "확인하고 넣기"는 두 문장이라, 동시에 오는 두 요청이 둘 다 "없음"을 보고 둘 다 넣을 수 있어요. UNIQUE 제약은 넣는 순간 DB가 검사하므로 하나는 23505로 실패해요. 앱의 확인은 알맞은 메시지를 주려고 두고, 끝까지 막는 것은 DB 제약에 맡겨요.'
 practice:
   says:
     - '스프링의 `JdbcTemplate`이나 JPA로 저장할 때 제약을 어기면 스프링은 드라이버의 `SQLException`을 `DataIntegrityViolationException`으로 바꿔 던진다. 유니크 위반은 그 하위 클래스 `DuplicateKeyException`이다. 테스트로 예외 클래스와 SQLState를 남긴다'
     - '코드 catchDup처럼 저장에서 이 예외를 잡아 "이미 가입한 이메일" 오류(HTTP 409)로 바꾼다. 앱의 사전 확인과 함께 둔다'
     - '흔한 실수: JPA 엔티티에 `@Column(unique = true)`만 달고 DB에 제약이 있다고 믿는다. 이 설정은 하이버네이트가 테이블을 만들 때(`ddl-auto`)만 쓰고, 운영 DB를 마이그레이션 도구로 만들면 무시된다. 저장할 때 따로 검사하지도 않는다. 고친 것: 제약을 마이그레이션 SQL에 적는다(하이버네이트 문서 근거)'
     - '흔한 실수 둘: `DataIntegrityViolationException`을 모두 "이메일 중복"으로 바꾼다. 외래 키나 NOT NULL 위반도 같은 예외라 다른 버그를 숨긴다. `DuplicateKeyException`만 잡거나 제약 이름을 본다'
+  title: 스프링에서는 이렇게 써요
+  body:
+    - p: '스프링으로 저장하다 제약을 어기면, 스프링은 드라이버의 `SQLException`을 자기 예외로 바꿔 던져요. 유니크 위반과 외래 키 위반을 `JdbcTemplate`으로 내 봤어요.'
+    - ci:
+        key: spring
+        label: 실제로 받은 예외 보기
+        source: KeysConstraintsTest.springTranslation
+    - p: '제약 위반은 모두 `DataIntegrityViolationException`이고, 유니크 위반만 그 하위 클래스 `DuplicateKeyException`이에요. JPA로 저장해도 같은 예외 체계로 와요.'
+    - h3: '흔한 실수 1: @Column(unique = true)만 믿기'
+    - code: entity
+      notes:
+        - mark: '@Column(unique = true,'
+          as: code
+          text: '이 설정은 하이버네이트가 테이블을 **만들 때**(`spring.jpa.hibernate.ddl-auto`)만 써요. 저장할 때 따로 검사하지 않아요. 운영 DB를 마이그레이션 도구로 만들면 이 줄은 아무 일도 하지 않아요.'
+    - p: '제약은 테이블을 만드는 SQL에 적어요. 이름을 붙여 두면 오류 메시지에서 어느 제약인지 바로 보여요.'
+    - code: migration
+      notes:
+        - mark: constraint member_email_key
+          as: code
+          text: '제약에 이름을 붙여요. 위반하면 메시지에 이 이름이 나와요.'
+    - h3: '흔한 실수 2: 모든 무결성 위반을 "이메일 중복"으로'
+    - code: catchAll
+      notes:
+        - mark: DataIntegrityViolationException
+          as: code
+          text: '외래 키 위반, NOT NULL 위반도 이 예외예요. 이름을 빠뜨린 버그까지 "이미 가입한 이메일"로 숨겨요.'
+    - code: catchDupFixed
+      notes:
+        - mark: DuplicateKeyException
+          as: code
+          text: '유니크 위반만 잡아 409(이미 있음) 응답으로 바꿔요. 다른 위반은 그대로 올라가 버그로 드러나요. 유니크 제약이 여럿이면 메시지의 제약 이름도 봐요.'
+    - muted: '근거: 예외 변환은 [스프링 문서](link:dao), `@Column`의 unique가 스키마 생성에 쓰인다는 것은 [Jakarta Persistence 명세](link:jpa). 예외 클래스는 테스트로 확인했어요.'
+interview:
+  question: 기본 키, 외래 키, 유니크 제약은 무엇이고, 앱에서 검사하는데 왜 DB 제약이 필요한가요?
+  model:
+    - label: 정의
+      text: 기본 키는 행 하나를 가리키는 값으로 NULL일 수 없고 겹칠 수 없습니다. 외래 키는 다른 테이블의 키를 가리켜 없는 부모를 가리키는 행을 막습니다. UNIQUE, NOT NULL, CHECK는 값이 겹치지 않게, 꼭 있게, 범위 안에 있게 지킵니다.
+    - label: 원리
+      text: 바뀔 수 있는 자연 키 대신 의미 없는 일련번호를 기본 키로 두고 이메일 같은 값에는 UNIQUE를 겁니다. 외래 키는 부모를 지울 때 막거나(NO ACTION) 함께 지우거나(CASCADE) 끊는(SET NULL) 규칙을 가집니다.
+    - label: 주의할 점
+      text: 앱의 "있는지 확인하고 넣기"는 두 문장이라 동시에 오는 요청이 둘 다 통과합니다. 넣는 순간 검사하는 UNIQUE 제약만 끝까지 막습니다. UNIQUE는 NULL끼리를 같다고 보지 않고, JPA의 @Column(unique)는 스키마 생성에만 쓰입니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 가입 버튼을 두 번 눌러 같은 이메일 회원이 생기는 버그를 UNIQUE 제약과 DuplicateKeyException 처리로 고쳤습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에서 SQL을 실행하고, 두 요청은 자바 21 스레드 두 개로 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([KeysConstraintsTest](link:test))가 다시 돌아요.
+footer: '근거: 제약 조건과 NULL을 다루는 방식은 [PostgreSQL 16 문서](link:constraints), SQLState는 [오류 코드 표](link:errcodes), 스프링의 예외 변환은 [스프링 문서](link:dao). 결과는 PostgreSQL 16과 스프링 부트 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '기본 키에 같은 값을 넣으면 23505, 외래 키가 없는 부모를 가리키면 23503, NOT NULL에 NULL을 넣으면 23502, CHECK를 어기면 23514'
     how: 'PostgreSQL 컨테이너에서 각 문장을 실행하고 `SQLException.getSQLState()`를 본다'
