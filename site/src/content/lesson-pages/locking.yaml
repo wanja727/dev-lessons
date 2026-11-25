@@ -1,8 +1,9 @@
-# 낙관적 락과 비관적 락 (설계서)
+# 낙관적 락과 비관적 락
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
 # 예전 레슨 site/src/pages/lessons/locking.astro와 lock/LockingTest.java를 재료로 다시 쓴다.
-stage: design
 title: 낙관적 락과 비관적 락
+description: 갱신 손실은 왜 생기고 언제 락이 필요한지, 낙관적 락과 비관적 락은 각각 어떻게 동작하는지, 둘을 어떻게 고르는지. 네 가지 질문에 스스로 답할 수 있게 재고 100개에 동시 주문을 넣으며 배우는 대화형 레슨.
+minutes: 25
 unit: DB
 roadmap: D10
 type: 동작 확인
@@ -41,6 +42,14 @@ covers:
     where: '질문 1의 더 알아보기. 동기화는 경쟁 상태와 동기화(C3)'
   - topic: 'Redis 차감, 분산 락, 선착순 재고'
     where: '다루지 않음: 동시 요청에서 재고 지키기(A7), 분산 락(A12)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lock/LockingLessonTest.java
+  oldTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lock/LockingTest.java
+  locking: https://www.postgresql.org/docs/16/explicit-locking.html
+  forUpdate: https://www.postgresql.org/docs/16/sql-select.html#SQL-FOR-UPDATE-SHARE
+  jpa: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  springLock: https://docs.spring.io/spring-data/jpa/reference/jpa/locking.html
+  springRetry: https://github.com/spring-projects/spring-retry
 codes:
   predict: |-
     -- 재고 100, 락 없음
@@ -95,9 +104,33 @@ codes:
       }
       throw new TooBusyException();
     }
+  atomicStock: |-
+    update stock
+       set quantity = [[quantity - 10]]
+     where product_id = 1
+       and quantity >= 10;
+  nowait: |-
+    select quantity from stock
+     where product_id = 1
+       for update [[nowait]];
+  skipLocked: |-
+    select id from job
+     where status = 'READY'
+     order by id
+     limit 1
+       for update [[skip locked]];
 predict:
-  text: '코드 predict를 두 주문이 동시에 실행해요. 둘 다 100을 읽은 뒤에 각자 90을 써요. 남은 재고는 몇 개일까요? 보기: 80, 90, 한쪽이 오류로 실패해서 90.'
-  answer: '90. 둘 다 90을 쓰고 둘 다 성공한다. 10개가 팔렸는데 재고에서 빠지지 않았다. 질문 1에서 밝힌다.'
+  title: 동시 주문 두 건, 남은 재고는?
+  text: '재고 100개인 상품에 주문 두 건이 동시에 들어와요. 두 주문은 각자 재고를 읽고, 앱에서 10을 뺀 값을 써요. 둘 다 100을 읽은 뒤에 썼어요. 남은 재고는 몇 개일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '80', label: '80'}
+    - {value: '90', label: '90'}
+    - {value: fail, label: '한쪽이 오류로 실패해서 90'}
+  answer: '90'
+  storageKey: lock-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 갱신 손실은 왜 생기고, 언제 락이 필요한가요?
@@ -113,6 +146,40 @@ questions:
     asks:
       - '본문의 예시: 재고 50에서 두 주문이 동시에 각자 읽고 5씩 빼서 쓴다. 락이 없으면 남은 재고는 (45)'
       - '옮긴 상황: 포인트 사용을 `update member set point = point - 300 where id = 1 and point >= 300`으로 한다. 동시에 두 요청이 와도 갱신 손실이 생기나 (생기지 않는다. 원자적 UPDATE라 두 번째는 첫 번째의 커밋을 기다렸다가 최신 값에서 뺀다)'
+    body:
+      - p: '처음 예측의 답은 **90**이에요. {{predict-result}} 두 주문 모두 성공했어요. 오류는 없어요.'
+      - ci:
+          key: lost-update
+          label: 실제 결과 보기
+          source: LockingLessonTest.lostUpdateAndAtomic
+          code: predict
+      - p: '10개가 두 번 팔렸는데 재고는 10만 줄었어요. 두 주문이 같은 100을 읽고, 각자 계산한 90으로 덮어써서 **먼저 쓴 수정이 사라졌어요.** 이것이 **갱신 손실**이에요([격리 수준과 이상 현상](lesson:isolation-level) 질문 5와 같은 현상이에요). 이 상품은 결국 실제보다 많이 팔려요.'
+      - h3: 원자적 UPDATE로 풀리면 락은 필요 없어요
+      - p: '재고처럼 "읽은 값에서 빼서 쓰기"는 계산을 UPDATE 안으로 옮길 수 있어요. 위 결과의 둘째 줄이 이 쿼리예요.'
+      - code: atomicStock
+        notes:
+          - mark: quantity - 10
+            as: code
+            text: 'DB가 행의 지금 값에서 빼요. UPDATE는 고친 행을 커밋까지 잠그니, 두 번째 UPDATE는 첫 번째의 커밋을 기다렸다가 최신 값에서 빼요. 80이 돼요. `quantity >= 10`은 재고가 모자라면 0행을 바꿔 실패를 알려요.'
+      - h3: 바꿀 수 없을 때
+      - p: '쿠폰과 등급으로 할인 금액을 계산해 결제 금액을 쓰거나, 주문 상태를 보고 "결제 대기 → 결제 완료"로 바꿀지 판단해야 할 때가 있어요. **읽은 값으로 앱이 결정**하니 한 문장으로 바꿀 수 없어요. 이때는 "읽은 뒤 쓰기 전에 아무도 바꾸지 않았다"는 보장이 필요해요. 방법은 둘이에요.'
+      - ul:
+          - '**쓸 때 확인한다:** 낙관적 락(질문 2)'
+          - '**읽을 때 잠근다:** 비관적 락(질문 3)'
+      - more:
+          summary: '더 알아보기: synchronized로는 왜 안 되나요?'
+          body:
+            - p: '서비스 메서드를 `synchronized`로 감싸면 한 서버 안의 스레드끼리는 줄을 세워요. 하지만 서버가 두 대면 각 서버의 락은 따로라서 서로를 막지 못해요. 두 서버가 함께 쓰는 것은 DB의 행이라서 DB에서 막아요. 자바의 동기화는 [경쟁 상태와 동기화](lesson:synchronization)에서 다뤄요.'
+      - quiz:
+          q: '포인트 사용을 `update member set point = point - 300 where id = 1 and point >= 300`으로 해요. 같은 회원의 요청 두 개가 동시에 오면 갱신 손실이 생기나요?'
+          options:
+            - '생긴다. 둘 다 같은 포인트를 읽는다'
+            - '생기지 않는다. 두 번째 UPDATE가 첫 번째의 커밋을 기다렸다가 최신 값에서 뺀다'
+            - '두 요청 모두 실패한다'
+          answer: 2
+          explain: '계산이 UPDATE 안에 있는 원자적 UPDATE예요. 행 락 때문에 차례로 실행되고, 포인트가 모자라면 0행을 바꿔요.'
+      - next: '앱에서 계산해야 하는 경우의 첫 번째 방법은, 쓰는 순간에 "그사이 누가 바꿨는지" 확인하는 거예요.'
+    recall: '두 트랜잭션이 같은 값을 읽고 앱에서 계산한 결과로 각자 덮어쓰면 먼저 쓴 수정이 사라져요. 이것이 갱신 손실이에요. 계산을 quantity = quantity - 10처럼 UPDATE 안으로 옮길 수 있으면 DB의 행 락이 막아 줘서 락이 필요 없어요. 앱에서 계산해야 할 때 낙관적 락이나 비관적 락을 써요.'
   - id: q2
     title: 낙관적 락은 어떻게 동작하나요?
     conclusion:
@@ -131,6 +198,65 @@ questions:
       - '본문의 예시: A와 B가 version 3을 읽었고 A가 먼저 커밋했다. B의 `update ... where version = 3`이 바꾼 행 수는 (0)'
       - '옮긴 상황: 위키 문서 편집에 낙관적 락을 쓴다. 두 사람이 같은 판을 열고 편집해 차례로 저장하면 (먼저 저장한 사람은 성공, 나중 사람은 충돌로 실패하고 바뀐 내용을 보고 다시 저장한다)'
       - '실무 구역의 상황: 코드 version의 엔티티를 두 트랜잭션이 같은 버전으로 읽고 각자 고쳐 커밋하면, 나중 쪽에서 스프링이 던지는 예외는 (`ObjectOptimisticLockingFailureException`)'
+    body:
+      - p: '행에 **버전 번호**를 하나 둬요. 읽을 때 버전도 함께 읽고, 쓸 때는 "내가 읽은 버전 그대로일 때만" 고치면서 버전을 1 올려요.'
+      - code: optimistic
+        notes:
+          - mark: version = version + 1
+            as: code
+            text: '고칠 때마다 버전을 올려요.'
+          - mark: and version = 7
+            as: code
+            text: '읽은 뒤에 누가 고쳤다면 버전이 8이라서 이 조건에 맞는 행이 없어요.'
+      - p: '두 주문이 둘 다 version 7을 읽은 경우를 SQL로 그대로 돌렸어요.'
+      - ci:
+          key: optimistic-sql
+          label: 실제 결과 보기
+          source: LockingLessonTest.optimisticSql
+      - p: '먼저 쓴 A는 1행을 바꾸고 버전이 8이 됐어요. 나중 B의 `where version = 7`에는 맞는 행이 없어서 **0행**을 바꿨어요. 앱은 바뀐 행 수 0을 보고 "그사이 누가 고쳤다"고 판단해요. 재고는 90이지만 B의 주문은 반영되지 않고 실패로 알려졌어요.'
+      - widget:
+          kind: steps
+          layout: [selector, duo, buttons, log, verdict]
+          selector:
+            label: 방식
+            options:
+              - {value: none, label: 락 없음}
+              - {value: optimistic, label: 낙관적 락}
+          initial:
+            duo:
+              - {label: 주문 A와 B가 읽은 것, text: 아직 없음, state: dim}
+              - {label: DB의 재고 행, rows: [{k: quantity, v: '100'}, {k: version, v: '7'}]}
+          scenarios:
+            none:
+              - log: 'A, B: select → 100'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100'}, {k: B, v: '100'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '100'}]}]
+              - log: 'A: update quantity = 90, commit'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100'}, {k: B, v: '100'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '90', mark: changed}]}]
+              - log: 'B: update quantity = 90, commit'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100'}, {k: B, v: '100'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '90', mark: bad}]}]
+                verdict: '둘 다 성공했지만 재고는 10만 줄었어요. A의 수정이 사라졌어요.'
+            optimistic:
+              - log: 'A, B: select → 100, version 7'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100, v7'}, {k: B, v: '100, v7'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '100'}, {k: version, v: '7'}]}]
+              - log: 'A: update ... where version = 7 → 1행, commit'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100, v7'}, {k: B, v: '100, v7'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '90', mark: changed}, {k: version, v: '8', mark: changed}]}]
+              - log: 'B: update ... where version = 7 → 0행, 충돌'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '100, v7'}, {k: B, v: '충돌', mark: bad}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '90'}, {k: version, v: '8'}]}]
+              - log: 'B: 다시 select → 90, version 8 → update ... where version = 8 → 1행'
+                duo: [{label: 주문 A와 B가 읽은 것, rows: [{k: A, v: '끝'}, {k: B, v: '90, v8'}]}, {label: DB의 재고 행, rows: [{k: quantity, v: '80', mark: changed}, {k: version, v: '9', mark: changed}]}]
+                verdict: 'B는 충돌을 알아채고 다시 읽어서 다시 썼어요. 재고 80이에요.'
+      - p: '이름이 "낙관적"인 것은 **"충돌은 드물 것"이라고 보고 잠그지 않기 때문**이에요. 읽는 동안 아무도 기다리지 않아요. 대신 진 쪽은 실패를 받고, **다시 읽어서 다시 계산하고 다시 써야** 해요.'
+      - p: '동시에 20건이 1씩 빼면 다시 시도를 거쳐 정확히 80이 돼요(예전 테스트 [LockingTest](link:oldTest)). 그런데 충돌이 잦을수록 다시 시도가 쌓여요. 한 행에 요청이 몰리는 곳에서 얼마나 쌓이는지는 질문 4에서 봐요.'
+      - quiz:
+          q: '위키 문서 편집에 낙관적 락을 써요. 두 사람이 같은 판(version 3)을 열고 편집해 차례로 저장하면 어떻게 되나요?'
+          options:
+            - '둘 다 저장되고 나중 사람의 내용만 남는다'
+            - '먼저 저장한 사람은 성공하고, 나중 사람은 충돌로 실패한다'
+            - '나중 사람은 먼저 사람이 저장할 때까지 편집 화면을 열 수 없다'
+          answer: 2
+          explain: '먼저 저장하면 버전이 4가 돼요. 나중 사람의 `where version = 3`은 0행이라 충돌이에요. 바뀐 내용을 보고 다시 저장하게 해요. 편집하는 동안 아무도 잠그지 않아요.'
+      - next: '두 번째 방법은 반대예요. 충돌이 날 거라고 보고, 읽는 순간 잠가요.'
+    recall: '행에 버전 번호를 두고, 쓸 때 "내가 읽은 버전 그대로일 때만" 고치면서 버전을 올려요. 그사이 누가 고쳤으면 바뀐 행이 0개라 충돌로 알아요. 읽을 때 잠그지 않아서 기다리는 일이 없지만, 진 쪽은 실패를 받고 다시 읽어서 다시 시도해야 해요.'
   - id: q3
     title: 비관적 락은 어떻게 동작하나요?
     conclusion:
@@ -149,6 +275,51 @@ questions:
     asks:
       - '본문의 예시: A가 `for update`로 재고 행을 잠근 채 3초 뒤 커밋한다. 그사이 B가 같은 행을 `for update`로 읽으면 (A가 커밋할 때까지 약 3초 기다린 뒤 A가 쓴 값을 읽는다)'
       - '옮긴 상황: 배치 서버 세 대가 `job` 테이블에서 처리할 작업을 하나씩 가져간다. 같은 작업을 두 서버가 가져가지 않으면서 서로 기다리지도 않게 하려면 (`for update skip locked`)'
+    body:
+      - p: '`select ... for update`는 읽는 순간 그 행에 **쓰기 락**을 걸어요. 다른 트랜잭션이 같은 행을 `for update`로 읽거나 고치려 하면, 내가 커밋하거나 롤백할 때까지 **기다려요.**'
+      - code: pessimistic
+        notes:
+          - mark: for update
+            as: code
+            text: '이 행을 커밋까지 잠가요.'
+      - p: 'A가 잠근 채 1초 뒤에 90을 쓰고 커밋하게 했어요. 그사이 B는 같은 행을 `for update`로, C는 일반 SELECT로 읽었어요.'
+      - ci:
+          key: pessimistic-sql
+          label: 실제 결과 보기
+          source: LockingLessonTest.pessimisticSql
+      - widget:
+          kind: timeline
+          layout: [timeline, buttons, verdict]
+          lanes: [주문 A, 주문 B]
+          scenarios:
+            default:
+              - event: {dir: right, title: 'A: select ... for update', text: '재고 100을 읽고 [[행을 잠금]]', note: 'A가 커밋할 때까지 이 행은 A의 것이에요.'}
+              - event: {dir: left, title: 'B: select ... for update', text: '[[기다림]]', note: 'B는 A가 끝나기를 기다려요. 아무 일도 하지 못해요.'}
+              - event: {dir: right, title: 'A: update quantity = 90, commit', text: '락을 놓음', note: 'A가 끝나는 순간 B가 깨어나요.'}
+              - event: {dir: left, title: 'B: 깨어나서 읽음', text: '재고 [[90]]', note: 'A가 쓴 값을 읽어요. 여기서 10을 빼면 80이에요.'}
+                verdict: '충돌을 미리 막아서 실패는 없지만, B는 A가 끝날 때까지 기다렸어요.'
+      - p: 'B는 약 1초 기다린 뒤 **A가 쓴 90**을 읽었어요. 여기서 빼면 80이에요. 실패도 다시 시도도 없어요. 이름이 "비관적"인 것은 **충돌이 날 것이라고 보고 먼저 잠그기 때문**이에요. C의 일반 SELECT는 기다리지 않았어요. 잠금이 막는 것은 같은 행을 잠그려는 쪽과 고치려는 쪽이에요.'
+      - h3: 기다리고 싶지 않을 때
+      - ci:
+          key: nowait
+          label: NOWAIT와 SKIP LOCKED의 실제 결과
+          source: LockingLessonTest.nowaitAndSkipLocked
+      - ul:
+          - '`for update nowait`: 이미 잠긴 행이면 기다리지 않고 바로 **55P03** 오류예요. "다른 사람이 처리 중이에요"를 바로 알려 줄 때 써요.'
+          - '`set lock_timeout = ''2s''`: 정한 시간까지만 기다려요.'
+          - '`for update skip locked`: 잠긴 행을 **건너뛰고** 다음 행을 가져와요. 여러 서버가 작업 테이블에서 하나씩 가져가는 작업 큐에 써요. 위 결과에서 서버 A는 1번, B는 2번을 가져갔어요.'
+      - code: skipLocked
+      - callout: '**락을 쥔 채 오래 걸리는 일을 하지 않아요.** 락 안에서 외부 결제 API를 부르면, API가 느린 만큼 같은 상품의 다른 주문이 모두 기다리고 커넥션 풀의 연결도 그만큼 쥐어요([DB 커넥션과 커넥션 풀](lesson:connection-pool)). 락 안에서는 DB 일만 하고 빨리 커밋해요.'
+      - quiz:
+          q: '배치 서버 세 대가 `job` 테이블에서 처리할 작업을 하나씩 가져가요. 같은 작업을 두 서버가 가져가지 않으면서, 서로를 기다리지도 않게 하려면?'
+          options:
+            - '`for update`'
+            - '`for update nowait`'
+            - '`for update skip locked`'
+          answer: 3
+          explain: '잠긴 작업은 건너뛰고 다음 작업을 가져가요. `for update`는 기다리고, `nowait`는 바로 실패해요.'
+      - next: '두 방법 모두 갱신 손실을 막아요. 그러면 언제 무엇을 쓸까요?'
+    recall: 'SELECT ... FOR UPDATE로 읽는 순간 그 행을 잠가서, 다른 트랜잭션은 내가 커밋하거나 롤백할 때까지 그 행을 잠그거나 고치지 못하고 기다려요. 충돌을 미리 막아 실패는 없지만 기다리는 시간이 생겨요. 기다리기 싫으면 NOWAIT, lock_timeout, SKIP LOCKED를 쓰고, 락을 쥔 트랜잭션은 짧게 끝내요.'
   - id: q4
     title: 낙관적 락과 비관적 락은 어떻게 고르나요?
     conclusion:
@@ -166,12 +337,118 @@ questions:
     asks:
       - '본문의 예시: 동시에 50건이 한 상품의 재고를 1씩 뺀다. 낙관적 락과 비관적 락 가운데 다시 시도가 많이 생기는 쪽은 (낙관적 락)'
       - '옮긴 상황: 관리자 둘이 가끔 같은 상품 설명을 고친다. 고칠 때 화면에서 몇 분씩 편집한다. 어느 락이 맞나 (낙관적 락. 비관적 락이면 편집하는 몇 분 동안 행을 잠근다)'
+    body:
+      - p: '한 상품의 재고에 동시에 50건이 1씩 빼는 주문을 넣었어요. 같은 일을 두 방식으로 시켰어요.'
+      - ci:
+          key: fifty
+          label: 실제 결과 보기
+          source: LockingLessonTest.fiftyConcurrent
+      - p: '둘 다 정확히 50이 남았어요. 하지만 낙관적 락은 **50건을 처리하려고 실패와 다시 시도를 수백 번** 했어요. 한 행에 요청이 몰리면 대부분의 시도가 충돌하기 때문이에요. 비관적 락은 줄을 세워 차례로 처리해서 다시 시도가 없어요. 시간은 실행할 때마다 다르니 크기만 보세요.'
+      - table:
+          head: [구분, 낙관적 락, 비관적 락]
+          rows:
+            - ['충돌을 다루는 법', '쓸 때 확인하고, 지면 실패', '읽을 때 잠그고, 뒤는 기다림']
+            - ['충돌이 드물 때', '잠그지 않아 빠르다', '충돌이 없어도 잠그는 비용이 든다']
+            - ['충돌이 잦을 때', '다시 시도가 쌓인다', '줄을 서서 차례로 처리한다']
+            - ['조심할 것', '다시 시도 코드가 필요하다', '오래 쥐면 모두 기다린다. 여러 행이면 데드락']
+      - ul:
+          - '**낙관적 락이 맞는 곳:** 회원 정보 수정, 게시글 편집, 관리자 설정. 같은 행을 동시에 고칠 일이 드물고, 충돌하면 "다른 사람이 먼저 고쳤어요"라고 알려도 돼요. 편집 화면을 몇 분씩 열어 두는 경우에도 아무것도 잠그지 않아요.'
+          - '**비관적 락이 맞는 곳:** 인기 상품의 재고, 좌석 예약, 계좌 출금. 같은 행에 요청이 몰리고, 실패 대신 모두 처리해야 해요.'
+          - '**그 전에:** 원자적 UPDATE로 풀리는지 먼저 봐요(질문 1). 풀리면 둘 다 필요 없어요.'
+      - widget:
+          kind: classify
+          categories:
+            - 낙관적 락
+            - 비관적 락
+            - 원자적 UPDATE로 충분
+          items:
+            - text: 게시글 작성자가 글을 고친다. 같은 글을 동시에 고칠 일은 드물다
+              answer: 1
+              explain: 충돌이 드물고, 충돌하면 알려 주고 다시 저장하게 하면 돼요.
+            - text: 콘서트 좌석을 고르면 상태를 보고 "선택됨"으로 바꾼다. 인기 공연은 같은 좌석에 요청이 몰린다
+              answer: 2
+              explain: 상태를 보고 판단해야 하고 같은 행에 요청이 몰려요. 먼저 잠그고 차례로 처리해요.
+            - text: 상품 상세를 열 때마다 조회수를 1 올린다
+              answer: 3
+              explain: '`views = views + 1`이면 행 락이 차례를 지켜 줘요.'
+            - text: 회원이 프로필의 자기소개를 고친다
+              answer: 1
+              explain: 같은 회원의 프로필을 동시에 고칠 일이 드물어요.
+            - text: 한정판 재고를 빼되, 등급별 할인 규칙으로 계산한 금액을 결제 행에 함께 쓴다. 오픈 직후 요청이 몰린다
+              answer: 2
+              explain: 앱에서 계산해야 하고 충돌이 잦아요. 낙관적 락이면 다시 시도가 쌓여요.
+            - text: 포인트를 적립한다(지금 포인트에 더하기만 한다)
+              answer: 3
+              explain: '`point = point + n`으로 계산을 UPDATE 안에서 할 수 있어요.'
+      - p: '비관적 락으로 **행 둘 이상**을 잠글 때는 잠그는 순서가 중요해요. 서로 반대 순서로 잠그면 서로를 영원히 기다리는 데드락이 생겨요. [DB 데드락](lesson:db-deadlock)에서 다뤄요.'
+      - quiz:
+          q: '관리자 둘이 가끔 같은 상품 설명을 고쳐요. 고칠 때 화면에서 몇 분씩 편집해요. 어느 락이 맞나요?'
+          options:
+            - '낙관적 락'
+            - '비관적 락'
+            - '락이 필요 없다'
+          answer: 1
+          explain: '충돌이 드물고, 편집하는 몇 분 동안 행을 잠그면 다른 관리자가 그동안 기다려요. 저장할 때 버전으로 확인해요.'
+    recall: '충돌이 드물고 진 쪽이 다시 시도하거나 실패를 받아도 되면 낙관적 락을, 충돌이 잦고 차례로 꼭 처리해야 하면 비관적 락을 써요. 낙관적 락은 충돌이 많을수록 다시 시도가 쌓이고, 비관적 락은 충돌이 없어도 기다리는 비용과 데드락 위험을 안아요. 먼저 원자적 UPDATE로 풀리는지 봐요.'
 practice:
   says:
     - 'JPA에서 낙관적 락은 코드 version처럼 엔티티에 `@Version` 필드 하나다. 하이버네이트가 UPDATE에 `version = version + 1`과 `where version = ?`을 넣고, 바뀐 행이 0이면 예외를 던진다. 스프링은 `ObjectOptimisticLockingFailureException`으로 바꾼다. 나간 SQL과 예외를 테스트로 남긴다'
     - '비관적 락은 코드 lock처럼 리포지토리 메서드에 `@Lock(LockModeType.PESSIMISTIC_WRITE)`를 단다. 하이버네이트는 PostgreSQL에 `for no key update`를 보낸다. 나간 SQL을 테스트로 남긴다. 잠금 대기 시간은 `jakarta.persistence.lock.timeout` 힌트로 정한다'
     - '흔한 실수: 낙관적 락의 다시 시도를 `@Transactional` 메서드 안에서 한다. 실패한 트랜잭션은 이미 롤백 표시가 되어 있고, 영속성 컨텍스트에는 낡은 엔티티가 남아 있다. 고친 코드: 코드 retry처럼 다시 시도는 트랜잭션 바깥에서 하고, 매번 새 트랜잭션에서 다시 읽는다. 스프링 리트라이(`@Retryable`)를 써도 같은 원리다(스프링 문서 근거)'
     - '흔한 실수 둘: `@Lock`을 단 조회를 `@Transactional` 없이 부른다. 트랜잭션이 없으면 문장 하나가 끝나는 순간 락이 풀려 아무것도 막지 못하고, 스프링 데이터는 예외를 던진다. 테스트로 예외를 보인다'
+  title: 스프링과 JPA에서는 이렇게 써요
+  body:
+    - p: 'JPA는 두 락을 애너테이션 하나로 켜요. JPA는 아직 배우기 전이지만, 엔티티는 테이블의 행 하나를 자바 객체로 옮긴 것이라고만 알면 읽혀요.'
+    - h3: 낙관적 락은 @Version 필드 하나
+    - code: version
+      notes:
+        - mark: '@Version'
+          as: anno
+          text: '하이버네이트가 UPDATE에 버전 조건을 넣고, 바뀐 행이 0이면 예외를 던져요.'
+    - ci:
+        key: optimistic-jpa
+        label: 하이버네이트가 보낸 SQL과 충돌한 쪽의 예외
+        source: LockingLessonTest.optimisticJpa
+    - p: '질문 2에서 손으로 쓴 SQL과 같은 모양이에요. 스프링은 충돌을 `ObjectOptimisticLockingFailureException`으로 바꿔 던져요.'
+    - h3: 비관적 락은 @Lock
+    - code: lock
+      notes:
+        - mark: '@Lock(LockModeType.PESSIMISTIC_WRITE)'
+          as: anno
+          text: '이 조회를 잠그면서 읽어요.'
+    - ci:
+        key: pessimistic-jpa
+        label: 하이버네이트가 보낸 SQL
+        source: LockingLessonTest.pessimisticJpaSql
+    - p: 'PostgreSQL에는 `for update` 대신 `for no key update`가 나가요. 키를 바꾸지 않는 수정에 맞춘 조금 약한 잠금이라, 이 행을 외래 키로 가리키는 자식 행을 넣는 것은 막지 않아요. 기다리는 시간은 `jakarta.persistence.lock.timeout` 힌트로 정해요(0이면 NOWAIT).'
+    - h3: '흔한 실수 1: 다시 시도를 트랜잭션 안에서'
+    - p: '낙관적 락의 충돌을 `@Transactional` 메서드 **안에서** 잡아 다시 시도하면 소용이 없어요. 실패한 트랜잭션은 이미 롤백 표시가 되어 있고, 읽어 둔 엔티티는 낡은 버전 그대로예요. 다시 시도는 트랜잭션 **바깥**에서, 매번 새 트랜잭션으로 다시 읽어요.'
+    - code: retry
+      notes:
+        - mark: stockService.decrease(id, n);
+          as: code
+          text: '다른 빈의 `@Transactional` 메서드라 부를 때마다 새 트랜잭션이 열리고, 재고를 다시 읽어요.'
+    - p: '스프링 리트라이의 `@Retryable`을 트랜잭션 메서드 바깥 빈에 다는 것도 같은 원리예요.'
+    - h3: '흔한 실수 2: @Lock 조회를 트랜잭션 없이'
+    - p: '`@Lock`을 단 조회를 `@Transactional` 없이 부르면, 락은 문장 하나가 끝나는 순간 풀려 아무것도 막지 못해요. 스프링 데이터 JPA는 이것을 실수로 보고 예외를 던져요.'
+    - ci:
+        key: no-tx
+        label: 실제로 받은 예외
+        source: LockingLessonTest.lockWithoutTransaction
+    - muted: '근거: `@Version`과 잠금 모드는 [Jakarta Persistence 명세](link:jpa), `@Lock`은 [스프링 데이터 JPA 문서](link:springLock), `@Retryable`은 [스프링 리트라이](link:springRetry). SQL과 예외는 테스트로 확인했어요.'
+interview:
+  question: 낙관적 락과 비관적 락의 차이와 고르는 기준을 설명해 주세요
+  model:
+    - label: 정의
+      text: 둘 다 두 트랜잭션이 같은 값을 읽고 각자 덮어써서 한쪽 수정이 사라지는 갱신 손실을 막습니다. 낙관적 락은 버전 열을 두고 쓸 때 읽은 버전 그대로인지 확인하고, 비관적 락은 SELECT FOR UPDATE로 읽을 때 행을 잠급니다.
+    - label: 원리
+      text: 낙관적 락은 UPDATE의 WHERE에 버전을 넣어 바뀐 행이 0이면 충돌로 보고, 진 쪽이 다시 읽어 다시 시도합니다. 비관적 락은 다른 트랜잭션의 잠금과 수정을 커밋까지 기다리게 해 차례로 처리합니다. JPA에서는 @Version과 @Lock(PESSIMISTIC_WRITE)로 켭니다.
+    - label: 주의할 점
+      text: 충돌이 드물면 낙관적 락, 같은 행에 요청이 몰리면 비관적 락을 씁니다. 낙관적 락은 다시 시도를 트랜잭션 바깥에서 하고, 비관적 락은 락을 쥔 채 외부 호출을 하지 않으며 여러 행을 같은 순서로 잠급니다. 계산을 UPDATE 안으로 옮길 수 있으면 둘 다 필요 없습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 인기 상품 재고를 낙관적 락으로 처리하다 다시 시도가 폭증해, 비관적 락과 짧은 트랜잭션으로 바꿨습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에서 연결 여러 개로 순서를 맞추거나 스레드 50개로 동시에 실행해 받은 값이에요. JPA 쪽은 하이버네이트 6.6이 보낸 SQL을 잡아 확인했어요. 코드가 바뀔 때마다 테스트([LockingLessonTest](link:test), [LockingTest](link:oldTest))가 다시 돌아요.
+footer: '근거: 행 락과 FOR UPDATE, NOWAIT, SKIP LOCKED는 [PostgreSQL 16 문서](link:locking)와 [SELECT의 잠금 절](link:forUpdate), `@Version`과 잠금 모드는 [Jakarta Persistence 명세](link:jpa), `@Lock`은 [스프링 데이터 JPA 문서](link:springLock). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '락 없이 두 주문이 같은 100을 읽고 10씩 빼면 90이다'
     how: '`CountDownLatch`로 두 스레드가 읽은 뒤 쓰게 한다'
