@@ -1,7 +1,8 @@
-# 조인 (설계서)
+# 조인
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
 title: 조인
+description: INNER JOIN은 어떤 행을 돌려주는지, 짝이 없는 행까지 보려면 어떻게 하는지, 조인하면 왜 행이 늘고 합계가 부푸는지, 앱에서 짝짓지 않고 왜 DB에서 조인하는지. 네 가지 질문에 스스로 답할 수 있게 회원과 주문의 작은 데이터로 배우는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D2
 type: 동작 확인
@@ -40,6 +41,10 @@ covers:
     where: '다루지 않음: JPA N+1 문제(P5)'
   - topic: '스프링 JdbcTemplate으로 조인 결과를 객체로 옮기기, 한 회원에 주문 여럿을 묶기'
     where: '실무에서는'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/join/SqlJoinTest.java
+  joins: https://www.postgresql.org/docs/16/queries-table-expressions.html#QUERIES-JOIN
+  tutorial: https://www.postgresql.org/docs/16/tutorial-join.html
 codes:
   predict: |-
     -- 회원 4명, 주문 5건
@@ -87,9 +92,62 @@ codes:
             rs.getLong("id"),
             rs.getInt("amount"),
             rs.getString("name")));
+  data: |-
+    member            orders
+    id | name         id | member_id
+     1 | kim           1 | 1
+     2 | lee           2 | 1
+     3 | park          3 | 2
+     4 | choi          4 | 3
+                       5 | NULL
+  inner: |-
+    select m.name, o.id
+      from member m
+      [[join]] orders o
+        [[on o.member_id = m.id]];
+  loop: |-
+    List<Order> orders = findOrders();
+    for (Order o : orders) {
+      String name = jdbc.queryForObject(
+          "select name from member"
+              + " where id = ?",
+          String.class, o.memberId());
+    }
+  oneJoin: |-
+    select o.id, m.name
+      from orders o
+      join member m
+        on m.id = o.member_id;
+  fixedSum: |-
+    select o.id, pay.total
+      from orders o
+      join (select order_id,
+                   sum(amount) total
+              from payment
+             group by order_id) pay
+        on pay.order_id = o.id;
+  group: |-
+    Map<String, List<Long>> byMember =
+        new LinkedHashMap<>();
+    for (OrderRow r : rows) {
+      byMember.computeIfAbsent(
+          r.name(),
+          k -> new ArrayList<>())
+        .add(r.id());
+    }
 predict:
-  text: '코드 predict는 회원 4명과 주문 5건을 INNER JOIN해요. choi는 주문이 없고, 주문 하나는 회원이 없어요(`member_id`가 NULL). 나오는 행은 몇 개일까요? 보기: 3개, 4개, 5개, 6개.'
-  answer: '4개. 짝이 있는 주문 4건만 나온다. choi와 회원 없는 주문은 빠진다. 질문 1에서 밝힌다.'
+  title: INNER JOIN은 몇 행?
+  text: '회원 4명과 주문 5건을 INNER JOIN해요. choi는 주문이 없고, 주문 5는 회원이 지워져 `member_id`가 NULL이에요. 나오는 행은 몇 개일까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '3', label: 3행}
+    - {value: '4', label: 4행}
+    - {value: '5', label: 5행}
+    - {value: '6', label: 6행}
+  answer: '4'
+  storageKey: join-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: INNER JOIN은 어떤 행을 돌려주나요?
@@ -108,6 +166,40 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 결과에 choi가 나오나 (나오지 않는다. 짝이 되는 주문이 없다)'
       - '옮긴 상황: 상품 10개와 리뷰 테이블을 `product join review`로 조인했다. 리뷰가 있는 상품은 6개이고 리뷰는 모두 15개다. 결과는 몇 행인가 (15행. 리뷰 없는 상품 4개는 빠진다)'
+    body:
+      - p: '레슨 전체에서 쓰는 데이터예요. 행을 손으로 셀 수 있게 작게 만들었어요.'
+      - code: data
+      - p: '조인은 왼쪽 행 하나마다 오른쪽에서 **ON 조건이 참인 행**을 찾아 옆에 붙여요. 외래 키 `orders.member_id`와 기본 키 `member.id`를 짝짓는 것이 가장 흔해요.'
+      - code: inner
+        notes:
+          - mark: join
+            as: code
+            text: '`join`만 쓰면 `inner join`이에요.'
+          - mark: on o.member_id = m.id
+            as: code
+            text: '짝을 짓는 조건이에요. 이 조건이 참인 쌍만 결과가 돼요.'
+      - p: '처음 예측의 답은 **4행**이에요. {{predict-result}}'
+      - ci:
+          key: inner
+          label: 실제 결과 보기
+          source: SqlJoinTest.joinKinds
+      - p: 'kim은 주문이 둘이라 두 번 나오고, lee와 park이 한 번씩 나와요. **choi는 짝이 되는 주문이 없어서**, 주문 5는 **짝이 되는 회원이 없어서** 빠졌어요. 오류도 경고도 없어요.'
+      - p: '주문 5가 빠지는 이유는 NULL이에요. `NULL = 1`은 참도 거짓도 아닌 NULL이라, ON 조건이 참이 되는 회원이 없어요.'
+      - callout: '"전체 회원의 주문 현황"을 INNER JOIN으로 만들면 **주문 없는 회원이 목록에서 사라져요.** 결과가 그럴듯해 보여서 알아채기 어려워요.'
+      - more:
+          summary: '더 알아보기: 같은 테이블끼리 조인하기'
+          body:
+            - p: '회원의 `referrer_id`가 다른 회원을 가리키면, 같은 테이블을 두 번 써서 추천인 이름을 붙여요. 별칭을 달리 줘요: `member m join member r on r.id = m.referrer_id`. 이것을 **SELF JOIN**이라고 해요. 테스트에서 lee와 park의 추천인 kim을 이렇게 붙였어요.'
+      - quiz:
+          q: '상품 10개와 리뷰 15개를 `product join review`로 조인했어요. 리뷰가 있는 상품은 6개예요. 결과는 몇 행인가요?'
+          options:
+            - '10행'
+            - '15행'
+            - '6행'
+          answer: 2
+          explain: '리뷰 하나마다 짝이 되는 상품이 하나라 15행이에요. 리뷰 없는 상품 4개는 빠져요.'
+      - next: '짝이 없는 행은 빠졌어요. choi처럼 주문이 없는 회원도 목록에 남기려면 어떻게 할까요?'
+    recall: 'INNER JOIN은 ON 조건으로 짝이 맞는 행만, 짝마다 한 행으로 붙여 돌려줘요. 짝이 없는 행은 양쪽 모두 결과에서 조용히 빠져요. NULL인 외래 키는 어떤 키와도 같지 않아서 짝이 없어요.'
   - id: q2
     title: 짝이 없는 행까지 보려면 어떻게 하나요?
     conclusion:
@@ -122,6 +214,60 @@ questions:
     asks:
       - '본문의 예시: 코드 leftWhere의 결과에 choi가 나오나 (나오지 않는다. NULL인 status가 WHERE에서 걸러진다)'
       - '옮긴 상황: 모든 상품과 "오늘 달린 리뷰 수"를 보이려고 `product left join review r on r.product_id = p.id where r.created_at >= current_date`로 썼다. 오늘 리뷰가 없는 상품은 결과에 나오나 (나오지 않는다. 날짜 조건을 ON으로 옮긴다)'
+    body:
+      - p: '`left join`으로 바꾸면 **왼쪽(회원)은 모두 남고**, 짝이 없는 행은 오른쪽 열을 NULL로 채워요.'
+      - code: leftJoin
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 조인 종류
+            options:
+              - {value: inner, label: INNER}
+              - {value: left, label: LEFT}
+              - {value: full, label: FULL OUTER}
+          scenes:
+            inner:
+              duo:
+                - {label: 결과 (name, order id), rows: [{k: kim, v: '1'}, {k: kim, v: '2'}, {k: lee, v: '3'}, {k: park, v: '4'}]}
+                - {label: 빠진 행, rows: [{k: choi, v: 주문 없음, mark: bad}, {k: 주문 5, v: 회원 없음, mark: bad}]}
+              verdict: '짝이 있는 4행이에요. 양쪽의 짝 없는 행이 빠졌어요.'
+            left:
+              duo:
+                - {label: 결과 (name, order id), rows: [{k: kim, v: '1'}, {k: kim, v: '2'}, {k: lee, v: '3'}, {k: park, v: '4'}, {k: choi, v: 'NULL', mark: changed}]}
+                - {label: 빠진 행, rows: [{k: 주문 5, v: 회원 없음, mark: bad}]}
+              verdict: '왼쪽(회원)이 모두 남아 5행이에요. choi의 주문 칸은 NULL이에요.'
+            full:
+              duo:
+                - {label: 결과 (name, order id), rows: [{k: kim, v: '1'}, {k: kim, v: '2'}, {k: lee, v: '3'}, {k: park, v: '4'}, {k: 'NULL', v: '5', mark: changed}, {k: choi, v: 'NULL', mark: changed}]}
+                - {label: 빠진 행, text: 없음, state: dim}
+              verdict: '양쪽을 모두 남겨 6행이에요.'
+      - ci:
+          key: left
+          label: LEFT JOIN의 실제 결과 보기
+          source: SqlJoinTest.joinKinds
+      - p: '`right join`은 오른쪽을 모두 남겨요. 테이블 순서를 바꾼 LEFT JOIN과 같아서 대개 LEFT로 통일해요. `full join`은 양쪽 다 남겨요.'
+      - p: '"주문이 없는 회원 찾기"는 LEFT JOIN 뒤에 오른쪽 키가 NULL인 행을 남기면 돼요: `where o.id is null`. choi 한 명이 나와요.'
+      - h3: 오른쪽 조건을 WHERE에 두면
+      - p: '결제 완료(PAID) 주문만 붙이고 싶어요. 조건을 WHERE에 둘 때와 ON에 둘 때를 비교해 볼게요.'
+      - code: leftWhere
+      - code: leftOn
+      - ci:
+          key: where-on
+          label: 두 쿼리의 실제 결과 보기
+          source: SqlJoinTest.leftJoinWhereVsOn
+      - p: 'WHERE에 둔 쪽은 **choi가 사라졌어요.** choi 행의 `o.status`는 NULL이라 `NULL = ''PAID''`가 참이 아니거든요. 결과가 INNER JOIN과 같아졌어요. ON에 둔 쪽은 "PAID 주문과만 짝짓기"라서, 짝이 없는 choi가 NULL 행으로 남아요.'
+      - callout: '**ON은 "어떤 행과 짝지을까", WHERE는 "다 붙인 뒤 어떤 행을 남길까"예요.** LEFT JOIN의 오른쪽 테이블에 거는 조건은 ON에 둬요.'
+      - quiz:
+          q: '모든 상품과 오늘 달린 리뷰를 보이려고 `product p left join review r on r.product_id = p.id where r.created_at >= current_date`로 썼어요. 오늘 리뷰가 없는 상품은 결과에 나오나요?'
+          options:
+            - '나온다. LEFT JOIN이라 상품은 모두 남는다'
+            - '나오지 않는다. WHERE가 리뷰 칸이 NULL인 행을 걸러낸다'
+            - '오류가 난다'
+          answer: 2
+          explain: '리뷰가 없는 상품은 `r.created_at`이 NULL이라 WHERE를 통과하지 못해요. 날짜 조건을 ON으로 옮기면 남아요.'
+      - next: '조인으로 행이 빠지는 경우를 봤어요. 반대로 행이 늘어나는 경우도 있어요.'
+    recall: 'LEFT JOIN은 왼쪽 행을 모두 남기고, 짝이 없으면 오른쪽 열을 NULL로 채워요. 주문 없는 회원은 LEFT JOIN 뒤 오른쪽 키가 NULL인 행으로 찾아요. 오른쪽 테이블의 조건을 WHERE에 두면 NULL 행이 걸러져 INNER JOIN처럼 되니, ON에 둬요.'
   - id: q3
     title: 조인하면 왜 행이 늘어나고, 합계가 부풀까요?
     conclusion:
@@ -139,6 +285,47 @@ questions:
     asks:
       - '본문의 예시: 주문 하나에 항목 3개, 결제 2건이 있다. 코드 doubleSum의 SUM은 실제 결제 합계의 몇 배인가 (3배)'
       - '옮긴 상황: 게시글 하나에 태그 4개와 댓글 5개가 있다. `post join tag join comment`로 조인한 뒤 `count(*)`로 댓글 수를 세면 얼마가 나오나 (20)'
+    body:
+      - p: '조인 결과의 행 수는 회원 수가 아니라 **짝의 수**예요. kim은 주문이 둘이라 kim 행이 두 번 나왔어요. 1:N 관계를 조인하면 "1" 쪽이 N번 반복돼요.'
+      - p: '이 반복이 두 겹이 되면 문제가 커져요. 주문 1에는 항목이 3개, 결제가 2건(6000원과 4000원으로 나눠 냄) 있어요. 주문별 결제 합계를 구하면서 항목 수도 보려고 둘을 함께 조인했어요.'
+      - code: doubleSum
+      - widget:
+          kind: steps
+          layout: [duo, buttons, log, verdict]
+          initial:
+            duo:
+              - {label: 조인 결과, rows: [{k: 주문 1, v: 1행}]}
+              - {label: SUM(p.amount), text: 아직 없음, state: dim}
+          scenarios:
+            default:
+              - log: 'orders만: 주문 1 → 1행'
+                duo: [{label: 조인 결과, rows: [{k: 주문 1, v: 1행}]}, {label: SUM(p.amount), text: 아직 없음, state: dim}]
+              - log: 'order_item을 붙임: 항목 3개 → 3행'
+                duo: [{label: 조인 결과, rows: [{k: pen, v: 1행}, {k: note, v: 1행}, {k: ink, v: 1행}]}, {label: SUM(p.amount), text: 아직 없음, state: dim}]
+              - log: 'payment를 붙임: 항목 3개 × 결제 2건 → 6행'
+                duo: [{label: 조인 결과, rows: [{k: pen, v: '6000, 4000', mark: bad}, {k: note, v: '6000, 4000', mark: bad}, {k: ink, v: '6000, 4000', mark: bad}]}, {label: SUM(p.amount), text: 아직 없음, state: dim}]
+              - log: 'group by o.id로 SUM'
+                duo: [{label: 조인 결과, rows: [{k: 6행, v: 결제 금액이 3번씩}]}, {label: SUM(p.amount), rows: [{k: 조인 뒤 합계, v: '30000', mark: bad}, {k: 실제 결제 합계, v: '10000'}]}]
+                verdict: '결제 금액이 항목 수만큼 반복돼서 합계가 3배가 됐어요.'
+      - ci:
+          key: multiply
+          label: 실제 결과 보기
+          source: SqlJoinTest.rowsMultiply
+      - p: '고치는 법은 **먼저 합친 뒤 붙이기**예요. 결제를 주문별로 먼저 묶어 합계를 한 행으로 만든 다음 조인하면 반복될 것이 없어요. 위 결과의 마지막 줄이에요.'
+      - code: fixedSum
+      - p: '`count(*)`도 같이 부풀어요. 조인 뒤에 무언가를 세거나 더할 때는 **다른 1:N 테이블을 함께 붙이지 않았는지** 봐요. 묶고 합치는 방법은 [집계와 서브쿼리](lesson:aggregate-subquery)에서 더 다뤄요.'
+      - h3: 조인 조건을 빠뜨리면
+      - p: 'ON 조건 없이 붙이면 모든 회원이 모든 주문과 짝지어져요. 4 × 5 = **20행**이에요. 이것을 **CROSS JOIN**(카테시안 곱)이라고 해요. 일부러 쓸 때는 `cross join`이라고 적어 실수가 아님을 드러내요.'
+      - quiz:
+          q: '글 하나에 태그 4개와 댓글 5개가 있어요. `post join tag ... join comment ...`로 조인한 뒤 `count(*)`로 댓글 수를 세면 얼마가 나오나요?'
+          options:
+            - '5'
+            - '9'
+            - '20'
+          answer: 3
+          explain: '태그 4행마다 댓글 5행이 붙어 4 × 5 = 20행이에요. 댓글 수는 댓글 테이블만 세야 해요.'
+      - next: '조인은 행 수를 잘 알고 써야 해요. 그래도 앱에서 하나씩 읽어 짝짓는 것보다 왜 나을까요?'
+    recall: '1:N 관계를 조인하면 "1" 쪽 행이 짝의 수만큼 반복돼요. 1:N을 두 개 함께 붙이면 곱만큼 늘어서, 그 위의 SUM과 COUNT가 부풀어요. 합계는 먼저 묶어 한 행으로 만든 뒤 붙여요. 조인 조건을 빠뜨리면 모든 행끼리 짝지어지는 CROSS JOIN이 돼요.'
   - id: q4
     title: 앱에서 짝짓지 않고 왜 DB에서 조인하나요?
     conclusion:
@@ -153,12 +340,69 @@ questions:
     asks:
       - '본문의 예시: 주문 300건을 읽고 주문마다 회원을 한 번씩 조회하면 쿼리는 모두 몇 번인가 (301번)'
       - '옮긴 상황: 게시글 50개와 글쓴이 이름을 보여 주는 화면이 쿼리 51번을 보낸다. 쿼리 한 번으로 줄이려면 (게시글과 회원을 조인한다)'
+    body:
+      - p: '주문 300건의 목록에 회원 이름을 붙여야 해요. 주문을 읽고, 주문마다 회원을 한 번씩 조회하면 이렇게 돼요.'
+      - code: loop
+      - p: '쿼리는 주문 목록 1번에 주문마다 1번, 모두 **301번**이에요. 같은 결과를 조인 한 번으로도 얻을 수 있어요.'
+      - code: oneJoin
+      - ci:
+          key: n-plus-one
+          label: 두 방법을 실제로 돌린 결과 보기
+          source: SqlJoinTest.nPlusOne
+      - p: '쿼리 하나마다 DB까지 갔다 오는 **왕복**이 들어요. 같은 컴퓨터 안의 DB여도 왕복이 300번 쌓이면 느려요. 조인은 DB 안에서 짝지어 결과만 한 번에 보내요. 이렇게 쿼리 수가 데이터 수만큼 늘어나는 것을 **N+1 문제**라고 불러요. 시간은 실행할 때마다 달라지니 크기만 보세요.'
+      - p: '조인이 어려운 경우도 있어요. 회원이 다른 DB나 다른 서비스에 있을 때예요. 그때는 두 목록을 한 번씩 읽어 회원 id로 찾는 맵을 만들고 짝지어요. 쿼리는 2번이에요([시간 복잡도](lesson:time-complexity)의 실무 구역).'
+      - p: 'JPA에서는 연관된 엔티티를 하나씩 불러오다가 같은 문제가 생겨요. [JPA N+1 문제](lesson:jpa-n-plus-1)에서 다뤄요.'
+      - more:
+          summary: '더 알아보기: DB가 조인을 실행하는 방법'
+          body:
+            - p: 'DB는 조인을 Nested Loop(왼쪽 행마다 오른쪽을 찾음), Hash Join(한쪽으로 해시 테이블을 만들어 찾음), Merge Join(둘 다 정렬해 나란히 훑음) 가운데 골라 실행해요. 무엇을 골랐는지는 실행계획에 나와요. 조인 열에 인덱스가 있으면 Nested Loop가 빨라져요. [인덱스와 실행계획](lesson:index-explain)에서 다뤄요.'
+      - quiz:
+          q: '게시글 50개와 글쓴이 이름을 보여 주는 화면이 쿼리 51번을 보내요. 쿼리 한 번으로 줄이려면?'
+          options:
+            - '글쓴이 조회 쿼리에 인덱스를 만든다'
+            - '게시글과 회원을 조인해서 한 번에 읽는다'
+            - '게시글을 두 번 나눠 읽는다'
+          answer: 2
+          explain: '글마다 회원을 따로 읽어서 1 + 50번이에요. 조인하면 DB 안에서 짝지어 한 번에 와요.'
+    recall: '조인은 DB 안에서 한 번에 짝지어 쿼리 한 번으로 끝나요. 앱에서 행마다 다시 조회하면 쿼리가 1 + 데이터 수만큼 늘고, 쿼리마다 DB 왕복이 쌓여 느려져요. 이것이 N+1 문제예요. 조인이 어려울 때는 두 목록을 한 번씩 읽어 맵으로 짝지어요.'
 practice:
   says:
     - '스프링의 `JdbcTemplate`으로 조인 결과를 읽는다. 코드 rowMapper처럼 조인한 한 행을 화면용 record 하나로 옮긴다. 엔티티가 아니라 화면에 필요한 열만 고른다. 테스트로 돌려 결과를 보인다'
     - '회원 한 명과 그 주문 목록처럼 1:N을 객체로 묶어야 할 때: 조인 결과는 회원이 주문 수만큼 반복된다(질문 3). 회원 id로 묶어(`groupingBy`, 또는 `LinkedHashMap`에 모아) 회원 하나에 주문 리스트를 만든다'
     - '흔한 실수: 통계 쿼리에 화면에 쓸 다른 1:N 테이블을 하나 더 조인했다가 합계가 부푼다. 고친 코드: 합계는 먼저 `group by`로 구한 뒤 붙인다. 고치기 전과 후의 합계를 테스트로 비교한다'
     - '흔한 실수 둘: 주문 없는 회원도 보여야 하는 관리자 화면을 INNER JOIN으로 만들어 회원이 빠진다. 신고가 들어오기 전에는 알기 어렵다. LEFT JOIN과 ON 조건으로 고친다'
+  title: 스프링에서는 이렇게 써요
+  body:
+    - p: '`JdbcTemplate`으로 조인 결과를 읽을 때는 조인한 한 행을 화면용 record 하나로 옮겨요. 엔티티 전체가 아니라 화면에 필요한 열만 골라요.'
+    - code: rowMapper
+      notes:
+        - mark: '(rs, i) -> new OrderRow('
+          as: code
+          text: '`RowMapper`예요. 결과의 행마다 불려서 열을 record의 필드로 옮겨요.'
+    - h3: 회원 하나에 주문 여러 개로 묶기
+    - p: '회원 화면처럼 "회원 하나와 그 주문 목록"이 필요하면, 조인 결과는 회원이 주문 수만큼 반복돼요(질문 3). 회원으로 묶어 리스트를 만들어요. 넣은 순서를 지키려고 `LinkedHashMap`을 썼어요.'
+    - code: group
+    - ci:
+        key: row-mapper
+        label: 실제 결과 보기
+        source: SqlJoinTest.rowMapperAndGrouping
+    - h3: '흔한 실수 1: 통계 쿼리에 1:N을 하나 더 붙이기'
+    - p: '매출 통계에 "항목 수"를 같이 보여 달라는 요청에 `order_item`을 조인에 더하는 순간 결제 합계가 부풀어요(질문 3의 3배). 숫자가 조금 커 보일 뿐 오류가 없어서 오래 안 들켜요. 고친 쿼리는 코드 fixedSum처럼 합계를 먼저 묶은 뒤 붙여요. 고치기 전과 후의 합계를 테스트로 비교했어요.'
+    - h3: '흔한 실수 2: 관리자 화면을 INNER JOIN으로'
+    - p: '"전체 회원과 최근 주문" 화면을 INNER JOIN으로 만들면 주문 없는 회원이 빠져요. 신고가 들어오기 전에는 알기 어려워요. 왼쪽을 모두 남겨야 하는 화면은 LEFT JOIN으로, 오른쪽 조건은 ON에 둬요(질문 2).'
+interview:
+  question: INNER JOIN과 LEFT JOIN의 차이와, 조인할 때 조심할 점을 설명해 주세요
+  model:
+    - label: 정의
+      text: 조인은 두 테이블의 행을 ON 조건으로 짝지어 한 행으로 붙입니다. INNER JOIN은 짝이 있는 행만 돌려주고, LEFT JOIN은 왼쪽 행을 모두 남기고 짝이 없으면 오른쪽 열을 NULL로 채웁니다.
+    - label: 원리
+      text: 결과의 행 수는 짝의 수라서 1:N을 조인하면 1 쪽이 반복됩니다. 1:N 둘을 함께 조인하면 곱만큼 늘어 SUM과 COUNT가 부풉니다. LEFT JOIN에서 오른쪽 조건을 WHERE에 두면 NULL 행이 걸러져 INNER JOIN과 같아집니다.
+    - label: 주의할 점
+      text: 합계는 먼저 묶은 뒤 붙이고, 오른쪽 조건은 ON에 둡니다. 앱에서 행마다 다시 조회하면 쿼리가 데이터 수만큼 느는 N+1이 되니 조인으로 한 번에 읽습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 매출 통계에 항목 테이블을 함께 조인했다가 결제 합계가 부푼 것을 찾아, 결제를 먼저 집계한 뒤 붙이도록 고쳤습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에 예제 데이터를 넣고 쿼리를 실행해 받은 값이에요. 쿼리 수와 시간은 스프링 부트 3.5의 `JdbcTemplate`으로 재었어요. 코드가 바뀔 때마다 테스트([SqlJoinTest](link:test))가 다시 돌아요.
+footer: '근거: 조인의 종류와 ON, WHERE는 [PostgreSQL 16 문서](link:joins)와 [조인 튜토리얼](link:tutorial). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '예제 데이터에서 INNER JOIN은 4행, LEFT JOIN은 5행, FULL OUTER JOIN은 6행이다'
     how: 'PostgreSQL 컨테이너에 예제 데이터를 넣고 각 쿼리의 결과를 남긴다'
