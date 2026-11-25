@@ -1,9 +1,10 @@
-# Future와 CompletableFuture (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-# 예전 레슨 둘(future-and-callable, completable-future)을 하나로 합친다.
-stage: design
+# Future와 CompletableFuture
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/completable-future.yaml에 있다.
+# 예전 레슨 둘(future-and-callable, completable-future)을 하나로 합쳤다.
 title: Future와 CompletableFuture
+description: 다른 스레드에 맡긴 일의 결과는 어떻게 받는지, 다른 스레드에서 난 예외는 어떻게 받는지, CompletableFuture는 결과를 어떻게 잇고 합치는지, 실패와 시간 초과는 어떻게 다루는지. 300ms 호출 셋을 기다리는 방법을 바꿔 가며 시간을 재 보는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 24
 roadmap: C8
 type: 자바 실행
 prerequisites:
@@ -107,14 +108,47 @@ codes:
     supplyAsync(() -> couponApi(), pool)
         .orTimeout(500, MILLISECONDS)
         .[[exceptionally]](e -> List.of());
+  springService: |-
+    var ex = [[apiExecutor]];
+    var order = supplyAsync(
+        () -> orderApi.get(id), ex);
+    var delivery = supplyAsync(
+        () -> deliveryApi.get(id), ex);
+    var coupons = supplyAsync(
+        () -> couponApi.get(id), ex)
+        .orTimeout(500, MILLISECONDS)
+        .exceptionally(e -> List.of());
+
+    allOf(order, delivery, coupons).join();
+    return new OrderPage(order.join(),
+        delivery.join(), coupons.join());
   commonPool: |-
     // executor를 넘기지 않으면
     CompletableFuture.supplyAsync(
         () -> callExternalApi());
     // ForkJoinPool.commonPool에서 돈다
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/completablefuture/FutureAndCompletableFutureTest.java
+  future: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  executionException: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutionException.html
+  cf: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  stage: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
+  forkJoin: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html
 predict:
-  text: '코드 predict는 300ms 걸리는 호출 셋을 스레드 3개짜리 풀에 모두 맡긴 뒤, 차례로 `get()`해서 화면을 만들어요. `render`가 불릴 때까지 대략 얼마나 걸릴까요? 보기: 0.3초쯤 / 0.9초쯤 / 바로'
-  answer: '0.3초쯤. 셋이 동시에 돌고, 첫 get이 기다리는 동안 나머지도 끝난다. 질문 1에서 밝힌다.'
+  title: 셋을 맡기고 차례로 get하면
+  text: '300ms 걸리는 호출 셋을 스레드 3개짜리 풀에 모두 맡긴 뒤, 차례로 `get()`해서 화면을 만들어요. `render`가 불릴 때까지 대략 얼마나 걸릴까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: fast
+      label: 0.3초쯤
+    - value: slow
+      label: 0.9초쯤
+    - value: zero
+      label: 바로
+  answer: fast
+  storageKey: completable-future-predict-v2
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 다른 스레드에 맡긴 일의 결과는 어떻게 받나요?
@@ -134,6 +168,88 @@ questions:
     asks:
       - '본문의 예시: 코드 serial처럼 300ms 작업 셋을 맡기자마자 하나씩 `get()`했다. 걸리는 시간은 (0.9초쯤. 하나씩 기다린다)'
       - '옮긴 상황: 스레드 2개 풀에 각각 1초 걸리는 작업 5개를 모두 맡긴 뒤 차례로 get했다. 대략 얼마나 걸리나 (3초쯤. 두 개씩 세 번)'
+    body:
+      - p: '`submit`은 작업이 끝나길 기다리지 않고 바로 **`Future`**를 돌려줘요. `Future`는 "나중에 결과를 받을 표"예요. 결과가 필요할 때 **`get()`**을 부르면, 나와 있으면 바로 돌려주고 아니면 나올 때까지 부른 스레드를 막아요(블로킹).'
+      - ci:
+          key: submit-get
+          label: submit과 get이 돌아온 실제 시각 보기
+          source: FutureAndCompletableFutureTest.submitReturnsGetBlocks
+      - p: '처음 예측의 답은 **0.3초쯤**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 모두 맡긴 뒤 get한 실제 시간 보기
+          source: FutureAndCompletableFutureTest.submitAllThenGetVersusSerial
+          code: predict
+      - p: '셋이 동시에 돌고, `o.get()`이 기다리는 동안 다른 둘도 끝나서 `d.get()`과 `c.get()`은 바로 돌아와요. 맡기자마자 기다리면 어떨까요?'
+      - ci:
+          key: serial
+          label: 하나씩 get한 실제 시간 보기
+          source: FutureAndCompletableFutureTest.submitAllThenGetVersusSerial
+          code: serial
+      - widget:
+          kind: toggle
+          layout: [selector, legend, gantt, verdict]
+          selector:
+            label: 기다리는 방법
+            options:
+              - {value: all, label: 모두 맡긴 뒤 get}
+              - {value: serial, label: 맡기자마자 get}
+              - {value: queue, label: '스레드 2개에 4개'}
+          legend:
+            - {kind: hold, label: 풀의 스레드가 호출 중}
+            - {kind: wait, label: 요청 스레드가 get으로 기다림}
+          scenes:
+            all:
+              gantt:
+                total: 0.9
+                axis: ['0초', '0.45초', '0.9초']
+                rows:
+                  - {label: 요청 스레드, bars: [{kind: wait, from: 0, to: 0.3}]}
+                  - {label: 풀 1, bars: [{kind: hold, from: 0, to: 0.3}]}
+                  - {label: 풀 2, bars: [{kind: hold, from: 0, to: 0.3}]}
+                  - {label: 풀 3, bars: [{kind: hold, from: 0, to: 0.3}]}
+              verdict: '셋이 함께 돌아 가장 긴 것만큼(0.3초쯤) 걸려요.'
+            serial:
+              gantt:
+                total: 0.9
+                axis: ['0초', '0.45초', '0.9초']
+                rows:
+                  - {label: 요청 스레드, bars: [{kind: wait, from: 0, to: 0.9}]}
+                  - {label: 풀 1, bars: [{kind: hold, from: 0, to: 0.3}]}
+                  - {label: 풀 2, bars: [{kind: hold, from: 0.3, to: 0.6}]}
+                  - {label: 풀 3, bars: [{kind: hold, from: 0.6, to: 0.9}]}
+              verdict: '하나 끝나야 다음을 맡기니 합(0.9초쯤)만큼 걸려요. 스레드가 셋이어도 하나씩 쓴 셈이에요.'
+            queue:
+              gantt:
+                total: 0.9
+                axis: ['0초', '0.45초', '0.9초']
+                rows:
+                  - {label: 요청 스레드, bars: [{kind: wait, from: 0, to: 0.6}]}
+                  - {label: 풀 1, bars: [{kind: hold, from: 0, to: 0.3}, {kind: hold, from: 0.3, to: 0.6}]}
+                  - {label: 풀 2, bars: [{kind: hold, from: 0, to: 0.3}, {kind: hold, from: 0.3, to: 0.6}]}
+              verdict: '스레드보다 작업이 많으면 나머지는 큐에서 기다려 두 번(0.6초쯤)에 걸쳐 끝나요.'
+      - ul:
+          - '**`get(시간)`**은 그 시간까지만 기다리고 `TimeoutException`을 던져요. 작업은 멈추지 않고 계속 돌아요. 멈추려면 `cancel`을 불러요.'
+          - '풀의 스레드보다 작업이 많으면 나머지는 큐에서 기다려요(스레드 풀 레슨).'
+      - ci:
+          key: timeout
+          label: get(500ms)의 실제 결과 보기
+          source: FutureAndCompletableFutureTest.getWithTimeout
+          code: timeout
+      - more:
+          summary: '더 알아보기: isDone과 cancel'
+          body:
+            - p: '`isDone()`은 기다리지 않고 끝났는지만 알려 줘요. `cancel(true)`는 실행 중인 스레드를 인터럽트하고, 그 뒤 `get()`은 `CancellationException`이에요([Future 문서](link:future)).'
+      - quiz:
+          q: '300ms 작업 셋을 맡기자마자 하나씩 `get()`했어요. 걸리는 시간은?'
+          options:
+            - 0.3초쯤
+            - 0.9초쯤
+            - 바로
+          answer: 2
+          explain: '하나가 끝나야 다음을 맡기니 함께 돌지 않아요. 실제로 0.9초 넘게 걸렸어요.'
+      - next: '맡긴 작업이 결과 대신 예외를 내면 어떻게 될까요?'
+    recall: '`submit`이 바로 돌려주는 `Future`를 들고 있다가, 결과가 필요할 때 `get()`으로 받아요. `get()`은 결과가 나올 때까지 부른 스레드를 막아요. 그래서 모두 맡긴 뒤에 모으면 가장 긴 작업만큼, 맡기자마자 하나씩 `get()`하면 합만큼 걸려요. `get(시간)`은 기다림만 끝내고 작업은 계속 돌아요.'
   - id: q2
     title: 다른 스레드에서 난 예외는 어떻게 받나요?
     conclusion:
@@ -148,6 +264,33 @@ questions:
     asks:
       - '본문의 예시: 코드 failGet에서 `f.get()`이 던지는 예외와 `getCause()`가 돌려주는 예외는 (ExecutionException, IllegalStateException)'
       - '옮긴 상황: `try { pool.submit(() -> parse(bad)); } catch (NumberFormatException e) { log(e); }`에서 parse가 NumberFormatException을 던진다. catch가 실행되나 (안 된다. 예외는 풀의 스레드에서 났고 Future 안에 있다)'
+    body:
+      - p: '예외는 그것을 던진 스레드의 스택을 따라 올라가요(예외 레슨). 작업은 **풀의 스레드**에서 돌았으니, `submit`을 `try-catch`로 감싸도 잡히지 않아요. 풀의 스레드에서 난 예외는 `Future`가 잡아 둬요.'
+      - ci:
+          key: fail-get
+          label: 실제 결과 보기
+          source: FutureAndCompletableFutureTest.exceptionWrappedInGet
+          code: failGet
+      - ul:
+          - '`get()`을 부르는 순간 **`ExecutionException`**이 나고, `getCause()`가 원래 예외예요([API 문서](link:executionException)).'
+          - '`ExecutionException`은 체크 예외라 `get()`을 부르는 코드는 잡거나 던져야 해요. `InterruptedException`도 함께예요.'
+          - '`get()`을 부르지 않으면 예외는 어디에도 찍히지 않아요(스레드 풀 레슨). 결과가 필요 없는 작업이어도 실패를 알고 싶으면 작업 안에서 잡아 로그를 남겨요.'
+      - p: '`CompletableFuture`는 결과를 꺼낼 때 `join()`을 많이 써요. 같은 실패를 두 방법으로 꺼내 봤어요.'
+      - ci:
+          key: join-get
+          label: join과 get의 실제 결과 보기
+          source: FutureAndCompletableFutureTest.joinVersusGet
+      - p: '`join()`은 **`CompletionException`**(언체크)으로 감싸서 람다 안에서도 쓰기 편해요. 원래 예외는 마찬가지로 `getCause()`에 있어요.'
+      - quiz:
+          q: '`try { pool.submit(() -> parse(bad)); } catch (NumberFormatException e) { log(e); }`에서 `parse`가 `NumberFormatException`을 던졌어요. catch가 실행될까요?'
+          options:
+            - 실행된다
+            - 실행되지 않는다. 예외는 Future 안에 있다
+            - JVM이 끝난다
+          answer: 2
+          explain: '예외는 풀의 스레드에서 났어요. `get()`을 불러야 `ExecutionException`으로 나와요.'
+      - next: '`Future`는 결과를 받으려면 `get()`으로 기다려야 해요. 주문 결과로 쿠폰을 또 부르려면 그 사이에도 기다려야 할까요?'
+    recall: '작업에서 난 예외는 `Future`가 잡아 두었다가, `get()`을 부를 때 `ExecutionException`으로 감싸 던져요. 원래 예외는 `getCause()`로 꺼내요. `submit`할 때는 아무 일도 없어서 `get()`을 부르지 않으면 예외를 끝내 모를 수 있어요. `CompletableFuture`의 `join()`은 언체크 예외인 `CompletionException`으로 감싸요.'
   - id: q3
     title: CompletableFuture는 결과를 어떻게 잇고 합치나요?
     conclusion:
@@ -164,6 +307,51 @@ questions:
     asks:
       - '본문의 예시: 주문 결과의 쿠폰 id로 `couponApiAsync(id)`(CompletableFuture를 돌려줌)를 이어 부를 때 `thenApply`를 쓰면 결과의 타입은 (`CompletableFuture<CompletableFuture<Coupon>>`. thenCompose를 써야 펼쳐진다)'
       - '옮긴 상황: 상품 정보(200ms)와 재고(400ms)를 함께 받아 하나로 합친다. thenCombine으로 합치면 대략 얼마나 걸리나. 풀의 스레드는 충분하다 (0.4초쯤. 둘 중 긴 것)'
+    body:
+      - p: '`Future`만으로는 결과를 잇거나 합치려면 중간마다 `get()`으로 기다려야 해요. 기다리는 동안 그 스레드는 아무것도 못 해요. **`CompletableFuture`**는 결과를 꺼내는 대신, 결과가 나오면 실행할 일을 **미리 붙여 둬요**([API 문서](link:cf)).'
+      - table:
+          head: [메서드, 하는 일]
+          rows:
+            - ['`supplyAsync(공급자, 풀)`', '작업을 풀에 맡기고 바로 돌려줘요']
+            - ['`thenApply(f)`', '결과 값을 f로 바꿔요. 바로 계산되는 일']
+            - ['`thenCompose(f)`', '결과로 또 다른 비동기 호출을 이어요']
+            - ['`thenCombine(other, f)`', '두 결과가 다 나오면 합쳐요']
+            - ['`allOf(...)`', '여럿이 모두 끝나길 기다려요']
+      - code: combine
+      - ci:
+          key: combine
+          label: thenCombine과 allOf의 실제 시간 보기
+          source: FutureAndCompletableFutureTest.combineAndAllOf
+      - p: '300ms 두 작업이 함께 돌아 합쳐지고, 셋을 `allOf`로 모아도 가장 긴 것만큼이에요. `allOf`가 끝난 뒤의 `join()`은 이미 결과가 있어 바로 돌아와요.'
+      - h3: thenApply와 thenCompose
+      - code: compose
+        notes:
+          - mark: thenCompose
+            as: code
+            text: '다음 일이 또 `CompletableFuture`를 돌려주면 펼쳐서 이어요.'
+      - ci:
+          key: compose
+          label: 두 방법의 실제 결과 보기
+          source: FutureAndCompletableFutureTest.thenComposeFlattens
+      - p: '`thenApply`로 이으면 `CompletableFuture<CompletableFuture<Coupon>>`처럼 겹쳐요. 스트림의 `map`과 `flatMap`의 관계와 같아요(스트림과 Optional 레슨).'
+      - more:
+          summary: '더 알아보기: 이어 붙인 일은 어느 스레드에서 도나요'
+          body:
+            - p: '`thenApply`의 함수는 앞 단계를 끝낸 스레드에서 이어서 실행돼요. 앞 단계가 이미 끝나 있으면 붙인 스레드에서 바로 실행돼요. `thenApplyAsync(f, 풀)`은 지정한 풀에서 실행돼요([CompletionStage 문서](link:stage)).'
+            - ci:
+                key: threads
+                label: 실제 스레드 이름 보기
+                source: FutureAndCompletableFutureTest.whichThread
+      - quiz:
+          q: '상품 정보(200ms)와 재고(400ms)를 각각 `supplyAsync`로 맡기고 `thenCombine`으로 합쳐요. 풀의 스레드는 충분해요. 대략 얼마나 걸릴까요?'
+          options:
+            - 0.2초쯤
+            - 0.4초쯤
+            - 0.6초쯤
+          answer: 2
+          explain: '둘이 함께 돌고, 둘 다 끝나야 합치니 긴 쪽만큼 걸려요.'
+      - next: '이어 붙인 단계 가운데 하나가 실패하거나, 외부 호출이 응답하지 않으면 어떻게 될까요?'
+    recall: '결과를 기다려 꺼내는 대신, 결과가 나오면 실행할 일을 미리 붙여 둬요. `thenApply`로 값을 바꾸고, `thenCompose`로 다음 비동기 호출을 펼쳐 잇고, `thenCombine`과 `allOf`로 여럿을 합쳐요. `Future`로 같은 일을 하려면 중간마다 `get()`으로 스레드를 묶어 둬야 해요.'
   - id: q4
     title: CompletableFuture에서 실패와 시간 초과는 어떻게 다루나요?
     conclusion:
@@ -176,61 +364,145 @@ questions:
       - '`orTimeout(500ms)`는 시간 안에 끝나지 않으면 `TimeoutException`으로 실패시킨다. `completeOnTimeout(기본값, 500ms)`는 기본값으로 끝낸다. 코드 recover처럼 이어 붙이면 느린 쿠폰 서비스를 0.5초에 끊고 빈 목록을 쓴다. 실제 결과를 보인다'
       - '두 메서드는 기다림만 끝낸다. 맡긴 작업은 풀에서 계속 돌 수 있다. 외부 호출 자체에도 연결과 응답 타임아웃을 준다(A10)'
     widget:
-      kind: steps
-      note: '주문, 배송, 쿠폰 세 호출을 합치는 흐름. selector로 시나리오: 모두 성공, 쿠폰이 예외, 쿠폰이 2초 걸림(orTimeout 500ms + exceptionally). 단계마다 각 호출의 상태(실행 중, 성공, 실패)와 합친 결과를 duo로 보이고, 실패가 뒤 단계를 건너뛰는 것과 exceptionally가 빈 목록으로 바꾸는 것을 log에 적는다'
+      kind: toggle
+      note: '주문, 배송, 쿠폰 세 호출을 합치는 흐름. selector로 시나리오: 모두 성공, 쿠폰이 예외, 쿠폰이 2초 걸림(orTimeout 500ms + exceptionally). 장면마다 세 호출의 결과와 합친 화면을 duo로 보이고, 실패가 뒤 단계를 건너뛰는 것과 exceptionally가 빈 목록으로 바꾸는 것을 verdict에 적는다. 설계 때는 steps였는데 단계가 짧아 toggle로 바꿨다'
     asks:
       - '본문의 예시: `supplyAsync(() -> { throw new RuntimeException(); }).thenApply(x -> x + 1).exceptionally(e -> -1).join()`의 결과는 (-1. thenApply는 건너뛰고 exceptionally가 바꾼다)'
       - '옮긴 상황: 추천 상품 API가 가끔 5초 넘게 걸린다. 화면은 1초 안에 나가야 하고 추천이 없으면 빈 목록이면 된다. 붙일 것을 고르면 (`completeOnTimeout(List.of(), 1, SECONDS)` 또는 `orTimeout` 뒤 `exceptionally`)'
       - '실무 구역: 요청 스레드에서 코드 commonPool처럼 executor 없이 2초 걸리는 외부 호출을 수십 개 맡겼다. 같은 JVM의 병렬 스트림은 어떻게 되나 (느려진다. 둘 다 크기가 작은 공용 풀을 함께 쓴다)'
+    body:
+      - p: '중간 단계에서 예외가 나면 그 뒤에 붙인 `thenApply`, `thenCombine`은 **실행되지 않아요.** 실패한 결과가 끝까지 전해지고 `join()`에서 `CompletionException`이 나요.'
+      - ci:
+          key: failure
+          label: 실패가 전해지는 실제 결과 보기
+          source: FutureAndCompletableFutureTest.failureSkipsStagesAndRecovers
+      - ul:
+          - '**`exceptionally(e -> 기본값)`**은 실패했을 때만 불려 기본값으로 바꿔요. 쿠폰 서비스가 죽어도 쿠폰 없이 화면을 보여 줄 수 있어요.'
+          - '**`handle((값, 예외) -> ...)`**은 성공과 실패 모두에 불려요. 둘 가운데 하나만 null이 아니에요.'
+      - h3: 기다리는 시간에 끝을 줘요
+      - code: recover
+        notes:
+          - mark: exceptionally
+            as: code
+            text: '시간 초과도 실패라서 여기서 빈 목록으로 바뀌어요.'
+      - ci:
+          key: recover
+          label: 2초 걸리는 호출에 500ms를 준 실제 결과 보기
+          source: FutureAndCompletableFutureTest.timeouts
+      - ul:
+          - '`orTimeout(500ms)`는 시간 안에 끝나지 않으면 `TimeoutException`으로 실패시켜요. `completeOnTimeout(기본값, 500ms)`는 기본값으로 끝내요.'
+          - '두 메서드는 **기다림만** 끝내요. 맡긴 작업은 풀에서 계속 돌 수 있어요. 외부 호출 자체에도 연결과 응답 타임아웃을 줘요(타임아웃, 재시도, 서킷 브레이커 레슨).'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 쿠폰 서비스가
+            options:
+              - {value: ok, label: 정상}
+              - {value: error, label: 예외를 던짐}
+              - {value: slow, label: 2초 걸림}
+          scenes:
+            ok:
+              duo:
+                - {label: 세 호출, rows: [{k: 주문, v: 성공}, {k: 배송, v: 성공}, {k: 쿠폰, v: 성공}]}
+                - {label: 합친 화면, rows: [{k: 쿠폰 칸, v: 쿠폰 3장}, {k: 걸린 시간, v: 0.3초쯤}]}
+              verdict: '셋 다 성공하면 allOf가 모아 화면을 만들어요.'
+            error:
+              duo:
+                - {label: 세 호출, rows: [{k: 주문, v: 성공}, {k: 배송, v: 성공}, {k: 쿠폰, v: 예외, mark: bad}]}
+                - {label: 합친 화면, rows: [{k: 쿠폰 칸, v: '빈 목록 (exceptionally)', mark: changed}, {k: 걸린 시간, v: 0.3초쯤}]}
+              verdict: '쿠폰 호출의 실패가 뒤 단계를 건너뛰어 내려오고, exceptionally가 빈 목록으로 바꿔요. 화면은 나가요.'
+            slow:
+              duo:
+                - {label: 세 호출, rows: [{k: 주문, v: 성공}, {k: 배송, v: 성공}, {k: 쿠폰, v: '500ms에 TimeoutException', mark: bad}]}
+                - {label: 합친 화면, rows: [{k: 쿠폰 칸, v: '빈 목록 (exceptionally)', mark: changed}, {k: 걸린 시간, v: 0.5초쯤}]}
+              verdict: 'orTimeout이 0.5초에 끊고, exceptionally가 빈 목록으로 바꿔요. 2초를 다 기다리지 않아요.'
+      - quiz:
+          q: '`supplyAsync(() -> { throw new RuntimeException(); }).thenApply(x -> x + 1).exceptionally(e -> -1).join()`의 결과는?'
+          options:
+            - 예외가 난다
+            - '-1'
+            - '0'
+          answer: 2
+          explain: '실패라서 thenApply는 건너뛰고, exceptionally가 -1로 바꿔요.'
+    recall: '앞 단계가 실패하면 뒤의 `thenApply`는 건너뛰고 실패가 끝까지 전해져요. `exceptionally`로 실패를 기본값으로 바꾸고(`handle`은 성공과 실패를 모두 받아요), `orTimeout`이나 `completeOnTimeout`으로 기다리는 시간에 끝을 정해요. 두 메서드는 기다림만 끝내니 외부 호출 자체에도 타임아웃을 줘요.'
 practice:
   says:
     - '스프링 서비스에서 외부 호출 셋을 함께 보내는 코드: 빈으로 만든 `ThreadPoolTaskExecutor`(C7)를 주입받아 `supplyAsync(..., executor)`로 넘기고, `allOf`로 모아 응답을 만든다. 호출마다 `orTimeout`과 `exceptionally`를 붙여 하나가 느리거나 실패해도 응답이 나가게 한다'
     - '흔한 실수: 코드 commonPool처럼 executor를 넘기지 않는다. 블로킹 호출이 `ForkJoinPool.commonPool()`의 스레드를 붙잡는다. 공용 풀은 코어 수보다 하나 적은 크기라 금방 다 차고, 병렬 스트림과 다른 CompletableFuture까지 기다린다. 고친 코드: 입출력용 풀을 따로 만들어 넘긴다. 실행된 스레드의 이름(`ForkJoinPool.commonPool-worker-1`과 넘긴 풀의 이름)을 테스트로 남긴다'
     - '또 하나의 실수: 각 단계마다 바로 `join()`한다(질문 1의 serial과 같다). 함께 돌지 않아 합만큼 걸린다'
     - '`@Async` 메서드가 `CompletableFuture`를 돌려주면 같은 방법으로 잇는다. 기본 풀 설정의 함정은 S14'
+  body:
+    - p: '스프링 서비스에서 외부 호출 여럿을 함께 보낼 때 이 레슨의 도구를 써요. 실행되는 스레드는 테스트로 확인했고, 공용 풀의 크기는 ForkJoinPool 문서가 근거예요.'
+    - h3: 외부 호출 셋을 함께 보내기
+    - code: springService
+      notes:
+        - mark: apiExecutor
+          as: code
+          text: '빈으로 만든 입출력용 풀이에요(스레드 풀 레슨). 넘기지 않으면 공용 풀에서 돌아요.'
+    - p: '호출마다 `orTimeout`과 `exceptionally`를 붙여서 하나가 느리거나 실패해도 응답이 나가게 해요.'
+    - h3: '흔한 실수: executor를 넘기지 않기'
+    - code: commonPool
+    - p: 'executor 없이 맡기면 `ForkJoinPool.commonPool()`에서 돌아요. 공용 풀은 코어 수보다 하나 적은 크기라([ForkJoinPool 문서](link:forkJoin)), 2초씩 기다리는 호출 몇 개로 금방 다 차요. 그러면 같은 JVM의 병렬 스트림과 다른 `CompletableFuture`까지 줄을 서요. 실제 스레드 이름은 질문 3의 더 알아보기에 있어요. 입출력은 따로 만든 풀에 넘겨요.'
+    - h3: '또 하나의 실수: 맡기자마자 join'
+    - p: '단계마다 `supplyAsync(...).join()`을 바로 부르면 질문 1의 "맡기자마자 get"과 같아요. 함께 돌지 않아 합만큼 걸려요. 서로 상관없는 호출을 모두 맡긴 뒤에 모아요.'
+    - muted: '`@Async` 메서드가 `CompletableFuture`를 돌려주면 같은 방법으로 이어요. 기본 풀 설정의 함정은 @Async 레슨에서 다뤄요.'
+interview:
+  question: Future와 CompletableFuture의 차이를 설명해 주세요
+  model:
+    - label: 정의
+      text: Future는 다른 스레드에 맡긴 작업의 결과를 나중에 받을 표이고, CompletableFuture는 거기에 결과가 나오면 실행할 일을 붙여 잇고 합칠 수 있게 한 것입니다.
+    - label: 원리
+      text: Future는 get으로 결과가 나올 때까지 부른 스레드를 막고, 작업의 예외는 get에서 ExecutionException으로 감싸 나옵니다. CompletableFuture는 thenApply, thenCompose, thenCombine, allOf로 기다리지 않고 단계를 붙이고, 실패는 뒤 단계를 건너뛰어 exceptionally나 handle까지 전해집니다.
+    - label: 주의할 점
+      text: 모두 맡긴 뒤 모아야 함께 돌고, 맡기자마자 기다리면 합만큼 걸립니다. executor를 넘기지 않으면 작은 공용 풀에서 돌아 블로킹 호출이 다른 작업까지 막으니 입출력용 풀을 넘기고, orTimeout으로 기다림에 끝을 줍니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문 상세의 외부 호출 셋을 순서대로 부르던 것을 CompletableFuture로 함께 보내 응답 시간을 0.9초에서 0.3초로 줄였습니다.'
+verified: 이 레슨의 시간과 예외는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 시간은 기계마다 달라서 테스트는 아래쪽 한계(하나씩 기다리면 합보다 짧을 수 없다)를 확인해요. 코드가 바뀔 때마다 테스트([FutureAndCompletableFutureTest](link:test))가 다시 돌아요.
+footer: '근거: Future는 API 문서([링크](link:future)), ExecutionException은 API 문서, CompletableFuture와 이어 붙이기 규칙은 CompletableFuture와 CompletionStage API 문서([링크](link:cf)), 공용 풀은 ForkJoinPool API 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 'submit은 작업이 끝나길 기다리지 않고 바로 Future를 돌려준다'
     how: '300ms 작업의 submit이 50ms 안에 돌아오는지 본다'
-    test: FutureTest.submitReturnsImmediately
+    test: FutureAndCompletableFutureTest.submitReturnsGetBlocks
   - claim: 'get은 작업이 끝날 때까지 부른 스레드를 막는다'
     how: '300ms 작업의 get이 250ms 넘게 걸리는지 본다'
-    test: FutureTest.getBlocks
+    test: FutureAndCompletableFutureTest.submitReturnsGetBlocks
   - claim: 'get(500ms)는 2초 작업에서 TimeoutException이고 작업은 끝나지 않은 채 남아 있다'
     how: '예외 뒤 isDone이 false인지 본다'
-    test: FutureTest.getTimeout
+    test: FutureAndCompletableFutureTest.getWithTimeout
   - claim: '작업의 예외는 get에서 ExecutionException으로 감싸져 나오고 getCause가 원래 예외다'
     how: '코드 failGet을 돌린다'
-    test: FutureTest.exceptionWrapped
+    test: FutureAndCompletableFutureTest.exceptionWrappedInGet
   - claim: 'cancel(true)는 실행 중인 스레드를 인터럽트하고, 그 뒤 get은 CancellationException이다'
     how: 'sleep하는 작업을 cancel한다'
-    test: FutureTest.cancelInterrupts
-  - claim: '모두 맡긴 뒤 get하면 300ms 셋이 0.55초 안에, 하나씩 get하면 0.9초 넘게 걸린다'
+    test: FutureAndCompletableFutureTest.cancelInterrupts
+  - claim: '모두 맡긴 뒤 get하면 300ms 셋이 0.85초 안에, 하나씩 get하면 0.9초 넘게 걸린다'
     how: '두 방법의 시간을 잰다'
-    test: FutureTest.submitAllThenGet
+    test: FutureAndCompletableFutureTest.submitAllThenGetVersusSerial
   - claim: '스레드 2개 풀에 300ms 작업 4개를 넣고 모두 get하면 0.6초 넘게 걸린다'
     how: '시간을 잰다'
-    test: FutureTest.queueWhenPoolFull
+    test: FutureAndCompletableFutureTest.queueWhenPoolIsFull
   - claim: 'join은 CompletionException, get은 ExecutionException으로 감싼다'
     how: '실패한 CompletableFuture에 둘을 부른다'
-    test: CompletableFutureTest.getVsJoin
-  - claim: 'thenCombine으로 300ms 두 작업을 0.55초 안에 합친다. allOf로 셋을 모아도 같다'
+    test: FutureAndCompletableFutureTest.joinVersusGet
+  - claim: 'thenCombine으로 300ms 두 작업을 0.85초 안에 합친다. allOf로 셋을 모아도 같다'
     how: '시간을 잰다'
-    test: CompletableFutureTest.thenCombineParallel
+    test: FutureAndCompletableFutureTest.combineAndAllOf
   - claim: 'thenCompose는 다음 비동기 호출을 펼쳐 잇는다'
     how: '결과의 타입과 값을 본다'
-    test: CompletableFutureTest.thenComposeFlattens
+    test: FutureAndCompletableFutureTest.thenComposeFlattens
   - claim: '중간 단계가 실패하면 뒤의 thenApply는 실행되지 않고 join이 CompletionException을 던진다'
     how: '뒤 단계의 실행 횟수를 센다'
-    test: CompletableFutureTest.failureSkipsStages
+    test: FutureAndCompletableFutureTest.failureSkipsStagesAndRecovers
   - claim: 'exceptionally는 실패만 바꾸고, handle은 성공과 실패 모두에 불린다'
     how: '두 경우를 돌린다'
-    test: CompletableFutureTest.exceptionallyAndHandle
+    test: FutureAndCompletableFutureTest.failureSkipsStagesAndRecovers
   - claim: 'orTimeout은 시간을 넘기면 TimeoutException으로 실패시키고, completeOnTimeout은 기본값으로 끝낸다'
     how: '2초 작업에 500ms를 준다'
-    test: CompletableFutureTest.timeouts
+    test: FutureAndCompletableFutureTest.timeouts
   - claim: 'executor 없는 supplyAsync는 ForkJoinPool.commonPool에서, 넘기면 그 풀에서 돈다. thenApplyAsync는 지정한 풀에서 돈다'
     how: '스레드 이름을 남긴다'
-    test: CompletableFutureTest.whichThread
+    test: FutureAndCompletableFutureTest.whichThread
 sources:
   - '`Future`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html'
   - '`ExecutionException`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutionException.html'

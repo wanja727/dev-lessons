@@ -1,125 +1,243 @@
-# CompletableFuture 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# Future와 CompletableFuture 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/completable-future.yaml의 says).
+# 동작에 관한 정답은 verification의 completablefuture/FutureAndCompletableFutureTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 예전 레슨 둘(future-and-callable, completable-future)을 합쳐 핵심 질문 구조로 다시 썼다.
+# 예전 문제는 지웠고, future-and-callable 문제 파일도 지웠다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: completable-future
-  title: CompletableFuture
-  unit: 동시성·분산
-  order: 8
+  title: Future와 CompletableFuture
+  unit: 운영체제와 동시성
+  order: 408
 concepts:
   - key: core
-    name: CompletableFuture
+    name: Future와 CompletableFuture
+coreQuestions:
+  - key: q1
+    text: "다른 스레드에 맡긴 일의 결과는 어떻게 받나요?"
+  - key: q2
+    text: "다른 스레드에서 난 예외는 어떻게 받나요?"
+  - key: q3
+    text: "CompletableFuture는 결과를 어떻게 잇고 합치나요?"
+  - key: q4
+    text: "CompletableFuture에서 실패와 시간 초과는 어떻게 다루나요?"
 questions:
-  - key: q-39a61cfd
+  # ── 질문 1 ──
+  - key: cf-serial-get
     concept: core
-    type: descriptive
-    status: reviewed
+    coreQuestion: q1
+    type: code_predict
+    status: draft
     difficulty: 1
-    body: CompletableFuture를 Future 대신 쓰는 이유를 1분 안에 설명해 보세요
+    body: 스레드 3개짜리 풀에서 300ms 걸리는 호출 셋을 아래처럼 불러요. 세 결과를 모두 받는 데 대략 얼마나 걸릴까요?
+    code: |-
+      Order o = pool.submit(
+          () -> orderApi()).get();
+      Delivery d = pool.submit(
+          () -> deliveryApi()).get();
+      List<Coupon> c = pool.submit(
+          () -> couponApi()).get();
+    choices:
+      - 0.3초쯤
+      - 0.9초쯤
+      - 바로
+      - 0.6초쯤
+    answer: "2"
     explanation: |-
-      - Future는 get()으로 블로킹해야 결과를 쓰고 조합이 어렵다
-      - CompletableFuture는 thenApply/thenCompose/thenCombine/allOf로 다음 할 일을 미리 등록하고, exceptionally/handle로 복구, orTimeout으로 시간 제한
-      - 주의: executor 없으면 commonPool, I/O는 전용 풀
-    checklist:
-      - Future의 블로킹 한계를 말했다
-      - 단계 연결(thenApply 등)을 말했다
-      - 조합(thenCombine, allOf)을 말했다
-      - 예외 처리와 타임아웃을 말했다
-      - 전용 executor를 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
-  - key: q-25e6ed5b
+      **0.9초쯤이에요.** 맡기자마자 get()으로 기다려서 하나가 끝나야 다음을 맡겨요. 스레드가 셋이어도 하나씩 쓴 셈이에요.
+
+      - 셋을 모두 맡긴 뒤에 get하면 0.3초쯤이에요
+      - 검증: FutureAndCompletableFutureTest.submitAllThenGetVersusSerial
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  - key: cf-pool-of-two
     concept: core
-    type: descriptive
-    status: reviewed
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
     difficulty: 2
-    body: thenApply, thenCompose, thenCombine의 차이를 예시와 함께 비교해 보세요
+    body: 스레드 2개짜리 풀에 각각 1초 걸리는 작업 5개를 모두 맡긴 뒤 차례로 get했어요. 대략 얼마나 걸릴까요?
+    choices:
+      - 1초쯤
+      - 2초쯤
+      - 3초쯤
+      - 5초쯤
+    answer: "3"
     explanation: |-
-      - thenApply: 값 변환 (map)
-      - thenCompose: 앞 결과로 다음 비동기 호출 (flatMap), thenApply로 하면 CF가 겹침. 예: 회원 id → 등급 조회
-      - thenCombine: 독립된 두 작업을 동시에 돌려 합침. 예: 환율 + 시세
-    checklist:
-      - thenApply는 값 변환이라고 말했다
-      - thenCompose는 의존적인 비동기 호출 연결이라고 말했다
-      - thenApply로 하면 겹친다고 말했다
-      - thenCombine은 독립 작업을 동시에 합친다고 말했다
-      - 각각 알맞은 예시를 들었다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
-  - key: q-055cac26
+      **3초쯤이에요.** 한 번에 둘씩 돌고 나머지는 큐에서 기다려서 2개, 2개, 1개의 세 번에 걸쳐 끝나요.
+
+      - 검증: FutureAndCompletableFutureTest.queueWhenPoolIsFull (스레드 2개에 300ms 작업 4개가 0.6초 넘게)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  # ── 질문 2 ──
+  - key: cf-execution-exception
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: 여러 외부 API를 CompletableFuture로 조합한 화면이 트래픽이 늘자 전체적으로 느려지고, 병렬 스트림을 쓰는 다른 기능까지 느려졌다. 원인과 해결을 말해 보세요
-    explanation: |-
-      - 원인: executor 없이 supplyAsync를 써서 외부 API(블로킹 I/O)가 ForkJoinPool.commonPool을 차지. 공용 풀은 작고 병렬 스트림과 공유
-      - 해결: I/O 전용 풀을 만들어 넘기기, 타임아웃(orTimeout/completeOnTimeout), 풀 크기·큐 모니터링
-    checklist:
-      - commonPool을 원인으로 말했다
-      - 공용 풀이 다른 기능과 공유된다고 말했다
-      - 전용 executor를 말했다
-      - 타임아웃을 말했다
-      - 풀 크기 설정이나 모니터링을 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html
-  - key: q-952305c5
-    concept: core
-    type: ox
-    status: reviewed
+    coreQuestion: q2
+    type: code_predict
+    status: draft
     difficulty: 1
-    body: "\"CompletableFuture 체인의 중간 단계에서 예외가 나도 그 뒤의 thenApply는 실행된다\""
+    body: 아래 코드에서 f.get()이 던지는 예외와, 그 예외의 getCause()가 돌려주는 것은?
+    code: |-
+      Future<Order> f = pool.submit(() -> {
+        throw new IllegalStateException(
+            "주문 없음");
+      });
+      f.get();
+    choices:
+      - IllegalStateException, null
+      - ExecutionException, IllegalStateException
+      - CompletionException, IllegalStateException
+      - InterruptedException, IllegalStateException
+    answer: "2"
+    explanation: |-
+      **ExecutionException이고 getCause()가 IllegalStateException이에요.** 작업의 예외는 Future가 잡아 두었다가 get()에서 감싸 던져요.
+
+      - CompletableFuture의 join()은 CompletionException으로 감싸요
+      - 검증: FutureAndCompletableFutureTest.exceptionWrappedInGet
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutionException.html
+  - key: cf-catch-submit
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"try { pool.submit(() -> parse(bad)); } catch (NumberFormatException e) { log(e); }에서 parse가 NumberFormatException을 던지면 catch가 실행된다\""
     answer: X
     explanation: |-
-      - 예외를 담은 채 다음 단계로 넘어가고 thenApply 같은 일반 단계는 건너뛴다. exceptionally나 handle에서 복구
-      - 검증: CompletableFutureTest (exceptionSkipsLaterStages)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
-  - key: q-33d4b9fb
-    concept: core
-    type: multiple_choice
-    status: reviewed
-    difficulty: 1
-    body: executor 없이 CompletableFuture.supplyAsync(...)를 부르면 작업은 어디서 실행되나?
-    choices:
-      - 호출한 스레드
-      - ForkJoinPool.commonPool
-      - 작업마다 새 스레드
-      - 톰캣 요청 스레드 풀
-    answer: "2"
-    explanation: |-
-      - (코어가 1개인 환경에서는 작업마다 새 스레드를 쓰기도 한다)
-      - 검증: CompletableFutureTest (defaultPoolIsCommonPool)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
-  - key: q-4fdf7455
-    concept: core
-    type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: 실패한 CompletableFuture에서 join()과 get()이 던지는 예외를 바르게 짝지은 것은?
-    choices:
-      - "join: ExecutionException / get: CompletionException"
-      - "join: CompletionException / get: ExecutionException"
-      - 둘 다 원래 예외를 그대로
-      - 둘 다 null을 돌려준다
-    answer: "2"
-    explanation: |-
-      - join은 언체크 CompletionException, get은 체크 ExecutionException. 원인은 getCause()
-      - 검증: CompletableFutureTest (getVsJoin)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
-  - key: q-bfdf4f95
-    concept: core
-    type: line_pick
-    status: reviewed
-    difficulty: 2
-    body: "[코드 12-A] 등급 조회 결과가 CompletableFuture<CompletableFuture<Grade>>가 되어 다루기 어렵다. 고쳐야 할 줄은?"
-    code: |-
-      CompletableFuture<Long> memberId =
-          CompletableFuture.supplyAsync(() -> memberApi.findId(token), apiPool);
+      **틀렸어요.** 예외는 풀의 스레드에서 났고 Future 안에 잡혀 있어요. submit을 부른 스레드에는 아무 일도 없어요.
 
-      var grade = memberId.thenApply(id ->
-          CompletableFuture.supplyAsync(() -> gradeApi.find(id), apiPool));
-    answer: "4"
+      - get()을 불러야 ExecutionException으로 나와요
+      - 검증: FutureAndCompletableFutureTest.exceptionWrappedInGet (submit을 감싼 catch에 걸리지 않음)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html
+  # ── 질문 3 ──
+  - key: cf-compose
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 주문 결과의 쿠폰 id로 couponApiAsync(id)(CompletableFuture<Coupon>을 돌려줌)를 이어 불러요. order.thenApply(o -> couponApiAsync(o.couponId()))의 타입은?
+    choices:
+      - CompletableFuture<Coupon>
+      - CompletableFuture<CompletableFuture<Coupon>>
+      - Coupon
+      - Future<Coupon>
+    answer: "2"
     explanation: |-
-      - 앞 결과로 또 다른 CompletableFuture를 만드는 호출은 thenCompose를 써야 한 겹으로 펼쳐진다
-      - 검증: CompletableFutureTest (thenCompose)
+      **CompletableFuture<CompletableFuture<Coupon>>이에요.** thenApply는 함수의 결과를 그대로 담아서 겹쳐요.
+
+      - 다음 비동기 호출을 펼쳐 이으려면 thenCompose를 써요. 스트림의 map과 flatMap의 관계와 같아요
+      - 검증: FutureAndCompletableFutureTest.thenComposeFlattens
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html
+  - key: cf-combine-time
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 상품 정보(200ms)와 재고(400ms)를 각각 supplyAsync로 맡기고 thenCombine으로 합쳐요. 풀의 스레드는 충분해요. 합친 결과가 나오기까지 대략 얼마나 걸릴까요?
+    choices:
+      - 0.2초쯤
+      - 0.4초쯤
+      - 0.6초쯤
+      - 바로
+    answer: "2"
+    explanation: |-
+      **0.4초쯤이에요.** 둘이 함께 돌고, 둘 다 끝나야 합치니 긴 쪽만큼 걸려요.
+
+      - 검증: FutureAndCompletableFutureTest.combineAndAllOf (300ms 둘을 합치는 데 0.3초 남짓)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  # ── 질문 4 ──
+  - key: cf-exceptionally
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 식의 결과는?
+    code: |-
+      supplyAsync(() -> {
+            throw new RuntimeException();
+          })
+          .thenApply(x -> x + 1)
+          .exceptionally(e -> -1)
+          .join();
+    choices:
+      - RuntimeException이 난다
+      - "-1"
+      - "0"
+      - CompletionException이 난다
+    answer: "2"
+    explanation: |-
+      **-1이에요.** 앞 단계가 실패해서 thenApply는 건너뛰고, 실패가 exceptionally까지 전해져 -1로 바뀌어요.
+
+      - 검증: FutureAndCompletableFutureTest.failureSkipsStagesAndRecovers
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: cf-recommend-timeout
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 추천 상품 API가 가끔 5초 넘게 걸려요. 화면은 1초 안에 나가야 하고, 추천이 없으면 빈 목록이면 돼요. 추천 호출의 CompletableFuture에 붙일 것으로 맞는 것은?
+    choices:
+      - .get()
+      - .completeOnTimeout(List.of(), 1, SECONDS)
+      - .thenApply(r -> List.of())
+      - .join()
+    answer: "2"
+    explanation: |-
+      **completeOnTimeout이에요.** 1초 안에 끝나지 않으면 빈 목록으로 끝내요. orTimeout 뒤에 exceptionally를 붙여도 같아요.
+
+      - 둘 다 기다림만 끝내고 맡긴 작업은 계속 돌 수 있어서, 외부 호출 자체에도 타임아웃을 줘요
+      - 검증: FutureAndCompletableFutureTest.timeouts
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html
+  - key: cf-common-pool
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 요청 스레드에서 아래처럼 executor 없이 2초 걸리는 외부 호출을 수십 개 맡겼어요. 같은 JVM의 병렬 스트림은 어떻게 될까요?
+    code: |-
+      CompletableFuture.supplyAsync(
+          () -> callExternalApi());
+    choices:
+      - 영향이 없다. 병렬 스트림은 따로 돈다
+      - 느려진다. 둘 다 작은 공용 풀(ForkJoinPool.commonPool)을 함께 쓴다
+      - supplyAsync가 컴파일되지 않는다
+      - 호출마다 새 스레드가 생겨 더 빨라진다
+    answer: "2"
+    explanation: |-
+      **느려져요.** executor를 넘기지 않은 supplyAsync는 공용 풀에서 돌고, 공용 풀은 코어 수보다 하나 적은 크기예요. 블로킹 호출이 그 스레드를 붙잡아요.
+
+      - 입출력은 따로 만든 풀을 넘겨요
+      - 검증: FutureAndCompletableFutureTest.whichThread (스레드 이름 ForkJoinPool.commonPool-worker)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html
+  # ── 네 질문을 하나로 ──
+  - key: cf-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "Future와 CompletableFuture의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **Future는 get으로 기다려 결과를 꺼내고, CompletableFuture는 결과가 나오면 할 일을 붙여 잇고 합쳐요.**
+
+      - **Future:** submit이 바로 돌려준다. get은 막는다. 모두 맡긴 뒤 모아야 함께 돈다
+      - **예외:** get에서 ExecutionException으로 감싸 나온다. join은 CompletionException
+      - **잇기:** thenApply, thenCompose(펼치기), thenCombine, allOf
+      - **실패와 시간:** 실패는 뒤 단계를 건너뛴다. exceptionally, handle, orTimeout, completeOnTimeout
+      - **실무:** executor를 넘긴다. 넘기지 않으면 공용 풀이다
+    checklist:
+      - Future의 get이 부른 스레드를 막는다고 말했다
+      - 다른 스레드의 예외가 ExecutionException으로 감싸져 온다고 말했다
+      - thenApply, thenCompose, thenCombine, allOf 가운데 둘 이상을 설명했다
+      - exceptionally나 orTimeout으로 실패와 시간을 다루는 법을 말했다
+      - executor를 넘기지 않으면 공용 풀에서 돈다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html

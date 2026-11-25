@@ -70,16 +70,19 @@ codes:
       }
     }
   tryLock: |-
+    Lock a = from.lock, b = to.lock;
     while (true) {
-      if (from.lock.tryLock(50, MILLISECONDS)) {
+      if (a.tryLock(50, MILLISECONDS)) {
         try {
-          if (to.lock.tryLock(50, MILLISECONDS)) {
-            try { move(from, to, amount); return; }
-            finally { to.lock.unlock(); }
+          if (b.tryLock(50, MILLISECONDS)) {
+            try {
+              move(from, to, amount);
+              return;
+            } finally { b.unlock(); }
           }
-        } finally { from.lock.unlock(); }
+        } finally { a.unlock(); }
       }
-      // 둘 다 풀었다. 조금 쉬고 다시
+      // 둘 다 풀었다. 무작위로 쉬고 다시
     }
   detect: |-
     ThreadMXBean mx = ManagementFactory
@@ -103,8 +106,8 @@ codes:
     @Transactional
     public void transfer(long fromId, long toId,
                          long amount) {
-      Account from = repo.findByIdForUpdate(fromId);
-      Account to = repo.findByIdForUpdate(toId);
+      var from = repo.findByIdForUpdate(fromId);
+      var to = repo.findByIdForUpdate(toId);
       from.withdraw(amount);
       to.deposit(amount);
     }

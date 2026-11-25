@@ -193,8 +193,8 @@ questions:
       @Transactional
       public void transfer(long fromId, long toId,
                            long amount) {
-        Account from = repo.findByIdForUpdate(fromId);
-        Account to = repo.findByIdForUpdate(toId);
+        var from = repo.findByIdForUpdate(fromId);
+        var to = repo.findByIdForUpdate(toId);
         from.withdraw(amount);
         to.deposit(amount);
       }
