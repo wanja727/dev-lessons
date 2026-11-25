@@ -1,18 +1,18 @@
 ---
-title: "AOP와 감사 로그"
-unit: Spring
-order: 17
-stage: 트랜잭션과 JPA
-summary: 서비스 코드에 한 줄도 넣지 않고 "누가, 언제, 무엇을, 전후 값" 감사 로그를 남겨요. 실패한 시도의 기록이 롤백과 함께 사라지는 함정과 REQUIRES_NEW로 남기는 방법, 어드바이스 순서까지 배워요.
-minutes: 30
+title: "AOP"
+unit: 스프링
+order: 709
+stage: 기초
+summary: 스프링 AOP가 서비스 코드를 고치지 않고 기능을 끼워 넣는 원리, 프록시를 만드는 방법과 걸리지 않는 곳, 같은 클래스 안의 호출에서 빠지는 이유, 애스펙트가 여럿일 때의 순서. 감사 로그 애스펙트로 기록이 남는 곳과 빠지는 곳을 확인해요.
+minutes: 20
 page: aop-audit
 verifiedBy:
-  - verification/src/test/java/lab/devlessons/audit/AuditAspectTest.java
+  - verification/src/test/java/lab/devlessons/aoplesson/AopLessonTest.java
 sources:
-  - https://docs.spring.io/spring-framework/reference/core/aop/ataspectj.html
+  - https://docs.spring.io/spring-framework/reference/core/aop/introduction-defn.html
+  - https://docs.spring.io/spring-framework/reference/core/aop/proxying.html
   - https://docs.spring.io/spring-framework/reference/core/aop/ataspectj/advice.html
-  - https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html
-updated: 2026-11-15
+updated: 2026-11-25
 ---
 
-선수 레슨: @Transactional 동작 원리와 내부 호출(프록시).
+선수 레슨: 스프링 빈과 의존성 주입, 프록시와 데코레이터 패턴.

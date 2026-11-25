@@ -1,16 +1,17 @@
-# AOP (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-# 예전 레슨 "AOP와 감사 로그"(site/src/pages/lessons/aop-audit.astro, audit/AuditAspectTest)를 재료로 다시 쓴다.
+# AOP
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/aop-audit.yaml에 있다.
+# 예전 레슨 "AOP와 감사 로그"(site/src/pages/lessons/aop-audit.astro, audit/AuditAspectTest)를 재료로 다시 썼다.
 # 로드맵대로 초점을 AOP로 바꾸고 감사 로그는 예로만 쓴다. 슬러그는 그대로 둔다.
-stage: design
 title: AOP
+description: 스프링 AOP가 서비스 코드를 고치지 않고 기능을 끼워 넣는 원리, 프록시를 만드는 방법과 걸리지 않는 곳, 같은 클래스 안의 호출에서 빠지는 이유, 애스펙트가 여럿일 때의 순서. 네 가지 질문에 스스로 답할 수 있게 감사 로그 애스펙트를 만들어 기록이 남는 곳과 빠지는 곳을 확인하는 대화형 레슨.
 unit: 스프링
+minutes: 20
 roadmap: S9
 type: 동작 확인
 prerequisites:
   - {slug: spring-beans, title: 스프링 빈과 의존성 주입}
   - {slug: proxy-decorator, title: 프록시와 데코레이터 패턴}
-assume: '자바 21, 스프링 부트 3.5. 같은 인터페이스로 진짜 객체를 감싸 앞뒤에 일을 더하는 프록시(프록시와 데코레이터 패턴 레슨). 오버라이딩과, `final`과 `private` 메서드는 오버라이딩할 수 없다는 것(상속과 다형성 레슨). 컨테이너가 빈을 만들어 넣어 준다는 것(스프링 빈과 의존성 주입 레슨). 실행 중에 클래스를 만들어 내는 동적 프록시(리플렉션과 어노테이션 레슨)는 알면 좋아요.'
+assume: '자바 21, 스프링 부트 3.5. 같은 인터페이스로 진짜 객체를 감싸 앞뒤에 일을 더하는 프록시(프록시와 데코레이터 패턴 레슨). 오버라이딩과, `final`과 `private` 메서드는 오버라이딩할 수 없다는 것(상속과 다형성 레슨). 컨테이너가 빈을 만들어 넣어 준다는 것(스프링 빈과 의존성 주입 레슨).'
 example: '계좌의 하루 이체 한도를 바꾸는 `LimitService.changeLimit`. 누가 언제 한도를 바꿨는지 남기는 감사 로그를, 서비스 코드를 고치지 않고 `@Audited` 어노테이션 하나로 붙인다.'
 intro:
   - '보안 감사에서 "관리자가 한도를 바꾼 기록을 모두 남기라"는 요구가 와요. 한도, 등급, 권한을 바꾸는 메서드가 스무 개예요. 메서드마다 기록 코드를 넣으면 본래 일보다 기록 코드가 길어지고, 하나를 빠뜨리면 감사에 걸려요.'
@@ -49,6 +50,13 @@ covers:
     where: '질문 1의 더 알아보기. 필터와 인터셉터(S7)'
   - topic: '감사 로그에 무엇을 남기나(누가, 무엇을, 전후 값, 결과)'
     where: '실무에서는'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/aoplesson/AopLessonTest.java
+  oldTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/audit/AuditAspectTest.java
+  concepts: https://docs.spring.io/spring-framework/reference/core/aop/introduction-defn.html
+  proxying: https://docs.spring.io/spring-framework/reference/core/aop/proxying.html
+  ordering: https://docs.spring.io/spring-framework/reference/core/aop/ataspectj/advice.html#aop-ataspectj-advice-ordering
+  bootProps: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
 codes:
   predict: |-
     @Service
@@ -64,16 +72,16 @@ codes:
     }
     // 두 메서드를 밖에서 한 번씩 부른다
   aspect: |-
-    @Aspect
+    [[@Aspect]]
     @Component
     class AuditAspect {
 
-      @Around("@annotation(audited)")
+      [[@Around("@annotation(audited)")]]
       Object audit(ProceedingJoinPoint jp,
           Audited audited) throws Throwable {
         String who = CurrentActor.get();
         try {
-          Object result = jp.proceed();
+          Object result = [[jp.proceed()]];
           logs.success(who, audited.value());
           return result;
         } catch (Throwable e) {
@@ -105,24 +113,69 @@ codes:
     public class LimitService {
 
       public void resetLimit(long id) {
-        this.changeLimit(id, 0);
+        [[this.changeLimit(id, 0);]]
       }
 
       @Audited("CHANGE_LIMIT")
       public void changeLimit(
           long id, int limit) { ... }
     }
+  split: |-
+    @Service
+    public class LimitService {
+      private final LimitChanger changer;
+
+      public void resetLimit(long id) {
+        [[changer.change(id, 0);]]
+      }
+    }
+
+    @Service
+    public class LimitChanger {
+      @Audited("CHANGE_LIMIT")
+      public void change(long id, int l) {
+        ...
+      }
+    }
   order: |-
     @Aspect
-    @Order(1)
+    [[@Order(1)]]
     class AuditAspect { ... }
 
     @Aspect
-    @Order(2)
+    [[@Order(2)]]
     class TimingAspect { ... }
+  swallow: |-
+    @Around("@annotation(audited)")
+    Object audit(ProceedingJoinPoint jp,
+        Audited audited) {
+      try {
+        return jp.proceed();
+      } catch (Throwable e) {
+        logs.failure(e);
+        [[return null;]]
+      }
+    }
+  pointcut: |-
+    // 어노테이션이 붙은 메서드
+    @Around("@annotation(audited)")
+
+    // Service로 끝나는 클래스의 모든 메서드
+    @Around("execution(⤶
+      * com.shop..*Service.*(..))")
 predict:
-  text: '코드 predict의 두 메서드에는 같은 `@Audited`가 붙어 있고, 다른 점은 두 번째 메서드의 `final`뿐이에요. 밖에서 두 메서드를 한 번씩 부르면 감사 로그는 몇 줄 남을까요? 보기: 0줄, 1줄, 2줄, 앱이 뜨지 않는다.'
-  answer: '1줄. 스프링 부트의 프록시는 하위 클래스가 메서드를 오버라이딩하는 방식이라 `final` 메서드는 오버라이딩되지 않고 어드바이스도 걸리지 않는다. 질문 2에서 밝힌다.'
+  title: 감사 로그는 몇 줄 남을까요?
+  text: '코드 predict의 두 메서드에는 같은 `@Audited`가 붙어 있고, 다른 점은 두 번째 메서드의 `final`뿐이에요. 밖에서 두 메서드를 한 번씩 부르면 감사 로그는 몇 줄 남을까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: a, label: 0줄}
+    - {value: b, label: 1줄}
+    - {value: c, label: 2줄}
+    - {value: d, label: 앱이 뜨지 않는다}
+  answer: b
+  storageKey: aop-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: AOP는 어떻게 서비스 코드를 고치지 않고 기능을 더하나요?
@@ -132,17 +185,84 @@ questions:
     says:
       - '코드 annotation과 코드 aspect를 보인다. `@Around("@annotation(audited)")`는 `@Audited`가 붙은 메서드에 걸라는 포인트컷이다. `jp.proceed()`가 원래 메서드를 부르는 곳이다. 그 앞뒤가 끼워 넣은 코드다'
       - '용어를 한 번 정리한다: 애스펙트(공통 기능을 모은 클래스), 어드바이스(끼워 넣을 코드), 포인트컷(어느 메서드에 걸지), 조인 포인트(걸린 메서드 호출 하나)'
-      - '`changeLimit`을 부르면 감사 로그가 남는다. 서비스 코드에는 기록 코드가 한 줄도 없다. 실제로 남은 로그를 보인다'
-      - '컨트롤러가 받은 `LimitService`의 클래스 이름을 출력한다. `LimitService$$SpringCGLIB$$0`이다. 컨테이너가 원래 객체 대신 프록시를 넣었다. 코드 proxy는 그 프록시가 하는 일을 자바로 풀어 쓴 것이다. O12에서 손으로 만든 프록시를 스프링이 대신 만든다'
-      - '`proceed()`를 부르지 않으면 원래 메서드가 실행되지 않는다. 돌려주는 값을 바꾸면 호출한 쪽은 바뀐 값을 받는다. `@Around`는 강력해서 실수하면 본래 일을 막는다'
-      - '포인트컷은 어노테이션 대신 이름의 모양으로도 고른다: `execution(* com.shop..*Service.*(..))`는 `Service`로 끝나는 클래스의 모든 메서드다'
+      - '`changeLimit`을 부르면 감사 로그가 남는다. 서비스 코드에는 기록 코드가 한 줄도 없다. 실패하면 실패 기록을 남기고 예외를 다시 던진다. 실제 기록을 보인다'
+      - '주입된 `LimitService`의 클래스 이름을 출력한다. `LimitService$$SpringCGLIB$$0`이다. 컨테이너가 원래 객체 대신 프록시를 넣었다. 코드 proxy는 그 프록시가 하는 일을 자바로 풀어 쓴 것이다. O12에서 손으로 만든 프록시를 스프링이 대신 만든다'
+      - '`proceed()`를 부르지 않으면 원래 메서드가 실행되지 않는다. 돌려주는 값을 바꾸면 호출한 쪽은 바뀐 값을 받는다'
+      - '포인트컷은 어노테이션 대신 이름의 모양으로도 고른다: `execution(* com.shop..*Service.*(..))`'
       - '더 알아보기: 필터와 인터셉터(S7)는 웹 요청에만 걸린다. AOP는 빈의 메서드 호출에 걸리므로 배치나 메시지 처리에서 부른 서비스에도 걸린다'
     widget:
       kind: steps
-      note: '컨트롤러, `LimitService` 프록시, `AuditAspect`, 원래 `LimitService`를 상자로 놓고 `changeLimit(1, 500)` 호출을 한 단계씩 따라간다: 컨트롤러가 프록시를 부름, 프록시가 `audit` 실행, `proceed()`로 원래 객체 호출, 원래 메서드가 끝남, 애스펙트가 로그를 씀, 결과가 컨트롤러로. 시나리오 선택으로 "원래 메서드가 예외"를 고르면 실패 로그를 쓰고 예외를 다시 던지는 길을 보인다'
+      note: '컨트롤러, `LimitService` 프록시, `AuditAspect`, 원래 `LimitService`를 놓고 `changeLimit(1, 500)` 호출을 한 단계씩 따라간다. 시나리오 선택으로 "원래 메서드가 예외"를 고르면 실패 로그를 쓰고 예외를 다시 던지는 길을 보인다'
     asks:
       - '본문의 예시: 코드 aspect에서 `jp.proceed()` 줄을 지우면 `changeLimit`을 불렀을 때 한도가 바뀌나 (바뀌지 않는다. 원래 메서드가 불리지 않는다)'
       - '옮긴 상황: `@Timed` 어노테이션과, 걸린 메서드의 실행 시간을 재는 `@Around` 애스펙트를 만들었다. `OrderService.place`에 `@Timed`를 붙이면 `OrderService` 코드에 시간을 재는 코드를 넣어야 하나 (넣지 않는다. 프록시가 애스펙트를 실행한다)'
+    body:
+      - p: '감사 로그를 남길 메서드에 붙일 표시부터 만들어요.'
+      - code: annotation
+      - p: '기록하는 코드는 서비스가 아니라 **애스펙트** 한 클래스에 모아요.'
+      - code: aspect
+        notes:
+          - mark: '@Aspect'
+            as: anno
+            text: '공통 기능을 모은 클래스라는 표시예요. 빈으로 등록해야 동작해요.'
+          - mark: '@Around("@annotation(audited)")'
+            as: anno
+            text: '`@Audited`가 붙은 메서드를 부를 때 이 메서드를 대신 실행하라는 뜻이에요.'
+          - mark: jp.proceed()
+            as: code
+            text: '여기서 원래 메서드가 실행돼요. 그 앞뒤가 끼워 넣은 코드예요.'
+      - p: '용어를 한 번 정리해요. 공통 기능을 모은 클래스가 **애스펙트**, 끼워 넣을 코드(`audit` 메서드)가 **어드바이스**, 어느 메서드에 걸지 고르는 식(`@annotation(audited)`)이 **포인트컷**, 걸린 메서드 호출 하나가 **조인 포인트**예요([근거](link:concepts)).'
+      - h3: 서비스 코드는 그대로인데 기록이 남아요
+      - p: '먼저 한 단계씩 따라가 보세요.'
+      - widget:
+          kind: steps
+          layout: [selector, log, buttons, verdict]
+          selector:
+            label: 원래 메서드의 결과
+            options:
+              - {value: ok, label: 성공}
+              - {value: fail, label: 예외}
+          scenarios:
+            ok:
+              - log: '컨트롤러 → limitService.changeLimit(1, 500) 호출. 받은 것은 프록시'
+              - log: '프록시: AuditAspect.audit 실행. 누가 했는지 읽음'
+              - log: 'jp.proceed() → 원래 LimitService.changeLimit 실행'
+              - log: '원래 메서드 끝. 감사 로그: CHANGE_LIMIT SUCCESS'
+              - log: '결과가 컨트롤러로 돌아감'
+                verdict: '컨트롤러도 서비스도 기록 코드를 모르는데 기록이 남았어요.'
+            fail:
+              - log: '컨트롤러 → limitService.changeLimit(1, -1) 호출'
+              - log: '프록시: AuditAspect.audit 실행'
+              - log: 'jp.proceed() → 원래 메서드가 IllegalArgumentException'
+              - log: 'catch: 감사 로그: CHANGE_LIMIT FAILED'
+              - log: 'throw e → 컨트롤러가 예외를 받음'
+                verdict: '실패도 기록하고, 예외는 그대로 다시 던져요.'
+      - ci:
+          key: proxy
+          label: 실제 결과 보기
+          source: AopLessonTest.auditedAndProxy
+      - p: '주입된 `LimitService`의 클래스 이름이 `LimitService$$SpringCGLIB$$0`이에요. 컨테이너가 원래 객체 대신 **프록시**를 넣은 거예요. 그 프록시가 하는 일을 자바로 풀어 쓰면 이래요.'
+      - code: proxy
+      - p: '[프록시와 데코레이터 패턴](lesson:proxy-decorator) 레슨에서 손으로 만든 프록시를 스프링이 대신 만들어요. 실패하는 호출의 기록도 봐요.'
+      - ci:
+          key: failure
+          label: 실제 결과 보기
+          source: AopLessonTest.auditedAndProxy
+      - p: '`proceed()`를 부르지 않으면 원래 메서드는 실행되지 않고, 다른 값을 돌려주면 호출한 쪽은 그 값을 받아요. `@Around`는 강력해서 실수하면 본래 일을 막아요.'
+      - more:
+          summary: '더 알아보기: 필터, 인터셉터와 무엇이 다른가요'
+          body:
+            - p: '[필터와 인터셉터](lesson:filter-interceptor)는 웹 요청에만 걸려요. AOP는 빈의 메서드 호출에 걸려서, 배치나 메시지 처리에서 부른 서비스에도 걸려요. 메서드에 거는 공통 기능은 AOP예요.'
+      - quiz:
+          q: '코드 aspect에서 `jp.proceed()` 줄을 지우고 `return null;`로 바꾸면 `changeLimit(1, 500)`을 불렀을 때 한도는?'
+          options:
+            - 500으로 바뀐다
+            - 바뀌지 않는다
+            - 앱이 뜨지 않는다
+          answer: 2
+          explain: '`proceed()`가 원래 메서드를 부르는 곳이에요. 부르지 않으면 원래 메서드가 실행되지 않아요.'
+      - next: '프록시는 원래 클래스를 상속한 하위 클래스였어요. 그러면 상속으로 덮어쓸 수 없는 메서드는 어떻게 될까요?'
+    recall: 'AOP는 공통 기능을 애스펙트 한 클래스에 모아요. 끼워 넣을 코드가 어드바이스, 걸 곳을 고르는 식이 포인트컷이에요. 스프링은 그 빈 대신 프록시(LimitService$$SpringCGLIB$$0)를 넣고, 다른 빈이 부르면 프록시가 어드바이스를 실행한 뒤 proceed()로 원래 객체를 불러요. 그래서 서비스 코드에는 어노테이션 하나만 남아요.'
   - id: q2
     title: 스프링은 프록시를 어떻게 만들고, 어디에는 걸지 못하나요?
     conclusion:
@@ -150,14 +270,57 @@ questions:
       sub: '그래서 오버라이딩할 수 없는 `final` 메서드와 `private` 메서드에는 어드바이스가 걸리지 않고, `final` 클래스는 프록시를 만들 수 없어요.'
     says:
       - '코드 predict를 돌린다. 로그는 1줄이다. 예측의 답을 밝힌다. `changeLimitFinal`은 오버라이딩되지 않아 프록시의 코드가 아니라 상속받은 메서드가 그대로 돈다'
-      - '프록시를 만드는 방법은 둘이다. JDK 동적 프록시는 빈이 구현한 인터페이스를 실행 중에 구현한 클래스를 만든다(J17의 `Proxy.newProxyInstance`). CGLIB은 빈의 클래스를 상속한 하위 클래스를 만든다. 스프링 부트는 `spring.aop.proxy-target-class=true`가 기본이라 인터페이스가 있어도 CGLIB을 쓴다'
-      - 'CGLIB은 오버라이딩이다(J7). `final` 메서드와 `private` 메서드는 하위 클래스가 오버라이딩할 수 없다. 그래서 어드바이스가 걸리지 않는다. 에러도 경고도 없다. `private` 메서드에 `@Audited`를 붙이고 같은 클래스에서 부르는 경우도 같은 결과다'
-      - '`final` 메서드에서 더 이상한 일: 그 메서드는 원래 객체가 아니라 프록시 객체 위에서 돈다. 프록시 객체의 필드는 채워지지 않아 주입받은 필드가 null이다. 테스트에서 나온 결과(null 또는 예외)를 그대로 보인다'
-      - '`final` 클래스에 애스펙트를 걸면 하위 클래스를 만들 수 없어 앱이 뜨지 않는다. 메시지를 보인다. 코틀린 클래스가 기본으로 `final`이라 스프링이 `open`으로 바꾸는 플러그인을 쓰는 이유다'
-      - '더 알아보기: `spring.aop.proxy-target-class=false`로 JDK 동적 프록시를 쓰면 빈은 인터페이스만 구현한 객체가 된다. 구현 클래스 타입(`LimitServiceImpl`)으로 주입받는 곳이 있으면 앱이 뜨지 않는다. 스프링 부트가 CGLIB을 기본으로 바꾼 이유다'
+      - '프록시를 만드는 방법은 둘이다. JDK 동적 프록시는 빈이 구현한 인터페이스를 실행 중에 구현한 클래스를 만든다(J17). CGLIB은 빈의 클래스를 상속한 하위 클래스를 만든다. 스프링 부트는 `spring.aop.proxy-target-class=true`가 기본이라 인터페이스가 있어도 CGLIB을 쓴다'
+      - 'CGLIB은 오버라이딩이다(J7). `final` 메서드와 `private` 메서드는 하위 클래스가 오버라이딩할 수 없다. 그래서 어드바이스가 걸리지 않는다. 에러도 경고도 없다'
+      - '`final` 메서드에서 더 이상한 일: 그 메서드는 원래 객체가 아니라 프록시 객체 위에서 돈다. 프록시 객체의 필드는 채워지지 않아 주입받은 필드가 null이다. 테스트에서 나온 결과를 그대로 보인다'
+      - '`final` 클래스에 애스펙트를 걸면 하위 클래스를 만들 수 없어 앱이 뜨지 않는다. 메시지를 보인다'
+      - '더 알아보기: `spring.aop.proxy-target-class=false`로 JDK 동적 프록시를 쓰면 빈은 인터페이스만 구현한 객체가 된다. 구현 클래스 타입으로 꺼내면 실패한다'
     asks:
-      - '본문의 예시: `LimitService`의 `@Audited` 메서드를 `private`으로 바꾸면 그 메서드가 불릴 때 감사 로그가 남나 (남지 않는다. 오버라이딩할 수 없다)'
+      - '본문의 예시: `LimitService`의 `@Audited` 메서드를 `private`으로 바꾸고 같은 클래스의 public 메서드에서 부르면 감사 로그가 남나 (남지 않는다)'
       - '옮긴 상황: `@Transactional`을 붙인 `PaymentService.pay`를 `public final`로 선언했다. 스프링 부트 기본 설정에서 이 메서드에 트랜잭션이 열리나 (열리지 않는다. `@Transactional`도 같은 CGLIB 프록시로 동작한다)'
+    body:
+      - p: '예측의 두 메서드와, 같은 클래스에서 부르는 `private` 메서드에 모두 `@Audited`를 붙이고 불렀어요.'
+      - ci:
+          key: final
+          label: 실제 결과 보기
+          source: AopLessonTest.finalAndPrivateNotAdvised
+          code: predict
+      - p: '**1줄**이에요. {{predict-result}} `final`과 `private` 메서드는 기록되지 않았어요. 에러도 경고도 없어요.'
+      - h3: 프록시는 하위 클래스예요
+      - p: '스프링이 프록시를 만드는 방법은 둘이에요([근거](link:proxying)).'
+      - table:
+          head: [방법, 만드는 것, 조건]
+          rows:
+            - ['JDK 동적 프록시', '빈이 구현한 인터페이스를 실행 중에 구현한 객체', '인터페이스가 있어야 한다']
+            - ['CGLIB 프록시', '빈의 클래스를 상속한 하위 클래스', '상속할 수 있어야 한다']
+      - p: '스프링 부트는 `spring.aop.proxy-target-class=true`가 기본이라, 인터페이스가 있어도 **CGLIB**을 써요([근거](link:bootProps)). CGLIB 프록시는 원래 클래스를 상속해 메서드를 **오버라이딩**한 하위 클래스예요. 질문 1의 코드 proxy가 그 모양이었어요.'
+      - p: '[상속과 다형성](lesson:inheritance-polymorphism)에서 본 대로 `final` 메서드와 `private` 메서드는 하위 클래스가 오버라이딩할 수 없어요. 프록시가 그 메서드에 자기 코드를 넣을 방법이 없어요. 그래서 상속받은 원래 메서드가 그대로 돌고 어드바이스는 실행되지 않아요.'
+      - h3: final 메서드는 더 이상해요
+      - p: '위 결과의 둘째 줄을 보세요. `final` 메서드 안에서 주입받은 `repository`가 **null**이었어요. 오버라이딩되지 않은 `final` 메서드는 원래 객체가 아니라 **프록시 객체 위에서** 돌아요. 프록시 객체는 생성자를 거치지 않고 만들어져서 필드가 비어 있어요. 기록만 빠지는 게 아니라 `NullPointerException`이 나기도 해요.'
+      - h3: final 클래스는 프록시를 만들 수 없어요
+      - ci:
+          key: final-class
+          label: 실제 에러 보기
+          source: AopLessonTest.finalClassCannotBeProxied
+      - p: '상속할 수 없는 `final` 클래스에 애스펙트가 걸리면 하위 클래스를 만들지 못해 앱이 뜨지 않아요. 코틀린은 클래스가 기본으로 `final`이라, 스프링을 쓸 때 클래스를 열어 주는 플러그인을 써요.'
+      - more:
+          summary: '더 알아보기: JDK 동적 프록시로 바꾸면'
+          body:
+            - ci:
+                key: jdk
+                label: 실제 결과 보기
+                source: AopLessonTest.jdkProxy
+            - p: '`proxy-target-class=false`면 인터페이스가 있는 빈은 JDK 동적 프록시가 돼요([리플렉션과 어노테이션](lesson:reflection-annotation)에서 본 `Proxy.newProxyInstance`). 그 객체는 인터페이스만 구현해서 `CouponServiceImpl` 타입이 아니에요. 구현 클래스 타입으로 주입받는 곳이 있으면 앱이 뜨지 않아요. 스프링 부트가 CGLIB을 기본으로 둔 이유예요.'
+      - quiz:
+          q: '`@Transactional`을 붙인 `PaymentService.pay`를 `public final`로 선언했어요. 스프링 부트 기본 설정에서 트랜잭션이 열릴까요?'
+          options:
+            - 열린다
+            - 열리지 않는다
+            - 앱이 뜨지 않는다
+          answer: 2
+          explain: '`@Transactional`도 같은 CGLIB 프록시로 동작해요. `final` 메서드는 오버라이딩할 수 없어 프록시가 트랜잭션을 열 기회가 없어요.'
+      - next: '`private` 메서드는 같은 클래스 안에서 불렀어요. 그런데 `public` 메서드라도 같은 클래스 안에서 부르면 어떻게 될까요?'
+    recall: '스프링 부트는 기본으로 CGLIB 프록시, 즉 원래 클래스를 상속해 메서드를 오버라이딩한 하위 클래스를 만들어요. 그래서 오버라이딩할 수 없는 final 메서드와 private 메서드에는 어드바이스가 걸리지 않고, final 메서드는 필드가 빈 프록시 객체 위에서 돌아 주입 필드가 null이에요. final 클래스는 프록시를 못 만들어 앱이 뜨지 않아요. JDK 동적 프록시는 인터페이스를 구현한 객체예요.'
   - id: q3
     title: 같은 클래스 안에서 부르면 왜 기능이 빠지나요?
     conclusion:
@@ -165,55 +328,160 @@ questions:
       sub: '고치려면 기능이 걸려야 할 메서드를 다른 빈으로 옮겨서, 프록시를 거쳐 부르게 해요.'
     says:
       - '코드 self의 `resetLimit`을 밖에서 부른다. 한도는 0이 되지만 감사 로그는 없다. 테스트로 보인다'
-      - '왜인가. 밖에서 부른 `resetLimit`은 프록시를 거쳐 원래 객체의 `resetLimit`에 닿는다. 그 안의 `this`는 원래 객체다. `this.changeLimit`은 프록시를 다시 거치지 않는다. 코드 proxy의 모양으로 보면, 원래 객체는 자기를 감싼 프록시를 모른다'
-      - '`resetLimit`에 `@Audited`를 붙이면 그 호출은 기록된다. 하지만 기록 이름이 바뀌고, `resetLimit`이 아닌 다른 메서드 안의 `changeLimit` 호출은 여전히 빠진다'
+      - '왜인가. 밖에서 부른 `resetLimit`은 프록시를 거쳐 원래 객체의 `resetLimit`에 닿는다. 그 안의 `this`는 원래 객체다. `this.changeLimit`은 프록시를 다시 거치지 않는다'
       - '고친 코드: 한도를 바꾸는 메서드를 `LimitChanger` 빈으로 옮기고 `LimitService`가 그 빈을 받아 부른다. 이제 프록시를 거치므로 기록된다. 테스트로 보인다'
-      - '자기 자신을 `@Lazy`로 주입받거나 `AopContext.currentProxy()`로 프록시를 꺼내 부르는 방법도 있지만, 코드가 프록시를 알게 되어 권하지 않는다고 짧게 적는다'
+      - '자기 자신을 주입받거나 `AopContext.currentProxy()`로 프록시를 꺼내 부르는 방법도 있지만, 코드가 프록시를 알게 되어 권하지 않는다'
       - '같은 이유로 `@Transactional`의 내부 호출도 트랜잭션이 빠진다. S10에서 다시 본다'
     asks:
       - '본문의 예시: 코드 self에서 컨트롤러가 `changeLimit`을 직접 부르면 감사 로그가 남나 (남는다. 밖에서 프록시를 거친다)'
       - '옮긴 상황: `NoticeService.sendAll`이 반복문 안에서 `this.send(user)`를 부르고, `send`에만 `@Timed`(시간 재기 애스펙트)가 붙어 있다. 컨트롤러가 `sendAll`을 부르면 `send`의 시간이 기록되나 (기록되지 않는다. 내부 호출이다)'
+    body:
+      - code: self
+        notes:
+          - mark: this.changeLimit(id, 0);
+            as: code
+            text: '`changeLimit`에는 `@Audited`가 붙어 있어요. 같은 클래스 안에서 불러요.'
+      - p: '`resetLimit`을 밖에서 부르고, 같은 일을 다른 빈으로 나눈 코드와 비교했어요.'
+      - ci:
+          key: self
+          label: 실제 결과 보기
+          source: AopLessonTest.selfInvocation
+      - p: '한도는 0이 됐는데 **감사 로그가 없어요.** 이것을 **내부 호출**(self-invocation) 문제라고 해요.'
+      - h3: 왜 빠지나요
+      - ol:
+          - '컨트롤러가 부른 것은 프록시의 `resetLimit`이에요. `resetLimit`에는 `@Audited`가 없으니 프록시는 바로 원래 객체의 `resetLimit`을 불러요.'
+          - '원래 객체 안에서 `this`는 **원래 객체 자신**이에요. 프록시가 아니에요.'
+          - '`this.changeLimit`은 프록시를 거치지 않고 원래 메서드를 바로 불러요. 어드바이스가 끼어들 틈이 없어요.'
+      - p: '원래 객체는 자기를 감싼 프록시를 몰라요. 프록시는 **밖에서 들어오는 호출**만 가로챌 수 있어요.'
+      - h3: 다른 빈으로 나눠요
+      - code: split
+        notes:
+          - mark: changer.change(id, 0);
+            as: code
+            text: '받은 `changer`는 `LimitChanger`의 프록시예요. 프록시를 거치니 어드바이스가 실행돼요.'
+      - p: '위 결과의 아래쪽처럼 이제 기록돼요. 자기 자신을 주입받거나 `AopContext.currentProxy()`로 프록시를 꺼내 부르는 방법도 있지만, 코드가 프록시를 알게 되어 권하지 않아요. 같은 이유로 `@Transactional`도 내부 호출에서 트랜잭션이 빠져요. [@Transactional 동작 원리](lesson:transactional-proxy) 레슨에서 다시 봐요.'
+      - quiz:
+          q: '`NoticeService.sendAll`이 반복문 안에서 `this.send(user)`를 부르고, `send`에만 `@Timed`가 붙어 있어요. 컨트롤러가 `sendAll`을 부르면 `send`의 시간이 기록될까요?'
+          options:
+            - 기록된다
+            - 기록되지 않는다
+            - 첫 번째 호출만 기록된다
+          answer: 2
+          explain: '`this.send`는 원래 객체 안의 호출이라 프록시를 거치지 않아요. `send`를 다른 빈으로 옮기면 기록돼요.'
+      - next: '감사 로그에 시간 재기까지, 한 메서드에 애스펙트가 여럿 걸리면 어떤 순서로 실행될까요?'
+    recall: '프록시는 밖에서 들어오는 호출만 가로채요. 원래 객체 안에서 this.method()로 부르면 this는 원래 객체라 프록시를 거치지 않고, 그 메서드에 붙은 어드바이스가 실행되지 않아요(내부 호출). 기능이 걸려야 할 메서드를 다른 빈으로 옮겨 그 빈(프록시)을 받아 부르면 고쳐져요. @Transactional도 같은 이유로 빠져요.'
   - id: q4
     title: 애스펙트가 여럿이면 어떤 순서로 실행되나요?
     conclusion:
       lead: '`@Order` 값이 작은 애스펙트가 바깥에서 먼저 시작하고, 안쪽 애스펙트가 끝난 뒤 마지막에 끝나요.'
       sub: '프록시가 어드바이스를 양파 껍질처럼 겹겹이 감싸기 때문이에요. 감사 로그를 트랜잭션 바깥에 둘지 안에 둘지도 이 순서로 정해져요.'
     says:
-      - '어드바이스 다섯 종류: `@Before`(전), `@AfterReturning`(정상으로 끝난 뒤), `@AfterThrowing`(예외가 난 뒤), `@After`(어느 쪽이든 끝난 뒤), `@Around`(앞뒤 모두). 한 애스펙트에 넷을 두고 정상과 예외 호출의 기록을 실제 출력으로 보인다'
+      - '어드바이스 다섯 종류: `@Before`, `@AfterReturning`, `@AfterThrowing`, `@After`, `@Around`. 한 애스펙트에 다섯을 두고 정상과 예외 호출의 기록을 실제 출력으로 보인다'
       - '코드 order처럼 `AuditAspect`(1)와 `TimingAspect`(2)를 둔다. 기록은 Audit 시작, Timing 시작, 메서드, Timing 끝, Audit 끝이다. 실제 출력'
-      - '순서를 바꾸면 결과가 달라지는 예: 시간 재기가 바깥이면 감사 로그를 쓰는 시간까지 잰다'
-      - '`@Transactional`도 같은 줄에 선다. 트랜잭션 어드바이스의 순서는 기본으로 가장 안쪽(가장 낮은 우선순위)이다. 감사 애스펙트가 트랜잭션 바깥이면 기록을 쓸 때 본 작업의 트랜잭션은 이미 끝나 있다. 안쪽이면 같은 트랜잭션에 섞여 본 작업이 롤백될 때 기록도 사라진다. 이 차이가 왜 생기고 어떻게 다루는지는 S10과 S11에서 다룬다고 적는다'
+      - '`@Transactional`도 같은 줄에 선다. 감사 애스펙트가 트랜잭션 바깥이면 기록을 쓸 때 본 작업의 트랜잭션은 이미 끝나 있다. 안쪽이면 같은 트랜잭션에 섞여 본 작업이 롤백될 때 기록도 사라진다. S10과 S11에서 다룬다'
       - '`@Order`를 주지 않으면 순서가 정해지지 않는다. 순서가 중요한 애스펙트는 꼭 적는다'
     asks:
       - '본문의 예시: `@Order(1)` `AuditAspect`와 `@Order(2)` `TimingAspect`가 같은 메서드에 걸린다. 메서드가 끝난 뒤 어느 애스펙트의 끝 기록이 먼저 남나 (Timing. 안쪽이 먼저 끝난다)'
       - '옮긴 상황: 같은 메서드에 권한 검사 애스펙트와 캐시 애스펙트가 걸린다. 권한이 없는 사람에게 캐시된 값을 돌려주지 않으려면 어느 쪽의 `@Order` 값이 작아야 하나 (권한 검사. 바깥에서 먼저 막아야 한다)'
+      - '실무 구역: 코드 swallow처럼 애스펙트가 예외를 잡고 `null`을 돌려주면 호출한 쪽은 예외를 받나 (받지 않는다. 성공한 줄 안다)'
+    body:
+      - p: '`@Around` 말고도 어드바이스는 네 종류가 더 있어요. 한 애스펙트에 다섯을 모두 두고 정상 호출과 예외 호출을 해 봤어요.'
+      - ci:
+          key: kinds
+          label: 실제 기록 보기
+          source: AopLessonTest.adviceKinds
+      - table:
+          head: [어드바이스, 언제]
+          rows:
+            - ['`@Before`', '메서드 전']
+            - ['`@AfterReturning`', '정상으로 끝난 뒤']
+            - ['`@AfterThrowing`', '예외가 난 뒤']
+            - ['`@After`', '어느 쪽이든 끝난 뒤(finally)']
+            - ['`@Around`', '앞뒤 모두. `proceed()`로 직접 부른다']
+      - h3: 애스펙트가 여럿이면
+      - code: order
+        notes:
+          - mark: '@Order(1)'
+            as: anno
+            text: '작은 값이 바깥이에요. 먼저 시작하고 나중에 끝나요.'
+      - ci:
+          key: order
+          label: 실제 기록 보기
+          source: AopLessonTest.aspectOrder
+      - p: '바깥의 Audit가 먼저 시작하고, 안쪽의 Timing이 끝난 뒤에 Audit가 끝나요. 프록시가 어드바이스를 양파 껍질처럼 겹겹이 감싸요([근거](link:ordering)). `@Order`를 주지 않으면 순서가 정해지지 않으니, 순서가 중요하면 꼭 적어요.'
+      - p: '순서가 결과를 바꿔요. 권한 검사와 캐시가 함께 걸리면, 권한 검사가 바깥이어야 권한 없는 사람에게 캐시된 값을 돌려주지 않아요. `@Transactional`도 이 줄에 서는 애스펙트예요. 감사 로그가 트랜잭션 안쪽이면 본 작업이 롤백될 때 기록도 함께 사라져요. 실패한 시도를 남기는 법은 [트랜잭션 전파와 롤백 규칙](lesson:tx-propagation) 레슨에서 다뤄요.'
+      - quiz:
+          q: '`@Order(1)` AuditAspect와 `@Order(2)` TimingAspect가 같은 메서드에 걸려요. 메서드가 끝난 뒤 어느 쪽의 끝 기록이 먼저 남을까요?'
+          options:
+            - Audit
+            - Timing
+            - 동시에
+          answer: 2
+          explain: '작은 값이 바깥이라 Audit가 Timing을 감싸요. 안쪽의 Timing이 먼저 끝나요.'
+    recall: '어드바이스는 @Before, @AfterReturning(정상 뒤), @AfterThrowing(예외 뒤), @After(어느 쪽이든 뒤), @Around(앞뒤 모두) 다섯 가지예요. 애스펙트가 여럿이면 @Order 값이 작은 것이 바깥에서 먼저 시작하고 마지막에 끝나요. 순서를 적지 않으면 정해지지 않고, @Transactional도 이 줄에 서서 감사 로그가 트랜잭션 안인지 밖인지가 순서로 정해져요.'
 practice:
+  title: 스프링 부트에서는 이렇게 써요
   says:
-    - '프로젝트의 감사 로그 모양: `@Audited("CHANGE_LIMIT")`, 애스펙트가 남기는 것(누가, 무엇을, 대상 id, 변경 전후 값, 성공 여부, 시각). 누가는 요청 스레드에 둔 로그인 정보에서 읽는다(S1의 `ThreadLocal`, S12의 `SecurityContextHolder`). 성공과 실패 기록을 테스트로 남긴다'
-    - '의존성: `spring-boot-starter-aop`. 스프링 부트 3.5에서 이 스타터가 AspectJ 라이브러리를 가져오고, 자동 설정이 `@Aspect` 빈을 찾아 프록시를 만든다. 이 저장소의 `verification`에 이미 있다'
-    - '흔한 실수: 포인트컷을 너무 넓게 쓴다. `execution(* com.shop..*(..))`는 모든 빈의 모든 메서드, 게터까지 감싼다. 고친 코드: 어노테이션 포인트컷으로 걸 곳을 표시한다'
+    - '프로젝트의 감사 로그 모양: `@Audited("CHANGE_LIMIT")`, 애스펙트가 남기는 것(누가, 무엇을, 대상 id, 변경 전후 값, 성공 여부, 시각). 누가는 요청 스레드에 둔 로그인 정보에서 읽는다'
+    - '의존성: `spring-boot-starter-aop`. 이 스타터가 AspectJ 라이브러리를 가져오고, 자동 설정이 `@Aspect` 빈을 찾아 프록시를 만든다. 이 저장소의 `verification`에 이미 있다'
+    - '흔한 실수: 포인트컷을 너무 넓게 쓴다. 고친 코드: 어노테이션 포인트컷으로 걸 곳을 표시한다'
     - '흔한 실수 둘: 애스펙트에서 예외를 잡고 다시 던지지 않는다. 호출한 쪽은 성공으로 알고, 트랜잭션은 커밋된다. 고친 코드: 코드 aspect처럼 기록한 뒤 `throw e`. 다시 던지지 않은 경우를 테스트로 보인다'
+  body:
+    - h3: 감사 로그에 남길 것
+    - p: '`@Audited("CHANGE_LIMIT")`를 붙이고, 애스펙트가 **누가**(로그인한 사용자), **무엇을**(작업 이름과 대상 id), **변경 전후 값**, **성공 여부**, **시각**을 남겨요. 누가는 요청 스레드에 둔 로그인 정보에서 읽어요([인증과 인가](lesson:spring-security)의 `SecurityContextHolder`). DB에 저장하는 모양은 예전 테스트([AuditAspectTest](link:oldTest))에 있어요.'
+    - p: '의존성은 `spring-boot-starter-aop` 하나예요. 이 스타터가 AspectJ 라이브러리를 가져오고, 자동 설정이 `@Aspect` 빈을 찾아 프록시를 만들어요. 애스펙트 클래스에는 `@Component`를 함께 붙여 빈으로 등록해요.'
+    - h3: '흔한 실수 1: 너무 넓은 포인트컷'
+    - code: pointcut
+    - p: '`execution(* com.shop..*(..))`처럼 넓게 쓰면 모든 빈의 모든 메서드, 게터까지 감싸요. 느려지고, 생각지 못한 곳에 기록이 남아요. 걸 곳은 어노테이션으로 표시하는 편이 읽기도 쉬워요.'
+    - h3: '흔한 실수 2: 애스펙트가 예외를 삼킴'
+    - code: swallow
+      notes:
+        - mark: return null;
+          as: code
+          text: '예외를 다시 던지지 않고 null을 돌려줘요.'
+    - ci:
+        key: swallow
+        label: 실제 결과 보기
+        source: AopLessonTest.swallowingAspect
+    - p: '호출한 쪽은 예외를 받지 못하고 성공한 줄 알아요. 트랜잭션 안이었다면 롤백되지 않고 커밋돼요. 기록한 뒤에는 질문 1의 코드처럼 `throw e`로 다시 던져요.'
+interview:
+  question: 스프링 AOP는 어떻게 동작하고, 어디에 걸리지 않나요?
+  model:
+    - label: 정의
+      text: AOP는 여러 메서드에 공통으로 들어가는 일을 애스펙트에 모으고, 포인트컷으로 걸 곳을 고르는 방식입니다. @Transactional, @Cacheable, @Async가 이 방식으로 동작합니다.
+    - label: 원리
+      text: 스프링은 그 빈 대신 프록시를 넣고, 다른 빈이 부르면 프록시가 어드바이스를 실행한 뒤 proceed()로 원래 객체를 부릅니다. 스프링 부트는 기본으로 클래스를 상속한 CGLIB 프록시를 만듭니다. 애스펙트가 여럿이면 @Order가 작은 것이 바깥입니다.
+    - label: 주의할 점
+      text: CGLIB은 오버라이딩이라 final, private 메서드에는 걸리지 않고 final 클래스는 프록시를 만들 수 없습니다. 같은 클래스 안의 this 호출은 프록시를 거치지 않아 빠지므로 다른 빈으로 나눕니다. 애스펙트에서 예외를 삼키면 호출한 쪽과 트랜잭션이 성공으로 압니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 메서드마다 있던 감사 로그 코드를 @Audited 애스펙트로 모았고, 내부 호출에서 기록이 빠지는 곳을 다른 빈으로 나눠 고쳤습니다.'
+verified: 이 레슨의 기록은 짐작이 아니라 스프링 프레임워크 6.2의 컨테이너에 애스펙트를 등록하고 불러 받은 값이에요. 코드가 바뀔 때마다 테스트([AopLessonTest](link:test))가 다시 돌아요.
+footer: '근거: AOP의 개념과 용어는 스프링 프레임워크 문서([링크](link:concepts)), 프록시 방식과 내부 호출은 [링크](link:proxying), 어드바이스 순서는 [링크](link:ordering), `spring.aop.proxy-target-class` 기본값은 스프링 부트 설정 목록([링크](link:bootProps)). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '`@Audited` 메서드를 밖에서 부르면 감사 로그가 남고, 주입된 빈은 CGLIB 프록시다'
-    how: '`AnnotationConfigApplicationContext`에 `@EnableAspectJAutoProxy(proxyTargetClass = true)`와 레슨 패키지의 빈만 등록한다. 기록은 메모리 리스트에 남겨 DB 없이 돌린다. `AopUtils.isCglibProxy`와 클래스 이름을 본다'
-    test: '예전 테스트 audit/AuditAspectTest#serviceIsProxy(DB를 쓰는 판)'
-  - claim: '`final` 메서드와 `private` 메서드에는 어드바이스가 걸리지 않는다'
-    how: '같은 컨텍스트에서 호출하고 로그 수를 센다'
-  - claim: '`final` 메서드 안에서는 주입받은 필드가 null이다'
-    how: '`final` 메서드가 필드를 읽어 결과를 돌려주게 해 본다. 결과대로 본문을 쓴다'
+  - claim: '`@Audited` 메서드를 밖에서 부르면 감사 로그가 남고, 주입된 빈은 CGLIB 프록시다. 실패하면 실패 기록을 남기고 예외를 다시 던진다'
+    how: '`AnnotationConfigApplicationContext`에 `@EnableAspectJAutoProxy(proxyTargetClass = true)`와 레슨의 빈만 등록한다. 기록은 메모리 리스트에 남겨 DB 없이 돌린다'
+    test: AopLessonTest.auditedAndProxy
+  - claim: '`final` 메서드와 `private` 메서드에는 어드바이스가 걸리지 않고, `final` 메서드 안에서는 주입받은 필드가 null이다'
+    how: '같은 컨텍스트에서 호출하고 로그 수와 필드를 본다'
+    test: AopLessonTest.finalAndPrivateNotAdvised
   - claim: '`final` 클래스에 애스펙트가 걸리면 컨텍스트가 뜨지 않는다'
     how: '`final` 클래스를 등록해 예외 메시지를 본다'
+    test: AopLessonTest.finalClassCannotBeProxied
   - claim: '`proxyTargetClass = false`이고 인터페이스가 있으면 JDK 동적 프록시가 되고, 구현 클래스 타입으로 꺼내면 실패한다'
     how: '`getBean(구현 클래스)`의 예외를 본다'
+    test: AopLessonTest.jdkProxy
   - claim: '같은 클래스 안의 호출에는 어드바이스가 걸리지 않고, 다른 빈으로 나누면 걸린다'
     how: '`resetLimit`과 `LimitChanger`로 비교한다'
-    test: '예전 테스트 audit/AuditAspectTest#selfInvocationIsNotAudited'
+    test: AopLessonTest.selfInvocation
   - claim: '`@Before`, `@AfterReturning`, `@AfterThrowing`, `@After`, `@Around`의 실행 순서'
     how: '한 애스펙트의 기록을 정상과 예외 호출에서 본다'
+    test: AopLessonTest.adviceKinds
   - claim: '`@Order(1)` 애스펙트가 `@Order(2)`를 감싼다'
     how: '두 애스펙트의 기록'
+    test: AopLessonTest.aspectOrder
   - claim: '애스펙트가 예외를 삼키면 호출한 쪽은 예외를 받지 않는다'
     how: '삼키는 애스펙트로 호출한다'
+    test: AopLessonTest.swallowingAspect
 sources:
   - '스프링 AOP의 개념과 용어, 프록시 방식, 내부 호출: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/aop/introduction-defn.html , https://docs.spring.io/spring-framework/reference/core/aop/proxying.html'
   - '어드바이스 순서와 `@Order`: https://docs.spring.io/spring-framework/reference/core/aop/ataspectj/advice.html#aop-ataspectj-advice-ordering'
