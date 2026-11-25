@@ -1,8 +1,9 @@
-# 로그와 모니터링 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 로그와 모니터링
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/logging-monitoring.yaml에 있다.
 title: 로그와 모니터링
+description: 로그를 어느 수준으로 무엇을 남기는지, 수천 줄 가운데 한 요청의 로그를 찾는 법, 서버가 느려졌는지 숫자로 보는 법, 알림을 거는 곳. 네 가지 질문에 스스로 답할 수 있게 주문 API의 로그와 지표로 배우는 대화형 레슨.
 unit: 테스트와 운영
+minutes: 20
 roadmap: T7
 type: 동작 확인
 prerequisites:
@@ -47,6 +48,14 @@ covers:
     where: '다루지 않음: 특정 도구의 사용법은 로드맵의 "다루지 않는 것"'
   - topic: '느려진 원인을 스레드 덤프로 찾기'
     where: '다루지 않음: 스레드 덤프와 힙 덤프(T10)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/logging/LoggingMonitoringTest.java
+  slf4j: https://www.slf4j.org/faq.html#logging_performance
+  bootLogging: https://docs.spring.io/spring-boot/reference/features/logging.html
+  bootMetrics: https://docs.spring.io/spring-boot/reference/actuator/metrics.html
+  timers: https://docs.micrometer.io/micrometer/reference/concepts/timers.html
+  sre: https://sre.google/sre-book/monitoring-distributed-systems/
+  tracing: https://docs.spring.io/spring-boot/reference/actuator/tracing.html
 codes:
   levels: |-
     log.debug("장바구니 {}", cart);
@@ -54,8 +63,16 @@ codes:
     log.warn("재고 부족 {}", sku);
     log.error("결제 실패 {}", orderId, e);
   concat: |-
-    log.debug("장바구니 " + cart);
-    log.debug("장바구니 {}", cart);
+    // logging.level = INFO
+    for (int i = 0; i < 10_000; i++) {
+      log.debug("장바구니 " [[+]] cart);
+      log.debug("장바구니 [[{}]]", cart);
+    }
+  exception: |-
+    log.error("결제 실패: "
+        + e.getMessage());
+    log.error("결제 실패 주문 {}",
+        orderId, [[e]]);
   mdcFilter: |-
     class RequestIdFilter
         extends OncePerRequestFilter {
@@ -63,11 +80,11 @@ codes:
           HttpServletRequest req,
           HttpServletResponse res,
           FilterChain chain) throws ... {
-        MDC.put("requestId", newId());
+        [[MDC.put("requestId", newId());]]
         try {
           chain.doFilter(req, res);
         } finally {
-          MDC.remove("requestId");
+          [[MDC.remove("requestId");]]
         }
       }
     }
@@ -75,14 +92,74 @@ codes:
     logging:
       pattern:
         level: "%5p [%X{requestId}]"
+  mdcRun: |-
+    // 톰캣 스레드 하나로 띄움
+    GET /orders/1   // 필터가 ID를 넣음
+    GET /health     // ID를 넣지 않음
+  decorator: |-
+    executor.setTaskDecorator(task -> {
+      var ctx = MDC.getCopyOfContextMap();
+      return () -> {
+        MDC.setContextMap(ctx);
+        try {
+          task.run();
+        } finally {
+          MDC.clear();
+        }
+      };
+    });
   timer: |-
     Timer timer = Timer.builder("order.pay")
         .publishPercentiles(0.5, 0.95, 0.99)
         .register(registry);
     timer.record(() -> pay(order));
+  timerRun: |-
+    // 95건은 10ms, 5건은 2초
+    timer.record(10, MILLISECONDS);  // 95번
+    timer.record(2, SECONDS);        // 5번
+  gcRun: |-
+    new JvmGcMetrics().bindTo(registry);
+    // 쓰레기를 만들고 System.gc() 세 번
+  levelYml: |-
+    logging:
+      level:
+        root: info
+        com.shop.order: debug
+        org.hibernate.SQL: debug
+  prometheus: |-
+    # build.gradle
+    implementation ⤶
+    'org.springframework.boot:⤷
+    spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:⤷
+    micrometer-registry-prometheus'
+
+    # application.yml
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,prometheus
+  structured: |-
+    logging:
+      structured:
+        format:
+          console: ecs
+  leakSecret: |-
+    log.info("가입 요청 {}", [[request]]);
+    // SignupRequest[email=a@b.com,
+    //   password=qwer1234]
 predict:
-  text: '`logging.level.root=INFO`인 서버에서 `log.debug("장바구니 " + cart)`가 1초에 1만 번 불려요. `cart.toString()`은 몇 번 불릴까요? 보기: 0번, 1만 번.'
-  answer: '1만 번. 로그는 버려져도 `+`로 이어 붙이는 문자열은 메서드를 부르기 전에 만들어진다. 자리표시자(`{}`)를 쓰면 0번이다. 질문 1에서 밝힌다.'
+  title: 버려지는 로그도 일을 할까요?
+  text: '로그 수준이 INFO인 서버에서 `log.debug("장바구니 " + cart)`가 1만 번 불려요. DEBUG는 INFO보다 낮아서 이 로그는 한 줄도 찍히지 않아요. 그동안 `cart.toString()`은 몇 번 불릴까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: concat
+  label: 내 예측
+  options:
+    - {value: '0', label: 0번}
+    - {value: '10000', label: 1만 번}
+  answer: '10000'
+  storageKey: logmon-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 로그는 무엇을 어느 수준으로 남기나요?
@@ -98,6 +175,51 @@ questions:
     asks:
       - '본문의 예시: 수준이 INFO일 때 `log.debug("장바구니 {}", cart)`에서 `cart.toString()`은 불리나 (불리지 않는다. 자리표시자는 수준이 켜져 있을 때만 문자열을 만든다)'
       - '옮긴 상황: 결제 실패를 `log.error("결제 실패: " + e.getMessage())`로 남겼다. 원인을 찾을 때 무엇이 없나 (스택 트레이스와 원인 예외. 예외 객체를 마지막 인자로 넘긴다)'
+    body:
+      - p: '자바 서버는 보통 SLF4J로 로그를 쓰고, 스프링 부트는 그 뒤에서 Logback이 실제로 찍어요. 로그 한 줄에는 **수준**을 붙여요. 낮은 것부터 TRACE, DEBUG, INFO, WARN, ERROR예요.'
+      - code: levels
+      - table:
+          head: [수준, 쓰는 곳, 예]
+          rows:
+            - ['TRACE, DEBUG', '개발 중에 흐름을 따라갈 때', '장바구니에 무엇이 들었나']
+            - [INFO, '일어난 일. 나중에 무슨 일이 있었는지 다시 그려 볼 수 있게', '주문 1001 생성']
+            - [WARN, '처리했지만 이상한 일', '재고 부족으로 주문을 거절']
+            - [ERROR, '처리하지 못한 일. 사람이 봐야 해요', '결제 실패']
+      - p: '설정에서 수준을 정하면 그보다 **낮은 로그는 버려져요**. 운영은 보통 INFO로 둬서 DEBUG와 TRACE는 찍히지 않아요. 그럼 버려지는 로그는 일을 하지 않을까요? 예측의 답이에요.'
+      - ci:
+          key: levels
+          label: 실제 결과 보기
+          source: LoggingMonitoringTest.levelsAndPlaceholders
+          code: concat
+      - p: '{{predict-result}} 찍힌 줄은 INFO와 WARN뿐인데, `+`로 이어 붙인 쪽은 `cart.toString()`이 **1만 번** 불렸어요. 자바는 메서드를 부르기 전에 인자를 먼저 계산하니, 로그가 버려질지 알기 전에 문자열이 이미 만들어져요. 자리표시자 `{}`를 쓰면 문자열 만들기를 로거에게 맡겨서, 수준이 꺼져 있으면 **한 번도** 부르지 않아요([SLF4J FAQ](link:slf4j)).'
+      - h3: 예외는 객체째 넘겨요
+      - code: exception
+        notes:
+          - mark: e
+            as: code
+            text: '마지막 인자로 예외 객체를 넘기면 스택 트레이스와 원인 예외가 남아요.'
+      - ci:
+          key: exception
+          label: 실제 결과 보기
+          source: LoggingMonitoringTest.exceptionNeedsTheObject
+      - p: '`e.getMessage()`만 이어 붙인 줄에는 예외가 **없어요**. 어느 줄에서 났는지, 원인이 읽기 시간 초과였다는 것을 잃었어요. 예외 객체를 마지막 인자로 넘기면 Logback이 스택 트레이스와 원인 예외까지 찍어요(예외 레슨).'
+      - h3: 남기면 안 되는 것
+      - code: leakSecret
+        notes:
+          - mark: request
+            as: code
+            text: '객체를 통째로 찍으면 `toString`에 든 값이 모두 로그에 남아요.'
+      - p: '비밀번호, 카드 번호, 토큰, 주민등록번호 같은 값은 로그에 남기지 않아요. 로그는 여러 사람이 보고 오래 남아요. 요청 객체를 통째로 찍으면 `toString`(record는 모든 필드를 찍어요)에 든 값이 새어 나가요. 필요한 필드만 골라 찍어요.'
+      - quiz:
+          q: '결제 실패를 `log.error("결제 실패: " + e.getMessage())`로 남겼어요. 원인을 찾을 때 무엇이 없을까요?'
+          options:
+            - 주문 번호
+            - 스택 트레이스와 원인 예외
+            - 로그 수준
+          answer: 2
+          explain: '예외 객체를 넘기지 않으면 메시지 글자만 남아요. 마지막 인자로 `e`를 넘겨요.'
+      - next: '로그를 잘 남겨도 서버에는 요청이 동시에 수백 개 들어와요. 그 가운데 한 요청의 줄은 어떻게 골라낼까요?'
+    recall: 'TRACE, DEBUG, INFO, WARN, ERROR 가운데 정한 수준보다 낮은 로그는 버려지고, 운영은 보통 INFO예요. 버려지는 로그라도 `+`로 이어 붙이면 문자열을 만들어서, 자리표시자 `{}`로 써야 수준이 꺼져 있을 때 일을 하지 않아요. 예외는 마지막 인자로 객체째 넘겨야 스택 트레이스와 원인이 남아요. 비밀번호와 토큰 같은 값은 남기지 않아요.'
   - id: q2
     title: 수천 줄 가운데 한 요청의 로그를 어떻게 찾나요?
     conclusion:
@@ -115,6 +237,48 @@ questions:
     asks:
       - '본문의 예시: 필터에서 `MDC.put("requestId", ...)`만 하고 `remove`를 하지 않았다. 같은 톰캣 스레드가 다음 요청을 처리할 때 그 요청의 첫 로그에는 무엇이 찍히나 (앞 요청의 ID)'
       - '옮긴 상황: 주문 처리 안에서 `@Async` 메서드로 메일을 보낸다. 메일 메서드 안의 로그에 requestId가 찍히나 (안 찍힌다. 다른 스레드라 MDC가 비어 있다. TaskDecorator로 복사한다)'
+    body:
+      - p: '서버에는 요청이 동시에 들어와요. 톰캣 스레드 여럿이 각자 요청을 처리하며 로그를 쓰니, 로그 파일에서는 여러 요청의 줄이 뒤섞여요. "주문이 안 된다"는 사용자의 요청이 어느 줄인지 알려면 줄마다 **요청 ID**가 붙어 있어야 해요.'
+      - p: '여기에 쓰는 것이 **MDC**(Mapped Diagnostic Context)예요. 스레드마다 따로 두는 작은 맵이라, 한 번 넣어 두면 그 스레드가 찍는 모든 로그 줄에 로거가 그 값을 붙여요. 요청이 처음 들어오는 필터에서 넣으면 돼요.'
+      - code: mdcFilter
+        notes:
+          - mark: MDC.put("requestId", newId());
+            as: code
+            text: '요청마다 ID를 만들어 이 스레드의 MDC에 넣어요.'
+          - mark: MDC.remove("requestId");
+            as: code
+            text: '요청이 끝나면 꼭 지워요.'
+      - code: pattern
+      - p: '로그 패턴에 `%X{requestId}`를 넣으면 줄마다 그 값이 찍혀요. 이제 로그를 `grep req-1`로 거르면 한 요청의 줄만 남아요.'
+      - h3: 지우지 않으면 다음 요청에 남아요
+      - p: 'MDC는 스레드마다 두는 값(스레드에 안전한 객체 레슨의 ThreadLocal)이에요. 톰캣은 스레드를 요청마다 새로 만들지 않고 **다시 써요**. 그래서 지우지 않은 값은 같은 스레드가 처리하는 다음 요청에 남아요. 톰캣 스레드를 하나로 줄여 놓고, ID를 넣는 주문 요청 다음에 ID를 넣지 않는 헬스 체크를 보냈어요.'
+      - ci:
+          key: mdc
+          label: 실제 로그 보기
+          source: LoggingMonitoringTest.mdcRequestId
+          code: mdcRun
+      - p: '`finally`에서 지운 쪽은 헬스 체크 줄의 ID가 비어 있어요. 지우지 않은 쪽은 헬스 체크 줄에 **앞 주문 요청의 ID**(`req-2`)가 붙었어요. 이 로그로 장애를 쫓으면 상관없는 요청을 범인으로 보게 돼요.'
+      - h3: 다른 스레드로 넘어가면 사라져요
+      - p: '반대로, 요청 처리 중에 스레드 풀(`@Async`, `CompletableFuture`)로 일을 넘기면 그 스레드의 MDC는 **비어 있어요**. MDC는 넣은 스레드에만 있기 때문이에요. 스프링의 `ThreadPoolTaskExecutor`에 `TaskDecorator`를 달면 일을 넘길 때 MDC를 복사해 줄 수 있어요.'
+      - code: decorator
+      - ci:
+          key: mdc-async
+          label: 실제 결과 보기
+          source: LoggingMonitoringTest.mdcAcrossThreads
+      - more:
+          summary: '더 알아보기: 서비스를 가로지르는 추적'
+          body:
+            - p: '주문 서비스가 결제 서비스를 부르면 요청이 서비스 둘을 지나가요. 이때는 **trace ID**를 HTTP 헤더(`traceparent`)에 실어 보내고, 받는 쪽도 그 ID를 MDC에 넣어 서비스를 가로질러 같은 요청을 따라가요. 스프링 부트 3는 Micrometer Tracing으로 이것을 자동으로 해요([스프링 부트 문서](link:tracing)). 이 부분은 문서가 근거예요.'
+      - quiz:
+          q: '필터에서 `MDC.put("requestId", ...)`만 하고 지우지 않았어요. 같은 톰캣 스레드가 다음 요청을 처리할 때, 필터가 ID를 넣지 않는 요청의 로그에는 무엇이 찍힐까요?'
+          options:
+            - 빈 값
+            - 앞 요청의 ID
+            - 새 ID가 자동으로 만들어진다
+          answer: 2
+          explain: 'MDC는 스레드에 남아 있고 톰캣은 스레드를 다시 써요. finally에서 지워요.'
+      - next: '로그로 한 요청은 쫓을 수 있어요. 그런데 "요즘 서버가 느려졌다"는 어떻게 알까요?'
+    recall: '요청이 들어오는 필터에서 요청 ID를 MDC에 넣고 로그 패턴에 `%X{requestId}`를 두면, 그 요청을 처리하는 스레드가 찍는 모든 줄에 같은 ID가 붙어 거를 수 있어요. MDC는 스레드마다 두는 값이라 `finally`에서 지우지 않으면 톰캣이 다시 쓰는 스레드의 다음 요청에 남고, 스레드 풀로 넘긴 일에서는 비어 있어 TaskDecorator로 복사해요.'
   - id: q3
     title: 서버가 느려졌는지는 무엇으로 아나요?
     conclusion:
@@ -131,6 +295,59 @@ questions:
     asks:
       - '본문의 예시: 요청 100개 가운데 95개는 10ms, 5개는 2초였다. 평균과 p99 가운데 느린 사용자를 드러내는 것은 (p99. 평균은 100ms 남짓이다)'
       - '옮긴 상황: 요청 지표에 `userId` 태그를 붙이려 한다. 사용자가 100만 명이다. 무엇이 문제인가 (태그 값마다 지표가 따로 생겨 100만 개가 된다)'
+    body:
+      - p: '로그는 일어난 일 하나하나의 기록이에요. "느려졌나"를 보려면 그것을 **센 숫자**가 필요해요. 이것이 **지표**(메트릭)예요. 숫자 몇 개라 싸고, 몇 달씩 두고 그래프로 볼 수 있어요. 스프링 부트는 Micrometer로 지표를 모아요.'
+      - table:
+          head: [종류, 뜻, 예]
+          rows:
+            - [카운터, '늘기만 하는 수', '주문 수, 오류 수']
+            - [게이지, '지금 이 순간의 값', '바쁜 톰캣 스레드 수, 힙 사용량']
+            - [타이머, '횟수와 걸린 시간의 분포', '주문 API의 응답 시간']
+      - h3: 평균은 느린 요청을 숨겨요
+      - p: '주문 API 요청 100개 가운데 95개는 10ms, 5개는 결제사가 늦어 2초가 걸렸어요. 타이머에 넣고 평균과 **백분위**를 읽었어요. p95는 "요청을 빠른 순으로 줄 세웠을 때 95%째 요청의 시간"이에요.'
+      - code: timer
+      - ci:
+          key: percentile
+          label: 실제 결과 보기
+          source: LoggingMonitoringTest.percentilesShowSlowRequests
+          code: timerRun
+      - p: '평균은 110ms라 "괜찮아" 보여요. p50과 p95도 10ms예요. 그런데 **p99는 2초**예요. 요청 100개 가운데 하나는 2초 넘게 걸린다는 뜻이에요. 페이지 하나를 열 때 API를 수십 번 부르는 화면이라면, 대부분의 사용자가 그 2초를 한 번은 겪어요. 그래서 응답 시간은 평균이 아니라 p95, p99로 봐요([Micrometer 문서](link:timers)).'
+      - p: '분포를 바꿔 가며 평균과 백분위를 비교해 보세요. 첫 장면은 위 실제 출력의 값이에요.'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 요청 100개의 응답 시간
+            options:
+              - {value: tail, label: '95개 10ms, 5개 2초'}
+              - {value: even, label: '모두 110ms'}
+          scenes:
+            tail:
+              duo:
+                - label: 평균
+                  rows: [{k: 평균, v: 110 ms}]
+                - label: 백분위
+                  rows: [{k: p50, v: 10 ms}, {k: p95, v: 10 ms}, {k: p99, v: '약 2000 ms', mark: bad}]
+              verdict: '평균은 멀쩡해 보이지만, p99가 2초짜리 요청을 드러내요.'
+            even:
+              duo:
+                - label: 평균
+                  rows: [{k: 평균, v: 110 ms}]
+                - label: 백분위
+                  rows: [{k: p50, v: 110 ms}, {k: p95, v: 110 ms}, {k: p99, v: 110 ms}]
+              verdict: '평균은 똑같이 110ms인데, 느린 사용자는 없어요. 평균만으로는 두 장면을 가를 수 없어요.'
+      - h3: 태그에 끝없는 값을 넣지 않아요
+      - p: '지표에는 태그를 붙여 나눠 봐요. 예를 들어 `http.server.requests`는 URI 틀(`/orders/{id}`), 메서드, 상태 코드로 나뉘어요. 태그의 값마다 지표가 따로 생기니, 사용자 ID나 주문 ID처럼 값이 끝없이 많은 것을 태그로 넣으면 지표가 수백만 개가 되어 저장소가 버티지 못해요. 태그는 값이 몇 개뿐인 것만 써요. 특정 요청을 쫓는 일은 질문 2의 로그와 요청 ID가 해요.'
+      - quiz:
+          q: '요청 100개 가운데 95개는 10ms, 5개는 2초였어요. 느린 사용자를 드러내는 숫자는 무엇일까요?'
+          options:
+            - 평균
+            - p50
+            - p99
+          answer: 3
+          explain: '평균은 110ms, p50은 10ms라 느린 요청이 묻혀요. p99가 2초를 보여 줘요.'
+      - next: '지표로 느려진 것을 볼 수 있다면, 사람은 언제 깨워야 할까요?'
+    recall: '로그는 일어난 일 하나하나, 지표는 그것을 센 숫자예요. 카운터(늘기만 함), 게이지(지금 값), 타이머(횟수와 시간 분포)로 모아요. 응답 시간은 평균이 아니라 p95, p99로 봐요. 95개가 10ms, 5개가 2초면 평균은 110ms로 멀쩡해 보이지만 p99는 2초예요. 태그에는 사용자 ID처럼 값이 끝없는 것을 넣지 않아요.'
   - id: q4
     title: 무엇이 생기면 사람을 깨워야 하나요?
     conclusion:
@@ -144,26 +361,85 @@ questions:
     asks:
       - '본문의 예시: CPU 사용률 80%에 알림을 걸었다. 새벽 배치가 돌 때마다 울리지만 사용자 응답은 빠르다. 어떻게 고치나 (응답 시간이나 오류율 같은 증상에 알림을 건다)'
       - '옮긴 상황: CPU 20%, 메모리 여유, 그런데 주문 API의 p99가 5초로 올랐다. 알림이 울려야 하나 (울려야 한다. 사용자가 겪는 증상이다. 원인은 풀, 외부 API, 락 같은 다른 곳에 있다)'
+    body:
+      - p: '지표를 모았으면 일정한 조건을 넘을 때 사람에게 알리는 **알림**을 걸어요. 무엇에 걸지가 중요해요. 구글의 SRE 책은 **증상**에 걸라고 권해요([Google SRE](link:sre)). 이 질문은 테스트가 아니라 이 권고와 원리가 근거예요.'
+      - table:
+          head: ['', 증상, 원인]
+          rows:
+            - [무엇, '사용자가 겪는 것: 오류율, 응답 시간(p99), 처리량', '그 뒤의 이유 후보: CPU, 메모리, GC 시간, 커넥션 풀']
+            - [알림에, 걸어요, '걸지 않고 원인을 찾을 때 봐요']
+      - p: '원인 지표에 걸면 엇나가요. 새벽 배치로 CPU가 90%여도 사용자 응답이 빠르면 아무 문제가 없는데 알림이 울려요. 반대로 CPU는 20%인데 커넥션 풀이 모자라 주문 API의 p99가 5초가 되면, CPU 알림은 조용하고 사용자는 고통받아요. 울려야 할 때 울지 않고, 울지 않아도 될 때 울면 사람이 알림을 믿지 않고 꺼 버려요.'
+      - ul:
+          - '**기간을 둬요.** "5분 동안 오류율 1% 넘음"처럼 잠깐 튄 값에는 울리지 않게 해요.'
+          - '**알림이 울린 뒤에는 좁혀 가요.** 지표로 언제부터 무엇이 나빠졌는지 보고, 로그와 요청 ID(질문 2)로 어떤 요청인지 보고, 서버 안에서 무엇을 하는지는 스레드 덤프(스레드 덤프와 힙 덤프 레슨)로 봐요. 원인 지표는 이때 써요.'
+      - quiz:
+          q: 'CPU 20%, 메모리도 넉넉한데 주문 API의 p99가 5초로 올랐어요. 알림이 울려야 할까요?'
+          options:
+            - 울리지 않아도 된다. CPU가 낮다
+            - 울려야 한다. 사용자가 겪는 증상이다
+            - 메모리가 넉넉하니 무시한다
+          answer: 2
+          explain: '응답 시간은 사용자가 겪는 증상이에요. 원인(풀, 외부 API, 락)은 알림이 울린 뒤에 찾아요.'
+    recall: '알림은 사용자가 겪는 증상인 오류율, 응답 시간의 p99, 처리량에 걸어요. CPU, 메모리, GC 같은 원인 지표에 걸면 사용자가 멀쩡해도 울리고 정작 아플 때는 조용해서, 사람이 알림을 믿지 않게 돼요. 잠깐 튄 값에 울리지 않게 기간을 두고, 울린 뒤에 원인 지표와 로그, 덤프로 좁혀 가요.'
 practice:
+  title: 실무에서는 이렇게 써요
   says:
     - '`application.yml`의 `logging.level`로 패키지마다 수준을 정한다. 하이버네이트 SQL(`org.hibernate.SQL: debug`)을 개발에서만 켜는 예 (테스트로 찍히는지 확인)'
     - '스프링 부트 액추에이터와 `micrometer-registry-prometheus`를 넣으면 `/actuator/prometheus`에 `http_server_requests_seconds`와 `jvm_gc_pause_seconds`가 나온다. 프로메테우스가 가져가 그라파나로 본다 (문서 근거. 의존성을 더하지 않고 Micrometer의 `JvmGcMetrics`를 SimpleMeterRegistry에 붙여 GC 지표가 쌓이는 것만 테스트로 보인다)'
     - '스프링 부트 3.4의 구조화 로그: `logging.structured.format.console=ecs`로 한 줄에 JSON 하나를 남긴다 (문서 근거)'
     - '흔한 실수 하나: 요청 본문이나 사용자 객체를 통째로 INFO로 찍어 비밀번호와 토큰이 로그에 남는다. 고친 코드: 필요한 필드만 찍고 `toString`에서 비밀 값을 뺀다'
     - '흔한 실수 둘: MDC를 스레드 풀로 넘기지 않아 비동기 로그에 요청 ID가 없다. 고친 코드: `ThreadPoolTaskExecutor.setTaskDecorator`로 MDC를 복사한다 (테스트로 확인)'
+  body:
+    - p: '수준은 `application.yml`에서 패키지마다 정해요. 전체는 INFO로 두고, 지금 들여다볼 패키지만 DEBUG로 낮춰요. 하이버네이트가 보내는 SQL을 보고 싶을 때 `org.hibernate.SQL`을 debug로 두는 것이 흔한 예예요. 이 저장소의 검증 테스트도 이 설정으로 SQL을 모아요([스프링 부트 로깅 문서](link:bootLogging)).'
+    - code: levelYml
+    - h3: 지표를 밖으로 내보내기
+    - code: prometheus
+    - p: '액추에이터와 프로메테우스용 Micrometer 레지스트리를 넣으면 `/actuator/prometheus`에 지표가 글로 나와요. 스프링 부트가 HTTP 요청의 수와 시간(`http_server_requests_seconds`), JVM 메모리, GC 멈춤(`jvm_gc_pause_seconds`)을 자동으로 모아요. 프로메테우스가 이 주소를 주기적으로 읽어 저장하고, 그라파나로 그래프와 알림을 만들어요([액추에이터 지표 문서](link:bootMetrics)). 이 구성은 문서가 근거이고, 아래는 GC 지표가 실제로 쌓이는지만 Micrometer로 확인한 거예요.'
+    - ci:
+        key: gc
+        label: GC 지표의 실제 값
+        source: LoggingMonitoringTest.gcMetrics
+        code: gcRun
+    - p: '가비지 컬렉션 레슨에서 본 GC의 멈춤이 이렇게 숫자로 쌓여요. 응답 시간의 p99가 튄 시각에 GC 멈춤도 튀었다면 GC를 의심할 수 있어요.'
+    - h3: 한 줄에 JSON 하나
+    - code: structured
+    - p: '스프링 부트 3.4부터는 로그를 한 줄에 JSON 하나로 남기는 구조화 로그를 설정 한 줄로 켜요. 로그를 모으는 도구가 수준, 요청 ID, 메시지를 칸으로 나눠 검색하고 집계하기 쉬워요(문서 근거).'
+    - h3: '흔한 실수: 객체를 통째로 찍기'
+    - p: '질문 1의 `log.info("가입 요청 {}", request)`예요. 요청 record의 `toString`이 비밀번호까지 찍어요. 필요한 필드(이메일)만 찍거나, 비밀 값은 `toString`에서 빼요.'
+    - h3: '흔한 실수: 비동기에서 요청 ID가 사라진다'
+    - p: '질문 2에서 본 대로 `@Async`가 쓰는 스레드 풀에는 MDC가 따라가지 않아요. 스레드 풀 빈에 `TaskDecorator`를 달아 복사해요.'
+interview:
+  question: '운영 중인 서버의 상태를 로그와 지표로 어떻게 보는지 설명해 주세요'
+  model:
+    - label: 정의
+      text: 로그는 일어난 일 하나하나의 기록이고, 지표는 요청 수, 응답 시간, 오류 수처럼 그것을 센 숫자입니다. 로그는 수준을 정해 남기고 운영은 보통 INFO로 둡니다.
+    - label: 원리
+      text: 로그는 자리표시자로 남겨 버려질 때 문자열을 만들지 않고, 예외는 객체째 넘깁니다. 요청 ID를 필터에서 MDC에 넣으면 그 요청의 모든 줄에 붙어 섞인 로그에서 골라낼 수 있습니다. 응답 시간은 평균이 아니라 p95, p99로 봅니다.
+    - label: 주의할 점
+      text: MDC는 스레드마다의 값이라 finally에서 지우지 않으면 다음 요청에 남고, 스레드 풀로 넘길 때는 복사해야 합니다. 지표 태그에 사용자 ID 같은 값을 넣지 않고, 알림은 CPU 같은 원인이 아니라 오류율과 응답 시간 같은 증상에 겁니다. 비밀 값은 로그에 남기지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 평균 응답 시간은 괜찮은데 사용자 불만이 있어 p99를 보니 결제 API 호출 때문에 2초였고, 결제 호출에 타임아웃을 두고 p99에 알림을 걸었습니다.'
+verified: '로그 수준, 자리표시자, 예외, MDC는 Logback과 내장 톰캣을 띄워, 백분위와 GC 지표는 Micrometer로 돌려 확인했어요. 알림을 거는 곳과 프로메테우스, 구조화 로그는 공식 문서가 근거예요. 코드가 바뀔 때마다 테스트([LoggingMonitoringTest](link:test))가 다시 돌아요.'
+footer: '근거: 자리표시자는 [SLF4J FAQ](link:slf4j), 수준과 구조화 로그는 [스프링 부트 로깅 문서](link:bootLogging), 지표와 프로메테우스는 [액추에이터 지표 문서](link:bootMetrics), 타이머와 백분위는 [Micrometer 문서](link:timers), 추적은 [스프링 부트 추적 문서](link:tracing), 증상에 알림을 거는 것은 [Google SRE](link:sre). 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '수준이 INFO면 DEBUG 로그는 버려지고, `+`로 이어 붙인 인자는 그래도 `toString`이 불리며 자리표시자는 불리지 않는다'
     how: 'Logback의 `LoggerContext`와 `ListAppender`로 찍힌 줄을 모으고, `toString`을 세는 객체로 횟수를 센다'
-  - claim: '`log.error(메시지, e)`는 스택 트레이스를 남기고 `getMessage`만 이어 붙이면 남지 않는다'
+    test: LoggingMonitoringTest.levelsAndPlaceholders
+  - claim: '`log.error(메시지, e)`는 스택 트레이스와 원인 예외를 남기고 `getMessage`만 이어 붙이면 남지 않는다'
     how: 'ListAppender의 이벤트에서 `ThrowableProxy`를 본다'
-  - claim: '필터가 MDC에 넣은 requestId가 그 요청의 모든 로그 줄에 붙고, 지우지 않으면 같은 스레드의 다음 요청에 남는다'
-    how: 'MiniWeb에 필터와 컨트롤러를 넣고 톰캣 스레드를 하나로 줄여 요청 둘을 차례로 보낸다'
+    test: LoggingMonitoringTest.exceptionNeedsTheObject
+  - claim: '필터가 MDC에 넣은 requestId가 그 요청의 로그 줄에 붙고, 지우지 않으면 같은 스레드의 다음 요청에 남는다'
+    how: '웹 자동 설정만 켠 앱을 톰캣 스레드 하나로 띄우고 요청 둘을 차례로 보낸다. 어펜더는 앱이 뜬 뒤에 붙이고, 이벤트의 MDC를 찍힌 순간에 붙잡는다'
+    test: LoggingMonitoringTest.mdcRequestId
   - claim: '스레드 풀로 넘긴 작업에서는 MDC가 비어 있고, TaskDecorator로 복사하면 남는다'
     how: '`ThreadPoolTaskExecutor`로 두 경우를 돌린다'
-  - claim: '95개 10ms, 5개 2초인 타이머의 평균은 100ms 남짓이고 p99는 2초 가까이다'
-    how: 'Micrometer `SimpleMeterRegistry`와 `Timer`에 기록하고 `takeSnapshot`으로 백분위를 읽는다. micrometer-core를 testImplementation으로 더한다'
-  - claim: 'JvmGcMetrics를 붙이고 GC를 일으키면 `jvm.gc.pause` 타이머의 횟수가 늘어난다'
-    how: '쓰레기를 만들고 `System.gc()`를 부른 뒤 타이머의 count를 본다. 정확한 횟수가 아니라 0보다 큰 것만 단정한다'
+    test: LoggingMonitoringTest.mdcAcrossThreads
+  - claim: '95개 10ms, 5개 2초인 타이머의 평균은 110ms이고 p99는 2초 가까이다'
+    how: 'Micrometer `SimpleMeterRegistry`와 `Timer`에 기록하고 `takeSnapshot`으로 백분위를 읽는다. micrometer-core는 스프링 배치를 따라 이미 들어 있다'
+    test: LoggingMonitoringTest.percentilesShowSlowRequests
+  - claim: 'JvmGcMetrics를 붙이고 GC를 일으키면 `jvm.gc.pause` 타이머가 쌓인다'
+    how: '쓰레기를 만들고 `System.gc()`를 부른 뒤 타이머의 count가 0보다 큰 것만 단정한다'
+    test: LoggingMonitoringTest.gcMetrics
 sources:
   - 'SLF4J 자리표시자: https://www.slf4j.org/faq.html#logging_performance'
   - '스프링 부트 로깅, 수준, 구조화 로그: https://docs.spring.io/spring-boot/reference/features/logging.html'
