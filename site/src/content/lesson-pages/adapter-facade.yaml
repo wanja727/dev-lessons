@@ -1,7 +1,9 @@
-# 어댑터와 퍼사드 패턴 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 어댑터와 퍼사드 패턴
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/adapter-facade.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 어댑터와 퍼사드 패턴
+description: 맞지 않는 인터페이스를 잇는 어댑터 패턴, 어댑터를 두면 좋아지는 것, 여러 시스템을 창구 하나 뒤에 두는 퍼사드 패턴과 둘의 차이. 세 가지 질문에 스스로 답할 수 있게 결제 대행사 SDK와 주문하기 흐름으로 배우는 대화형 레슨.
+minutes: 16
 unit: 객체지향 설계와 패턴
 roadmap: O14
 type: 설계
@@ -41,6 +43,11 @@ covers:
     where: '다루지 않음: 헥사고날 아키텍처(A21)'
   - topic: '외부 호출의 타임아웃과 재시도'
     where: '다루지 않음: 타임아웃, 재시도, 서킷 브레이커(A10)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/adapterfacade/AdapterFacadeTest.java
+  asList: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html#asList(T...)
+  slf4j: https://www.slf4j.org/
+  bootLogging: https://docs.spring.io/spring-boot/reference/features/logging.html
 codes:
   ours: |-
     interface PaymentGateway {
@@ -88,9 +95,72 @@ codes:
         return id;
       }
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  adapterMark: |-
+    class TossAdapter
+        [[implements PaymentGateway]] {
+      private final [[TossSdk sdk]];
+
+      public Approval approve(long orderId,
+                              int amount) {
+        var res = sdk.requestPayment(Map.of(
+            "orderNo", String.valueOf(orderId),
+            "amount", (long) amount,
+            "currency", "KRW"));
+        return new Approval(
+            [["0000".equals(res.get("code"))]],
+            res.get("tid"));
+      }
+    }
+  leak: |-
+    // 주문 서비스, 환불 서비스, 정산 배치
+    Map<String, String> res =
+        tossSdk.requestPayment(params);
+    if ("0000".equals(res.get("code"))) {
+      ...
+    }
+  controller: |-
+    // 퍼사드 없이: 컨트롤러가 넷을 안다
+    inventory.reserve(cart);
+    payment.approve(orderId, total);
+    delivery.request(cart);
+    notifier.notify(member, "주문 완료");
+
+    // 퍼사드를 쓰면
+    orderFacade.placeOrder(cart);
+  asList: |-
+    String[] array = {"a", "b", "c"};
+    List<String> list =
+        Arrays.asList(array);
+    list.set(0, "X");
+    list.add("d");
+  slf4j: |-
+    import org.slf4j.Logger;
+    import org.slf4j.LoggerFactory;
+
+    Logger log = LoggerFactory
+        .getLogger(OrderService.class);
+    log.info("주문 {}", orderId);
+  sdkLeakBad: |-
+    // 서비스 사이에 SDK 타입이 오간다
+    Map<String, String> pay(Order o) {
+      return tossSdk.requestPayment(...);
+    }
 predict:
-  text: '주문 서비스, 환불 서비스, 정산 배치가 모두 `PaymentGateway`만 쓰고, 토스 SDK는 `TossAdapter` 안에서만 써요. 결제 대행사를 나이스로 바꾸면 세 서비스 가운데 몇 개를 고쳐야 할까요? 보기: 0개, 1개, 3개.'
-  answer: '0개. 새 `NiceAdapter`를 만들고 조립하는 곳만 바꾼다. 질문 2에서 밝힌다.'
+  title: 결제 대행사를 바꾸면 서비스 몇 개를 고칠까요?
+  text: '주문 서비스, 환불 서비스, 정산 배치가 모두 우리 인터페이스 `PaymentGateway`만 쓰고, 토스 SDK는 `TossAdapter` 안에서만 써요. 결제 대행사를 나이스로 바꾸면 세 서비스 가운데 몇 개를 고쳐야 할까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: ours
+  label: 내 예측 (고칠 서비스 수)
+  options:
+    - value: s0
+      label: 0개
+    - value: s1
+      label: 1개
+    - value: s3
+      label: 3개
+  answer: s0
+  storageKey: adapter-facade-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 어댑터 패턴은 무엇인가요?
@@ -105,6 +175,39 @@ questions:
     asks:
       - '본문의 예시: SDK가 `{"code": "1001", "tid": null}`을 돌려주면 `TossAdapter.approve`가 돌려주는 것은 (`Approval(ok=false, txId=null)`)'
       - '옮긴 상황: 우리 코드는 `Temperature`를 섭씨로 받는 `Thermometer`를 원하는데, 장비 라이브러리는 화씨 `double readF()`만 준다. 두 모양을 잇는 클래스는 어떤 패턴이고 무엇을 하나 (어댑터. `Thermometer`를 구현하고 `readF()`를 불러 섭씨로 바꾼다)'
+    body:
+      - p: '우리 코드가 원하는 결제는 이 모양이에요.'
+      - code: ours
+      - p: '그런데 결제 대행사 SDK는 이렇게 생겼어요. 우리가 고칠 수 없는 코드예요.'
+      - code: sdk
+      - p: '메서드 이름도, 인자(주문 번호는 문자열, 금액은 long, 통화 코드)도, 결과(코드 문자열 `"0000"`)도 우리와 달라요. **어댑터 패턴**은 이런 맞지 않는 인터페이스를 가진 객체를 감싸서, 쓰는 쪽이 원하는 인터페이스로 바꿔 줘요. 여행용 전원 어댑터와 같은 일이에요.'
+      - code: adapterMark
+        notes:
+          - mark: implements PaymentGateway
+            as: code
+            text: '우리 인터페이스를 구현해요. 우리 코드는 이것만 알아요.'
+          - mark: TossSdk sdk
+            as: code
+            text: 'SDK를 필드로 감싸요. SDK의 모양은 이 클래스 안에만 있어요.'
+          - mark: '"0000".equals(res.get("code"))'
+            as: code
+            text: 'SDK의 결과 코드를 우리 타입 `Approval`로 바꿔요.'
+      - ci:
+          key: adapter
+          label: 가짜 SDK로 돌린 결과 보기
+          source: AdapterFacadeTest.adapterTranslates
+      - h3: 데코레이터, 프록시와 무엇이 다른가요?
+      - p: '셋 다 다른 객체를 감싸요. 차이는 **인터페이스**예요. [프록시와 데코레이터](lesson:proxy-decorator)는 감싸는 것과 **같은** 인터페이스를 구현해서 진짜 자리에 들어가요. 어댑터는 감싸는 것(SDK)과 **다른** 인터페이스(우리 것)를 구현해서 모양을 바꿔요.'
+      - quiz:
+          q: '우리 코드는 섭씨를 돌려주는 `Thermometer`를 원하는데, 장비 라이브러리는 화씨를 주는 `double readF()`만 있어요. `Thermometer`를 구현하고 안에서 `readF()`를 불러 섭씨로 바꾸는 클래스는 무엇일까요?'
+          options:
+            - 어댑터
+            - 데코레이터
+            - 퍼사드
+          answer: 1
+          explain: '맞지 않는 인터페이스(화씨 라이브러리)를 감싸 우리가 원하는 인터페이스로 바꿔 주는 것이 어댑터예요.'
+      - next: '어댑터 하나를 두는 것이 왜 그렇게 중요할까요?'
+    recall: '맞지 않는 인터페이스를 가진 객체를 감싸서, 쓰는 쪽이 원하는 인터페이스로 바꿔 주는 패턴이에요. `TossAdapter`는 우리 `PaymentGateway`를 구현하고 SDK를 필드로 가진 채, 주문 번호와 금액의 모양을 바꿔 SDK를 부르고 결과 코드 "0000"을 `Approval`로 바꿔요. 같은 인터페이스를 유지하는 데코레이터나 프록시와 달리, 어댑터는 인터페이스를 바꿔요.'
   - id: q2
     title: 어댑터를 두면 무엇이 좋아지나요?
     conclusion:
@@ -122,6 +225,75 @@ questions:
     asks:
       - '본문의 예시: 세 서비스가 `PaymentGateway`만 쓸 때 나이스로 바꾸면 세 서비스 가운데 고칠 파일 수는 (0개)'
       - '옮긴 상황: 문자 발송 업체 SDK의 응답 형식이 바뀌었다. 우리 코드에 `SmsSender` 인터페이스와 그 업체의 어댑터가 있다면 고칠 곳은 (어댑터 하나)'
+    body:
+      - p: '어댑터가 없으면 SDK의 모양이 서비스마다 들어가요.'
+      - code: leak
+      - p: '이러면 대행사를 바꿀 때 `Map` 파라미터와 `"0000"`을 다루는 서비스를 모두 고쳐야 해요. 어댑터를 두고 서비스가 `PaymentGateway`만 쓰게 했을 때를 세었어요.'
+      - ci:
+          key: vendor
+          label: 나이스로 바꿀 때 바뀐 파일 보기
+          source: AdapterFacadeTest.switchingVendor
+      - p: '처음에 예측한 답은 **0개**예요. `NiceAdapter`를 새로 만들고 조립하는 곳만 바꿔요. 세 서비스는 그대로예요. {{predict-result}}'
+      - p: '아래에서 요구를 골라 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 들어온 요구
+            options:
+              - {value: nice, label: 나이스로 바꾸기}
+              - {value: format, label: SDK 결과 형식이 바뀜}
+              - {value: test, label: 주문 서비스 테스트하기}
+          sides:
+            - label: SDK를 직접 쓰는 코드
+              items:
+                - {name: OrderService, note: SDK와 Map을 다룬다}
+                - {name: RefundService, note: SDK와 Map을 다룬다}
+                - {name: SettlementJob, note: SDK와 Map을 다룬다}
+            - label: 어댑터를 둔 코드
+              items:
+                - {name: OrderService, note: PaymentGateway만 안다}
+                - {name: RefundService, note: PaymentGateway만 안다}
+                - {name: SettlementJob, note: PaymentGateway만 안다}
+                - {name: TossAdapter, note: SDK를 우리 모양으로}
+          scenes:
+            nice:
+              sides:
+                - marks:
+                    - {name: OrderService, tag: 고침, mark: bad}
+                    - {name: RefundService, tag: 고침, mark: bad}
+                    - {name: SettlementJob, tag: 고침, mark: bad}
+                  result: [{k: 고칠 서비스, v: '3', mark: bad}]
+                - add: [{name: NiceAdapter, note: 나이스 SDK를 우리 모양으로, tag: 새로 만듦}]
+                  result: [{k: 고칠 서비스, v: '0'}]
+              verdict: 어댑터를 두면 업체를 바꿀 때 새 어댑터를 더하고 조립하는 곳만 바꿔요.
+            format:
+              sides:
+                - marks:
+                    - {name: OrderService, tag: 고침, mark: bad}
+                    - {name: RefundService, tag: 고침, mark: bad}
+                    - {name: SettlementJob, tag: 고침, mark: bad}
+                - marks: [{name: TossAdapter, tag: 고침}]
+              verdict: SDK의 모양이 바뀌어도 어댑터 하나만 고쳐요.
+            test:
+              sides:
+                - marks: [{name: OrderService, tag: 진짜 SDK가 필요, mark: bad}]
+                  result: [{k: 테스트에 필요한 것, v: SDK나 그 흉내, mark: bad}]
+                - marks: [{name: OrderService, tag: 가짜 PaymentGateway}]
+                  result: [{k: 테스트에 필요한 것, v: 우리 인터페이스의 가짜}]
+              verdict: 우리 인터페이스의 가짜를 넣으면 SDK 없이 승인과 거절을 시험해요.
+      - p: '인터페이스 `PaymentGateway`는 쓰는 쪽(주문)에 두고 우리 말로 지어요. [의존 역전 원칙과 의존성 주입](lesson:dip-di)에서 본 것과 같아요.'
+      - callout: '**어댑터에는 바꾸는 일만 둬요.** "5만 원 이상이면 할부" 같은 업무 규칙을 어댑터에 넣으면, 업체를 바꿀 때 그 규칙도 새 어댑터에 옮겨 써야 해요.'
+      - quiz:
+          q: '문자 발송 업체 SDK의 응답 형식이 바뀌었어요. 우리 코드에 `SmsSender` 인터페이스와 그 업체용 어댑터가 있고, 서비스들은 `SmsSender`만 써요. 어디를 고칠까요?'
+          options:
+            - SmsSender를 쓰는 모든 서비스
+            - 어댑터 하나
+            - SmsSender 인터페이스
+          answer: 2
+          explain: 'SDK의 모양은 어댑터 안에만 있어요. 서비스와 인터페이스는 그대로예요.'
+      - next: '어댑터가 하나의 모양을 바꾼다면, 여러 시스템을 한꺼번에 다룰 때는 어떻게 할까요?'
+    recall: '외부의 모양이 우리 코드 안으로 새지 않아서, 업체나 라이브러리를 바꿀 때 어댑터만 바꿔요. 세 서비스가 `PaymentGateway`만 쓰면 나이스로 바꿀 때 `NiceAdapter`를 더하고 조립하는 곳만 고치고, 서비스는 0개를 고쳐요. 테스트에서는 우리 인터페이스의 가짜를 넣고, 어댑터에는 업무 규칙을 넣지 않아요.'
   - id: q3
     title: 퍼사드 패턴은 무엇이고, 어댑터와 무엇이 다른가요?
     conclusion:
@@ -137,23 +309,93 @@ questions:
     asks:
       - '본문의 예시: `OrderFacade`를 쓰기 전과 후에 컨트롤러가 직접 아는 클래스는 몇 개인가 (넷에서 하나)'
       - '옮긴 상황: 레거시 결제 모듈의 메서드 이름이 우리 규칙과 달라서 우리 인터페이스로 감싼 클래스와, 회원 가입에 필요한 다섯 시스템을 순서대로 부르는 `SignupFacade` 가운데 어댑터는 (앞의 것)'
+    body:
+      - p: '주문하기는 네 시스템을 순서대로 불러요. 재고를 예약하고, 결제를 승인하고, 배송을 요청하고, 알림을 보내요. 컨트롤러가 이것을 직접 하면 순서와 네 시스템을 모두 알아야 해요.'
+      - code: controller
+      - p: '**퍼사드 패턴**은 여러 하위 시스템을 정해진 순서로 부르는 일을 **단순한 창구 하나** 뒤에 둬요.'
+      - code: facade
+      - ci:
+          key: facade
+          label: placeOrder가 부른 순서 보기
+          source: AdapterFacadeTest.facadeOrder
+      - p: '컨트롤러가 아는 클래스가 넷에서 하나로 줄었어요. [결합도와 응집도](lesson:coupling-cohesion)에서 본 "알아야 할 것을 줄이기"예요. 주문 순서가 바뀌어도 퍼사드 한 곳만 고쳐요.'
+      - p: '퍼사드는 하위 시스템을 **감추지만 막지는 않아요.** 관리자 화면이 재고만 따로 볼 때는 `Inventory`를 직접 써요.'
+      - h3: 어댑터와 퍼사드의 차이
+      - table:
+          head: [' ', 어댑터, 퍼사드]
+          rows:
+            - [감싸는 것, 하나, 여럿]
+            - [하는 일, 모양을 우리 인터페이스로 바꾼다, 여러 호출을 단순한 창구로 묶는다]
+            - [예, 'TossAdapter, Arrays.asList', 'OrderFacade, SLF4J']
+      - more:
+          summary: 퍼사드가 너무 커지면?
+          body:
+            - p: '퍼사드에 업무 규칙을 계속 더하면 모든 것을 아는 커다란 클래스가 돼요. 퍼사드는 순서를 잇는 일만 하고, 재고 규칙은 재고에, 결제 규칙은 결제에 둬요.'
+      - quiz:
+          q: '레거시 결제 모듈의 메서드 이름이 우리 규칙과 달라 우리 인터페이스로 감싼 클래스와, 회원 가입에 필요한 다섯 시스템을 순서대로 부르는 `SignupFacade` 가운데 어댑터는 무엇일까요?'
+          options:
+            - 레거시 결제 모듈을 감싼 클래스
+            - SignupFacade
+            - 둘 다
+          answer: 1
+          explain: '하나의 모양을 우리 인터페이스로 바꾸는 것이 어댑터, 여럿을 창구 하나로 묶는 것이 퍼사드예요.'
+    recall: '여러 하위 시스템을 정해진 순서로 부르는 일을 단순한 창구 하나 뒤에 두는 패턴이에요. `OrderFacade.placeOrder(cart)` 하나가 재고, 결제, 배송, 알림 순서로 불러서, 컨트롤러가 아는 클래스가 넷에서 하나로 줄어요. 어댑터는 하나의 모양을 우리 인터페이스로 바꾸고, 퍼사드는 여럿을 단순하게 묶어요. 퍼사드 뒤의 시스템은 필요하면 직접 쓸 수 있어요.'
 practice:
+  title: 자바와 스프링 안의 어댑터와 퍼사드
   says:
     - '자바의 어댑터: `Arrays.asList(array)`는 배열을 `List`로 바꾼다. 복사가 아니라 배열을 감싼 것이라 `set(0, x)`가 배열을 바꾸고, `add`는 `UnsupportedOperationException`이다. 테스트로 확인한다'
     - '`InputStreamReader`는 바이트를 읽는 `InputStream`을 글자를 읽는 `Reader`로 바꾸는 어댑터다'
     - '로깅의 퍼사드: 스프링 코드는 `org.slf4j.Logger`에 로그를 남기고, 실제로 쓰는 것은 스프링 부트의 기본인 Logback이다. `LoggerFactory.getLogger(...)`가 돌려준 객체의 클래스를 찍어 Logback인 것을 테스트로 보인다. 구현을 바꿔도 로그를 남기는 코드는 그대로다'
     - '흔한 실수: SDK의 타입(`TossSdk`, 결과 `Map`)을 서비스의 메서드 인자나 반환값으로 쓴다. 고친 코드: SDK 타입은 어댑터 안에만 두고 서비스 사이에는 우리 타입(`Approval`)만 오간다'
+  body:
+    - h3: Arrays.asList는 배열의 어댑터예요
+    - p: '`Arrays.asList`는 배열을 복사하지 않고 감싸서 `List` 인터페이스로 보여 줘요([API 문서](link:asList)).'
+    - ci:
+        key: aslist
+        label: 실제로 돌린 결과 보기
+        source: AdapterFacadeTest.arraysAsListIsAdapter
+        code: asList
+    - p: '리스트에 `set`하자 원래 배열이 바뀌었어요. 감싼 것이라 같은 데이터를 보기 때문이에요. 배열은 길이를 바꿀 수 없으니 `add`는 예외예요. 바이트를 읽는 `InputStream`을 글자를 읽는 `Reader`로 바꾸는 `InputStreamReader`도 어댑터예요.'
+    - h3: SLF4J는 로깅의 퍼사드예요
+    - p: '스프링 코드는 보통 SLF4J로 로그를 남겨요. 이름부터 Simple Logging **Facade** for Java예요([SLF4J](link:slf4j)). 코드는 SLF4J만 알고, 실제로 로그를 쓰는 것은 스프링 부트의 기본 구현인 Logback이에요([스프링 부트 문서](link:bootLogging)).'
+    - code: slf4j
+    - ci:
+        key: slf4j
+        label: 받은 로거의 실제 클래스 보기
+        source: AdapterFacadeTest.slf4jIsFacade
+    - p: '로깅 구현을 Log4j2로 바꿔도 `log.info(...)`를 쓰는 코드는 그대로예요.'
+    - h3: '흔한 실수: SDK 타입이 서비스 사이를 오간다'
+    - code: sdkLeakBad
+    - p: '어댑터를 만들어 놓고도 SDK의 결과 `Map`을 서비스 메서드의 반환값으로 쓰면, SDK의 모양이 다시 새어 나가요. SDK 타입은 어댑터 안에만 두고, 서비스 사이에는 `Approval` 같은 우리 타입만 오가게 해요.'
+interview:
+  question: 어댑터 패턴과 퍼사드 패턴을 설명하고, 둘의 차이를 말해 주세요
+  model:
+    - label: 정의
+      text: 어댑터 패턴은 맞지 않는 인터페이스를 가진 객체를 감싸 쓰는 쪽이 원하는 인터페이스로 바꿔 주는 패턴이고, 퍼사드 패턴은 여러 하위 시스템을 정해진 순서로 부르는 일을 단순한 창구 하나 뒤에 두는 패턴입니다.
+    - label: 원리
+      text: 결제 SDK를 우리 PaymentGateway로 감싸는 어댑터를 두면 SDK의 모양이 서비스로 새지 않아서, 업체를 바꿀 때 새 어댑터와 조립 코드만 바뀌고 서비스는 그대로입니다. 주문 퍼사드는 재고, 결제, 배송, 알림을 순서대로 불러서 컨트롤러가 알아야 할 클래스를 넷에서 하나로 줄입니다.
+    - label: 주의할 점
+      text: 어댑터는 인터페이스를 바꾸고 데코레이터와 프록시는 같은 인터페이스를 유지합니다. 어댑터에는 바꾸는 일만, 퍼사드에는 순서를 잇는 일만 두고 업무 규칙은 각 시스템에 둡니다. SDK 타입이 서비스 사이를 오가면 어댑터를 둔 의미가 없습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 외부 결제 SDK를 어댑터 뒤에 두어, 대행사를 바꿀 때 서비스 코드를 고치지 않았습니다.'
+verified: '이 레슨의 SDK에 넘긴 값, 바뀐 파일, 호출 순서, 배열 결과, 로거 클래스는 짐작이 아니라 자바 21과 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([AdapterFacadeTest](link:test))가 다시 돌아요.'
+footer: '근거: `Arrays.asList`는 [API 문서](link:asList), SLF4J는 [공식 사이트](link:slf4j), 스프링 부트의 로깅 기본값은 [공식 문서](link:bootLogging). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '`TossAdapter`는 주문 번호를 문자열로, 금액을 long으로 바꾸고 통화 KRW를 넣어 SDK를 부르며, 코드 "0000"은 ok=true, 그 밖은 ok=false다'
     how: '가짜 SDK로 받은 파라미터와 결과를 확인한다'
+    test: AdapterFacadeTest.adapterTranslates
   - claim: '세 서비스가 `PaymentGateway`만 쓰면 나이스로 바꿀 때 서비스는 그대로이고 어댑터와 조립 코드만 바뀐다'
     how: '바꾸기 전후 소스를 비교한다(SourceChange)'
+    test: AdapterFacadeTest.switchingVendor
   - claim: '`OrderFacade.placeOrder`는 재고, 결제, 배송, 알림 순서로 부른다'
     how: '가짜 하위 시스템으로 호출 순서를 기록한다'
+    test: AdapterFacadeTest.facadeOrder
   - claim: '`Arrays.asList`의 `set`은 원래 배열을 바꾸고 `add`는 `UnsupportedOperationException`이다'
     how: '돌려서 확인한다'
+    test: AdapterFacadeTest.arraysAsListIsAdapter
   - claim: '스프링 부트에서 SLF4J `LoggerFactory.getLogger`가 돌려준 객체는 Logback의 Logger다'
     how: '클래스 이름을 확인한다'
+    test: AdapterFacadeTest.slf4jIsFacade
 sources:
   - '`Arrays.asList`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html#asList(T...)'
   - 'SLF4J: 공식 사이트 https://www.slf4j.org/'
