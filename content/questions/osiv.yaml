@@ -6,6 +6,7 @@
 # 동작에 관한 정답은 verification의 OsivOnTest, OsivOffTest로 확인했다 (스프링 부트 3.5, PostgreSQL 16).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제 가운데 면접 질문(q-fa934d44)만 키를 이어 쓴다.
+# 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -34,7 +35,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: OSIV를 켠 앱에서 서비스의 @Transactional 메서드가 막 끝나고 컨트롤러로 돌아왔어요. 이 순간 트랜잭션과 영속성 컨텍스트는 각각 어떤 상태일까요?
     choices:
@@ -52,7 +53,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 새로 만든 스프링 부트 3 앱의 application.yml에는 JPA 설정이 데이터소스 주소뿐이에요. 이 앱의 OSIV는 어떤 상태일까요?
     choices:
@@ -71,7 +72,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 컨트롤러에는 트랜잭션이 없고, service.findPlayer는 @Transactional로 선수 엔티티를 돌려줘요. 선수의 팀은 LAZY예요. spring.jpa.open-in-view를 false로 둔 앱에서 이 요청은 어떻게 될까요?
     code: |-
@@ -94,7 +95,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV를 켠 앱의 주문 상세 컨트롤러가 서비스에서 받은 주문 엔티티를 그대로 돌려줘서 잭슨이 JSON을 만들어요. 주문의 회원은 LAZY이고 서비스에서는 회원을 읽지 않았어요. 어떻게 될까요?
     choices:
@@ -113,7 +114,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서비스의 @Transactional 메서드가 끝난 직후, 컨트롤러에서 커넥션 풀의 사용 중 커넥션 수를 읽었어요. 다른 요청은 없어요. OSIV를 켰을 때와 껐을 때 값은 각각 얼마일까요?
     choices:
@@ -131,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 커넥션 풀 크기가 10이고 OSIV가 켜진 API가 있어요. 요청마다 서비스는 0.05초 만에 끝나고, 그 뒤 컨트롤러가 결제사 API를 3초 동안 불러요. 같은 순간 요청 30개가 들어오면 어떻게 될까요?
     choices:
@@ -151,7 +152,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: OSIV를 켠 앱의 컨트롤러가 서비스에서 받은 선수의 이름을 바꾸고, 다른 서비스는 부르지 않고 "ok"를 돌려줘요. 요청이 끝난 뒤 DB의 선수 이름은 어떻게 될까요?
     choices:
@@ -168,7 +169,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV를 켠 앱에서 컨트롤러가 주문 엔티티의 금액을 할인 표시용으로 바꾼 뒤, 로그 엔티티를 저장하는 서비스(@Transactional)를 불렀어요. 주문 금액은 어떻게 될까요?
     choices:
@@ -187,7 +188,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: OSIV를 끈 앱이에요. 서비스의 @Transactional(readOnly = true) findView가 선수를 조회해 이름과 팀 이름을 record PlayerView에 담아 돌려주고, 컨트롤러는 view.teamName()을 응답해요. 어떻게 될까요?
     choices:
@@ -204,7 +205,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: OSIV를 끄자 게시글 목록 API에서 LazyInitializationException이 나요. 목록의 게시글마다 작성자 이름이 필요해요. 어떻게 고칠까요?
     choices:
@@ -223,7 +224,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "OSIV가 무엇이고, 왜 끄라고 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

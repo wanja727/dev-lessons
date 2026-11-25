@@ -6,6 +6,7 @@
 # 동작에 관한 정답은 verification의 JpaBasicsTest로 확인했다 (Hibernate 6.6, PostgreSQL 16).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제 가운데 면접 질문(q-4ac3dd19)만 키를 이어 쓴다.
+# 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스프링 부트 앱에서 JPA의 EntityManagerFactory를 주입받아 스프링이 감싼 것을 벗기고 실제 구현 클래스의 이름을 찍었어요. 어느 패키지의 클래스가 나올까요?
     choices:
@@ -51,7 +52,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 팀이 JPA 구현을 Hibernate에서 EclipseLink로 바꾸려 해요. 서비스 A는 @Entity와 EntityManager만 쓰고, 서비스 B는 org.hibernate.Session을 직접 꺼내 써요. 고칠 곳이 생기는 쪽은 어디일까요?
     choices:
@@ -71,7 +72,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 엔티티로 테이블을 만들면 name 필드와 price 필드는 각각 어떤 컬럼이 될까요?
     code: |-
@@ -99,7 +100,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 부트의 기본 설정에서 @Entity class Order에 @Column 없이 LocalDateTime orderedAt 필드를 뒀어요. 만들어지는 컬럼 이름은 무엇일까요?
     choices:
@@ -119,7 +120,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CafeMenu의 price 필드는 price 컬럼이에요. 리포지토리 인터페이스의 findByPriceLessThan(5000)을 부르면 나가는 SELECT의 WHERE 절은 무엇일까요?
     choices:
@@ -138,7 +139,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: interface OrderRepository extends JpaRepository<Order, Long>에 List<Order> findByStatus(String status)만 더하고 구현 클래스는 쓰지 않았어요. 서비스가 생성자로 OrderRepository를 받아 findByStatus("PAID")를 부르면 어떻게 될까요?
     choices:
@@ -157,7 +158,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: CafeMenu의 필드는 id, name, price이고, name은 menu_name 컬럼이에요. 리포지토리에 List<CafeMenu> findByMenuName(String menuName)을 더했어요. 어떻게 될까요?
     choices:
@@ -177,7 +178,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CafeMenu의 name 필드는 @Column(name = "menu_name")이에요. JPQL select m from CafeMenu m where m.name = :name이 SQL로 바뀌면 WHERE 절의 컬럼은 무엇일까요?
     choices:
@@ -195,7 +196,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 엔티티 Order는 @Table(name = "orders")예요. 리포지토리에 @Query("select o from orders o")를 적었어요. 어떻게 될까요?
     choices:
@@ -215,7 +216,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "JPA, Hibernate, Spring Data JPA는 각각 무엇이고 어떻게 다른가요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

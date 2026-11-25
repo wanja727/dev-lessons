@@ -65,10 +65,9 @@ codes:
     ref.getName();
   streamRun: |-
     // 선수 3명, 팀은 모두 다르다
-    List<Player> players = em
-        .createQuery("select p"
-            + " from Player p", Player.class)
-        .getResultList();
+    List<Player> players = em.createQuery(
+        "select p from Player p",
+        Player.class).getResultList();
     players.stream()
         .map(p -> [[p.getTeam().getName()]])
         .toList();
