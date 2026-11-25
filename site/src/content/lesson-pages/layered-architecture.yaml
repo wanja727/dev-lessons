@@ -1,8 +1,9 @@
-# 계층형 아키텍처 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 계층형 아키텍처
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/layered-architecture.yaml에 있다.
 title: 계층형 아키텍처
+description: 컨트롤러, 서비스, 리포지토리로 나누는 이유, 의존이 한 방향이어야 하는 이유, 저장 방식을 바꿔도 서비스가 그대로인 이유, 계층 사이에 무엇을 넘기는지. 회원 가입 API를 세 계층으로 나누고 요구가 바뀔 때 고칠 곳을 세어 보는 대화형 레슨.
 unit: 시스템 설계와 아키텍처
+minutes: 20
 roadmap: A1
 type: 설계
 prerequisites:
@@ -56,6 +57,20 @@ codes:
           req.email(), req.name());
       return new MemberResponse(req.email());
     }
+  predictMark: |-
+    @PostMapping("/members")
+    MemberResponse join(
+        @RequestBody [[JoinRequest req]]) {
+      Integer n = jdbc.queryForObject(
+          "select count(*) from member"
+          + " where email = ?",
+          Integer.class, req.email());
+      [[if (n > 0) throw new DuplicateEmail();]]
+      jdbc.update("insert into member"
+          + "(email, name) values (?, ?)",
+          req.email(), req.name());
+      return new MemberResponse(req.email());
+    }
   layered: |-
     @RestController
     class MemberController {
@@ -63,15 +78,15 @@ codes:
       @PostMapping("/members")
       MemberResponse join(
           @RequestBody JoinRequest req) {
-        Long id = service.join(
-            req.email(), req.name());
+        Long id = [[service.join(]]
+            [[req.email(), req.name())]];
         return new MemberResponse(id);
       }
     }
   service: |-
     @Service
     class MemberService {
-      private final MemberRepository repo;
+      private final [[MemberRepository]] repo;
       @Transactional
       Long join(String email, String name) {
         if (repo.existsByEmail(email)) {
@@ -81,9 +96,109 @@ codes:
             new Member(email, name)).getId();
       }
     }
+  serviceRun: |-
+    MemberService service = new MemberService(
+        new MemoryMemberRepository());
+    service.join("minji@a.com", "민지");
+    service.join("minji@a.com", "민지2");
+  batch: |-
+    for (Row row : excelRows) {
+      memberService.join(
+          row.email(), row.name());
+    }
+  httpService: |-
+    ResponseEntity<String> join(
+        [[HttpServletRequest req]]) {
+      String email =
+          req.getParameter("email");
+      if (repo.existsByEmail(email)) {
+        return [[ResponseEntity.status(409)]]
+            .body("duplicate");
+      }
+      ...
+    }
+  repoInterface: |-
+    interface MemberRepository {
+      boolean existsByEmail(String email);
+      Member save(Member member);
+    }
+
+    class JdbcMemberRepository
+        implements MemberRepository { ... }
+    class MemoryMemberRepository
+        implements MemberRepository { ... }
+  swapRun: |-
+    for (MemberRepository repo : List.of(
+        new MemoryMemberRepository(),
+        new JdbcMemberRepository(jdbc))) {
+      MemberService s =
+          new MemberService(repo);
+      s.join("junho@a.com", "준호");
+      s.join("junho@a.com", "준호");
+    }
+  entityOut: |-
+    @GetMapping("/entity")
+    Member get() { ... }
+
+    @GetMapping("/dto")
+    MemberResponse get() { ... }
+  dto: |-
+    record JoinRequest(
+        String email, String name) { }
+
+    record MemberResponse(
+        Long id, String email,
+        String name) { }
+  advice: |-
+    @RestControllerAdvice
+    class ErrorAdvice {
+      @ExceptionHandler(DuplicateEmail.class)
+      @ResponseStatus(HttpStatus.CONFLICT)
+      ErrorBody dup(DuplicateEmail e) {
+        return new ErrorBody(e.getMessage());
+      }
+    }
+  txController: |-
+    @RestController
+    class MemberController {
+      [[@Transactional]]
+      @PostMapping("/members")
+      MemberResponse join(...) {
+        if (repo.existsByEmail(...)) ...
+        Member m = repo.save(...);
+        pointRepo.save(new Point(m, 1000));
+        ...
+      }
+    }
+  packages: |-
+    계층별                기능별
+    controller/           member/
+      MemberController      MemberController
+      OrderController       MemberService
+    service/                MemberRepository
+      MemberService       order/
+      OrderService          OrderController
+    repository/             OrderService
+      MemberRepository      OrderRepository
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/layered/LayeredArchitectureTest.java
+  dao: https://docs.spring.io/spring-framework/reference/data-access/dao.html
+  stereotype: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html
 predict:
-  text: '코드 predict는 회원 가입을 컨트롤러 메서드 하나에 다 넣었어요. 관리자가 엑셀로 회원 100명을 한꺼번에 등록하는 배치를 만들어야 해요. 이메일 중복 확인 규칙을 다시 쓰지 않고 쓰려면 어떻게 해야 할까요? 보기: 배치가 이 컨트롤러 메서드를 직접 부른다, 배치가 HTTP 요청을 100번 보낸다, 규칙을 HTTP를 모르는 클래스로 옮기고 둘이 함께 부른다.'
-  answer: '규칙을 HTTP를 모르는 클래스(서비스)로 옮기고 컨트롤러와 배치가 함께 부른다. 질문 1에서 밝힌다.'
+  title: 같은 규칙을 배치에서도 쓰려면?
+  text: '코드 predict는 회원 가입을 컨트롤러 메서드 하나에 다 넣었어요. 관리자가 엑셀로 회원 100명을 한꺼번에 등록하는 배치를 만들어야 해요. 이메일 중복 확인 규칙을 다시 쓰지 않고 쓰려면 어떻게 해야 할까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: call
+      label: 배치가 이 컨트롤러 메서드를 직접 부른다
+    - value: http
+      label: 배치가 HTTP 요청을 100번 보낸다
+    - value: move
+      label: 규칙을 HTTP를 모르는 클래스로 옮기고 둘이 함께 부른다
+  answer: move
+  storageKey: layered-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 왜 코드를 컨트롤러, 서비스, 리포지토리로 나누나요?
@@ -102,6 +217,102 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 구조에서 저장을 `JdbcTemplate`에서 JPA로 바꾸면 고치는 메서드는 어디인가 (HTTP를 다루는 그 컨트롤러 메서드. 다른 일과 섞여 있다)'
       - '옮긴 상황: 주문 취소 규칙("배송 시작 뒤에는 취소 불가")을 앱 API와 고객센터 관리자 화면에서 함께 써야 한다. 규칙을 어느 계층에 두나 (서비스. 두 컨트롤러가 같은 서비스를 부른다)'
+    body:
+      - p: '처음 코드를 다시 볼게요. 메서드 하나가 세 가지 일을 해요.'
+      - code: predictMark
+        notes:
+          - mark: JoinRequest req
+            as: code
+            text: 'HTTP 요청 본문을 읽는 일이에요. 요청 형식이 바뀌면 여기를 고쳐요.'
+          - mark: if (n > 0) throw new DuplicateEmail();
+            as: code
+            text: '"같은 이메일은 한 번만 가입한다"는 업무 규칙이에요. SQL 두 줄은 저장하는 일이고요.'
+      - p: '세 가지가 한곳에 있으니 **어느 하나를 다른 곳에서 쓰려면 나머지까지 끌려와요.** 배치에는 HTTP 요청이 없는데, 규칙을 쓰려면 이 컨트롤러 메서드를 불러야 하고, 그러려면 `JoinRequest`를 만들어 HTTP 요청인 척해야 해요.'
+      - p: '그래서 일을 셋으로 나눠 층으로 쌓아요. 이것을 **계층형 아키텍처**라고 해요. 스프링에서는 보통 이렇게 나눠요.'
+      - table:
+          head: [층, 하는 일, 모르는 것]
+          rows:
+            - ['컨트롤러 (표현 계층)', 'HTTP 요청을 읽어 값으로 바꾸고, 결과를 응답으로 만든다', '저장 방식']
+            - ['서비스', '업무 규칙을 지키고, 한 업무를 한 트랜잭션으로 묶는다', 'HTTP, 저장 방식']
+            - ['리포지토리 (데이터 접근 계층)', '저장하고 조회한다', 'HTTP, 업무 규칙']
+      - p: '나눈 코드예요. 컨트롤러는 요청에서 값을 꺼내 서비스에 넘기기만 해요.'
+      - code: layered
+        notes:
+          - mark: 'service.join('
+            as: code
+            text: '규칙은 서비스가 지켜요. 컨트롤러는 이메일과 이름이라는 **값**만 넘기고, HTTP 요청 객체는 넘기지 않아요.'
+      - code: service
+        notes:
+          - mark: MemberRepository
+            as: code
+            text: '저장은 리포지토리에 맡겨요. 서비스는 SQL을 몰라요. 왜 인터페이스인지는 질문 3에서 봐요.'
+      - p: '이제 배치는 서비스를 부르면 돼요. 처음 예측의 답은 **규칙을 HTTP를 모르는 클래스로 옮기고 둘이 함께 부르는 것**이에요. {{predict-result}} 그 클래스가 서비스예요.'
+      - code: batch
+      - p: 'HTTP가 없으니 테스트도 쉬워요. 서비스에 메모리 저장소를 넣고 바로 불러 봤어요. 웹 서버를 띄우지 않았어요.'
+      - ci:
+          key: service
+          label: 실제 결과 보기
+          source: LayeredArchitectureTest.serviceWithoutHttp
+          code: serviceRun
+      - p: '나누는 기준은 **바뀌는 이유**예요. 응답 형식은 화면을 만드는 쪽의 요구로, 규칙은 기획의 요구로, 저장 방식은 기술 선택으로 바뀌어요. 단일 책임 원칙([단일 책임과 개방 폐쇄 원칙](lesson:srp-ocp))을 층에 적용한 셈이에요. 요구를 하나씩 골라 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 바뀐 요구
+            options:
+              - {value: res, label: 응답에 가입일 더하기}
+              - {value: batch, label: 관리자 일괄 등록 더하기}
+              - {value: jpa, label: 저장을 JPA로 바꾸기}
+              - {value: rule, label: 중복 기준에 전화번호 더하기}
+          sides:
+            - label: 한 클래스 (코드 predict)
+              items:
+                - {name: MemberController.join, note: 'HTTP, 규칙, SQL이 한 메서드에'}
+            - label: 세 계층
+              items:
+                - {name: MemberController, note: HTTP와 응답}
+                - {name: MemberService, note: 중복 확인 규칙}
+                - {name: MemberRepository, note: 저장과 조회}
+          scenes:
+            res:
+              sides:
+                - marks: [{name: MemberController.join, tag: 고침}]
+                  result: [{k: 고치는 곳, v: '규칙과 SQL이 섞인 메서드'}]
+                - marks: [{name: MemberController, tag: 고침}]
+                  result: [{k: 고치는 곳, v: 컨트롤러만}]
+              verdict: '응답 형식은 컨트롤러의 일이라 나눈 쪽은 컨트롤러만 고쳐요.'
+            batch:
+              sides:
+                - marks: [{name: MemberController.join, tag: 복사, mark: bad}]
+                  result: [{k: 할 일, v: '규칙을 복사하거나 HTTP 요청인 척하기', mark: bad}]
+                - add: [{name: MemberBatch, note: 서비스를 부른다, tag: 새로 만듦}]
+                  result: [{k: 할 일, v: '새 입구 하나. 서비스는 그대로'}]
+              verdict: '새 입구는 같은 서비스를 불러요. 규칙이 한 곳에 남아요.'
+            jpa:
+              sides:
+                - marks: [{name: MemberController.join, tag: 고침}]
+                  result: [{k: 고치는 곳, v: 'HTTP와 규칙 사이의 SQL 줄'}]
+                - marks: [{name: MemberRepository, tag: 고침}]
+                  result: [{k: 고치는 곳, v: 리포지토리 구현만}]
+              verdict: '저장 방식은 리포지토리의 일이에요. 질문 3에서 직접 바꿔 봐요.'
+            rule:
+              sides:
+                - marks: [{name: MemberController.join, tag: 고침}]
+                  result: [{k: 고치는 곳, v: 'HTTP 코드 사이의 if 문'}]
+                - marks: [{name: MemberService, tag: 고침}, {name: MemberRepository, tag: 조회 더함}]
+                  result: [{k: 고치는 곳, v: '서비스와, 조회가 필요하면 리포지토리'}]
+              verdict: '규칙은 서비스에 있어요. 컨트롤러는 그대로예요.'
+      - quiz:
+          q: '앱 API와 고객센터 관리자 화면에서 "배송 시작 뒤에는 주문 취소 불가" 규칙을 함께 써야 해요. 규칙을 어디에 두나요?'
+          options:
+            - '앱 API 컨트롤러'
+            - '서비스'
+            - '리포지토리'
+          answer: 2
+          explain: '규칙은 서비스에 두고, 두 컨트롤러가 같은 서비스를 불러요. 컨트롤러에 두면 관리자 쪽에 복사해야 해요.'
+      - next: '서비스가 HTTP를 모르니 배치에서도 부를 수 있었어요. 거꾸로 서비스가 HTTP를 알게 되면 무엇이 깨질까요?'
+    recall: 'HTTP를 읽고 응답을 만드는 일, 업무 규칙, 저장은 바뀌는 이유가 달라서 컨트롤러, 서비스, 리포지토리로 나눠요. 나누면 응답 형식이 바뀔 때 컨트롤러만, 저장 방식이 바뀔 때 리포지토리만 고쳐요. 규칙이 HTTP를 모르는 서비스에 있으니 배치나 관리자 화면 같은 다른 입구에서 같은 서비스를 부르고, 웹 서버 없이 테스트로 바로 불러요.'
   - id: q2
     title: 계층 사이의 의존은 왜 한 방향이어야 하나요?
     conclusion:
@@ -116,6 +327,41 @@ questions:
     asks:
       - '본문의 예시: `MemberService.join(HttpServletRequest req)`로 만든 서비스를 관리자 배치에서 부르려 한다. 무엇이 문제인가 (HTTP 요청이 없는 곳에서 요청 객체를 만들어야 한다)'
       - '옮긴 상황: `OrderService`가 재고 부족일 때 `ResponseEntity.status(409)`를 돌려준다. 이 서비스를 카프카 컨슈머에서 부를 때 생기는 일과 고칠 곳은 (컨슈머에겐 HTTP 상태가 뜻이 없다. 서비스는 예외를 던지고 컨트롤러 쪽에서 409로 바꾼다)'
+    body:
+      - p: '의존은 **위에서 아래로만** 가요. 컨트롤러는 서비스를 부르고, 서비스는 리포지토리를 불러요. 거꾸로는 부르지도 않고, 위층의 타입을 쓰지도 않아요.'
+      - prewrap: '컨트롤러 → 서비스 → 리포지토리 → DB'
+      - p: '이 방향이 깨지는 흔한 모양은 서비스가 HTTP의 타입을 받거나 돌려주는 거예요.'
+      - code: httpService
+        notes:
+          - mark: HttpServletRequest req
+            as: code
+            text: '서비스가 HTTP 요청을 받아요. 배치에는 HTTP 요청이 없으니 가짜 요청 객체를 만들어야 불러요.'
+          - mark: ResponseEntity.status(409)
+            as: code
+            text: 'HTTP 상태 코드를 서비스가 정해요. 메시지 컨슈머나 배치에게 409는 아무 뜻이 없어요.'
+      - p: '이 서비스는 컨트롤러에서만 쓸 수 있어요. 컨트롤러가 할 일(HTTP 읽기, 상태 코드 정하기)이 아래층으로 내려왔기 때문이에요. 두 서비스의 클래스 파일을 열어 참조하는 웹 타입을 찾아봤어요.'
+      - ci:
+          key: imports
+          label: 실제 결과 보기
+          source: LayeredArchitectureTest.serviceDoesNotReferenceWeb
+      - p: '고치는 방법은 질문 1의 서비스 모양이에요. **서비스는 값을 받고, 실패는 예외로 알려요.** 예외를 상태 코드로 바꾸는 일은 컨트롤러 쪽이 해요. 스프링에서는 `@RestControllerAdvice`가 그 자리예요.'
+      - code: advice
+      - p: '이렇게 두면 같은 `DuplicateEmail`을 컨트롤러는 409로, 배치는 "건너뛴 행"으로, 메시지 컨슈머는 "실패한 메시지"로 각자 다뤄요. 서비스는 누가 불렀는지 몰라요.'
+      - more:
+          summary: 컨트롤러가 리포지토리를 바로 불러도 되나요?
+          body:
+            - p: '위층이 바로 아래층만 부르게 하는 것을 **엄격한 계층**, 아래 어느 층이든 부르게 하는 것을 **느슨한 계층**이라고 해요. 조회 한 줄짜리 API에서 컨트롤러가 리포지토리를 바로 부르면 코드가 짧아요.'
+            - p: '그래도 많은 팀이 조회도 서비스를 거치게 해요. 서비스 메서드가 리포지토리 호출 한 줄뿐인 "얇은 서비스"라도, 나중에 권한 확인이나 트랜잭션이 붙을 자리가 정해져 있기 때문이에요. 어느 쪽이든 팀에서 하나로 정해 두는 것이 중요해요.'
+      - quiz:
+          q: '`OrderService`가 재고가 모자라면 `ResponseEntity.status(409)`를 돌려줘요. 이 서비스를 카프카 컨슈머에서도 쓰려면 어떻게 고치나요?'
+          options:
+            - '컨슈머도 `ResponseEntity`를 받아 상태 코드를 읽게 한다'
+            - '서비스는 재고 부족 예외를 던지고, 컨트롤러 쪽에서 409로 바꾼다'
+            - '컨슈머용 서비스를 따로 복사해 만든다'
+          answer: 2
+          explain: '상태 코드는 HTTP의 일이라 컨트롤러 쪽이 정해요. 서비스는 예외로 알리고, 부른 쪽이 각자 다뤄요.'
+      - next: '위층을 모르게 했으니 아래층은 어떨까요? 서비스가 리포지토리의 구현까지 알아야 할까요?'
+    recall: '의존은 컨트롤러에서 서비스, 서비스에서 리포지토리로 한 방향이에요. 아래층이 위층을 모르게 해야 아래층을 여러 입구에서 그대로 써요. 서비스가 `HttpServletRequest`를 받거나 `ResponseEntity`와 상태 코드를 돌려주면 HTTP가 없는 배치나 메시지 컨슈머에서 쓸 수 없어요. 서비스는 값을 받고 실패는 예외로 알리고, 상태 코드는 `@RestControllerAdvice` 같은 컨트롤러 쪽이 정해요.'
   - id: q3
     title: 저장 방식을 바꿔도 서비스는 왜 그대로인가요?
     conclusion:
@@ -129,6 +375,28 @@ questions:
     asks:
       - '본문의 예시: `MemberService`가 `JdbcMemberRepository`를 직접 `new`로 만들어 쓴다. 테스트에서 메모리 저장소로 바꾸려면 어디를 고치나 (서비스. 인터페이스로 받아 주입받게 고친다)'
       - '옮긴 상황: 상품 조회를 DB에서 외부 상품 API로 바꾼다. 서비스가 `ProductReader` 인터페이스에 기대고 있다면 새로 만들 것과 고칠 것은 (새 구현 클래스 하나. 서비스는 그대로)'
+    body:
+      - p: '서비스의 필드는 `MemberRepository`였어요. 클래스가 아니라 **인터페이스**예요. 서비스가 아는 것은 "이메일이 있는지 물을 수 있고, 회원을 저장할 수 있다"는 약속뿐이에요.'
+      - code: repoInterface
+      - p: 'PostgreSQL에 SQL을 보내는 구현과 메모리 맵에 담는 구현을 차례로 같은 서비스에 넣어 봤어요. 서비스 코드는 한 글자도 바꾸지 않았어요.'
+      - ci:
+          key: swap
+          label: 실제 결과 보기
+          source: LayeredArchitectureTest.swapRepository
+          code: swapRun
+      - p: '두 구현 모두 두 번째 가입을 거절했어요. **규칙은 서비스에 있고, 저장은 구현이 하니** 구현을 바꿔도 규칙이 그대로예요. 테스트에서는 DB 없이 메모리 구현으로 규칙만 빠르게 확인하고, 운영에서는 JDBC나 JPA 구현을 넣어요.'
+      - p: '서비스가 `new JdbcMemberRepository(...)`로 구현을 직접 만들면 이 일이 안 돼요. 바꾸려면 서비스를 고쳐야 해요. 그래서 서비스는 생성자로 인터페이스를 **받고**, 무엇을 넣을지는 바깥(스프링 컨테이너)이 정해요. 이것이 의존성 주입이고, 원리는 [의존 역전 원칙과 의존성 주입](lesson:dependency-inversion) 레슨에서 다뤄요.'
+      - p: '스프링 데이터 JPA를 쓰면 `interface MemberRepository extends JpaRepository<Member, Long>`처럼 인터페이스만 쓰고 구현은 스프링이 만들어요. 모양은 같아요. 서비스는 인터페이스를 받아 메서드를 불러요.'
+      - quiz:
+          q: '상품 조회를 DB에서 외부 상품 API로 바꿔요. 서비스는 `ProductReader` 인터페이스에 기대고 있어요. 무엇을 하나요?'
+          options:
+            - '서비스의 조회 코드를 HTTP 호출로 고친다'
+            - '`ProductReader`의 새 구현을 만들어 넣는다. 서비스는 그대로다'
+            - '컨트롤러에서 외부 API를 부르고 서비스를 건너뛴다'
+          answer: 2
+          explain: '서비스는 인터페이스만 알아요. 외부 API를 부르는 새 구현을 만들어 주입하면 서비스는 고치지 않아요.'
+      - next: '층마다 하는 일과 방향을 정했어요. 그럼 층과 층 사이로는 어떤 객체를 넘길까요?'
+    recall: '서비스가 리포지토리의 구현 클래스가 아니라 인터페이스(`MemberRepository`)에 기대기 때문이에요. 서비스는 생성자로 인터페이스를 받고, 어떤 구현을 넣을지는 스프링 컨테이너가 정해요. 그래서 JDBC 구현을 JPA 구현이나 메모리 구현으로 바꿔도 서비스의 규칙은 그대로이고, 테스트에서는 메모리 구현으로 규칙만 빠르게 확인해요.'
   - id: q4
     title: 계층 사이에는 무엇을 넘기나요?
     conclusion:
@@ -143,24 +411,89 @@ questions:
     asks:
       - '본문의 예시: 컨트롤러가 `Member` 엔티티를 그대로 돌려줄 때 응답 JSON에 들어가는 것은 (엔티티의 게터로 보이는 모든 값. `password`도 나간다)'
       - '옮긴 상황: `Product` 엔티티의 `price` 칸을 `salePrice`로 이름을 바꿨다. 엔티티를 그대로 내보내던 API와 응답 DTO를 쓰던 API에서 클라이언트가 받는 필드 이름은 각각 (앞은 `salePrice`로 바뀌고, 뒤는 그대로다)'
+    body:
+      - p: '**DTO**(Data Transfer Object)는 값을 나르기만 하는 객체예요. 요청 DTO는 HTTP 본문이 어떻게 생겼는지, 응답 DTO는 무엇을 내보낼지를 정해요. 자바 21에서는 record로 짧게 만들어요.'
+      - code: dto
+      - p: '응답 DTO 없이 엔티티를 그대로 돌려주면 어떻게 될까요? 회원 엔티티에는 비밀번호 칸이 있어요. 같은 회원을 두 방식으로 돌려줘 봤어요.'
+      - ci:
+          key: dto
+          label: 실제 응답 보기
+          source: LayeredArchitectureTest.entityLeaksPassword
+          code: entityOut
+      - p: '스프링 MVC는 잭슨으로 객체를 JSON으로 바꾸고, 잭슨은 **게터가 있는 값을 모두** 써요. 그래서 엔티티를 돌려주면 `password`까지 나가요. 응답 DTO는 정한 세 값만 나가요.'
+      - p: '숨길 값만 문제가 아니에요. 엔티티의 칸은 테이블의 모양이고, 테이블은 업무가 바뀌면 바뀌어요. 엔티티를 그대로 내보내면 칸 이름을 `price`에서 `salePrice`로 바꾸는 순간 **API의 필드 이름도 바뀌어** 앱이 깨져요. 응답 DTO가 있으면 엔티티를 고쳐도 DTO를 만드는 한 줄만 고치고 API는 그대로예요.'
+      - table:
+          head: [어디서 어디로, 무엇을]
+          rows:
+            - ['클라이언트 → 컨트롤러', '요청 DTO (`JoinRequest`)']
+            - ['컨트롤러 → 서비스', '값 (이메일, 이름) 또는 요청 DTO에서 꺼낸 명령']
+            - ['서비스 → 리포지토리', '엔티티']
+            - ['서비스 → 컨트롤러', '값이나 엔티티 (이 레슨은 id)']
+            - ['컨트롤러 → 클라이언트', '응답 DTO (`MemberResponse`)']
+      - p: '서비스가 무엇을 받고 돌려줄지는 팀마다 달라요. 서비스가 응답 DTO를 바로 만들어 돌려주는 팀도 있어요. 이 레슨은 서비스가 값을 받고, 응답으로 바꾸는 일은 컨트롤러가 하는 방식을 썼어요. JPA 엔티티를 컨트롤러까지 넘기면 지연 로딩이 언제 일어나느냐는 문제가 하나 더 생기는데, [OSIV](lesson:osiv) 레슨에서 다뤄요.'
+      - quiz:
+          q: '`Product` 엔티티를 그대로 내보내던 API에서 엔티티의 `price` 칸을 `salePrice`로 바꿨어요. 앱이 받는 JSON의 필드 이름은?'
+          options:
+            - '`price` 그대로'
+            - '`salePrice`로 바뀐다'
+            - '둘 다 나온다'
+          answer: 2
+          explain: '엔티티를 그대로 내보내면 칸 이름이 곧 API의 필드 이름이에요. 응답 DTO를 두면 API는 그대로예요.'
+      - next: '원리는 여기까지예요. 이제 스프링 프로젝트에서 세 층을 실제로 어떻게 만들고, 어디서 자주 틀리는지 볼게요.'
+    recall: '요청 본문은 요청 DTO로 받고, 컨트롤러는 거기서 값을 꺼내 서비스에 넘겨요. 서비스는 엔티티로 저장하고 결과(값이나 엔티티)를 돌려주고, 컨트롤러가 그것을 응답 DTO로 바꿔 내보내요. 엔티티를 그대로 내보내면 잭슨이 게터의 값을 모두 써서 비밀번호 같은 값이 나가고, 칸 이름을 바꾸면 API의 필드 이름도 바뀌어 클라이언트가 깨져요.'
 practice:
+  title: 스프링 프로젝트에서는 이렇게 나눠요
   says:
     - '스프링에서 세 층을 만드는 애너테이션: `@RestController`, `@Service`, `@Repository`. 모두 `@Component`라 컴포넌트 스캔으로 빈이 된다'
     - '`@Repository`가 하는 일 하나: 그 빈에서 나온 DB 예외를 스프링의 `DataAccessException` 계열로 바꾼다. 그래서 서비스는 JDBC 드라이버의 예외를 몰라도 된다. 테스트로 `DuplicateKeyException`을 받는 것을 보인다'
     - '`@Transactional`은 서비스 메서드에 둔다. 중복 확인과 저장이 한 업무라서 한 트랜잭션이어야 한다. 원리는 S10'
     - '흔한 실수: 컨트롤러에 `@Transactional`을 붙이고 리포지토리를 여러 번 부른다. 업무 규칙이 컨트롤러에 남고, 배치에서 같은 일을 할 때 트랜잭션도 다시 만들어야 한다. 고친 코드: 그 묶음을 서비스 메서드 하나로 옮긴다'
     - '패키지 나누기: 계층별(`controller`, `service`, `repository`)과 기능별(`member`, `order` 안에 세 층). 기능이 많아지면 기능별이 찾기 쉽다. 정답이 없으니 팀에서 하나로 정한다'
+  body:
+    - h3: 애너테이션 셋
+    - p: '`@RestController`, `@Service`, `@Repository`는 모두 `@Component`를 품은 애너테이션이라 컴포넌트 스캔으로 빈이 돼요([스프링 문서](link:stereotype)). 이름은 층을 드러내는 표시예요. 기능이 하나 더 붙는 것은 `@Repository`예요. 그 빈에서 나온 JPA나 JDBC 드라이버의 예외를 스프링의 `DataAccessException` 계열로 바꿔 줘요([스프링 문서](link:dao)). 스프링의 `JdbcTemplate`도 같은 변환을 해요. 같은 이메일을 두 번 넣으면 PostgreSQL 드라이버의 예외가 아니라 `DuplicateKeyException`이 나오는 것을 테스트로 확인했어요. 덕분에 서비스는 어느 DB를 쓰는지 몰라도 "중복"을 잡을 수 있어요.'
+    - h3: '@Transactional은 서비스에'
+    - p: '중복 확인과 저장은 한 업무라서 하나의 트랜잭션이어야 해요. 한 업무가 서비스 메서드 하나이니 `@Transactional`도 서비스 메서드에 붙여요. 어떻게 트랜잭션이 열리고 닫히는지는 [@Transactional 동작 원리](lesson:transactional-proxy) 레슨에서 다뤄요.'
+    - h3: 흔한 실수 하나
+    - p: '컨트롤러에 `@Transactional`을 붙이고 리포지토리를 여러 번 부르는 코드예요.'
+    - code: txController
+      notes:
+        - mark: '@Transactional'
+          as: anno
+          text: '트랜잭션은 걸리지만 가입 규칙과 포인트 지급이 컨트롤러에 있어요. 관리자 배치에서 같은 가입을 하려면 규칙과 트랜잭션을 다시 만들어야 해요.'
+    - p: '고친 코드는 질문 1의 모양이에요. 중복 확인, 회원 저장, 포인트 지급을 `MemberService.join` 하나로 옮기고 거기에 `@Transactional`을 붙여요. 컨트롤러는 서비스를 한 번 부르고 응답만 만들어요.'
+    - h3: 패키지는 계층별로, 아니면 기능별로
+    - code: packages
+    - p: '기능이 몇 개 없을 때는 계층별이 단순해요. 기능이 많아지면 회원 일을 고칠 때 세 폴더를 오가야 해서 기능별이 찾기 쉬워요. 기능별로 나누면 나중에 기능 하나를 떼어 내기도 쉬워요([모놀리스와 마이크로서비스](lesson:monolith-msa)). 정답은 없으니 팀에서 하나로 정해요.'
+interview:
+  question: 계층형 아키텍처에서 계층을 왜 나누고, 각 계층은 무엇을 맡나요?
+  model:
+    - label: 정의
+      text: 코드를 하는 일에 따라 컨트롤러, 서비스, 리포지토리 층으로 나누고 위층이 아래층만 부르게 하는 구조입니다. 컨트롤러는 HTTP를 읽고 응답을 만들고, 서비스는 업무 규칙과 트랜잭션을, 리포지토리는 저장과 조회를 맡습니다.
+    - label: 원리
+      text: 세 가지 일은 바뀌는 이유가 달라서, 나눠 두면 하나가 바뀔 때 그 층만 고칩니다. 아래층은 위층을 모르게 해서 서비스가 HTTP 타입을 받지 않으니 배치나 메시지 컨슈머에서도 같은 서비스를 부릅니다. 서비스는 리포지토리 인터페이스에 기대서 저장 방식을 바꿔도 그대로입니다.
+    - label: 주의할 점
+      text: 서비스가 HttpServletRequest나 ResponseEntity를 다루면 방향이 깨집니다. 실패는 예외로 알리고 상태 코드는 컨트롤러 쪽에서 정합니다. 엔티티를 응답으로 그대로 내보내면 숨길 값이 나가고 칸 이름이 API가 되니 응답 DTO로 바꿉니다. @Transactional은 서비스 메서드에 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 컨트롤러에 있던 가입 규칙을 서비스로 옮겨 관리자 일괄 등록에서도 같은 규칙을 쓰고, 메모리 저장소로 규칙만 빠르게 테스트했습니다.'
+verified: 서비스를 HTTP 없이 부른 결과, 저장소를 바꾼 결과, 응답 JSON은 스프링 부트 3.5와 PostgreSQL 16에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([LayeredArchitectureTest](link:test))가 다시 돌아요.
+footer: '근거: 스테레오타입 애너테이션은 [스프링 문서](link:stereotype), `@Repository`의 예외 변환은 [스프링 데이터 접근 문서](link:dao). 결과는 스프링 부트 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '나눈 `MemberService`는 HTTP 없이 부를 수 있고, 같은 이메일로 두 번 가입하면 `DuplicateEmail`이 난다'
     how: '서비스에 메모리 리포지토리를 넣고 바로 부른다'
+    test: LayeredArchitectureTest.serviceWithoutHttp
   - claim: '같은 서비스에 JDBC 리포지토리와 메모리 리포지토리를 넣어도 결과가 같다. 서비스 코드는 바뀌지 않는다'
     how: 'PostgreSQL 컨테이너에 JDBC 구현을 붙인 경우와 메모리 구현을 비교한다'
+    test: LayeredArchitectureTest.swapRepository
   - claim: '서비스 클래스는 `jakarta.servlet`과 `org.springframework.web` 패키지의 타입을 참조하지 않는다'
-    how: '서비스 클래스 파일의 상수 풀에서 참조하는 클래스 이름을 읽는다(`javap -v` 대신 ASM 없이 클래스 파일을 바이트로 읽어 문자열을 찾는다)'
+    how: '서비스 클래스 파일을 바이트로 읽어 참조하는 타입 이름을 찾는다. HTTP를 다루는 서비스는 `HttpServletRequest`와 `ResponseEntity`를 참조한다'
+    test: LayeredArchitectureTest.serviceDoesNotReferenceWeb
   - claim: '엔티티를 그대로 돌려주면 응답 JSON에 `password`가 나가고, 응답 DTO를 쓰면 나가지 않는다'
     how: '`MiniWeb`으로 두 컨트롤러를 띄워 응답 본문을 본다'
-  - claim: '`@Repository` 빈에서 유니크 제약 위반이 나면 `DuplicateKeyException`(스프링 예외)으로 받는다'
-    how: 'PostgreSQL에 같은 이메일을 두 번 넣는다'
+    test: LayeredArchitectureTest.entityLeaksPassword
+  - claim: '같은 이메일을 두 번 넣으면 드라이버 예외가 아니라 `DuplicateKeyException`(스프링 예외)으로 받는다'
+    how: '설계 때는 `@Repository` 빈으로 확인하려 했으나, 스프링의 `JdbcTemplate`이 같은 변환을 하므로 `JdbcTemplate`으로 확인하고 `@Repository`의 변환은 문서를 근거로 적었다'
+    test: LayeredArchitectureTest.duplicateKeyTranslated
 sources:
   - '`@Repository`의 예외 변환: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/data-access/dao.html'
   - '`@Component`와 스테레오타입 애너테이션: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html'

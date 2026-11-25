@@ -1,0 +1,266 @@
+# 계층형 아키텍처 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/layered-architecture.yaml의 says).
+# 동작에 관한 정답은 verification의 LayeredArchitectureTest로 확인했다 (스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: layered-architecture
+  title: 계층형 아키텍처
+  unit: 시스템 설계와 아키텍처
+  order: 901
+concepts:
+  - key: core
+    name: 계층형 아키텍처
+coreQuestions:
+  - key: q1
+    text: "왜 코드를 컨트롤러, 서비스, 리포지토리로 나누나요?"
+  - key: q2
+    text: "계층 사이의 의존은 왜 한 방향이어야 하나요?"
+  - key: q3
+    text: "저장 방식을 바꿔도 서비스는 왜 그대로인가요?"
+  - key: q4
+    text: "계층 사이에는 무엇을 넘기나요?"
+questions:
+  # ── 질문 1 ──
+  - key: la-jpa-in-controller
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 회원 가입이 컨트롤러 메서드 하나에 다 들어 있어요. 저장을 `JdbcTemplate`에서 JPA로 바꾸면 어디를 고쳐야 할까요?
+    code: |-
+      @PostMapping("/members")
+      MemberResponse join(
+          @RequestBody JoinRequest req) {
+        Integer n = jdbc.queryForObject(
+            "select count(*) from member"
+            + " where email = ?",
+            Integer.class, req.email());
+        if (n > 0) throw new DuplicateEmail();
+        jdbc.update("insert into member"
+            + "(email, name) values (?, ?)",
+            req.email(), req.name());
+        return new MemberResponse(req.email());
+      }
+    choices:
+      - 리포지토리 클래스만 고친다
+      - HTTP와 규칙이 함께 든 이 컨트롤러 메서드를 고친다
+      - 고칠 곳이 없다
+      - 서비스 클래스만 고친다
+    answer: "2"
+    explanation: |-
+      **이 컨트롤러 메서드를 고쳐요.** 저장하는 SQL이 HTTP를 읽는 코드, 중복 확인 규칙과 한 메서드에 섞여 있어요.
+
+      - 나눠 두면 저장 방식은 리포지토리의 일이라 리포지토리만 고쳐요
+      - 지금 코드에는 리포지토리도 서비스도 없어요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html
+  - key: la-cancel-rule-place
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "\"배송이 시작된 주문은 취소할 수 없다\"는 규칙을 앱 API와 고객센터 관리자 화면에서 함께 써야 해요. 두 화면은 컨트롤러가 따로 있어요. 규칙을 어디에 두는 것이 알맞을까요?"
+    choices:
+      - 앱 API의 컨트롤러에 두고 관리자 컨트롤러에 복사한다
+      - 주문 서비스에 두고 두 컨트롤러가 같은 서비스를 부른다
+      - 관리자 컨트롤러가 앱 API에 HTTP 요청을 보내게 한다
+      - 주문 리포지토리의 SQL 조건으로만 둔다
+    answer: "2"
+    explanation: |-
+      **주문 서비스에 둬요.** 서비스는 HTTP를 모르니 어느 입구에서든 부를 수 있어요.
+
+      - 컨트롤러에 두면 규칙이 두 곳에 생겨 하나를 고칠 때 다른 하나를 빠뜨리기 쉬워요
+      - 업무 규칙은 서비스, 저장과 조회는 리포지토리의 일이에요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html
+  - key: la-tx-on-controller
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 가입하면 회원을 저장하고 포인트 1000점을 주는 코드가 `@Transactional`을 붙인 컨트롤러 메서드에 있어요. 관리자 일괄 등록에서도 같은 가입을 해야 할 때 생기는 문제는 무엇일까요?
+    code: |-
+      @Transactional
+      @PostMapping("/members")
+      MemberResponse join(JoinRequest req) {
+        if (repo.existsByEmail(req.email()))
+          throw new DuplicateEmail();
+        Member m = repo.save(...);
+        pointRepo.save(new Point(m, 1000));
+        return new MemberResponse(m.getId());
+      }
+    choices:
+      - 컨트롤러에는 @Transactional을 붙일 수 없어 컴파일 오류가 난다
+      - 규칙과 트랜잭션이 컨트롤러에 있어 일괄 등록에서 다시 만들어야 한다
+      - 포인트가 두 번 저장된다
+      - 문제가 없다. 일괄 등록이 이 컨트롤러 메서드를 부르면 된다
+    answer: "2"
+    explanation: |-
+      **가입 규칙과 트랜잭션을 일괄 등록에서 다시 만들어야 해요.** 한 업무가 컨트롤러에 있기 때문이에요.
+
+      - 컨트롤러에도 @Transactional은 붙고 동작은 해요
+      - 고친 코드는 중복 확인, 회원 저장, 포인트 지급을 서비스 메서드 하나로 옮기고 거기에 @Transactional을 붙여요
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+  # ── 질문 2 ──
+  - key: la-request-in-service
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: "`MemberService.join(HttpServletRequest req)`처럼 서비스가 HTTP 요청을 받아 파라미터를 꺼내요. 이 서비스를 관리자 엑셀 일괄 등록 배치에서 부르려 할 때의 문제는 무엇일까요?"
+    choices:
+      - 배치에는 HTTP 요청이 없어 가짜 요청 객체를 만들어야 부를 수 있다
+      - 서비스가 너무 빨라진다
+      - 트랜잭션이 걸리지 않는다
+      - 배치에서는 스프링 빈을 쓸 수 없다
+    answer: "1"
+    explanation: |-
+      **HTTP 요청이 없는 곳에서 요청 객체를 만들어야 해요.** 아래층인 서비스가 위층(HTTP)의 타입을 알게 되어 의존 방향이 깨졌어요.
+
+      - 서비스는 이메일과 이름 같은 값을 받게 고쳐요
+      - HTTP에서 값을 꺼내는 일은 컨트롤러가 해요
+    source: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/arguments.html
+  - key: la-status-in-service
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`OrderService.place`가 재고가 모자라면 `ResponseEntity.status(409)`를 돌려줘요. 이 서비스를 카프카 메시지 컨슈머에서도 쓰려고 해요. 어떻게 고치는 것이 알맞을까요?"
+    choices:
+      - 컨슈머가 ResponseEntity의 상태 코드를 읽어 409인지 확인한다
+      - 서비스는 재고 부족 예외를 던지고, 409로 바꾸는 일은 컨트롤러 쪽(@RestControllerAdvice)이 한다
+      - 컨슈머용 OrderService를 하나 더 복사해 만든다
+      - 서비스가 HTTP 요청을 직접 보내게 한다
+    answer: "2"
+    explanation: |-
+      **서비스는 예외로 알리고, 상태 코드는 컨트롤러 쪽이 정해요.** 상태 코드는 HTTP의 일이라 컨슈머에게는 뜻이 없어요.
+
+      - 그러면 컨트롤러는 409로, 컨슈머는 실패한 메시지로 같은 예외를 각자 다뤄요
+      - 서비스는 누가 불렀는지 몰라도 돼요
+    source: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-advice.html
+  # ── 질문 3 ──
+  - key: la-new-in-service
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 서비스를 테스트할 때 DB 대신 메모리 저장소를 넣고 싶어요. 어디를 고쳐야 할까요?
+    code: |-
+      class MemberService {
+        private final MemberRepository repo =
+            new JdbcMemberRepository(jdbc);
+
+        Long join(String email, String name) {
+          if (repo.existsByEmail(email))
+            throw new DuplicateEmail();
+          return repo.save(
+              new Member(email, name)).getId();
+        }
+      }
+    choices:
+      - 고칠 곳이 없다. 테스트가 알아서 메모리 저장소를 쓴다
+      - 서비스. 구현을 직접 만들지 말고 생성자로 MemberRepository를 받게 한다
+      - JdbcMemberRepository를 지운다
+      - join 메서드의 if 문
+    answer: "2"
+    explanation: |-
+      **서비스가 구현을 직접 만들고 있어서 서비스를 고쳐요.** 생성자로 인터페이스를 받게 하면 무엇을 넣을지 바깥이 정해요.
+
+      - 그러면 테스트는 메모리 구현을, 운영은 JDBC나 JPA 구현을 넣어요
+      - 서비스의 규칙 코드는 그대로예요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  - key: la-external-api-reader
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "상품 정보를 우리 DB가 아니라 외부 상품 API에서 읽기로 했어요. `ProductService`는 `ProductReader` 인터페이스를 생성자로 받아 `reader.find(id)`를 불러요. 무엇을 해야 할까요?"
+    choices:
+      - ProductService의 find 호출을 HTTP 호출 코드로 바꾼다
+      - 외부 API를 부르는 ProductReader의 새 구현을 만들어 주입한다. ProductService는 그대로다
+      - 컨트롤러가 외부 API를 부르고 ProductService를 건너뛴다
+      - ProductReader 인터페이스를 지운다
+    answer: "2"
+    explanation: |-
+      **새 구현 하나를 만들어 넣어요.** 서비스는 인터페이스만 알아서 구현이 바뀌어도 고치지 않아요.
+
+      - 서비스의 규칙은 그대로 남아요
+      - 테스트에서는 가짜 구현을 넣어 외부 API 없이 확인할 수 있어요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  # ── 질문 4 ──
+  - key: la-entity-json
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: "`Member` 엔티티에는 `getId`, `getEmail`, `getName`, `getPassword` 게터가 있어요. 컨트롤러가 엔티티를 그대로 돌려주면 응답 JSON에 무엇이 들어갈까요?"
+    code: |-
+      @GetMapping("/members/{id}")
+      Member get(@PathVariable Long id) {
+        return service.find(id);
+      }
+    choices:
+      - id만 들어간다
+      - id, email, name만 들어간다
+      - id, email, name, password가 모두 들어간다
+      - 엔티티는 JSON으로 바꿀 수 없어 오류가 난다
+    answer: "3"
+    explanation: |-
+      **password까지 모두 들어가요.** 잭슨은 게터가 있는 값을 모두 JSON에 써요.
+
+      - 테스트로 돌려 보니 응답에 "password":"secret"이 나왔어요
+      - 응답 DTO를 두면 정한 값만 나가요
+    source: https://docs.spring.io/spring-boot/reference/features/json.html
+  - key: la-rename-field
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "`Product` 엔티티의 `price` 칸을 `salePrice`로 이름을 바꿨어요. A API는 엔티티를 그대로 돌려주고, B API는 `record ProductResponse(Long id, long price)`로 바꿔 돌려줘요. 두 API를 쓰는 앱이 받는 가격 필드 이름은 각각 무엇일까요?"
+    choices:
+      - A는 price, B는 price
+      - A는 salePrice, B는 price
+      - A는 price, B는 salePrice
+      - A는 salePrice, B는 salePrice
+    answer: "2"
+    explanation: |-
+      **A는 salePrice로 바뀌고 B는 price 그대로예요.** 엔티티를 그대로 내보내면 칸 이름이 곧 API의 필드 이름이에요.
+
+      - B는 DTO를 만드는 한 줄만 product.getSalePrice()로 고치면 돼요
+      - 응답 DTO가 엔티티의 변화로부터 API를 지켜요
+    source: https://docs.spring.io/spring-boot/reference/features/json.html
+  # ── 네 질문을 하나로 ──
+  - key: la-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "계층형 아키텍처에서 계층을 왜 나누고, 각 계층은 무엇을 맡나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **바뀌는 이유가 다른 일을 컨트롤러, 서비스, 리포지토리로 나눠, 하나가 바뀔 때 그 층만 고치려고 나눠요.**
+
+      - **역할:** 컨트롤러는 HTTP와 응답, 서비스는 업무 규칙과 트랜잭션, 리포지토리는 저장과 조회
+      - **방향:** 위에서 아래로만 의존한다. 서비스가 HTTP 타입을 모르니 배치와 컨슈머에서도 쓴다
+      - **인터페이스:** 서비스가 리포지토리 인터페이스에 기대서 저장 방식을 바꿔도 그대로다
+      - **넘기는 것:** 요청 DTO로 받고 응답 DTO로 내보낸다. 엔티티를 그대로 내보내지 않는다
+    checklist:
+      - 세 계층의 역할을 말했다
+      - 바뀌는 이유가 다르다는 것을 나누는 이유로 말했다
+      - 의존이 위에서 아래로 한 방향이고 서비스가 HTTP를 모른다고 말했다
+      - 서비스가 리포지토리 인터페이스에 기댄다고 말했다
+      - 엔티티 대신 응답 DTO를 내보낸다고 말했다
+    source: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html
