@@ -1,8 +1,9 @@
-# 경쟁 상태와 동기화 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 경쟁 상태와 동기화
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/synchronization.yaml에 있다.
 title: 경쟁 상태와 동기화
+description: 경쟁 상태는 무엇이고 어떤 코드에서 생기는지, 원자성과 가시성은 무엇이고 volatile은 어느 것을 막는지, synchronized와 AtomicInteger는 어떻게 막는지. 같은 카운터를 네 가지로 바꿔 두 스레드로 100만 번씩 올려 보며 배우는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 22
 roadmap: C3
 type: 자바 실행
 prerequisites:
@@ -111,9 +112,39 @@ codes:
         issued++;
       }
     }
+  serviceFixed: |-
+    @Service
+    class CouponService {
+      private final AtomicLong issued =
+          new AtomicLong();
+
+      void issue() {
+        issued.[[incrementAndGet()]];
+      }
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/synchronization/SynchronizationTest.java
+  jls17: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  jls17hb: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.4.5
+  tutorialSync: https://docs.oracle.com/javase/tutorial/essential/concurrency/sync.html
+  atomicPkg: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
+  longAdder: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/LongAdder.html
+  sbuilder: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/StringBuilder.html
 predict:
-  text: '코드 predict는 `count`에 `volatile`을 붙이고 스레드 둘이 100만 번씩 올려요. 출력은 무엇일까요? 보기: 정확히 2000000 / 2000000보다 작은 값이 나올 수 있다 / 컴파일 오류'
-  answer: '2000000보다 작은 값이 나올 수 있다. `volatile`은 가시성만 보장하고 읽고-고치고-쓰기를 한 덩어리로 묶지 않는다. 질문 2에서 밝힌다.'
+  title: volatile을 붙이면 정확해질까요?
+  text: '`count`에 `volatile`을 붙이고 스레드 둘이 100만 번씩 올린 뒤 출력해요. 무엇이 찍힐까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: exact
+      label: 정확히 2000000
+    - value: less
+      label: 2000000보다 작은 값이 나올 수 있다
+    - value: error
+      label: 컴파일 오류
+  answer: less
+  storageKey: sync-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 경쟁 상태는 무엇이고 어떤 코드에서 생기나요?
@@ -128,6 +159,29 @@ questions:
     asks:
       - '본문의 예시: 코드 checkThenAct를 같은 `userId`로 두 스레드가 거의 동시에 실행했다. `couponCount`가 2가 될 수 있나 (될 수 있다. 둘 다 확인을 통과한 뒤에 넣을 수 있다)'
       - '옮긴 상황: `if (balance >= amount) balance -= amount;`를 잔액 100에서 두 스레드가 각각 amount 80으로 실행했다. 잔액이 음수가 될 수 있나 (될 수 있다. 둘 다 확인을 통과하면 두 번 뺀다)'
+    body:
+      - p: '프로세스와 스레드 레슨에서 본 `count++`의 갱신 손실처럼, **결과가 스레드의 실행 순서에 따라 달라지는 상황**을 경쟁 상태라고 해요. 함께 쓰는 값을 고치는 코드 구간은 **임계 영역**이라고 불러요. 경쟁 상태는 두 모양으로 자주 나타나요.'
+      - ul:
+          - '**읽고-고치고-쓰기.** 값을 읽어 계산한 결과를 써요. 사이에 다른 스레드가 쓰면 그 쓰기가 덮여요. `count++`가 이 모양이에요.'
+          - '**확인하고-행동하기.** 조건을 확인하고 그 결과로 행동해요. 확인과 행동 사이에 다른 스레드가 끼어들면 확인한 사실이 이미 틀린 채로 행동해요.'
+      - code: checkThenAct
+      - p: '두 스레드가 같은 사용자로 이 코드에 들어오게 하고, 둘 다 "아직 없다"를 확인한 순간에 맞춰 세운 뒤 함께 넘어가게 했어요.'
+      - ci:
+          key: check-then-act
+          label: 실제 결과 보기
+          source: SynchronizationTest.checkThenActIssuesTwice
+      - p: '같은 사용자에게 쿠폰이 **두 번** 발급됐어요. 실제로는 이렇게 딱 맞춰지는 일이 드물 뿐, 요청이 몰리면 생겨요.'
+      - callout: '겉모습이 달라도 같은 문제예요. **static 필드**는 모든 스레드가 함께 써요(static과 초기화 순서 레슨). 람다는 바깥 지역 변수를 바꿀 수 없어서 필드나 배열에 세게 되는데, 그 람다를 여러 스레드가 실행하면 역시 함께 쓰는 값을 고치는 거예요(람다 레슨).'
+      - quiz:
+          q: '잔액 100에서 두 스레드가 각각 `if (balance >= 80) balance -= 80;`을 실행했어요. 잔액이 음수가 될 수 있을까요?'
+          options:
+            - 없다. 확인을 했다
+            - 있다. 둘 다 확인을 통과한 뒤 각자 뺄 수 있다
+            - 컴파일러가 막는다
+          answer: 2
+          explain: '확인하고-행동하기 사이에 끼어들면 두 스레드 모두 "100 ≥ 80"을 보고 각자 80을 빼요.'
+      - next: '`count`에 `volatile`을 붙이면 다른 스레드의 값을 바로 본다고 들었어요. 그러면 문제가 풀릴까요?'
+    recall: '결과가 스레드의 실행 순서에 따라 달라지는 상황이 경쟁 상태예요. 함께 쓰는 값을 읽고 그 값으로 판단하거나 고쳐 쓰는 코드에서 생기고, 대표적인 모양은 읽고-고치고-쓰기(`count++`)와 확인하고-행동하기(`if (없으면) 넣기`)예요. static 필드나 람다에서 바꾸는 필드도 같아요.'
   - id: q2
     title: 원자성과 가시성은 무엇이고, volatile은 어느 것을 막나요?
     conclusion:
@@ -146,6 +200,54 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에서 `volatile`을 뺐다가 다시 붙였다. 결과가 정확히 2000000이 되나 (안 된다. volatile은 읽고-고치고-쓰기를 묶지 않는다)'
       - '옮긴 상황: 한 스레드만 `config` 참조를 새 객체로 바꾸고, 다른 스레드들은 읽기만 한다. 바뀐 설정을 읽는 쪽이 보게 하려면 무엇이 맞나. 보기: volatile, 아무것도 필요 없음 (volatile. 쓰는 쪽이 하나고 읽기만 하니 가시성만 있으면 된다)'
+    body:
+      - p: '동시성의 문제는 두 가지로 나눠 보면 정리돼요.'
+      - table:
+          head: ['', 무엇, 깨지면]
+          rows:
+            - [원자성, '연산이 중간에 끼어들 수 없게 한 덩어리로 실행되는 것', '`count++`의 세 단계 사이에 끼어들어 갱신이 사라져요']
+            - [가시성, '한 스레드가 쓴 값을 다른 스레드가 보는 것', '다른 스레드가 바꾼 값을 오랫동안 못 봐요']
+      - p: '가시성이 왜 깨질까요? 스레드는 값을 CPU의 캐시나 레지스터에 두고 쓰기도 하고, JIT 컴파일러는 반복문 안의 읽기를 반복문 밖으로 빼기도 해요. 그래서 자바는 **동기화 없이 쓴 값을 다른 스레드가 언제 볼지 약속하지 않아요.**'
+      - p: '`volatile`을 붙인 변수는 쓰면 다른 스레드가 다음에 읽을 때 그 값을 봐요. 멈추라는 플래그를 `false`로 바꾸면 일하는 스레드가 바로 멈췄어요.'
+      - ci:
+          key: flag
+          label: 실제 결과 보기
+          source: SynchronizationTest.volatileVisibility
+          code: flag
+      - muted: '`volatile` 없이 돌리면 멈출 수도, 영원히 돌 수도 있어요. 보장이 없다는 것 자체가 문제라서 테스트로는 "안 멈춘다"를 단정하지 않았어요.'
+      - h3: 그러면 volatile 카운터는
+      - p: '처음 예측의 답은 **2000000보다 작은 값이 나올 수 있다**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 여러 번 돌린 실제 결과 보기
+          source: SynchronizationTest.volatileIsNotAtomic
+          code: predict
+      - p: '두 스레드가 **최신 값 5를 정확히 읽어도**, 각자 6을 쓰면 하나가 사라져요. `volatile`은 가시성을 줄 뿐 읽고-고치고-쓰기를 한 덩어리로 묶지 않아요. **가시성은 원자성을 주지 않아요.**'
+      - widget:
+          kind: classify
+          categories: [원자성 문제, 가시성 문제]
+          items:
+            - {text: '멈추라는 플래그를 바꿨는데 일하는 스레드가 계속 돈다', answer: 2, explain: '바꾼 값을 다른 스레드가 못 본 거예요. volatile로 풀려요.'}
+            - {text: 'volatile 카운터를 두 스레드가 올렸더니 값이 모자란다', answer: 1, explain: '최신 값을 봐도 읽고-고치고-쓰기 사이에 끼어들어요.'}
+            - {text: '잔액을 확인하고 빼는 사이에 다른 스레드가 먼저 뺐다', answer: 1, explain: '확인과 행동을 한 덩어리로 묶어야 해요.'}
+            - {text: '한 스레드가 설정 객체를 새것으로 바꿨는데 다른 스레드가 옛것을 계속 읽는다', answer: 2, explain: '쓰는 쪽이 하나이고 읽기만 하니 volatile 참조로 풀려요.'}
+      - ul:
+          - '**`volatile`이 맞는 곳:** 한 스레드가 쓰고 다른 스레드들은 읽기만 하는 값. 멈춤 플래그, 새로 바꾼 설정 객체의 참조.'
+          - '**`volatile`로 안 되는 곳:** 여러 스레드가 읽고 고치는 값. 다음 질문의 도구가 필요해요.'
+      - more:
+          summary: '더 알아보기: happens-before'
+          body:
+            - p: '자바 메모리 모델은 "이 쓰기를 저 읽기가 본다"는 관계를 happens-before로 정해요([명세 17.4.5](link:jls17hb)). volatile 변수에 쓴 것은 그 변수를 뒤에 읽는 스레드에게, 락을 푼 것은 같은 락을 뒤에 잡는 스레드에게, `start()` 전의 쓰기는 시작된 스레드에게, 끝난 스레드의 쓰기는 그것을 `join()`한 스레드에게 보여요. 프로세스와 스레드 레슨에서 `join()` 뒤에 값을 읽은 것이 맞았던 이유예요.'
+      - quiz:
+          q: '한 스레드만 `config` 참조를 새 설정 객체로 바꾸고, 다른 스레드들은 읽기만 해요. 읽는 쪽이 바뀐 설정을 보게 하려면?'
+          options:
+            - '`config`에 volatile을 붙인다'
+            - 아무것도 필요 없다
+            - 읽을 때마다 새 스레드를 만든다
+          answer: 1
+          explain: '쓰는 쪽이 하나이고 읽기만 하니 가시성만 있으면 돼요. volatile이 그 일을 해요.'
+      - next: '읽고-고치고-쓰기를 한 덩어리로 묶으려면 무엇을 써야 할까요?'
+    recall: '원자성은 연산이 중간에 끼어들 수 없게 한 덩어리로 실행되는 것이고, 가시성은 한 스레드가 쓴 값을 다른 스레드가 보는 것이에요. `volatile`은 가시성만 보장해요. 다른 스레드가 바꾼 플래그는 보게 하지만, `count++`를 한 덩어리로 묶지 않아서 volatile 카운터도 값이 사라져요.'
   - id: q3
     title: synchronized는 어떻게 경쟁 상태를 막나요?
     conclusion:
@@ -165,6 +267,51 @@ questions:
       - '본문의 예시: 코드 wrongLock으로 두 스레드가 100만 번씩 `inc()`를 부른다. 결과는 (2000000보다 작을 수 있다. 부를 때마다 락이 달라 서로를 막지 않는다)'
       - '옮긴 상황: `Counter`를 두 개 만들어 스레드 A는 첫째의 `synchronized inc()`를, B는 둘째의 것을 부른다. 둘째 `Counter`의 값만 보면 정확한가 (정확하다. 둘째는 B만 고친다. 서로 막지 않지만 함께 쓰는 값도 없다)'
       - '실무 구역: 서버 두 대에서 같은 쿠폰 수를 `synchronized` 메서드로 줄인다(값은 DB에서 읽고 쓴다). 초과 발급을 막을 수 있나 (막지 못한다. synchronized는 JVM 하나 안에서만 막는다)'
+    body:
+      - p: '자바의 모든 객체는 **락(모니터)** 하나를 가져요. `synchronized (obj) { ... }`에 들어가려면 `obj`의 락을 잡아야 하고, 다른 스레드가 잡고 있으면 풀릴 때까지 기다려요(`BLOCKED`). 블록 안에는 한 번에 한 스레드만 있으니, 안의 여러 단계가 끼어들 틈 없이 한 덩어리가 돼요.'
+      - code: syncCounter
+      - p: '인스턴스 메서드에 붙인 `synchronized`는 `this`의 락이에요. 두 스레드가 같은 `Counter`의 `inc()`를 100만 번씩 불렀어요.'
+      - ci:
+          key: sync
+          label: 실제 결과 보기
+          source: SynchronizationTest.sameLockIsExact
+      - p: '정확히 2000000이에요. **가시성도 함께** 줘요. 락을 풀기 전에 쓴 값은 같은 락을 다음에 잡는 스레드가 봐요. 그래서 값을 읽는 쪽도 같은 락 안에서 읽어요(코드의 `get()`처럼).'
+      - h3: '흔한 실수: 락이 다르면 아무것도 막지 못해요'
+      - code: wrongLock
+        notes:
+          - mark: new Object()
+            as: code
+            text: '부를 때마다 새 객체라 스레드마다 다른 락을 잡아요. 아무도 기다리지 않아요.'
+      - ci:
+          key: wrong-lock
+          label: 실제 결과 보기
+          source: SynchronizationTest.newLockEachCall
+      - ul:
+          - '`Counter` 객체가 둘이면 인스턴스 메서드의 `synchronized`도 서로를 막지 않아요. 락이 `this`라서 객체마다 달라요.'
+          - 'static 메서드의 `synchronized`는 그 클래스(`Counter.class`)의 락이에요.'
+      - h3: StringBuffer와 StringBuilder
+      - p: '`StringBuffer`는 메서드마다 `synchronized`가 붙어 있고 `StringBuilder`는 없어요([API 문서](link:sbuilder)). 두 스레드가 10만 글자씩 붙여 봤어요.'
+      - ci:
+          key: buffer
+          label: 실제 결과 보기
+          source: SynchronizationTest.stringBufferVsBuilder
+      - p: '`StringBuilder`는 글자가 사라지거나 배열 범위 예외가 날 수 있어요. 그렇다고 늘 `StringBuffer`를 쓰지는 않아요. 문자열은 보통 메서드 안에서 한 스레드가 만들어서 동기화 비용이 없는 `StringBuilder`가 맞아요(String 레슨).'
+      - callout: '**비용:** 들어가려는 스레드가 몰리면 줄을 서서 기다려요. 블록은 함께 쓰는 값을 고치는 부분만 짧게 감싸요.'
+      - more:
+          summary: '더 알아보기: 재진입과 이중 검사 잠금'
+          body:
+            - p: '락을 잡은 스레드가 같은 락의 다른 `synchronized` 메서드를 불러도 멈추지 않아요(재진입). 이미 가진 락이라 기다릴 필요가 없어요.'
+            - p: '이중 검사 잠금은 싱글톤을 만들 때 락을 처음 한 번만 잡으려는 모양이에요. `if (instance == null) { synchronized (X.class) { if (instance == null) instance = new X(); } }`. 바깥 검사는 **락 밖에서** 읽어서, `instance`에 `volatile`이 없으면 다른 스레드가 생성자가 덜 끝난 객체의 참조를 볼 수 있어요. 자바 메모리 모델이 생성자 안의 쓰기와 참조의 쓰기 순서를 락 밖의 읽는 쪽에 약속하지 않기 때문이에요. `volatile`을 붙이면 참조를 본 스레드는 생성자의 쓰기도 봐요. 더 간단한 방법은 enum이나 홀더 클래스예요(싱글톤 레슨).'
+      - quiz:
+          q: '`synchronized (new Object()) { count++; }`로 두 스레드가 100만 번씩 올리면 결과는?'
+          options:
+            - 정확히 2000000
+            - 2000000보다 작을 수 있다
+            - 데드락으로 멈춘다
+          answer: 2
+          explain: '부를 때마다 새 객체라 락이 달라요. 서로를 막지 않으니 아무것도 안 한 것과 같아요.'
+      - next: '`synchronized`는 기다리게 해서 막아요. 기다리지 않고도 정확하게 세는 방법이 있을까요?'
+    recall: '같은 락을 잡은 스레드 하나만 그 블록에 들어가게 해서, 블록 안의 여러 단계를 한 덩어리로 만들어요. 락을 풀 때 쓴 값은 같은 락을 다음에 잡는 스레드가 보니 가시성도 줘요. 인스턴스 메서드는 `this`, static 메서드는 클래스가 락이고, 락이 다르면 아무것도 막지 못해요.'
   - id: q4
     title: AtomicInteger는 락 없이 어떻게 정확하게 세나요?
     conclusion:
@@ -179,15 +326,79 @@ questions:
     asks:
       - '본문의 예시: `compareAndSet(5, 6)`을 부를 때 값이 이미 다른 스레드에 의해 6이 되어 있었다. 결과는 (false. 값은 6 그대로다)'
       - '옮긴 상황: 재고 `stock`과 판매 수 `sold`를 각각 `AtomicInteger`로 두고 `stock.decrementAndGet(); sold.incrementAndGet();`을 여러 스레드가 실행한다. 어느 순간에 읽어도 `stock + sold`가 처음 재고와 같나 (같다는 보장이 없다. 두 연산 사이에 다른 스레드가 읽을 수 있다)'
+    body:
+      - code: atomic
+      - p: '`AtomicInteger`의 `incrementAndGet()`은 락 없이도 정확해요. 비밀은 **CAS(compare-and-set)**예요.'
+      - ci:
+          key: cas
+          label: compareAndSet의 실제 결과 보기
+          source: SynchronizationTest.casBasics
+      - p: '`compareAndSet(기대한 값, 새 값)`은 **지금 값이 기대한 값과 같을 때만** 바꾸고 `true`를 돌려줘요. 다르면(누가 먼저 바꿨으면) 바꾸지 않고 `false`예요. CPU가 이것을 명령 하나로 원자적으로 해요.'
+      - code: cas
+      - p: '읽고, 계산하고, CAS로 바꾸고, 실패하면 처음부터 다시 해요. 락을 잡지 않으니 기다리며 잠드는 스레드가 없어요. 이 반복만으로 직접 세어 봤어요.'
+      - ci:
+          key: atomic
+          label: 실제 결과 보기
+          source: SynchronizationTest.casLoopIsExact
+      - h3: 무엇을 고를까요
+      - table:
+          head: [상황, 도구]
+          rows:
+            - ['값 하나를 더하거나 바꾼다', '`AtomicInteger`, `AtomicLong`, `AtomicReference`']
+            - ['한 스레드가 쓰고 나머지는 읽기만 한다', '`volatile`']
+            - ['두 값을 함께 바꾸거나 확인과 행동을 묶는다', '`synchronized`(또는 다음 레슨의 락)']
+      - p: 'Atomic 두 개를 따로 바꾸면 **두 연산 사이**에 다른 스레드가 끼어들어요. 재고와 판매 수처럼 함께 맞아야 하는 값은 한 락 안에서 함께 바꿔요.'
+      - more:
+          summary: '더 알아보기: LongAdder'
+          body:
+            - p: '스레드가 아주 많이 같은 값을 올리면 CAS의 실패와 재시도가 늘어나요. `LongAdder`는 스레드마다 다른 칸에 더해 두고 읽을 때 합쳐요([API 문서](link:longAdder)). 많이 쓰고 가끔 읽는 통계(요청 수, 에러 수)에 맞아요.'
+      - quiz:
+          q: '값이 이미 다른 스레드에 의해 6이 된 `AtomicInteger`에 `compareAndSet(5, 6)`을 부르면?'
+          options:
+            - true를 돌려주고 값은 6
+            - false를 돌려주고 값은 6 그대로
+            - 예외가 난다
+          answer: 2
+          explain: '지금 값(6)이 기대한 값(5)과 달라서 바꾸지 않고 false를 돌려줘요. 호출한 쪽은 다시 읽어 다시 해요.'
+    recall: '"지금 값이 내가 읽은 값일 때만 바꾼다"를 CPU 명령 하나로 하는 CAS로 바꾸고, 실패하면 다시 읽어 다시 해요. 락이 없어 기다리는 스레드가 없어요. 값 하나를 고치는 데는 Atomic이 가볍고, 여러 값을 함께 바꾸거나 확인과 행동을 묶어야 하면 `synchronized`를 써요.'
 practice:
   says:
     - '스프링의 싱글톤 서비스 필드는 모든 요청 스레드가 함께 쓴다(C1). 흔한 실수: 코드 serviceCounter처럼 `int` 필드를 `++`로 센다. 고친 코드: `AtomicLong`의 `incrementAndGet()`. 스레드 여럿이 부르는 테스트로 고치기 전과 뒤를 비교한다'
     - '`volatile`만 붙이는 것도 흔한 실수다. 질문 2의 결과 그대로 숫자가 틀린다'
     - '더 큰 실수: 값을 DB에서 읽고 고쳐 쓰는 코드(재고, 쿠폰 수량)에 `synchronized`를 붙인다. 서버가 한 대면 막히는 것처럼 보이지만, 서버가 두 대면 각 JVM이 자기 락만 보니 막지 못한다. 트랜잭션이 커밋되기 전에 락이 풀려도 같은 문제가 생긴다. DB의 조건부 UPDATE나 락을 쓴다(A7, D10). 이 부분은 설명만 하고 테스트는 맡는 레슨이 한다'
     - '여러 스레드가 함께 쓰는 맵이나 캐시는 C6에서 다룬다'
+  body:
+    - p: '스프링 서버에서는 **싱글톤 서비스의 필드**와 **DB의 값**에서 이 레슨의 문제를 만나요. 앞의 것은 테스트로 돌렸고, 뒤의 것은 원리만 짚고 맡는 레슨으로 넘겨요.'
+    - h3: '흔한 실수: 서비스 필드를 ++로 세기'
+    - code: serviceCounter
+    - p: '싱글톤 빈의 필드는 모든 요청 스레드가 함께 써요(프로세스와 스레드 레슨). 스레드 8개가 같은 서비스의 `issue()`를 10만 번씩 불렀어요.'
+    - ci:
+        key: service
+        label: 고치기 전과 뒤의 실제 결과 보기
+        source: SynchronizationTest.serviceCounter
+    - p: '`AtomicLong`의 `incrementAndGet()`으로 바꾸면 정확해요. `volatile`만 붙이는 것은 질문 2의 결과 그대로 고친 것이 아니에요.'
+    - code: serviceFixed
+    - h3: '더 큰 실수: DB의 값에 synchronized'
+    - p: '재고나 쿠폰 수량처럼 **DB에서 읽고 고쳐 쓰는 값**에 `synchronized`를 붙이면, 서버가 한 대일 때는 막히는 것처럼 보여요. 그런데 서버가 두 대면 각 JVM이 자기 락만 봐서 서로를 막지 못해요. 서버가 한 대여도 트랜잭션이 커밋되기 전에 메서드가 끝나 락이 풀리면 다음 요청이 옛 값을 읽어요.'
+    - p: '이런 값은 DB가 지켜요: 조건을 붙인 UPDATE, 낙관적 락, 비관적 락. 낙관적 락과 비관적 락 레슨, 동시 요청에서 재고 지키기 레슨에서 다뤄요.'
+    - muted: '여러 스레드가 함께 쓰는 맵이나 캐시는 스레드에 안전한 객체 레슨에서 다뤄요.'
+interview:
+  question: volatile과 synchronized와 AtomicInteger의 차이를 설명해 주세요
+  model:
+    - label: 정의
+      text: 경쟁 상태는 결과가 스레드의 실행 순서에 따라 달라지는 상황입니다. 막으려면 원자성(끼어들 수 없게 한 덩어리로)과 가시성(쓴 값을 다른 스레드가 보는 것) 두 가지를 봐야 합니다.
+    - label: 원리
+      text: volatile은 가시성만 보장해서 플래그를 알리는 데 맞고, count++ 같은 읽고-고치고-쓰기는 막지 못합니다. synchronized는 같은 락을 잡은 스레드 하나만 들어가게 해서 원자성과 가시성을 함께 줍니다. AtomicInteger는 CAS로 기대한 값일 때만 바꾸고 실패하면 다시 해서 락 없이 값 하나를 원자적으로 바꿉니다.
+    - label: 주의할 점
+      text: 락 객체가 다르면 synchronized는 아무것도 막지 못하고, Atomic 두 개를 따로 바꾸면 그 사이에 끼어듭니다. 또 synchronized는 JVM 하나 안에서만 막아서 서버가 여러 대이거나 값이 DB에 있으면 DB의 락이나 조건부 UPDATE를 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 서비스 필드로 센 발급 수가 모자라 AtomicLong으로 바꾸고, 재고 차감은 DB의 조건부 UPDATE로 옮겼습니다.'
+verified: 이 레슨의 숫자는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 값이 실행마다 달라지는 경쟁 상태는 여러 번 돌려 한 번이라도 생기는지를 확인했어요. 코드가 바뀔 때마다 테스트([SynchronizationTest](link:test))가 다시 돌아요.
+footer: '근거: 자바 메모리 모델과 volatile, 모니터는 자바 언어 명세 17장([링크](link:jls17)), synchronized는 자바 튜토리얼([링크](link:tutorialSync)), compareAndSet은 atomic 패키지 문서([링크](link:atomicPkg)), StringBuilder의 동기화는 API 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '래치로 두 스레드를 확인 직후에 세우면 확인하고-행동하기 코드가 같은 사용자에게 두 번 발급한다'
-    how: '`CountDownLatch`로 두 스레드가 확인을 마친 뒤 함께 넣게 만든다'
+  - claim: '배리어로 두 스레드를 확인 직후에 세우면 확인하고-행동하기 코드가 같은 사용자에게 두 번 발급한다'
+    how: '`CyclicBarrier`로 두 스레드가 확인을 마친 뒤 함께 넣게 만든다'
+    test: SynchronizationTest.checkThenActIssuesTwice
   - claim: 'volatile만 붙인 count++는 두 스레드 100만 번씩에서 2000000보다 작은 값이 나올 수 있다'
     how: '최대 10번 돌려 한 번이라도 작은 값이 나오는지 본다'
     test: SynchronizationTest.volatileIsNotAtomic
@@ -203,8 +414,9 @@ claims:
   - claim: 'synchronized는 재진입할 수 있다'
     how: '락을 가진 스레드가 같은 락의 다른 synchronized 메서드를 부르고 끝나는지 본다'
     test: SynchronizationTest.reentrant
-  - claim: '두 스레드가 StringBuffer에 1만 글자씩 append하면 길이가 정확히 2만이고, StringBuilder는 다르거나 예외가 날 수 있다'
+  - claim: '두 스레드가 StringBuffer에 10만 글자씩 append하면 길이가 정확히 20만이고, StringBuilder는 다르거나 예외가 날 수 있다'
     how: 'StringBuilder 쪽은 최대 20번 돌려 한 번이라도 어긋나는지 본다'
+    test: SynchronizationTest.stringBufferVsBuilder
   - claim: 'compareAndSet은 기대한 값일 때만 바꾸고 결과를 true와 false로 알려 준다'
     how: '값 5에 (5, 6)과 (5, 7)을 차례로 부른다'
     test: SynchronizationTest.casBasics
@@ -213,6 +425,7 @@ claims:
     test: SynchronizationTest.casLoopIsExact
   - claim: '싱글톤 서비스의 int 필드를 여러 스레드가 올리면 부른 수보다 작을 수 있고, AtomicLong이면 정확하다'
     how: '같은 서비스 객체를 스레드 8개가 10만 번씩 부른다'
+    test: SynchronizationTest.serviceCounter
 sources:
   - '자바 메모리 모델, volatile, happens-before, 모니터: 자바 언어 명세 17장 https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html'
   - 'synchronized 메서드와 문: 자바 튜토리얼 https://docs.oracle.com/javase/tutorial/essential/concurrency/sync.html'

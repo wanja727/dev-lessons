@@ -1,128 +1,237 @@
-# 동기화: synchronized, volatile, 원자적 연산 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 경쟁 상태와 동기화 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/synchronization.yaml의 says).
+# 동작에 관한 정답은 verification의 synchronization/SynchronizationTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: synchronization
-  title: "동기화: synchronized, volatile, 원자적 연산"
-  unit: 동시성·분산
-  order: 9
+  title: 경쟁 상태와 동기화
+  unit: 운영체제와 동시성
+  order: 403
 concepts:
   - key: core
-    name: "동기화: synchronized, volatile, 원자적 연산"
+    name: 경쟁 상태와 동기화
+coreQuestions:
+  - key: q1
+    text: "경쟁 상태는 무엇이고 어떤 코드에서 생기나요?"
+  - key: q2
+    text: "원자성과 가시성은 무엇이고, volatile은 어느 것을 막나요?"
+  - key: q3
+    text: "synchronized는 어떻게 경쟁 상태를 막나요?"
+  - key: q4
+    text: "AtomicInteger는 락 없이 어떻게 정확하게 세나요?"
 questions:
-  - key: q-83cbf9a4
+  # ── 질문 1 ──
+  - key: sy-check-then-act
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: synchronized와 volatile의 차이를 1분 안에 설명해 보세요
-    explanation: |-
-      - synchronized: 락으로 원자성 + 가시성, 락 대기 비용
-      - volatile: 가시성만, count++ 같은 읽기-수정-쓰기는 격침. 한 쪽이 쓰고 나머지가 읽는 플래그에 적합
-    checklist:
-      - 원자성과 가시성을 나눠 말했다
-      - synchronized는 둘 다 보장한다고 말했다
-      - volatile은 가시성만이라고 말했다
-      - volatile count++가 왜 틀리는지 말했다
-      - 각각 쓰는 상황을 말했다
-    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
-  - key: q-223772e9
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: synchronized, AtomicInteger(CAS), LongAdder를 비교하고 각각 언제 쓰는지 말해 보세요
-    explanation: |-
-      - synchronized: 여러 값을 함께 바꾸는 복합 연산, 락 대기 비용
-      - AtomicInteger: 변수 하나의 원자적 연산, CAS 재시도로 락 없음
-      - LongAdder: 많은 스레드가 같은 카운터를 올릴 때 나눠 더했다가 합침, CAS 실패 감소
-    checklist:
-      - synchronized는 복합 연산에 쓴다고 말했다
-      - CAS의 동작(기대값 비교 후 변경, 실패 시 재시도)을 말했다
-      - Atomic은 변수 하나에만 원자적이라고 말했다
-      - 고경합에서 LongAdder를 말했다
-      - 락 대기 비용과 CAS 재시도 비용을 비교했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
-  - key: q-0e329af7
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 환율 캐시를 ConcurrentHashMap으로 만들었는데 같은 키의 외부 API가 가끔 두 번 호출된다. 원인과 해결을 말해 보세요
-    explanation: |-
-      - containsKey 후 put처럼 메서드를 이어 불렀을 가능성. 맵 메서드 하나하나는 안전해도 사이에 다른 스레드가 끼어든다(check-then-act)
-      - 해결: computeIfAbsent로 한 번에. (여러 서버면 서버마다 한 번씩은 호출됨을 알고, 필요하면 공유 캐시)
-    checklist:
-      - 맵 자체는 안전하다고 말했다
-      - 메서드를 이어 부르는 사이의 틈을 말했다
-      - check-then-act라는 패턴을 말했다
-      - computeIfAbsent(또는 putIfAbsent, compute)를 말했다
-      - 서버가 여러 대일 때의 한계를 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ConcurrentHashMap.html
-  - key: q-0ce029aa
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: "\"필드를 volatile로 선언하면 여러 스레드가 동시에 count++해도 값이 정확하다\""
-    answer: X
-    explanation: |-
-      - volatile은 가시성만 보장하고, 읽기·더하기·쓰기를 한 덩어리로 만들지 않는다
-      - 검증: SynchronizationTest (volatileIsNotAtomic)
-    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
-  - key: q-a79e2a89
-    concept: core
+    coreQuestion: q1
     type: code_predict
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: AtomicInteger stock = new AtomicInteger(10); stock.compareAndSet(10, 9); stock.compareAndSet(10, 8); 이후 stock.get()은?
+    body: 아래 코드를 같은 userId로 두 스레드가 거의 동시에 실행했어요. issued는 여러 스레드가 써도 안전한 집합이에요. couponCount가 2가 될 수 있을까요?
+    code: |-
+      if (!issued.contains(userId)) {
+        issued.add(userId);
+        couponCount++;
+      }
     choices:
-      - "10"
-      - "9"
-      - "8"
+      - 없다. 집합이 스레드에 안전하다
+      - 있다. 둘 다 확인을 통과한 뒤에 넣을 수 있다
+      - 없다. if가 한 줄이라 원자적이다
       - 예외가 난다
     answer: "2"
     explanation: |-
-      - 첫 CAS는 10이 맞아서 9로 바뀌고 true, 두 번째는 이미 9라 실패하고 false. 예외는 없다
-      - 검증: SynchronizationTest (compareAndSet)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
-  - key: q-6527a402
+      **있어요.** 확인하고-행동하기 사이에 다른 스레드가 끼어들면 둘 다 "아직 없다"를 보고 둘 다 발급해요.
+
+      - 집합의 메서드 하나하나가 안전해도 두 호출을 묶어 주지는 않아요
+      - 검증: SynchronizationTest.checkThenActIssuesTwice (배리어로 확인 직후에 맞추면 매번 2)
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: sy-balance
     concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
-    difficulty: 1
-    body: 다음 중 "한 스레드가 쓰고 다른 스레드는 읽기만 하는 종료 플래그"에 가장 알맞은 것은?
+    status: draft
+    difficulty: 2
+    body: 잔액 100에서 두 스레드가 각각 if (balance >= 80) balance -= 80;을 실행했어요. 동기화는 하지 않았어요. 잔액이 음수가 될 수 있을까요?
     choices:
-      - 아무것도 붙이지 않은 boolean
-      - volatile boolean
-      - 호출마다 synchronized (new Object())
-      - ThreadLocal
+      - 없다. 확인을 했다
+      - 있다. 둘 다 확인을 통과한 뒤 각자 뺄 수 있다
+      - 없다. 두 번째 스레드는 예외가 난다
+      - 있다. 하지만 자바가 자동으로 되돌린다
     answer: "2"
     explanation: |-
-      - 쓰기와 읽기가 나뉘어 있어 가시성만 필요하다. 1번은 보인다는 보장이 없고, 3번은 락이 매번 달라 무의미, 4번은 스레드마다 따로 있어 다른 스레드가 못 본다
-      - 검증: SynchronizationTest (volatileVisibility)
-    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
-  - key: q-7a305b1a
-    concept: core
-    type: line_pick
-    status: reviewed
-    difficulty: 2
-    body: "[코드 7-A] 두 스레드가 increment()를 동시에 수백만 번 부르면 값이 틀어진다. 원인이 되는 줄은?"
-    code: |-
-      class Counter {
-          private int count;
+      **있어요.** 두 스레드 모두 "100 ≥ 80"을 본 뒤 각자 80을 빼면 -60이 돼요.
 
-          public void increment() {
-              synchronized (new Object()) {
-                  count++;
-              }
-          }
-      }
-    answer: "5"
+      - 확인과 행동을 한 덩어리로 묶어야 해요(synchronized나 DB의 조건부 UPDATE)
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 2 ──
+  - key: sy-volatile-counter
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 두 스레드가 아래 코드를 동시에 실행하고 둘 다 끝난 뒤 count를 출력해요. 결과로 맞는 것은?
+    code: |-
+      static volatile int count = 0;
+
+      // 두 스레드가 각각
+      for (int i = 0; i < 1_000_000; i++)
+        count++;
+    choices:
+      - 정확히 2000000
+      - 2000000보다 작은 값이 나올 수 있다
+      - 2000000보다 큰 값이 나올 수 있다
+      - 컴파일 오류
+    answer: "2"
     explanation: |-
-      - 호출마다 새 객체를 락으로 잡아서 스레드들이 서로 기다리지 않는다. 고치기: 필드에 둔 하나의 락 객체(또는 synchronized 메서드), 혹은 AtomicInteger
-      - 검증: SynchronizationTest (differentLocksDoNotExclude, sameLockIsExact)
+      **2000000보다 작은 값이 나올 수 있어요.** volatile은 가시성만 보장하고 읽고-고치고-쓰기를 한 덩어리로 묶지 않아요.
+
+      - 두 스레드가 최신 값 5를 정확히 읽어도 각자 6을 쓰면 하나가 사라져요
+      - 검증: SynchronizationTest.volatileIsNotAtomic
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  - key: sy-config-volatile
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 설정을 다시 읽는 스레드 하나만 config 참조를 새 객체로 바꾸고, 요청 스레드들은 config를 읽기만 해요. 요청 스레드가 바뀐 설정을 보게 하는 가장 가벼운 방법은?
+    choices:
+      - config 필드에 volatile을 붙인다
+      - 아무것도 필요 없다
+      - 읽는 쪽마다 새 스레드를 만든다
+      - config를 static으로 바꾼다
+    answer: "1"
+    explanation: |-
+      **volatile을 붙여요.** 쓰는 쪽이 하나이고 나머지는 읽기만 하니 원자성은 문제가 아니고 가시성만 있으면 돼요.
+
+      - 아무것도 없으면 자바는 다른 스레드가 바뀐 참조를 언제 볼지 약속하지 않아요
+      - static은 함께 쓰는 자리일 뿐 가시성을 주지 않아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 3 ──
+  - key: sy-wrong-lock
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 두 스레드가 같은 객체의 inc()를 100만 번씩 불러요. 끝난 뒤 count는?
+    code: |-
+      void inc() {
+        synchronized (new Object()) {
+          count++;
+        }
+      }
+    choices:
+      - 정확히 2000000
+      - 2000000보다 작을 수 있다
+      - 데드락으로 멈춘다
+      - 정확히 1000000
+    answer: "2"
+    explanation: |-
+      **2000000보다 작을 수 있어요.** 부를 때마다 새 객체로 잠가서 스레드마다 다른 락을 잡아요. 아무도 기다리지 않아요.
+
+      - 같은 락 객체(예: this)로 잠가야 서로를 막아요
+      - 검증: SynchronizationTest.newLockEachCall
     source: https://docs.oracle.com/javase/tutorial/essential/concurrency/sync.html
+  - key: sy-two-counters
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: Counter 객체를 두 개 만들어 스레드 A는 첫째의 synchronized inc()를, 스레드 B는 둘째의 synchronized inc()를 100만 번씩 불러요. 맞는 설명은?
+    choices:
+      - 두 스레드는 같은 락을 다투니 한 줄로 선다
+      - 락이 객체마다 달라 서로 막지 않지만, 각 Counter는 한 스레드만 고치니 둘 다 정확히 1000000이다
+      - 둘 다 1000000보다 작을 수 있다
+      - static이 아니라 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **서로 막지 않지만 둘 다 정확해요.** 인스턴스 메서드의 synchronized는 this의 락이라 객체마다 달라요.
+
+      - 서로 막지 않아도 괜찮은 이유는 함께 쓰는 값이 없기 때문이에요
+      - 같은 값을 두 객체가 함께 고친다면(예: static 필드) 이 락으로는 막지 못해요
+    source: https://docs.oracle.com/javase/tutorial/essential/concurrency/sync.html
+  - key: sy-two-servers
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 쿠폰 수량을 DB에서 읽고 하나 줄여 쓰는 메서드에 synchronized를 붙였어요. 같은 애플리케이션을 서버 두 대로 띄우면 초과 발급을 막을 수 있을까요?
+    choices:
+      - 막는다. synchronized가 메서드를 한 번에 하나만 실행한다
+      - 막지 못한다. synchronized는 JVM 하나 안에서만 막는다
+      - 막는다. DB가 알아서 순서를 맞춘다
+      - 서버가 두 대면 컴파일되지 않는다
+    answer: "2"
+    explanation: |-
+      **막지 못해요.** 서버마다 JVM이 따로라 각자 자기 락만 봐요. 두 서버의 요청이 같은 수량을 읽고 각자 줄여 써요.
+
+      - DB의 값은 조건부 UPDATE나 DB 락으로 지켜요
+      - 서버가 한 대여도 커밋 전에 락이 풀리면 다음 요청이 옛 값을 읽을 수 있어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  # ── 질문 4 ──
+  - key: sy-cas-false
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 다른 스레드가 이미 값을 6으로 바꾼 AtomicInteger에 compareAndSet(5, 6)을 불렀어요. 결과는?
+    choices:
+      - true, 값은 6
+      - false, 값은 6 그대로
+      - true, 값은 7
+      - IllegalStateException
+    answer: "2"
+    explanation: |-
+      **false이고 값은 6 그대로예요.** compareAndSet은 지금 값이 기대한 값과 같을 때만 바꿔요.
+
+      - 실패하면 다시 읽고 계산해서 다시 시도하는 것이 CAS 반복이에요
+      - 검증: SynchronizationTest.casBasics
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
+  - key: sy-two-atomics
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"재고 stock과 판매 수 sold를 각각 AtomicInteger로 두고 stock.decrementAndGet(); sold.incrementAndGet();을 여러 스레드가 실행하면, 언제 읽어도 stock + sold는 처음 재고와 같다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 두 연산 하나하나는 원자적이지만, 두 연산 사이에 다른 스레드가 읽으면 하나만 바뀐 값을 봐요.
+
+      - 함께 맞아야 하는 두 값은 한 락(synchronized) 안에서 함께 바꿔요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html
+  # ── 네 질문을 하나로 ──
+  - key: sy-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "volatile과 synchronized와 AtomicInteger의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **volatile은 가시성만, synchronized는 원자성과 가시성을, AtomicInteger는 CAS로 값 하나의 원자적 변경을 줘요.**
+
+      - **경쟁 상태:** 결과가 실행 순서에 달린 상황. 읽고-고치고-쓰기, 확인하고-행동하기
+      - **volatile:** 쓴 값을 다른 스레드가 보게 한다. count++는 막지 못한다. 플래그에 맞다
+      - **synchronized:** 같은 락을 잡은 하나만 들어간다. 락 객체가 다르면 막지 못한다
+      - **Atomic:** 기대한 값일 때만 바꾸고 실패하면 다시 한다. 값 하나에 맞고, 여러 값을 묶으려면 락
+      - **실무:** JVM 하나 안에서만 막으니 DB의 값은 DB의 락이나 조건부 UPDATE로
+    checklist:
+      - 경쟁 상태와 원자성, 가시성을 구분해 말했다
+      - volatile이 count++를 막지 못하는 이유를 말했다
+      - synchronized가 같은 락으로 한 스레드만 들여보낸다고 말했다
+      - CAS가 기대한 값일 때만 바꾸고 다시 시도한다고 말했다
+      - 서버가 여러 대이거나 값이 DB에 있을 때의 한계를 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
