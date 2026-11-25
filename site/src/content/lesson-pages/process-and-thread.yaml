@@ -1,8 +1,9 @@
-# 프로세스와 스레드 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 프로세스와 스레드
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/process-and-thread.yaml에 있다.
 title: 프로세스와 스레드
+description: 프로세스와 스레드는 무엇이 다른지, 같은 프로세스의 스레드는 무엇을 함께 쓰고 무엇을 따로 가지는지, 스레드는 어떻게 시작하는지, 메모리를 함께 쓰면 무엇이 문제인지. 자바 프로그램을 하나 더 띄우고 두 스레드로 같은 변수를 올려 보며 배우는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 20
 roadmap: C1
 type: 자바 실행
 prerequisites:
@@ -88,9 +89,27 @@ codes:
         return ++count;
       }
     }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/processthread/ProcessAndThreadTest.java
+  tutorial: https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html
+  jls17: https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html
+  threadApi: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html
+  bootProps: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
 predict:
-  text: '코드 predict는 스레드 둘이 같은 `count`를 100만 번씩 올리고 둘이 끝나길 기다려 출력해요. 출력은 무엇일까요? 보기: 정확히 2000000 / 2000000보다 작은 값 / 1000000'
-  answer: '2000000보다 작은 값. 실행할 때마다 달라진다. 질문 4에서 밝힌다.'
+  title: 두 스레드가 같은 변수를 올리면
+  text: '스레드 둘이 같은 `count`를 100만 번씩 올리고, 둘이 끝나길 기다려 출력해요. 무엇이 찍힐까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 4에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: exact
+      label: 정확히 2000000
+    - value: less
+      label: 2000000보다 작은 값
+    - value: half
+      label: 정확히 1000000
+  answer: less
+  storageKey: process-thread-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 프로세스와 스레드는 무엇이 다른가요?
@@ -110,6 +129,58 @@ questions:
     asks:
       - '본문의 예시: 자식 JVM이 자기의 static `count`를 100으로 바꾸고 끝났다. 부모 JVM의 `count`(처음 0)는 무엇인가 (0. 프로세스끼리는 메모리를 공유하지 않는다)'
       - '옮긴 상황: 한 스레드에서 처리하던 요청 때문에 프로세스가 죽었다. 같은 서버 프로세스의 다른 요청 스레드들은 어떻게 되나 (함께 끝난다. 스레드는 프로세스에 딸려 있다)'
+    body:
+      - p: '`java -jar app.jar`로 띄운 JVM 하나가 **프로세스** 하나예요. 실행 중인 프로그램이 프로세스이고, 운영체제는 프로세스마다 번호(PID)와 메모리 공간을 따로 줘요.'
+      - p: '자바 프로그램 안에서 자식 JVM을 하나 더 띄워, 같은 이름의 static 변수 `count`를 100으로 바꾸게 했어요. 부모의 `count`는 어떻게 될까요?'
+      - ci:
+          key: child
+          label: 두 JVM의 실제 출력 보기
+          source: ProcessAndThreadTest.processesDoNotShareMemory
+          code: childProcess
+      - p: '자식은 자기 `count`를 100으로 바꿨지만 **부모의 `count`는 그대로 0**이에요. PID도 달라요. 두 프로세스는 메모리를 나누지 않아서, 같은 클래스의 같은 변수라도 서로 다른 칸이에요. 프로세스끼리 데이터를 주고받으려면 파일, 소켓, 파이프 같은 통로를 따로 써요(프로세스 간 통신, IPC).'
+      - p: '**스레드**는 프로세스 안에서 코드를 실행하는 흐름이에요. 프로그램이 시작되면 `main` 스레드 하나가 있고, 스레드를 더 만들 수 있어요. 같은 프로세스의 스레드는 그 프로세스의 메모리를 **함께** 써요.'
+      - widget:
+          kind: compare
+          layout: [sides, buttons, verdict]
+          run: {label: '한쪽에서 count = 100'}
+          sides:
+            - label: 프로세스 둘 (JVM 둘)
+              items:
+                - {name: 프로세스 A의 count, note: 'A의 메모리에 있는 칸'}
+                - {name: 프로세스 B의 count, note: 'B의 메모리에 있는 칸'}
+            - label: 한 프로세스의 스레드 둘
+              items:
+                - {name: 스레드 A가 보는 count, note: '프로세스 메모리의 같은 칸'}
+                - {name: 스레드 B가 보는 count, note: '프로세스 메모리의 같은 칸'}
+          initial:
+            sides:
+              - result: [{k: A의 값, v: '0'}, {k: B의 값, v: '0'}]
+              - result: [{k: A의 값, v: '0'}, {k: B의 값, v: '0'}]
+          scenes:
+            run:
+              sides:
+                - marks: [{name: 프로세스 A의 count, tag: '100으로 바꿈'}]
+                  result: [{k: A의 값, v: '100'}, {k: B의 값, v: '0'}]
+                - marks: [{name: 스레드 A가 보는 count, tag: '100으로 바꿈'}, {name: 스레드 B가 보는 count, tag: '함께 바뀜'}]
+                  result: [{k: A의 값, v: '100'}, {k: B의 값, v: '100', mark: changed}]
+              verdict: '프로세스는 자기 칸만 바뀌고, 스레드는 같은 칸을 보니 함께 바뀌어요.'
+      - table:
+          head: ['', 프로세스 여럿, 스레드 여럿]
+          rows:
+            - [만드는 비용, '메모리 공간을 새로 만들어 무거워요', '가벼워요']
+            - [한쪽이 죽으면, '다른 프로세스는 영향이 없어요', '프로세스가 죽으면 모든 스레드가 함께 끝나요']
+            - [데이터 나누기, '파일, 소켓 같은 통로(IPC)', '같은 객체를 바로 봐요']
+      - p: '그래서 브라우저는 탭마다 프로세스를 따로 둬서 한 탭이 죽어도 다른 탭이 살게 하고, 스프링 서버는 프로세스 하나에 스레드 여럿을 둬서 요청을 처리해요.'
+      - quiz:
+          q: '자식 JVM이 자기의 static `count`를 100으로 바꾸고 끝났어요. 부모 JVM의 `count`(처음 0)는 무엇일까요?'
+          options:
+            - '100'
+            - '0'
+            - '알 수 없다'
+          answer: 2
+          explain: '프로세스끼리는 메모리를 공유하지 않아요. 자식은 자기 메모리의 칸만 바꿨어요.'
+      - next: '같은 프로세스의 스레드는 메모리를 함께 쓴다고 했어요. 그러면 모든 것을 함께 쓸까요?'
+    recall: '프로세스는 운영체제가 메모리와 PID를 따로 주는 실행 중인 프로그램이고, 스레드는 한 프로세스 안에서 그 메모리를 함께 쓰며 코드를 실행하는 흐름이에요. 프로세스끼리는 변수를 나누지 않아 IPC로 주고받고, 스레드끼리는 같은 객체를 바로 봐요. 프로세스는 무겁지만 서로 격리되고, 스레드는 가볍지만 프로세스가 죽으면 함께 끝나요.'
   - id: q2
     title: 같은 프로세스의 스레드는 무엇을 함께 쓰고 무엇을 따로 가지나요?
     conclusion:
@@ -125,6 +196,36 @@ questions:
     asks:
       - '본문의 예시: 두 스레드가 같은 메서드 `int countLocal() { int n = 0; for (...) n++; return n; }`을 동시에 1만 번씩 돌린다. 각 스레드가 돌려받는 값은 (둘 다 10000. 지역 변수는 스레드마다 따로다)'
       - '옮긴 상황: 두 스레드가 각자 지역 변수 `list`를 갖지만 둘 다 같은 싱글톤 빈의 `getItems()`가 돌려준 리스트를 받았다. 이 리스트는 함께 쓰는 것인가 (함께 쓴다. 변수는 따로지만 가리키는 객체는 힙의 같은 것이다)'
+    body:
+      - p: '다른 스레드가 static `count`를 100으로 바꾸면, main 스레드가 읽는 값도 100이에요. 같은 변수를 보기 때문이에요.'
+      - ci:
+          key: shared
+          label: 실제 출력 보기
+          source: ProcessAndThreadTest.threadsShareHeap
+          code: shared
+      - p: 'JVM 메모리 구조 레슨의 영역이 그대로 함께 쓰는 것과 따로 가지는 것으로 나뉘어요.'
+      - table:
+          head: [함께 쓰는 것, 따로 가지는 것]
+          rows:
+            - ['힙의 객체(같은 객체를 가리키면 같은 객체)', '스택(지역 변수, 매개변수, 호출 기록)']
+            - ['static 필드', '지금 실행하는 위치(PC)']
+            - ['메서드 영역의 클래스 정보, 프로세스가 연 파일과 소켓', '스레드의 이름과 상태']
+      - p: '**지역 변수는 다른 스레드가 볼 수 없어요.** 두 스레드가 같은 메서드에서 지역 변수 `n`을 1만 번 올렸더니 둘 다 정확히 1만을 돌려받았어요. 각자의 스택 프레임에 `n`이 따로 있어서 섞이지 않아요.'
+      - callout: '다만 지역 변수가 **가리키는 객체**는 힙에 있어요. 두 스레드의 지역 변수가 같은 객체(예: 싱글톤 빈이 돌려준 리스트)를 가리키면, 변수는 따로여도 그 객체는 함께 쓰는 거예요.'
+      - more:
+          summary: '더 알아보기: 람다 안에서 지역 변수를 못 바꾸는 이유'
+          body:
+            - p: '람다 안에서는 바깥 지역 변수를 바꿀 수 없어요(effectively final). 람다는 다른 스레드에서 실행될 수 있는데, 지역 변수는 람다를 만든 스레드의 스택에 있기 때문이에요. 그래서 람다에서 무언가를 세려고 필드나 배열을 쓰게 되는데, 그것은 힙이라 함께 쓰는 것이 돼요. 질문 4의 문제가 거기서 생겨요.'
+      - quiz:
+          q: '두 스레드가 `int countLocal() { int n = 0; for (1만 번) n++; return n; }`을 동시에 실행해요. 각 스레드가 돌려받는 값은?'
+          options:
+            - 둘 다 10000
+            - 합쳐서 20000이 되게 나뉜다
+            - 10000보다 작을 수 있다
+          answer: 1
+          explain: '지역 변수 `n`은 스레드마다 자기 스택에 따로 있어요. 서로의 `n`을 건드리지 않아요.'
+      - next: '이제 스레드를 직접 만들어 실행해 볼 차례예요. 스레드는 어떻게 시작할까요?'
+    recall: '힙의 객체와 static 필드, 클래스 정보는 함께 쓰고, 스택에 놓이는 지역 변수와 매개변수, 실행 위치는 스레드마다 따로 가져요. 지역 변수는 다른 스레드가 볼 수 없지만, 지역 변수가 가리키는 객체가 같다면 그 객체는 함께 쓰는 거예요.'
   - id: q3
     title: 스레드는 어떻게 만들고 실행하나요?
     conclusion:
@@ -140,6 +241,33 @@ questions:
     asks:
       - '본문의 예시: 코드 startRun의 두 줄은 각각 어떤 이름을 출력하나 (`run()`은 main, `start()`는 worker)'
       - '옮긴 상황: 스레드 A와 B를 차례로 `start()`하고 `join()` 없이 바로 결과 리스트를 출력했다. A와 B는 각각 리스트에 값 하나를 넣는다. 출력의 크기로 맞는 것은 (0, 1, 2 가운데 무엇이든 나올 수 있다. 기다리지 않았다)'
+    body:
+      - p: '할 일을 `Runnable`(람다)로 넘겨 `Thread`를 만들고 **`start()`**를 불러요. `start()`는 JVM에게 새 스레드를 만들어 달라고 하고 바로 돌아와요. 새 스레드가 그 일을 실행해요.'
+      - p: '`run()`을 직접 부르면 어떻게 될까요? 두 줄이 찍는 스레드 이름을 비교했어요.'
+      - ci:
+          key: start-run
+          label: 실제 출력 보기
+          source: ProcessAndThreadTest.startVersusRun
+          code: startRun
+      - p: '`run()`은 새 스레드를 만들지 않고 **부른 스레드에서 그냥 메서드로** 실행돼요. 그래서 이름이 `main`이에요. 새 스레드에서 돌리려면 꼭 `start()`예요.'
+      - ul:
+          - '**`join()`은 그 스레드가 끝날 때까지 기다려요.** 처음 예측의 코드에서 `join()`을 빼면 두 스레드가 일하는 중에 출력해서 0이나 중간 값이 나와요.'
+          - '**실행 순서는 정해져 있지 않아요.** A를 먼저 `start()`해도 B가 먼저 끝날 수 있어요. 운영체제의 스케줄러가 정해요. 컨텍스트 스위칭 레슨에서 다뤄요.'
+          - '**한 스레드는 한 번만 시작해요.** 같은 `Thread` 객체에 `start()`를 두 번 부르면 `IllegalThreadStateException`이에요.'
+      - more:
+          summary: '더 알아보기: 데몬 스레드와 JVM이 끝나는 때'
+          body:
+            - p: 'JVM은 데몬이 아닌 스레드가 모두 끝나야 끝나요. `main`이 끝나도 다른 스레드가 일하는 동안 프로그램이 끝나지 않는 이유예요. `setDaemon(true)`로 만든 스레드는 기다리지 않아서, 남은 스레드가 데몬뿐이면 JVM이 끝나요.'
+      - quiz:
+          q: '`new Thread(job, "worker").run();`을 main 스레드에서 부르면 `job`은 어느 스레드에서 실행될까요?'
+          options:
+            - worker라는 새 스레드
+            - main 스레드
+            - 실행되지 않는다
+          answer: 2
+          explain: '`run()`은 그냥 메서드 호출이라 부른 스레드에서 돌아요. 새 스레드는 `start()`가 만들어요.'
+      - next: '스레드 둘이 같은 `count`를 함께 볼 수 있다는 것을 봤어요. 둘이 동시에 그 값을 고치면 어떻게 될까요?'
+    recall: '할 일을 `Runnable`로 넘겨 `Thread`를 만들고 `start()`를 불러야 새 스레드에서 실행돼요. `run()`을 직접 부르면 부른 스레드에서 그냥 메서드로 실행돼요. 끝나길 기다리려면 `join()`을 부르고, 스레드끼리의 실행 순서는 운영체제가 정해서 정해져 있지 않아요.'
   - id: q4
     title: 스레드가 메모리를 함께 쓰면 무엇이 문제인가요?
     conclusion:
@@ -157,6 +285,78 @@ questions:
       - '본문의 예시: count가 5일 때 두 스레드가 거의 동시에 `count++`를 한 번씩 했다. 끝난 뒤 count로 나올 수 있는 값을 모두 고르면 (6 또는 7)'
       - '옮긴 상황: 좋아요 수를 `likes = likes + 1`로 올리는 코드를 스레드 10개가 100번씩 실행했다. 결과로 맞는 것은 (1000 이하. 1000이 나올 수도 있지만 보장되지 않는다)'
       - '실무 구역: 코드 serviceField의 `visit()`을 요청 스레드 여럿이 동시에 부른다. 요청 1만 번 뒤 count는 (1만 이하. 싱글톤 빈의 필드는 모든 요청 스레드가 함께 쓴다)'
+    body:
+      - p: '처음 예측의 답은 **2000000보다 작은 값**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 여러 번 돌린 실제 결과 보기
+          source: ProcessAndThreadTest.lostUpdate
+          code: predict
+      - p: '실행할 때마다 값이 달라요. 가끔은 2000000이 나오기도 해요. `count++`는 한 줄이지만 CPU에게는 **세 단계**예요: 메모리에서 `count`를 읽고, 1을 더하고, 메모리에 써요. 스레드 A가 5를 읽고 아직 쓰기 전에 B도 5를 읽으면, 둘 다 6을 써요. 두 번 더했는데 하나만 남아요. 이것을 **갱신 손실**이라고 해요.'
+      - widget:
+          kind: steps
+          layout: [selector, duo, log, buttons, verdict]
+          selector:
+            label: 두 스레드가
+            options:
+              - {value: apart, label: 따로 실행}
+              - {value: overlap, label: 겹쳐서 실행}
+          initial:
+            duo:
+              - {label: '스레드 A가 읽은 값', state: dim, text: 아직 없음}
+              - {label: '스레드 B가 읽은 값', state: dim, text: 아직 없음}
+          scenarios:
+            apart:
+              - log: 'A: count를 읽음 (5)'
+                duo:
+                  - {label: 스레드 A가 읽은 값, rows: [{k: 읽은 값, v: '5', mark: changed}]}
+                  - {label: 스레드 B가 읽은 값, text: 아직 없음}
+              - log: 'A: 1을 더해 씀 → count = 6'
+                duo:
+                  - {label: 스레드 A가 읽은 값, rows: [{k: 쓴 값, v: '6'}]}
+                  - {label: 스레드 B가 읽은 값, text: 아직 없음}
+              - log: 'B: count를 읽음 (6)'
+                duo:
+                  - {label: 스레드 A가 읽은 값, state: dim, text: 끝남}
+                  - {label: 스레드 B가 읽은 값, rows: [{k: 읽은 값, v: '6', mark: changed}]}
+              - log: 'B: 1을 더해 씀 → count = 7'
+                duo:
+                  - {label: 스레드 A가 읽은 값, state: dim, text: 끝남}
+                  - {label: 스레드 B가 읽은 값, rows: [{k: 쓴 값, v: '7'}]}
+                verdict: '두 번 더해서 7이에요. 겹치지 않으면 맞아요.'
+            overlap:
+              - log: 'A: count를 읽음 (5)'
+                duo:
+                  - {label: 스레드 A가 읽은 값, rows: [{k: 읽은 값, v: '5', mark: changed}]}
+                  - {label: 스레드 B가 읽은 값, text: 아직 없음}
+              - log: 'B: count를 읽음 (5). A가 아직 쓰지 않았다'
+                duo:
+                  - {label: 스레드 A가 읽은 값, rows: [{k: 읽은 값, v: '5'}]}
+                  - {label: 스레드 B가 읽은 값, rows: [{k: 읽은 값, v: '5', mark: changed}]}
+              - log: 'A: 1을 더해 씀 → count = 6'
+                duo:
+                  - {label: 스레드 A가 읽은 값, rows: [{k: 쓴 값, v: '6'}]}
+                  - {label: 스레드 B가 읽은 값, rows: [{k: 읽은 값, v: '5'}]}
+              - log: 'B: 1을 더해 씀 → count = 6'
+                duo:
+                  - {label: 스레드 A가 읽은 값, state: dim, text: 끝남}
+                  - {label: 스레드 B가 읽은 값, rows: [{k: 쓴 값, v: '6', mark: bad}]}
+                verdict: '두 번 더했는데 6이에요. A가 쓴 값을 B가 덮었어요.'
+      - p: '이렇게 결과가 스레드의 실행 순서에 따라 달라지는 상황을 **경쟁 상태**라고 해요. 맛보기로 `count`를 `AtomicInteger`로 바꾸면 정확히 2000000이 나와요. 왜 그런지, 다른 방법은 무엇인지는 경쟁 상태와 동기화 레슨에서 다뤄요.'
+      - ci:
+          key: atomic
+          label: AtomicInteger로 바꾼 결과 보기
+          source: ProcessAndThreadTest.atomicIsExact
+      - callout: '**드물게 나는 것이 더 위험해요.** 혼자 눌러 보는 개발 환경에서는 거의 겹치지 않다가, 요청이 몰리는 운영에서 숫자가 조금씩 틀려요.'
+      - quiz:
+          q: '`count`가 5일 때 두 스레드가 거의 동시에 `count++`를 한 번씩 했어요. 끝난 뒤 나올 수 있는 값을 모두 고르면?'
+          options:
+            - 7만
+            - 6 또는 7
+            - 5, 6, 7 가운데 아무것
+          answer: 2
+          explain: '겹치지 않으면 7, 둘이 같은 5를 읽고 각자 6을 쓰면 6이에요. 둘 다 한 번은 썼으니 5로 남지는 않아요.'
+    recall: '두 스레드가 같은 값을 동시에 고치면 한쪽의 갱신이 사라질 수 있어요. `count++`는 읽기, 더하기, 쓰기 세 단계라서, 두 스레드가 같은 값을 읽고 각자 더해 쓰면 하나만 남아요. 이렇게 결과가 실행 순서에 달린 상황이 경쟁 상태이고, 드물게 나서 운영에서 드러나요.'
 practice:
   title: 스프링 서버에서는 이렇게 만나요
   says:
@@ -164,6 +364,40 @@ practice:
     - '싱글톤 빈은 힙에 하나 있고 모든 요청 스레드가 함께 쓴다(질문 2). 그래서 빈의 필드는 모든 요청이 함께 쓰는 변수다'
     - '흔한 실수: 코드 serviceField처럼 요청마다 바뀌는 값(방문 수, 현재 사용자, 계산 중인 합계)을 빈의 필드에 둔다. 요청이 겹치면 값이 사라지거나 다른 사람 값이 섞인다. 고친 코드: 요청마다 다른 값은 메서드의 지역 변수나 매개변수로 넘긴다. 정말 함께 세야 하는 값이면 `AtomicLong`(C3)이나 DB에 둔다. 스레드 둘로 `visit()`을 부르는 테스트로 고치기 전과 뒤를 비교한다'
     - '로그의 스레드 이름으로 어느 요청이 어느 스레드에서 돌았는지 본다. 로그백의 기본 패턴에 스레드 이름이 들어 있다'
+  body:
+    - p: '스프링 MVC 서버에서 이 레슨의 스레드는 **요청 처리 스레드**로 만나요. 톰캣이 요청 하나를 스레드 하나에게 맡겨요.'
+    - h3: 요청마다 톰캣의 스레드가 처리해요
+    - p: '작은 스프링 웹 앱을 띄우고 요청 두 개가 같은 순간에 처리되게 맞춘 뒤, 각 요청을 처리한 스레드의 이름을 돌려받았어요.'
+    - ci:
+        key: tomcat
+        label: 실제 출력 보기
+        source: ProcessAndThreadTest.requestsRunOnTomcatThreads
+    - p: '이름이 `http-nio-…-exec-N` 모양이고, 두 요청의 스레드가 달라요(포트를 정하면 `http-nio-8080-exec-1`처럼 나와요). 톰캣의 요청 처리 스레드는 기본으로 200개까지 늘어요(`server.tomcat.threads.max`, [스프링 부트 속성 목록](link:bootProps)). 로그백의 기본 로그 패턴에 이 스레드 이름이 들어 있어서, 로그에서 어느 요청이 어느 스레드에서 돌았는지 볼 수 있어요.'
+    - h3: '흔한 실수: 싱글톤 빈의 필드에 요청마다 바뀌는 값'
+    - p: '스프링의 빈은 기본이 싱글톤이라 힙에 하나 있고, 모든 요청 스레드가 같은 빈을 가리켜요. 그러니 **빈의 필드는 모든 요청이 함께 쓰는 변수**예요(질문 2).'
+    - code: serviceField
+    - p: '방문 수를 이렇게 세면 질문 4의 갱신 손실이 그대로 생겨요. 스레드 8개가 같은 서비스 객체의 `visit()`을 10만 번씩 불렀어요.'
+    - ci:
+        key: service
+        label: 실제 결과 보기
+        source: ProcessAndThreadTest.serviceFieldIsShared
+    - ul:
+        - '**요청마다 다른 값**(현재 사용자, 계산 중인 합계)은 필드가 아니라 **메서드의 지역 변수나 매개변수**로 넘겨요. 지역 변수는 스레드마다 따로예요.'
+        - '**정말 함께 세야 하는 값**이면 `AtomicLong`을 쓰거나 DB에 둬요. 서버가 여러 대면 JVM 안의 필드로는 셀 수 없으니 DB나 Redis에 둬요.'
+    - muted: '빈의 스코프와 상태는 빈의 생명주기와 스코프 레슨에서, 톰캣이 요청을 스레드에 맡기는 방법은 서블릿과 톰캣 레슨에서 다뤄요.'
+interview:
+  question: 프로세스와 스레드의 차이를 설명해 주세요
+  model:
+    - label: 정의
+      text: 프로세스는 운영체제가 메모리와 PID를 따로 주는 실행 중인 프로그램이고, 스레드는 프로세스 안에서 코드를 실행하는 흐름입니다. 한 프로세스는 스레드를 하나 이상 가집니다.
+    - label: 원리
+      text: 같은 프로세스의 스레드는 힙과 static 필드를 함께 쓰고, 스택의 지역 변수와 실행 위치는 따로 가집니다. 프로세스끼리는 메모리를 나누지 않아 파일이나 소켓으로 주고받습니다.
+    - label: 주의할 점
+      text: 프로세스는 무겁지만 서로 격리되어 한쪽이 죽어도 다른 쪽은 살고, 스레드는 가볍고 데이터를 바로 나누지만 같은 값을 동시에 고치면 갱신이 사라지는 경쟁 상태가 생깁니다. count++도 읽기, 더하기, 쓰기 세 단계라 겹칠 수 있습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 싱글톤 서비스의 필드로 방문 수를 세다가 부하 테스트에서 숫자가 모자라 AtomicLong으로 바꿨습니다.'
+verified: 이 레슨의 출력은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 프로세스는 자식 JVM을 따로 띄워, 톰캣 스레드는 작은 스프링 웹 앱을 띄워 확인했어요. 코드가 바뀔 때마다 테스트([ProcessAndThreadTest](link:test))가 다시 돌아요.
+footer: '근거: 프로세스와 스레드의 정의는 자바 튜토리얼([링크](link:tutorial)), 스레드가 함께 쓰는 변수는 자바 언어 명세 17장([링크](link:jls17)), start와 join은 Thread API 문서([링크](link:threadApi)), 톰캣 스레드 수는 스프링 부트 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '자식 JVM이 static 변수를 바꿔도 부모 JVM의 같은 변수는 그대로이고, 두 프로세스의 PID가 다르다'
     how: '`ChildJvm`으로 자식을 띄워 출력과 PID를 비교한다'
@@ -173,10 +407,13 @@ claims:
     test: ProcessAndThreadTest.threadsShareHeap
   - claim: '같은 메서드를 두 스레드가 동시에 실행해도 지역 변수는 따로다'
     how: '두 스레드가 같은 메서드에서 지역 변수를 1만 번 올리고 결과를 비교한다'
+    test: ProcessAndThreadTest.localsArePerThread
   - claim: '`run()`은 부른 스레드에서, `start()`는 새 스레드에서 실행된다'
     how: '코드 startRun의 스레드 이름을 모은다'
+    test: ProcessAndThreadTest.startVersusRun
   - claim: '`start()`를 두 번 부르면 `IllegalThreadStateException`이다'
     how: '같은 스레드 객체에 두 번 부른다'
+    test: ProcessAndThreadTest.startTwice
   - claim: '동기화 없이 두 스레드가 count++를 100만 번씩 하면 2000000보다 작은 값이 나올 수 있다'
     how: '최대 10번 돌려 한 번이라도 작은 값이 나오는지 본다. 값을 `CiOutput`에 남긴다'
     test: ProcessAndThreadTest.lostUpdate
@@ -185,8 +422,10 @@ claims:
     test: ProcessAndThreadTest.atomicIsExact
   - claim: '스프링 MVC에서 동시에 들어온 두 요청은 서로 다른 톰캣 스레드가 처리한다'
     how: '`MiniWeb`으로 스레드 이름을 돌려주는 컨트롤러를 띄우고 래치로 두 요청을 겹치게 해 이름을 비교한다'
+    test: ProcessAndThreadTest.requestsRunOnTomcatThreads
   - claim: '싱글톤 빈의 필드를 여러 스레드가 올리면 요청 수보다 작아질 수 있고, `AtomicLong`이면 정확하다'
     how: '같은 서비스 객체의 `visit()`을 스레드 여럿이 부른다'
+    test: ProcessAndThreadTest.serviceFieldIsShared
 sources:
   - '프로세스와 스레드의 정의: 자바 튜토리얼 https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html'
   - '스레드와 공유 변수: 자바 언어 명세 17장 https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html'
