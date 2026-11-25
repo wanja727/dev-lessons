@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/stack-and-queue.yaml의 says).
 # 동작에 관한 정답은 verification의 StackAndQueueTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -29,7 +30,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 괄호의 짝이 맞는지 보는 메서드예요. balanced("(()")는 무엇을 돌려줄까요?
     code: |-
@@ -60,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 문서 편집기에서 글자 A, B, C를 차례로 입력한 뒤 "되돌리기"를 두 번 눌렀어요. 남는 글자는 무엇이고, 되돌릴 기록을 담기에 맞는 것은 무엇일까요?
     choices:
@@ -81,7 +82,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 빈 ArrayDeque에서 두 메서드를 각각 불러요. 각각 어떻게 될까요?
     code: |-
@@ -105,7 +106,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 코드 리뷰에서 Stack<Integer> history = new Stack<>();을 봤어요. 무엇으로 바꾸라고 하고, 그 이유는 무엇일까요?
     choices:
@@ -125,7 +126,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 화면의 "뒤로 가기" 기록을 Deque에 담았어요. 마지막 줄은 무엇을 출력할까요?
     code: |-
@@ -152,7 +153,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 원소 5개가 든 ArrayDeque에서 poll()을 한 번 해요. 남은 원소 가운데 안쪽 배열에서 자리를 옮기는 것은 몇 개일까요?
     choices:
@@ -172,7 +173,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 원소 n개가 든 ArrayList를 큐로 쓰며 아래처럼 모두 꺼내요. 전체 시간 복잡도는 무엇일까요?
     code: |-
@@ -196,7 +197,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스택과 큐의 차이는 무엇이고, 자바에서는 무엇으로 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

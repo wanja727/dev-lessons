@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/sorting.yaml의 says).
 # 동작에 관한 정답은 verification의 SortingTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 원소 6개의 배열을 아래 버블 정렬로 정렬해요. if의 비교는 모두 몇 번 일어날까요?
     code: |-
@@ -60,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 버블 정렬로 원소 1,000개를 정렬하는 데 0.01초가 걸렸어요. 같은 컴퓨터에서 원소 100,000개면 대략 얼마나 걸릴까요?
     choices:
@@ -80,7 +81,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 원소 16개를 병합 정렬로 절반씩 나눠요. 원소 하나가 될 때까지 몇 겹으로 나뉠까요?
     choices:
@@ -99,7 +100,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 맨 앞 원소를 피벗으로 쓰는 퀵 정렬에 이미 오름차순으로 정렬된 원소 n개를 넣었어요. 시간 복잡도는 무엇이고, 왜 그럴까요?
     choices:
@@ -120,7 +121,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 주문 목록을 List.sort로 금액 순 정렬해요. 정렬한 뒤 이름의 순서는 무엇일까요?
     code: |-
@@ -145,7 +146,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 학생 목록을 이름 순으로 정렬한 뒤, 다시 학년 순으로 정렬했어요. 둘째 정렬이 안정 정렬이면 같은 학년 안의 학생 순서는 무엇일까요?
     choices:
@@ -165,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 금액 높은 순, 같은 금액이면 오래된 순으로 정렬하던 코드에서 reversed()를 맨 뒤로 옮겼어요. 같은 금액의 주문은 어떤 순서가 될까요?
     code: |-
@@ -189,7 +190,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 회원 목록을 나이 많은 순으로, 나이가 같으면 이름의 사전 순으로 정렬하려고 해요. List.sort에 무엇을 넘길까요?
     choices:
@@ -208,7 +209,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 금액 순(오름차순)으로 정렬하려고 뺄셈으로 Comparator를 만들었어요. 금액 2,000,000,000원 주문과 -500,000,000원 환불 건을 이 기준으로 정렬하면 어느 쪽이 앞에 올까요? (amount는 int예요)
     code: |-
@@ -232,7 +233,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "퀵 정렬과 병합 정렬의 차이는 무엇이고, 자바의 정렬은 무엇을 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

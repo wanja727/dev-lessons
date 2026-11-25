@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/time-complexity.yaml의 says).
 # 동작에 관한 정답은 verification의 TimeComplexityTest로 확인했다 (자바 21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 회원 2,000명이 든 리스트에서 목록에 없는 이메일을 찾아요. equals는 몇 번 불릴까요?
     code: |-
@@ -60,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 어떤 코드가 실행하는 단계 수가 2n + 100이에요. n이 1만에서 2만으로 늘면 단계 수는 대략 몇 배가 될까요?
     choices:
@@ -80,7 +81,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 이메일이 같은 회원이 둘 있는지 보는 코드예요. n이 2배가 되면 비교 횟수는 대략 몇 배가 될까요?
     code: |-
@@ -107,7 +108,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: n이 1024일 때 아래 코드는 몇 번 출력할까요?
     code: |-
@@ -131,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 회원 1천 명이 든 리스트를 처음부터 하나씩 비교해 이메일을 찾는 메서드가 있어요. 찾는 이메일이 맨 앞에 있어서 비교 한 번에 끝났어요. 이 메서드의 시간 복잡도를 어떻게 말할까요?
     choices:
@@ -151,7 +152,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 길이가 n인 정수 배열에서 가장 큰 값을 찾아요. 값이 어떻게 놓여 있을 때 비교 횟수가 가장 적고, 가장 많을까요?
     code: |-
@@ -178,9 +179,9 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
-    body: 이메일이 같은 회원이 둘 있는지, 겹친 반복 대신 아래 코드로 봐요. 시간 복잡도는 어떻게 바뀔까요?
+    body: 이메일 n개 가운데 같은 것이 둘 있는지 보는 코드예요. 이중 for로 모든 짝을 비교하던 코드를 아래처럼 바꿨어요. 시간 복잡도는 무엇에서 무엇으로 바뀔까요?
     code: |-
       Set<String> seen = new HashSet<>();
       for (String e : emails) {
@@ -205,7 +206,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 상품 n개를 돌며 품절 목록에 있는 상품을 숨겨요. soldOutIds는 크기가 m인 ArrayList예요. 이 코드의 시간 복잡도와, soldOutIds를 HashSet으로 바꾼 뒤의 시간 복잡도는 각각 무엇일까요?
     code: |-
@@ -230,7 +231,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서비스 코드에서 주문 10,000건과 회원 1,000명을 짝지어요. 안쪽 if의 비교는 모두 몇 번 일어날까요?
     code: |-
@@ -258,7 +259,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "시간 복잡도가 무엇이고, 코드를 보고 어떻게 알아보나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
