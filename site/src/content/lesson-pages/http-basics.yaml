@@ -1,8 +1,9 @@
-# HTTP 요청과 응답 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# HTTP 요청과 응답
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/http-basics.yaml에 있다.
 title: HTTP 요청과 응답
+description: HTTP 요청과 응답이 어떻게 생겼는지, 메서드와 상태 코드가 무엇을 알려 주는지, 헤더가 하는 일, 연결 하나로 요청을 여러 번 보내는 법. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 20
 roadmap: N4
 type: 개념 설명
 prerequisites:
@@ -36,47 +37,105 @@ covers:
 codes:
   request: |-
     POST /products HTTP/1.1
-    Host: localhost:8080
+    Host: localhost
     Content-Type: application/json
-    Content-Length: 31
+    Content-Length: 30
+    Connection: close
 
     {"name":"커피","price":4500}
   response: |-
     HTTP/1.1 201
     Content-Type: application/json
-    Content-Length: 39
+    Content-Length: 35
 
     {"id":1,"name":"커피","price":4500}
   noHost: |-
     GET /products/1 HTTP/1.1
 
+  headRun: |-
+    GET /menu HTTP/1.1
+    Host: localhost
+
+    HEAD /menu HTTP/1.1
+    Host: localhost
+  statusRun: |-
+    GET /nope HTTP/1.1
+    DELETE /products/1 HTTP/1.1
+    GET /boom HTTP/1.1
+  lengthRun: |-
+    @GetMapping("/menu")
+    String menu() {
+      return "커피 4500원";
+    }
+
+    @GetMapping("/stream")
+    StreamingResponseBody stream() {
+      return out -> {
+        for (int i = 1; i <= 3; i++) {
+          out.write(("주문" + i + "\n")
+              .getBytes(UTF_8));
+          out.flush();
+        }
+      };
+    }
+  acceptRun: |-
+    GET /products/1 HTTP/1.1
+    Host: localhost
+    Accept: [[application/xml]]
   twoOnOne: |-
     GET /products/1 HTTP/1.1
     Host: localhost
 
     GET /products/2 HTTP/1.1
     Host: localhost
-    Connection: close
-
+    [[Connection: close]]
   controller: |-
     @PostMapping(value = "/products",
-        consumes = "application/json")
+        [[consumes]] = "application/json")
     ResponseEntity<Product> create(
-        @RequestBody NewProduct body) {
+        @RequestBody NewProduct body,
+        [[@RequestHeader]]("User-Agent")
+            String agent) {
       Product p = products.save(body);
-      return ResponseEntity
+      return [[ResponseEntity]]
           .status(HttpStatus.CREATED)
           .body(p);
     }
   missingType: |-
     POST /products HTTP/1.1
     Host: localhost
-    Content-Length: 31
+    Content-Length: 30
 
     {"name":"커피","price":4500}
+  fetchFixed: |-
+    fetch("/products", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(product)
+    });
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/httpbasics/HttpBasicsTest.java
+  rfc9110: https://www.rfc-editor.org/rfc/rfc9110.html
+  rfc9112: https://www.rfc-editor.org/rfc/rfc9112.html
+  tomcatHttp: https://tomcat.apache.org/tomcat-10.1-doc/config/http.html
+  mvcMapping: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-requestmapping.html
 predict:
-  text: '코드 noHost는 `Host` 헤더 없이 보낸 HTTP/1.1 요청이에요. 경로는 있는 상품이에요. 스프링 부트(톰캣) 서버는 어떻게 답할까요? 보기: 200과 상품, 400, 404.'
-  answer: '400. HTTP/1.1은 Host 헤더를 꼭 요구하고, 없으면 서버는 400으로 답해야 한다. 질문 1에서 밝힌다.'
+  title: Host 헤더를 빼면 어떻게 될까요?
+  text: '아래는 `Host` 헤더 없이 보낸 HTTP/1.1 요청이에요. 경로의 상품은 서버에 있어요. 스프링 부트(톰캣) 서버는 어떻게 답할까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: noHost
+  label: 내 예측
+  options:
+    - value: ok
+      label: 200과 상품 정보
+    - value: bad
+      label: '400'
+    - value: notfound
+      label: '404'
+  answer: bad
+  storageKey: hb-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: HTTP 요청과 응답은 어떻게 생겼나요?
@@ -92,6 +151,45 @@ questions:
     asks:
       - '본문의 예시: 요청 글에서 헤더가 끝나고 본문이 시작하는 곳을 서버는 무엇으로 아나 (빈 줄)'
       - '옮긴 상황: 서버 하나(IP 하나)에 `shop.example.com`과 `admin.example.com`이 함께 떠 있다. 서버는 요청이 어느 사이트로 온 것인지 무엇으로 구별하나 (Host 헤더)'
+    body:
+      - p: 상품을 하나 등록하는 요청이에요. 브라우저나 앱이 실제로 보내는 글 그대로예요.
+      - code: request
+      - p: '네 부분으로 나뉘어요. 줄은 `\r\n`(CR과 LF 두 글자)으로 끝나요.'
+      - table:
+          head: [부분, 이 요청에서, 뜻]
+          rows:
+            - ['첫 줄', '`POST /products HTTP/1.1`', '메서드(무엇을 할지), 대상(어디에), 버전']
+            - ['헤더', '`Host`부터 `Connection`까지', '`이름: 값` 한 줄씩. 요청에 대한 정보']
+            - ['빈 줄', '(아무것도 없는 줄)', '헤더가 여기서 끝난다는 표시']
+            - ['본문', '`{"name":"커피",...}`', '보내는 데이터. 없을 수도 있다']
+      - p: 응답도 같은 모양이에요. 첫 줄만 달라서 버전과 **상태 코드**를 적어요. 이 요청을 소켓으로 스프링 서버에 보내 받은 응답 그대로예요.
+      - ci:
+          key: shape
+          label: 보낸 요청과 받은 응답 보기
+          source: HttpBasicsTest.requestAndResponseShape
+          code: request
+      - ul:
+          - '**첫 줄** `HTTP/1.1 201`: 만들었다는 뜻이에요. 숫자 뒤에 원래 "Created" 같은 이유 문구를 붙일 수 있는데, 톰캣 10.1은 붙이지 않아요. 클라이언트는 숫자만 봐요.'
+          - '**헤더**의 이름은 대소문자를 가리지 않아요. `content-type`이라고 적어도 같아요.'
+          - '본문 앞뒤의 `25`와 `0`은 질문 3에서 볼 조각 전송(chunked)의 표시예요.'
+      - h3: Host는 꼭 있어야 해요
+      - p: '처음 예측한 요청은 `Host` 헤더가 없었어요. 결과는 **400**이에요. {{predict-result}}'
+      - ci:
+          key: no-host
+          label: 두 요청의 실제 응답 보기
+          source: HttpBasicsTest.missingHostIs400
+          code: noHost
+      - p: '경로의 상품은 있었지만 서버는 경로를 보기도 전에 거절했어요. HTTP/1.1은 Host를 꼭 적도록 정했고, 없으면 서버가 400으로 답해야 해요. IP 주소 하나에 사이트가 여럿 떠 있을 수 있어서, 서버는 Host로 어느 사이트로 온 요청인지 알아야 하기 때문이에요.'
+      - quiz:
+          q: '요청 글에서 헤더가 끝나고 본문이 시작하는 곳을 서버는 무엇으로 알까요?'
+          options:
+            - Content-Type 헤더
+            - 빈 줄
+            - 본문의 첫 글자 `{`
+          answer: 2
+          explain: 헤더 뒤의 빈 줄 하나가 헤더의 끝이에요. 그 뒤가 본문이에요.
+      - next: 요청의 첫 단어 `POST`와 응답의 `201`은 무엇을 뜻하고, 어떤 것들이 있을까요?
+    recall: 첫 줄, 헤더 여러 줄, 빈 줄, 본문 순서의 글이에요. 요청의 첫 줄은 메서드, 대상, 버전이고 응답의 첫 줄은 버전과 상태 코드예요. 헤더는 이름과 값 한 줄씩이고 빈 줄이 헤더의 끝을 알려요. HTTP/1.1 요청은 Host 헤더가 꼭 있어야 하고, 없으면 400이에요.
   - id: q2
     title: 메서드와 상태 코드는 무엇을 알려 주나요?
     conclusion:
@@ -106,8 +204,70 @@ questions:
       kind: classify
       note: '상황(없는 상품 조회, 상품 등록 성공, 지원하지 않는 메서드, 서버 코드의 NullPointerException, 로그인하지 않음, 권한 없음, 삭제 성공 후 본문 없음, 뒤의 서버가 응답하지 않는 게이트웨이)을 상태 코드 묶음과 코드로 고른다'
     asks:
-      - '본문의 예시: GET만 받는 `/products/1`에 POST를 보내면 받는 상태 코드와 함께 오는 헤더는 (405, Allow)'
+      - '본문의 예시: GET만 받는 `/products/1`에 DELETE를 보내면 받는 상태 코드와 함께 오는 헤더는 (405, Allow)'
       - '옮긴 상황: 주문 API가 클라이언트에게 503을 돌려줬다. 클라이언트가 요청을 고쳐야 하는가, 잠시 뒤 다시 보내 볼 만한가 (5xx라 서버 쪽 사정이다. 잠시 뒤 다시 보내 볼 수 있다)'
+    body:
+      - p: '**메서드**는 요청의 첫 단어예요. 대상(경로)에 무엇을 하려는지 알려요.'
+      - table:
+          head: [메서드, 뜻, 본문]
+          rows:
+            - ['`GET`', '읽기', '보통 없음']
+            - ['`POST`', '새로 만들기, 또는 처리를 맡기기', '있음']
+            - ['`PUT`', '그 자리의 것을 통째로 바꾸기', '있음']
+            - ['`PATCH`', '일부만 바꾸기', '있음']
+            - ['`DELETE`', '지우기', '보통 없음']
+            - ['`HEAD`', 'GET과 같은데 응답의 본문 없이 헤더만', '없음']
+            - ['`OPTIONS`', '이 대상에 쓸 수 있는 메서드 묻기', '없음']
+      - p: HEAD가 정말 헤더만 주는지 확인해 봤어요. 같은 주소에 GET과 HEAD를 보냈어요.
+      - ci:
+          key: head
+          label: GET과 HEAD의 응답 보기
+          source: HttpBasicsTest.headHasNoBody
+          code: headRun
+      - p: '헤더는 `Content-Length: 14`까지 같고, HEAD에는 본문이 없어요. 큰 파일을 받기 전에 크기만 알고 싶을 때 써요.'
+      - h3: 상태 코드는 첫 자리가 묶음이에요
+      - p: '**상태 코드**는 응답 첫 줄의 세 자리 숫자예요. 클라이언트는 본문을 읽기 전에 이 숫자로 결과를 판단해요.'
+      - table:
+          head: [묶음, 뜻, 자주 보는 코드]
+          rows:
+            - ['2xx', '성공', '200 OK, 201 Created(만들었음), 204 No Content(본문 없음)']
+            - ['3xx', '다른 곳을 보라', '301, 302(다른 주소로 가라), 304(가진 것을 그대로 써라)']
+            - ['4xx', '요청 쪽 잘못', '400(형식이 틀림), 401(로그인 필요), 403(권한 없음), 404(없음), 405(메서드가 맞지 않음), 415(본문 종류를 못 읽음)']
+            - ['5xx', '서버 쪽 잘못', '500(서버 코드 오류), 502(뒤의 서버가 이상한 답), 503(지금 처리 못 함), 504(뒤의 서버가 답이 없음)']
+      - p: 같은 서버에 잘못된 요청 셋을 보내 봤어요.
+      - ci:
+          key: status
+          label: 세 요청의 상태 줄 보기
+          source: HttpBasicsTest.statusCodes
+          code: statusRun
+      - ul:
+          - '**404:** 그런 경로가 없어요.'
+          - '**405와 `Allow`:** 경로는 있지만 그 메서드를 받지 않아요. `Allow` 헤더가 쓸 수 있는 메서드를 알려 줘요.'
+          - '**500:** 요청은 맞았는데 서버 코드가 예외를 던졌어요.'
+      - p: '**4xx와 5xx를 가르는 것**이 중요해요. 4xx는 요청이 잘못된 것이라 같은 요청을 다시 보내도 또 실패해요. 요청을 고쳐야 해요. 5xx는 서버 쪽 사정이라, 잠시 뒤 같은 요청이 성공할 수도 있어요. 클라이언트가 "다시 보내 볼까"를 이 첫 자리로 정해요.'
+      - p: 아래 상황에 맞는 상태 코드를 골라 보세요.
+      - widget:
+          kind: classify
+          categories: ['200', '201', '204', '401', '403', '404', '500', '503']
+          items:
+            - {text: 있는 상품을 읽었어요, answer: 1, explain: '읽기 성공은 200이에요.'}
+            - {text: 새 상품을 만들었어요, answer: 2, explain: '만들었으면 201이에요.'}
+            - {text: 상품을 지웠고 돌려줄 본문이 없어요, answer: 3, explain: '성공했지만 본문이 없으면 204예요.'}
+            - {text: 로그인하지 않은 사용자가 내 주문을 봤어요, answer: 4, explain: '누구인지 모르면 401이에요.'}
+            - {text: 일반 회원이 관리자 화면을 열었어요, answer: 5, explain: '누구인지는 알지만 권한이 없으면 403이에요.'}
+            - {text: 없는 상품 번호를 읽었어요, answer: 6, explain: '없으면 404예요.'}
+            - {text: 서버 코드에서 NullPointerException이 났어요, answer: 7, explain: '서버 코드의 오류는 500이에요.'}
+            - {text: 점검 중이라 잠시 요청을 받지 않아요, answer: 8, explain: '지금 처리할 수 없으면 503이에요. 잠시 뒤 다시 보낼 수 있어요.'}
+      - quiz:
+          q: '주문 API가 503을 돌려줬어요. 클라이언트는 어떻게 하는 것이 맞을까요?'
+          options:
+            - 요청 본문이 잘못됐으니 고쳐서 보낸다
+            - 서버 쪽 사정이니 잠시 뒤 같은 요청을 다시 보내 볼 수 있다
+            - 로그인을 다시 한다
+          answer: 2
+          explain: 5xx는 서버 쪽 사정이에요. 503은 지금 처리할 수 없다는 뜻이라 잠시 뒤에 다시 보내 볼 만해요.
+      - next: 상태 코드는 결과를 알려 줬어요. 그러면 본문이 JSON인지, 얼마나 긴지는 무엇이 알려 줄까요?
+    recall: 메서드는 대상에 무엇을 하려는지(GET 읽기, POST 만들기, PUT 바꾸기, DELETE 지우기, HEAD는 헤더만), 상태 코드는 결과를 세 자리 숫자로 알려 줘요. 첫 자리가 묶음이라 2xx 성공, 3xx 다른 곳으로, 4xx 요청 쪽 잘못, 5xx 서버 쪽 잘못이에요. 4xx는 요청을 고쳐야 하고 5xx는 나중에 다시 보내 볼 수 있어요.
   - id: q3
     title: 헤더는 무슨 일을 하나요?
     conclusion:
@@ -121,6 +281,44 @@ questions:
     asks:
       - '본문의 예시: 서버가 JSON만 돌려줄 수 있는 주소에 `Accept: application/xml`만 적어 요청하면 받는 상태 코드는 (406)'
       - '옮긴 상황: 응답 헤더에 Content-Length가 없고 `Transfer-Encoding: chunked`가 있다. 클라이언트는 본문이 끝난 것을 어떻게 아나 (길이가 0인 마지막 조각)'
+    body:
+      - p: 헤더는 본문과 요청에 대한 정보를 적는 곳이에요. 가장 자주 만나는 셋이에요.
+      - table:
+          head: [헤더, 누가 보내나, 뜻]
+          rows:
+            - ['`Content-Type`', '본문을 보내는 쪽', '본문의 종류. `application/json`, `text/html; charset=UTF-8`']
+            - ['`Content-Length`', '본문을 보내는 쪽', '본문의 바이트 수']
+            - ['`Accept`', '요청하는 쪽', '응답을 어떤 종류로 받고 싶은지']
+      - h3: 본문이 어디서 끝나는지 알려 줘요
+      - p: 'TCP는 바이트의 흐름이라 메시지의 끝을 알려 주지 않아요(TCP와 UDP 레슨). 게다가 질문 4에서 볼 것처럼 HTTP/1.1은 응답 뒤에도 연결을 닫지 않아요. 그러면 받는 쪽은 본문이 어디서 끝나는지 어떻게 알까요? 방법이 둘이에요.'
+      - ul:
+          - '**`Content-Length`:** 본문의 바이트 수를 미리 적어요. 받는 쪽은 그만큼 읽으면 끝이에요.'
+          - '**`Transfer-Encoding: chunked`:** 길이를 미리 모를 때 써요. 본문을 조각으로 나눠 조각마다 앞에 길이(16진수)를 붙이고, 길이 0인 조각으로 끝을 알려요.'
+      - p: 문자열을 돌려주는 주소와, 조각조각 써서 돌려주는 주소를 불러 봤어요.
+      - ci:
+          key: length
+          label: 두 응답 보기
+          source: HttpBasicsTest.contentLengthOrChunked
+          code: lengthRun
+      - p: '첫 응답은 `Content-Length: 14`예요. `커피 4500원`은 일곱 글자인데 14바이트예요. 한글은 UTF-8에서 한 글자가 3바이트라서, 길이는 **글자 수가 아니라 바이트 수**예요. 둘째 응답은 길이를 미리 모르니 chunked로 왔어요. 조각마다 길이 `8`(주문1과 줄바꿈이 8바이트)이 붙고 마지막에 `0`이 와요. 질문 1의 JSON 응답도 스프링이 길이를 미리 계산하지 않아 chunked로 왔어요.'
+      - h3: 받고 싶은 모양을 고르게 해요
+      - p: '요청의 `Accept`는 "응답을 이 종류로 주세요"예요. 서버가 그 종류로 만들 수 있으면 그렇게 주고, 못 만들면 **406**이에요. 이렇게 클라이언트와 서버가 종류를 맞추는 것을 **내용 협상**이라고 해요. JSON만 만드는 주소에 XML을 달라고 해 봤어요.'
+      - ci:
+          key: accept
+          label: 두 요청의 상태 줄 보기
+          source: HttpBasicsTest.acceptMismatchIs406
+          code: acceptRun
+      - p: '반대 방향도 있어요. 요청 본문의 `Content-Type`을 서버가 읽을 줄 모르면 **415**예요. 실무 구역에서 이 실수를 봐요.'
+      - quiz:
+          q: '응답 헤더에 `Content-Length`가 없고 `Transfer-Encoding: chunked`가 있어요. 클라이언트는 본문이 끝난 것을 어떻게 알까요?'
+          options:
+            - 서버가 연결을 닫을 때
+            - 길이가 0인 마지막 조각이 올 때
+            - 빈 줄이 나올 때
+          answer: 2
+          explain: chunked는 조각마다 길이를 붙이고 길이 0인 조각으로 끝을 알려요. 연결은 닫지 않아도 돼요.
+      - next: 본문의 끝을 알아야 하는 이유는 연결이 닫히지 않아서라고 했어요. 연결 하나로 요청을 정말 여러 번 보낼 수 있을까요?
+    recall: 본문에 대한 정보와 요청에 대한 조건을 전해요. Content-Type은 본문의 종류, Content-Length는 본문의 바이트 수, Accept는 받고 싶은 종류예요. 길이를 모르면 chunked로 조각마다 길이를 붙이고 0으로 끝을 알려요. Accept에 맞는 종류를 못 만들면 406, Content-Type을 못 읽으면 415예요.
   - id: q4
     title: 연결 하나로 요청을 여러 번 보낼 수 있나요?
     conclusion:
@@ -138,29 +336,162 @@ questions:
     asks:
       - '본문의 예시: 소켓 하나에 `Connection: close`가 없는 요청 하나를 보내고 응답을 다 읽었다. 서버는 연결을 바로 닫나 (닫지 않는다. 다음 요청을 기다린다)'
       - '옮긴 상황: HTTP/1.1 클라이언트가 응답 헤더에 Content-Length가 있는 응답을 받는다. 연결이 닫히지 않는데 다음 응답이 어디서 시작하는지 어떻게 아나 (Content-Length만큼 읽으면 본문이 끝난다)'
+    body:
+      - p: '예전 HTTP/1.0은 응답을 보내면 연결을 닫았어요. 요청마다 TCP 연결을 새로 맺어야 했죠(TCP와 UDP 레슨의 handshake 왕복). HTTP/1.1은 반대로 **응답 뒤에도 연결을 닫지 않고 다음 요청을 기다리는 것**이 기본이에요. 이것을 지속 연결(persistent connection), 흔히 keep-alive라고 불러요.'
+      - p: 한 단계씩 넘겨 보세요.
+      - widget:
+          kind: timeline
+          layout: [duo, timeline, buttons, verdict]
+          lanes: [클라이언트, 서버]
+          initial:
+            duo:
+              - {label: 연결 상태, state: dim, text: 없음}
+              - {label: 연결을 맺은 횟수, state: dim, text: '0'}
+          scenarios:
+            default:
+              - event:
+                  dir: right
+                  title: TCP 연결 맺기
+                  text: SYN, SYN-ACK, ACK
+                  note: 연결을 한 번 맺어요.
+                duo:
+                  - label: 연결 상태
+                    rows: [{k: TCP, v: 열림, mark: changed}]
+                  - label: 연결을 맺은 횟수
+                    rows: [{k: 횟수, v: '1', mark: changed}]
+              - event:
+                  dir: right
+                  title: 요청 1
+                  text: |
+                    GET /products/1 HTTP/1.1
+                    Host: localhost
+              - event:
+                  dir: left
+                  title: 응답 1
+                  text: |
+                    HTTP/1.1 200
+                    Transfer-Encoding: chunked
+                  note: 응답을 보낸 뒤에도 서버는 연결을 닫지 않고 기다려요.
+              - event:
+                  dir: right
+                  title: 요청 2 (같은 연결)
+                  text: |
+                    GET /products/2 HTTP/1.1
+                    Host: localhost
+                    [[Connection: close]]
+                  note: 새 연결을 맺지 않고 같은 연결로 보내요. 이번이 마지막이라고 알려요.
+              - event:
+                  dir: left
+                  title: 응답 2
+                  text: |
+                    HTTP/1.1 200
+                    [[Connection: close]]
+                  note: 서버도 닫겠다고 답해요.
+              - event:
+                  dir: left
+                  title: 연결 닫기
+                  text: FIN
+                  note: 서버가 연결을 닫아요. 클라이언트의 read는 -1을 받아요.
+                duo:
+                  - label: 연결 상태
+                    rows: [{k: TCP, v: 닫힘, mark: changed}]
+                  - label: 연결을 맺은 횟수
+                    rows: [{k: 횟수, v: '1'}]
+                verdict: 요청 둘에 연결은 한 번 맺었어요. 연결을 닫는 것은 Connection close를 주고받은 뒤예요.
+      - p: 실제로 소켓 하나에 요청 둘을 이어 써 봤어요.
+      - ci:
+          key: keep-alive
+          label: 한 연결로 받은 두 응답 보기
+          source: HttpBasicsTest.twoRequestsOnOneConnection
+          code: twoOnOne
+      - p: '응답 둘이 차례로 왔어요. 첫 요청에는 `Connection: close`가 없어서 서버가 연결을 닫지 않았고, 둘째 요청에 적었더니 둘째 응답에도 `Connection: close`가 붙고 연결이 닫혔어요(read가 -1).'
+      - p: '여기서 질문 3이 다시 나와요. 연결이 닫히지 않으니, 클라이언트는 **본문의 길이(Content-Length나 chunked의 0)로 첫 응답의 끝을 알아야** 그다음 바이트를 둘째 응답으로 읽어요.'
+      - p: '서버는 쉬는 연결을 끝없이 두지 않아요. 톰캣은 연결에 정해진 시간 동안 요청이 없으면 닫아요(`keepAliveTimeout`, 기본은 `connectionTimeout`과 같은 20초).'
+      - more:
+          summary: '더 알아보기: HTTP/2는 무엇이 다른가요?'
+          body:
+            - p: 'HTTP/1.1은 한 연결에서 응답이 요청한 순서대로 와야 해요. 앞의 응답이 늦으면 뒤의 응답도 기다려요. 그래서 브라우저는 한 서버에 연결을 여러 개(보통 6개) 열어 나눠 보내요.'
+            - p: 'HTTP/2는 요청과 응답을 작은 프레임으로 쪼개 한 연결에 섞어 보내요. 연결 하나로 여러 요청을 동시에 주고받아요. 요청 글의 뜻(메서드, 헤더, 상태 코드)은 HTTP/1.1과 같고, 연결 위에 싣는 방식만 달라요.'
+      - quiz:
+          q: '소켓 하나로 `Connection: close`가 없는 HTTP/1.1 요청을 보내고 응답을 다 읽었어요. 서버는 어떻게 할까요?'
+          options:
+            - 응답을 보내자마자 연결을 닫는다
+            - 연결을 열어 두고 다음 요청을 기다린다
+            - 연결을 닫고 새 연결을 맺으라고 알린다
+          answer: 2
+          explain: HTTP/1.1은 연결을 다시 쓰는 것이 기본이에요. 닫으려면 Connection close를 보내요. 쉬는 시간이 길면 서버가 닫기도 해요.
+    recall: 네. HTTP/1.1은 응답을 보낸 뒤 연결을 닫지 않고 다음 요청을 기다리는 것이 기본이라, 연결을 맺는 비용을 한 번만 내요. 연결이 닫히지 않으니 Content-Length나 chunked로 응답의 끝을 알아요. 닫고 싶으면 Connection close를 보내고, 서버는 쉬는 연결을 정해진 시간 뒤에 닫아요.
 practice:
+  title: 스프링 컨트롤러로 보면
   says:
     - '스프링 MVC에서 HTTP의 각 부분은 애너테이션과 클래스로 보인다. 메서드는 `@GetMapping`, `@PostMapping`, 받는 Content-Type은 `consumes`, 주는 종류는 `produces`, 헤더는 `@RequestHeader`, 상태 코드와 헤더는 `ResponseEntity`다(코드 controller)'
     - '`@RequestBody`는 요청의 Content-Type을 보고 메시지 변환기를 고른다. JSON이면 잭슨이 객체로 바꾼다'
     - '흔한 실수: 클라이언트가 JSON 본문을 보내면서 Content-Type을 빠뜨린다(코드 missingType). 스프링은 본문을 무엇으로 읽을지 몰라 415를 준다. 서버 코드가 아니라 요청을 고친다. 두 요청의 응답을 테스트로 남긴다'
     - '`ResponseEntity.status(HttpStatus.CREATED)`로 201을, `ResponseEntity.noContent()`로 204를 준다. 상태 코드를 고르는 기준은 REST API 설계(N5)에서 다룬다'
+  body:
+    - p: 스프링 MVC 컨트롤러는 질문 넷에서 본 HTTP의 부분을 애너테이션과 클래스로 다뤄요. 요청 글을 직접 읽고 쓰지 않아도, 무엇을 정하는지는 같아요.
+    - code: controller
+      notes:
+        - mark: consumes
+          as: code
+          text: '요청의 `Content-Type`이 `application/json`일 때만 이 메서드가 받아요(질문 3). `produces`는 응답의 종류를 정하고 `Accept`와 맞춰 봐요.'
+        - mark: '@RequestHeader'
+          as: anno
+          text: 요청 헤더 하나를 꺼내요. 이름은 대소문자를 가리지 않아요(질문 1).
+        - mark: ResponseEntity
+          as: code
+          text: 상태 코드(질문 2), 헤더, 본문을 직접 정해요. `ResponseEntity.noContent()`는 204예요.
+    - p: '`@RequestBody`는 요청의 `Content-Type`을 보고 본문을 읽을 변환기를 골라요. `application/json`이면 잭슨이 JSON을 `NewProduct` 객체로 바꿔요. 메서드와 경로가 맞지 않으면 스프링이 405와 404를, 처리 중 예외가 나면 500을 대신 돌려줘요.'
+    - h3: '흔한 실수: Content-Type 없이 JSON 보내기'
+    - p: '프론트엔드가 "상품 등록 API가 415를 줘요"라고 해요. 서버 코드는 멀쩡해요. 요청을 보니 본문은 JSON인데 `Content-Type`이 없어요.'
+    - code: missingType
+    - p: 두 요청을 보내 봤어요. 하나는 위와 같고, 하나는 Content-Type을 넣었어요.
+    - ci:
+        key: no-type
+        label: 두 요청의 응답 보기
+        source: HttpBasicsTest.missingContentTypeIs415
+        code: missingType
+    - p: '본문이 같아도 Content-Type이 없으면 스프링은 본문이 JSON인지 알 수 없어서 읽지 않고 415로 답해요. 메시지가 `Content-Type ''null'' is not supported`예요. 고칠 곳은 서버가 아니라 요청이에요. `fetch`라면 헤더를 적어요.'
+    - code: fetchFixed
+    - muted: '`curl -d`는 Content-Type을 적지 않으면 `application/x-www-form-urlencoded`로 보내서 역시 415가 나요. `-H "Content-Type: application/json"`을 붙여요. 근거: [스프링 문서의 consumes와 produces](link:mvcMapping), [톰캣의 keepAliveTimeout](link:tomcatHttp).'
+interview:
+  question: HTTP 요청과 응답의 구조와, 상태 코드를 어떻게 읽는지 설명해 주세요
+  model:
+    - label: 정의
+      text: HTTP는 클라이언트가 요청 글을 보내고 서버가 응답 글로 답하는 규칙입니다. 요청은 메서드, 대상, 버전을 적은 첫 줄, 헤더, 빈 줄, 본문으로 되어 있고, 응답은 버전과 상태 코드를 적은 첫 줄, 헤더, 빈 줄, 본문입니다.
+    - label: 원리
+      text: 메서드는 대상에 무엇을 할지(GET, POST, PUT, DELETE), 상태 코드는 결과를 세 자리로 알려 주고 첫 자리가 묶음(2xx 성공, 4xx 요청 쪽 잘못, 5xx 서버 쪽 잘못)입니다. 헤더는 Content-Type으로 본문의 종류, Content-Length나 chunked로 본문의 끝, Accept로 받고 싶은 종류를 전합니다. HTTP/1.1은 Host가 꼭 있어야 하고, 연결을 닫지 않고 다시 쓰는 것이 기본입니다.
+    - label: 주의할 점
+      text: 연결을 다시 쓰기 때문에 본문의 길이로 응답의 끝을 알아야 합니다. 4xx는 요청을 고쳐야 하고 5xx는 다시 보내 볼 수 있어서 클라이언트의 재시도가 이 구분에 기댑니다. JSON을 보내면서 Content-Type을 빠뜨리면 스프링은 415를 줍니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 프론트엔드에서 415가 난다는 문의를 받고 요청에 Content-Type이 빠진 것을 찾아 고쳤습니다.'
+verified: 이 레슨의 응답은 짐작이 아니라, 스프링 부트 3.5(톰캣 10.1) 서버에 자바 21 소켓으로 요청 글을 직접 보내 받은 그대로예요. 코드가 바뀔 때마다 테스트([HttpBasicsTest](link:test))가 다시 돌아요.
+footer: '근거: 메서드, 상태 코드, 헤더, 내용 협상은 RFC 9110, 메시지 형식과 Host가 없으면 400, 지속 연결, chunked는 RFC 9112, HTTP/2는 RFC 9113, keepAliveTimeout은 톰캣 10.1 문서, consumes와 produces는 스프링 프레임워크 문서. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '소켓으로 코드 request를 보내면 상태 줄, 헤더, 빈 줄, 본문으로 된 응답이 온다'
     how: 'MiniWeb으로 컨트롤러를 띄우고 java.net.Socket으로 요청 글을 쓴다'
+    test: HttpBasicsTest.requestAndResponseShape
   - claim: 'Host 헤더가 없는 HTTP/1.1 요청에 톰캣은 400으로 답한다'
     how: '코드 noHost를 보낸다'
+    test: HttpBasicsTest.missingHostIs400
   - claim: 'HEAD는 GET과 같은 Content-Length를 주고 본문이 없다'
     how: '같은 주소에 GET과 HEAD를 보내 비교한다'
+    test: HttpBasicsTest.headHasNoBody
   - claim: '없는 경로는 404, 맞지 않는 메서드는 405와 Allow 헤더, 처리 중 예외는 500이다'
     how: '세 요청을 보낸다'
+    test: HttpBasicsTest.statusCodes
   - claim: '길이를 아는 응답은 Content-Length, 스트림으로 쓴 응답은 Transfer-Encoding: chunked다'
     how: 'String을 돌려주는 주소와 StreamingResponseBody를 돌려주는 주소를 부른다'
+    test: HttpBasicsTest.contentLengthOrChunked
   - claim: 'JSON만 만드는 주소에 Accept: application/xml을 보내면 406이다'
     how: '헤더를 바꿔 보낸다'
+    test: HttpBasicsTest.acceptMismatchIs406
   - claim: '소켓 하나에 요청 둘을 이어 쓰면 응답 둘이 오고, Connection: close 뒤에 서버가 연결을 닫는다'
     how: '응답을 읽은 뒤 read가 -1인지 본다'
+    test: HttpBasicsTest.twoRequestsOnOneConnection
   - claim: 'JSON 본문에 Content-Type이 없으면 @RequestBody 주소가 415를 준다'
     how: '코드 missingType과 Content-Type을 넣은 요청을 비교한다'
+    test: HttpBasicsTest.missingContentTypeIs415
 sources:
   - 'HTTP의 메서드, 상태 코드, 헤더: RFC 9110 https://www.rfc-editor.org/rfc/rfc9110.html'
   - 'HTTP/1.1의 메시지 형식, Host가 없으면 400, 지속 연결, chunked: RFC 9112 https://www.rfc-editor.org/rfc/rfc9112.html'
