@@ -6,3 +6,5 @@ build/
 *.log
 .idea/
 site/public/ci/
+# VS Code의 자바 확장이 컴파일한 결과
+verification/bin/
