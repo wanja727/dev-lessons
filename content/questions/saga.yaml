@@ -1,115 +1,229 @@
 # 분산 트랜잭션과 사가 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/saga.yaml의 says).
+# 동작에 관한 정답은 verification의 SagaTest로 확인했다 (스프링 부트 3.5, PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 쓰면서 예전 문제를 지우고 새로 썼다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: saga
   title: 분산 트랜잭션과 사가
-  unit: 동시성·분산
-  order: 25
+  unit: 시스템 설계와 아키텍처
+  order: 919
 concepts:
   - key: core
     name: 분산 트랜잭션과 사가
+coreQuestions:
+  - key: q1
+    text: "여러 서비스에 걸친 일을 2PC로 묶지 않는 이유는 무엇인가요?"
+  - key: q2
+    text: "사가는 실패를 어떻게 되돌리나요?"
+  - key: q3
+    text: "오케스트레이션과 코레오그래피는 무엇이 다른가요?"
+  - key: q4
+    text: "사가를 쓸 때 무엇을 조심하나요?"
 questions:
-  - key: q-0e7cb652
+  # ── 질문 1 ──
+  - key: sg-2pc-coordinator
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 사가 패턴이 무엇이고, 보상 트랜잭션이 롤백과 어떻게 다른지 설명해 보세요
-    explanation: |-
-      - 사가: 로컬 트랜잭션을 차례로 실행하고, 실패하면 성공한 단계의 보상을 역순으로 실행
-      - 보상: 반대 동작을 새로 실행해 기록이 남는다(REFUNDED). 롤백은 흔적 없이 지운다
-    checklist:
-      - 로컬 트랜잭션 여러 개로 나눈다고 말했다
-      - 실패 시 성공한 단계만 보상한다고 말했다
-      - 보상은 역순이라고 말했다
-      - 보상은 새 동작이라 기록이 남는다고 말했다
-      - 예시(결제 → 환불, 주문 → 취소)를 들었다
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-f1c05adf
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 오케스트레이션 사가와 코레오그래피 사가를 비교하고, 각각 어떤 상황에 맞는지 말해 보세요
-    explanation: |-
-      - 오케스트레이션: 지휘자가 순서·보상 결정. 흐름이 한 곳, 단계 많을 때. 로직이 지휘자에 몰림
-      - 코레오그래피: 이벤트로 이어짐. 결합 느슨, 단계 적을 때. 흐름 파악·디버깅 어려움
-    checklist:
-      - 누가 순서를 정하는지로 구분했다
-      - 오케스트레이션의 장점(흐름 가시성)을 말했다
-      - 코레오그래피의 장점(느슨한 결합)을 말했다
-      - 코레오그래피의 단점(흐름이 흩어짐)을 말했다
-      - 단계 수·변경 빈도로 선택 기준을 말했다
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-e9c3c690
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: 사가로 주문을 처리하는데, 결제 승인 뒤 재고 차감 전에 고객이 결제 내역을 열었습니다. 어떤 문제가 있고 어떻게 다루나요?
-    explanation: |-
-      - 사가는 격리가 없어 곧 환불될 결제가 CHARGED로 보인다
-      - 검증: SagaTest (sagaHasNoIsolation)
-    checklist:
-      - 각 단계가 바로 커밋돼 중간 상태가 보인다고 말했다
-      - 사가에는 격리가 없다고 말했다
-      - PENDING 같은 상태로 "확정 아님"을 드러낸다고 말했다
-      - 다른 기능이 PENDING을 건드리지 않게 한다고 말했다
-      - 보상이 재시도될 수 있으니 멱등해야 한다고 말했다
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-8e83239b
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: 사가에서 1. 주문 생성 2. 결제 승인 3. 재고 차감 중 3단계가 실패했다. 보상 순서는?
+    body: 2PC에서 참가자 셋이 모두 준비를 마치고 "준비됨"이라 답한 뒤 조정자가 죽었어요. 참가자들은 어떻게 되나요?
     choices:
-      - 주문 취소 → 환불
-      - 환불 → 주문 취소
-      - 재고 복원만
+      - 각자 알아서 커밋한다
+      - 결정을 몰라 락을 쥔 채 기다린다
+      - 각자 알아서 롤백한다
+      - 가장 먼저 준비한 참가자가 조정자가 된다
     answer: "2"
     explanation: |-
-      - 성공한 단계를 역순으로 보상한다. 3단계는 커밋되지 않아 보상할 것이 없다
-      - 검증: SagaTest (orchestrationCompensatesInReverse)
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-0daf7f0e
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 사가의 환불 보상이 실행되면 결제 행은 삭제된다
-    answer: X
-    explanation: |-
-      - 보상은 반대 동작을 새로 실행한다. 결제 행은 REFUNDED 상태로 남는다
-      - 검증: SagaTest (orchestrationCompensatesInReverse)
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-30bb65a0
-    concept: core
-    type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: 환불 보상 SQL로 맞는 것은?
-    choices:
-      - UPDATE payment SET status='REFUNDED' WHERE order_id=?
-      - UPDATE payment SET status='REFUNDED' WHERE order_id=? AND status='CHARGED'
-      - DELETE FROM payment WHERE order_id=?
-    answer: "2"
-    explanation: |-
-      - 상태 조건이 있어야 두 번 불려도 두 번째는 0행이 바뀌어 멱등하다. (1)은 실제 환불 API와 함께 쓰면 두 번 환불할 수 있고, (3)은 기록을 지운다
-      - 검증: SagaTest (compensationIsIdempotent)
-    source: https://learn.microsoft.com/en-us/azure/architecture/patterns/saga
-  - key: q-a0597a60
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 2
-    body: 2PC는 원자성을 보장하지 못해서 마이크로서비스에서 잘 쓰지 않는다
-    answer: X
-    explanation: |-
-      - 2PC는 원자성을 보장한다. 문제는 준비와 커밋 사이의 락 대기, 조정자 장애, 브로커·외부 API 미지원이다
-      - PostgreSQL은 기본 설정에서 max_prepared_transactions = 0 (SagaTest.twoPhaseCommitIsOffByDefault)
+      **락을 쥔 채 기다려요.** 준비한 참가자는 조정자의 결정 없이 커밋도 롤백도 할 수 없어요.
+
+      - 그동안 락을 쥐어 다른 요청도 막혀요
+      - 그래서 서비스 사이에서는 2PC 대신 사가를 써요
     source: https://www.postgresql.org/docs/16/sql-prepare-transaction.html
+  - key: sg-2pc-kafka
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 DB 저장, 카프카 발행, 외부 PG 승인을 2PC 하나로 묶자는 제안을 받았어요. 가장 큰 문제는?
+    choices:
+      - 2PC는 DB 두 개까지만 묶는다
+      - 카프카와 외부 PG는 대개 2PC에 참여하지 못하고, 묶여도 하나가 늦으면 모두 락을 쥐고 기다린다
+      - 2PC는 커밋이 너무 빨라 순서가 섞인다
+      - 문제없다
+    answer: "2"
+    explanation: |-
+      **브로커와 외부 API는 대개 참여하지 못해요.** 참여해도 가장 느린 참가자만큼 모두가 락을 쥐어요.
+
+      - PostgreSQL도 기본 설정에서 준비된 트랜잭션이 꺼져 있어요(max_prepared_transactions 0)
+    source: https://www.postgresql.org/docs/16/runtime-config-resource.html
+  # ── 질문 2 ──
+  - key: sg-cake-final
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 케이크 재고가 0이에요. 사가가 주문 생성(PENDING), 결제 승인(CHARGED)까지 마친 뒤 재고 차감에서 실패했어요. 보상이 끝난 뒤 결제와 주문은?
+    choices:
+      - 결제와 주문 행이 지워진다
+      - 결제 CHARGED, 주문 PENDING으로 남는다
+      - 결제 REFUNDED, 주문 CANCELLED로 남는다
+      - 결제는 지워지고 주문은 CANCELLED
+    answer: "3"
+    explanation: |-
+      **결제 REFUNDED, 주문 CANCELLED로 남아요.** 보상은 지우지 않고 반대 동작을 하나 더 해요.
+
+      - 테스트에서 결제 환불, 주문 취소가 역순으로 실행됐어요
+      - 기록이 남아야 대사와 고객 문의에 답해요
+    source: https://microservices.io/patterns/data/saga.html
+  - key: sg-travel-order
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 여행 예약 사가가 항공 예약 → 호텔 예약 → 렌터카 예약 순서예요. 렌터카 예약에서 실패했어요. 보상은 어떤 순서로 실행되나요?
+    choices:
+      - 항공 취소, 그다음 호텔 취소
+      - 렌터카 취소, 호텔 취소, 항공 취소
+      - 보상하지 않는다
+      - 호텔 취소, 그다음 항공 취소
+    answer: "4"
+    explanation: |-
+      **호텔 취소, 그다음 항공 취소예요.** 끝난 단계를 역순으로 되돌려요.
+
+      - 렌터카는 실패해서 되돌릴 것이 없어요
+    source: https://microservices.io/patterns/data/saga.html
+  # ── 질문 3 ──
+  - key: sg-choreo-next
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 코레오그래피 사가에서 재고 서비스가 재고 부족으로 StockFailed 이벤트를 보냈어요. 다음에 움직이는 것은?
+    choices:
+      - 결제 서비스가 이벤트를 듣고 환불한 뒤 PaymentRefunded를 보낸다
+      - 지휘자가 결제 서비스에 환불을 명령한다
+      - 주문 서비스가 결제를 직접 환불한다
+      - 아무도 움직이지 않는다
+    answer: "1"
+    explanation: |-
+      **결제 서비스가 스스로 환불하고 결과를 이벤트로 보내요.** 코레오그래피에는 지휘자가 없어요.
+
+      - 이어서 주문 서비스가 PaymentRefunded를 듣고 주문을 취소해요
+      - 테스트에서 오케스트레이션과 같은 최종 상태가 됐어요
+    source: https://microservices.io/patterns/data/saga.html
+  - key: sg-seven-steps
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 단계가 7개이고 단계마다 보상이 있는 정산 사가예요. 장애가 났을 때 흐름 전체를 빨리 파악할 수 있어야 해요. 어느 방식이 알맞나요?
+    choices:
+      - 코레오그래피
+      - 2PC
+      - 오케스트레이션
+      - 사가를 쓰지 않는다
+    answer: "3"
+    explanation: |-
+      **오케스트레이션이에요.** 지휘자 한 곳에 순서와 보상이 다 있어 흐름을 한눈에 봐요.
+
+      - 코레오그래피는 흐름이 여러 서비스의 이벤트에 흩어져요
+    source: https://microservices.io/patterns/data/saga.html
+  # ── 질문 4 ──
+  - key: sg-midway-read
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 케이크 주문 사가가 결제를 승인한 뒤, 재고 차감 전에 고객이 결제 내역을 조회했어요. 재고는 0이라 곧 보상될 거예요. 고객이 보는 결제 상태는?
+    choices:
+      - REFUNDED
+      - 아무것도 보이지 않는다
+      - 조회가 사가가 끝날 때까지 막힌다
+      - CHARGED
+    answer: "4"
+    explanation: |-
+      **CHARGED가 보여요.** 사가는 단계마다 이미 커밋해서 격리가 없어요.
+
+      - 사가가 끝나면 REFUNDED로 바뀌어요
+      - 중간 상태의 뜻을 업무에서 정해 둬요(처리 중 등)
+    source: https://microservices.io/patterns/data/saga.html
+  - key: sg-refund-twice
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 환불 보상 메시지가 재전송돼 아래 메서드가 같은 주문으로 두 번 불렸어요. 어떻게 되나요?
+    code: |-
+      @Transactional
+      public void refund(long orderId) {
+        Payment p = payments.find(orderId);
+        p.refund();
+        pg.cancel(p.getPgTxId());
+      }
+    choices:
+      - 한 번만 환불된다
+      - 두 번째 메시지는 브로커가 막는다
+      - PG 취소가 두 번 요청되고 환불이 두 번 처리될 수 있다
+      - 컴파일 오류가 난다
+    answer: "3"
+    explanation: |-
+      **두 번 처리될 수 있어요.** 이미 환불했는지 확인하지 않아요.
+
+      - 보상도 메시지와 재시도로 두 번 올 수 있어요
+      - 상태가 REFUNDED면 바로 끝내게 해 멱등하게 만들어요
+    source: https://microservices.io/patterns/data/saga.html
+  - key: sg-delete-comp
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 결제가 실패한 주문의 보상으로 결제 행과 주문 행을 DB에서 지우는 코드가 있어요. 이 방식의 문제는?
+    choices:
+      - 문제없다. 깔끔하다
+      - PG에 남은 승인과 우리 기록을 맞출 수 없고, PG 승인도 취소되지 않는다
+      - 지우면 더 빨라진다
+      - 행을 지우면 사가가 다시 시작된다
+    answer: "2"
+    explanation: |-
+      **기록이 사라져 대사와 문의에 답할 수 없어요.** 보상은 지우는 게 아니라 반대 동작이에요.
+
+      - 상태를 REFUNDED, CANCELLED로 바꾸고 PG에 취소를 요청해요
+    source: https://microservices.io/patterns/data/saga.html
+  # ── 네 질문을 하나로 ──
+  - key: sg-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "여러 서비스에 걸친 트랜잭션을 어떻게 처리하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **2PC로 묶지 않고, 사가로 단계마다 커밋하고 실패하면 보상을 역순으로 실행해요.**
+
+      - **2PC:** 준비한 채 락을 쥐고 조정자를 기다린다. 브로커와 외부 API는 참여하지 못한다
+      - **사가:** 로컬 트랜잭션과 보상. 지우지 않고 취소, 환불로 남긴다
+      - **이끄는 방식:** 오케스트레이션과 코레오그래피
+      - **조심할 것:** 격리가 없다, 보상은 멱등하게, 진행 상태를 기록한다
+    checklist:
+      - 2PC를 잘 쓰지 않는 이유를 말했다
+      - 사가의 로컬 트랜잭션과 보상을 말했다
+      - 보상을 역순으로 실행한다고 말했다
+      - 오케스트레이션과 코레오그래피를 말했다
+      - 격리가 없거나 보상이 멱등해야 한다고 말했다
+    source: https://microservices.io/patterns/data/saga.html

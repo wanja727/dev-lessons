@@ -1,0 +1,350 @@
+# 분산 트랜잭션과 사가
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/saga.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 분산 트랜잭션과 사가
+description: 여러 서비스에 걸친 일을 2PC로 묶지 않는 이유, 사가가 단계마다 커밋하고 실패하면 보상으로 되돌리는 방식, 오케스트레이션과 코레오그래피, 사가에 격리가 없어 생기는 일과 보상의 멱등성. 주문, 결제, 재고 서비스로 케이크 주문을 흘려 보는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 25
+roadmap: A19
+type: 동작 확인
+prerequisites:
+  - {slug: transactional-outbox, title: 트랜잭셔널 아웃박스}
+assume: '스프링 부트 3.5, PostgreSQL 16. 서비스마다 DB가 따로라 한 트랜잭션으로 묶을 수 없다는 것(모놀리스와 마이크로서비스 레슨). 메시지 발행을 DB 저장과 맞추는 아웃박스(트랜잭셔널 아웃박스 레슨). 같은 요청이 두 번 와도 한 번만 처리하는 멱등성(멱등성과 중복 요청 방지 레슨).'
+example: '케이크 주문. 주문 서비스가 주문을 만들고, 결제 서비스가 결제를 승인하고, 재고 서비스가 케이크 재고를 줄인다. 세 서비스는 각자 테이블(saga_order, saga_payment, saga_stock)을 가진다. 케이크 재고가 0이면 어떻게 되돌리는지 본다.'
+intro:
+  - '케이크를 주문했는데 결제는 승인되고 재고가 없어 주문이 실패했어요. 고객 카드에는 승인 내역만 남았어요. 주문, 결제, 재고가 다른 서비스라 하나의 롤백으로 되돌릴 수 없었던 거예요.'
+  - '서비스를 나누면 "주문을 받으면 결제하고 재고를 줄인다" 같은 일이 여러 서비스에 걸쳐요. 개발자는 한쪽이 실패했을 때 앞서 성공한 일을 어떻게 되돌릴지 설계해야 해요. 커머스와 핀테크의 경력 면접에서 "분산 트랜잭션을 어떻게 처리하나요", "사가 패턴"으로 물어요.'
+  - '이 레슨에서는 주문, 결제, 재고 서비스로 케이크 주문을 흘려 보내고, 재고가 없을 때 보상이 어떤 순서로 실행되는지, 그 사이 다른 요청은 무엇을 보는지, 보상이 두 번 불리면 어떻게 되는지 확인해요.'
+covers:
+  - topic: '2PC(두 단계 커밋): 조정자가 모두에게 준비를 묻고 모두 준비되면 커밋한다. 참가자는 준비한 채 락을 쥐고 조정자를 기다린다'
+    where: '질문 1'
+  - topic: '2PC를 잘 쓰지 않는 이유: 조정자가 죽으면 참가자가 멈춘다, 락을 오래 쥔다, 브로커와 외부 API는 참여하지 못한다. PostgreSQL도 기본 설정에서 꺼져 있다'
+    where: '질문 1'
+  - topic: '사가: 여러 서비스의 일을 단계마다 각자의 로컬 트랜잭션으로 커밋하고, 실패하면 앞서 끝난 단계를 보상 트랜잭션으로 되돌린다'
+    where: '질문 2'
+  - topic: '보상은 역순으로 실행한다. 지우지 않고 취소, 환불 상태로 남긴다'
+    where: '질문 2'
+  - topic: '오케스트레이션: 지휘자가 다음 단계와 보상을 정한다. 코레오그래피: 서비스들이 이벤트를 주고받으며 스스로 다음 일을 한다'
+    where: '질문 3'
+  - topic: '둘을 고르는 기준: 흐름이 한눈에 보이는가, 서비스 사이의 결합'
+    where: '질문 3'
+  - topic: '사가에는 격리가 없다. 보상 전까지 다른 요청은 중간 상태를 본다'
+    where: '질문 4'
+  - topic: '보상은 멱등해야 한다. 메시지가 다시 오거나 재시도로 두 번 불릴 수 있다'
+    where: '질문 4. 멱등성은 멱등성과 중복 요청 방지(A6)'
+  - topic: '보상할 수 없는 단계(메일 발송)는 뒤에 둔다. 보상도 실패할 수 있어 다시 시도한다'
+    where: '질문 4의 더 알아보기'
+  - topic: '사가의 진행 상태를 테이블에 기록하는 지휘자 코드'
+    where: '실무에서는'
+  - topic: '결제 승인과 취소, 정산의 흐름'
+    where: '다루지 않음: 결제 시스템 흐름(A20)'
+codes:
+  predict: |-
+    // 케이크 재고 0
+    orders.create(...);   // PENDING
+    payments.charge(...); // CHARGED
+    stock.decrease(...);  // 실패
+    // 결제와 주문은 어떻게 되나?
+  orchestrator: |-
+    public long placeOrder(String item,
+        long amount) {
+      long id = orders.create(item);
+      payments.charge(id, amount);
+      try {
+        stock.decrease(item);
+      } catch (OutOfStock e) {
+        [[payments.refund(id);]]
+        [[orders.cancel(id);]]
+        throw e;
+      }
+      orders.confirm(id);
+      return id;
+    }
+  choreography: |-
+    OrderCreated     → 결제 서비스
+    PaymentCompleted → 재고 서비스
+    StockFailed      → 결제 서비스
+    PaymentRefunded  → 주문 서비스
+  refund: |-
+    @Transactional
+    public void refund(long orderId) {
+      Payment p = payments.find(orderId);
+      [[if (p.getStatus() == REFUNDED) {]]
+        [[return;]]
+      [[}]]
+      p.refund();
+      pg.cancel(p.getPgTxId());
+    }
+  sagaTable: |-
+    create table saga_instance (
+      saga_id uuid primary key,
+      order_id bigint not null,
+      step varchar(30) not null,
+      status varchar(20) not null,
+      updated_at timestamptz not null
+    );
+  deleteComp: |-
+    void compensate(long orderId) {
+      [[paymentRepository]]
+          [[.deleteByOrderId(orderId);]]
+      [[orderRepository.deleteById(orderId);]]
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/saga/SagaTest.java
+  saga: https://microservices.io/patterns/data/saga.html
+  pgPrepare: https://www.postgresql.org/docs/16/sql-prepare-transaction.html
+  pgConfig: https://www.postgresql.org/docs/16/runtime-config-resource.html
+predict:
+  title: 재고가 없으면 결제는?
+  text: '케이크 재고가 0이에요. 주문 서비스가 주문을 만들고(PENDING), 결제 서비스가 결제를 승인했고(CHARGED), 재고 서비스에서 실패했어요. 사가로 처리하면 끝난 뒤 결제와 주문은 어떤 상태일까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: deleted
+      label: 결제와 주문 행이 지워진다
+    - value: compensated
+      label: 결제는 REFUNDED, 주문은 CANCELLED로 남는다
+    - value: stuck
+      label: 결제는 CHARGED, 주문은 PENDING으로 남는다
+  answer: compensated
+  storageKey: saga-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 여러 서비스에 걸친 일을 2PC로 묶지 않는 이유는 무엇인가요?
+    conclusion:
+      lead: '2PC는 모두가 준비한 채 락을 쥐고 조정자의 결정을 기다려서, 조정자나 참가자 하나가 멈추면 모두가 멈추기 때문이에요.'
+      sub: '게다가 메시지 브로커와 외부 결제 API는 대개 2PC에 참여하지 못하고, PostgreSQL도 기본 설정에서 꺼져 있어요. 그래서 서비스 사이에서는 사가를 써요.'
+    says:
+      - '2PC 두 단계: 준비(PREPARE), 커밋. 준비한 참가자는 결정까지 락을 쥔다'
+      - '조정자가 죽으면 준비한 참가자가 멈춘다. 가장 느린 참가자만큼 락을 쥔다'
+      - 'PostgreSQL max_prepared_transactions 기본 0. 테스트로 읽는다'
+    asks:
+      - '본문의 예시: 2PC에서 모두 준비를 마친 뒤 조정자가 죽었다. 참가자들은 (커밋할지 롤백할지 몰라 락을 쥔 채 기다린다)'
+      - '옮긴 상황: 주문 DB 저장과 카프카 발행, 외부 PG 승인을 2PC 하나로 묶으려 한다. 문제는 (카프카와 외부 PG는 대개 2PC에 참여하지 못한다)'
+    body:
+      - p: '한 DB 안에서는 `@Transactional` 하나로 함께 커밋하고 롤백해요. 서비스마다 DB가 따로면 그럴 수 없어요([모놀리스와 마이크로서비스](lesson:monolith-msa)). 여러 DB를 하나처럼 묶는 고전적인 방법이 **2PC**(두 단계 커밋)예요.'
+      - ol:
+          - '**준비:** 조정자가 모든 참가자에게 "커밋할 수 있나?"를 물어요. 참가자는 일을 다 해 두고 "준비됨"이라 답하며, 결정이 올 때까지 **락을 쥔 채** 기다려요.'
+          - '**커밋:** 모두 준비됐으면 조정자가 "커밋"을, 하나라도 못 하면 "롤백"을 보내요.'
+      - p: '문제는 준비와 결정 사이예요. 조정자가 그 사이에 죽으면 참가자는 커밋할지 롤백할지 몰라 **락을 쥔 채 멈춰요.** 가장 느린 참가자를 기다리는 동안 모두가 락을 쥐어 다른 요청도 막혀요. 서비스가 하나라도 늦으면 전체가 늦어요.'
+      - p: '게다가 카프카 같은 메시지 브로커나 외부 결제 API는 대개 2PC에 참여하지 못해요. DB도 따로 켜야 해요. PostgreSQL은 준비된 트랜잭션(`PREPARE TRANSACTION`)의 최대 수가 기본 0이라 꺼져 있어요([PostgreSQL 문서](link:pgPrepare)). 테스트에서 `SHOW max_prepared_transactions`가 0이었어요.'
+      - p: '그래서 서비스 사이에서는 **묶지 않고**, 각자 커밋한 뒤 실패하면 되돌리는 방법을 써요. 그것이 사가예요.'
+      - quiz:
+          q: '2PC에서 참가자 셋이 모두 준비를 마치고 "준비됨"이라 답한 뒤, 조정자가 죽었어요. 참가자들은 어떻게 되나요?'
+          options:
+            - '각자 알아서 커밋한다'
+            - '각자 알아서 롤백한다'
+            - '결정을 몰라 락을 쥔 채 기다린다'
+          answer: 3
+          explain: '준비한 참가자는 조정자의 결정 없이 커밋도 롤백도 할 수 없어요. 그동안 락을 쥐어요.'
+      - next: '묶지 않고 각자 커밋한다면, 뒤 단계가 실패했을 때 앞 단계는 어떻게 되돌릴까요?'
+    recall: '2PC는 조정자가 모든 참가자에게 준비를 묻고 모두 준비되면 커밋해요. 준비한 참가자는 결정이 올 때까지 락을 쥐고 기다려서, 조정자가 죽거나 참가자 하나가 느리면 모두가 멈추거나 느려져요. 메시지 브로커와 외부 API는 대개 참여하지 못하고, PostgreSQL도 기본 설정에서 꺼져 있어요(max_prepared_transactions 0). 그래서 서비스 사이에서는 사가를 써요.'
+  - id: q2
+    title: 사가는 실패를 어떻게 되돌리나요?
+    conclusion:
+      lead: '단계마다 각 서비스가 자기 트랜잭션으로 커밋하고, 뒤 단계가 실패하면 앞서 끝난 단계마다 정해 둔 보상 트랜잭션을 역순으로 실행해요.'
+      sub: '보상은 행을 지우는 것이 아니라 취소, 환불 같은 반대 동작이에요. 기록은 CANCELLED, REFUNDED 상태로 남아요.'
+    says:
+      - '재고 0: 주문 생성 → 결제 승인 → 재고 실패 → 보상: 결제 환불 → 보상: 주문 취소. 예측의 답'
+      - '역순인 이유. 지우지 않고 상태로 남기는 이유(감사, 대사, 고객 문의)'
+    asks:
+      - '본문의 예시: 주문 → 결제 → 재고 순서에서 재고가 실패했다. 보상의 순서는 (결제 환불, 그다음 주문 취소)'
+      - '옮긴 상황: 여행 예약 사가가 항공 → 호텔 → 렌터카 순서이고 렌터카에서 실패했다. 보상은 (호텔 취소, 그다음 항공 취소)'
+    body:
+      - p: '**사가**는 여러 서비스에 걸친 일을 단계로 나눠, 단계마다 그 서비스의 **로컬 트랜잭션**으로 커밋해요. 뒤 단계가 실패하면 앞서 끝난 단계를 되돌리는 **보상 트랜잭션**을 실행해요([사가 패턴](link:saga)).'
+      - table:
+          head: [단계, 하는 일, 보상]
+          rows:
+            - ['1. 주문 서비스', '주문 생성 (PENDING)', '주문 취소 (CANCELLED)']
+            - ['2. 결제 서비스', '결제 승인 (CHARGED)', '결제 환불 (REFUNDED)']
+            - ['3. 재고 서비스', '재고 차감', '재고 되돌리기']
+      - p: '케이크 재고를 0으로 두고 돌렸어요.'
+      - code: orchestrator
+        notes:
+          - mark: payments.refund(id);
+            as: code
+            text: '재고가 실패하면 끝난 단계를 **역순으로** 되돌려요. 결제가 나중에 끝났으니 먼저 환불해요.'
+      - ci:
+          key: compensate
+          label: 실제 결과 보기
+          source: SagaTest.orchestrationCompensatesInReverse
+      - p: '답은 **결제는 REFUNDED, 주문은 CANCELLED로 남는다**예요. {{predict-result}} 재고 실패 뒤 결제 환불, 주문 취소가 차례로 실행됐어요. 행은 지우지 않았어요. 환불은 "결제를 없던 일로" 하는 게 아니라 **반대 거래**를 하나 더 하는 거예요. 카드 승인 내역과 취소 내역이 둘 다 남는 것처럼요. 그래야 나중에 고객 문의나 정산 대사에서 무슨 일이 있었는지 알 수 있어요.'
+      - p: '역순인 이유는 뒤 단계가 앞 단계에 기대기 때문이에요. 결제는 주문이 있어야 의미가 있으니, 결제를 먼저 되돌리고 주문을 취소해요.'
+      - quiz:
+          q: '여행 예약 사가가 항공 예약 → 호텔 예약 → 렌터카 예약 순서예요. 렌터카에서 실패하면 보상은 어떤 순서인가요?'
+          options:
+            - '항공 취소, 그다음 호텔 취소'
+            - '호텔 취소, 그다음 항공 취소'
+            - '렌터카 취소, 호텔 취소, 항공 취소'
+          answer: 2
+          explain: '끝난 단계를 역순으로 되돌려요. 렌터카는 실패해서 되돌릴 것이 없어요.'
+      - next: '이 흐름을 누가 이끌까요? 한 곳에서 지휘할 수도, 서비스들이 알아서 이어 갈 수도 있어요.'
+    recall: '사가는 여러 서비스의 일을 단계로 나눠 각 서비스가 자기 로컬 트랜잭션으로 커밋하고, 뒤 단계가 실패하면 앞서 끝난 단계마다 정해 둔 보상 트랜잭션을 역순으로 실행해요. 케이크 재고가 0이면 결제 환불, 주문 취소 순서로 되돌려요. 보상은 행을 지우지 않고 반대 동작을 하나 더 해서, 기록은 REFUNDED, CANCELLED로 남아요.'
+  - id: q3
+    title: 오케스트레이션과 코레오그래피는 무엇이 다른가요?
+    conclusion:
+      lead: '오케스트레이션은 지휘자 하나가 다음 단계와 보상을 정하고, 코레오그래피는 서비스들이 이벤트를 주고받으며 스스로 다음 일을 해요.'
+      sub: '같은 보상 흐름과 최종 상태가 돼요. 오케스트레이션은 흐름이 한곳에 보여 단계가 많을 때 좋고, 코레오그래피는 서비스끼리 덜 묶이지만 흐름이 여러 곳에 흩어져요.'
+    says:
+      - '코레오그래피의 이벤트: OrderCreated → PaymentCompleted → StockFailed → PaymentRefunded. 같은 최종 상태'
+      - '고르는 기준'
+    widget:
+      kind: compare
+      note: '왼쪽 오케스트레이션(지휘자, 주문, 결제, 재고), 오른쪽 코레오그래피(주문, 결제, 재고). 요구 "쿠폰 단계 더하기"를 고르면 고칠 곳이 강조된다'
+    asks:
+      - '본문의 예시: 코레오그래피에서 재고 서비스가 StockFailed를 보내면 다음에 움직이는 것은 (결제 서비스가 환불하고 PaymentRefunded를 보낸다)'
+      - '옮긴 상황: 단계가 7개이고 단계마다 보상이 있는 정산 사가. 흐름을 한눈에 보려면 (오케스트레이션)'
+    body:
+      - p: '사가를 이끄는 방법은 둘이에요.'
+      - ul:
+          - '**오케스트레이션:** 지휘자(오케스트레이터) 하나가 "다음은 결제, 그다음은 재고, 실패하면 환불"을 정해요. 질문 2의 `placeOrder`가 지휘자예요.'
+          - '**코레오그래피:** 지휘자가 없어요. 서비스마다 받은 이벤트를 보고 자기 일을 하고, 결과를 이벤트로 보내요.'
+      - code: choreography
+      - ci:
+          key: choreography
+          label: 실제 결과 보기
+          source: SagaTest.choreographyReachesSameState
+      - p: '이벤트를 주고받아도 같은 보상 흐름과 같은 최종 상태가 됐어요. 차이는 **흐름이 어디에 적혀 있느냐**예요. 새 단계를 더해 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 바뀐 요구
+            options:
+              - {value: coupon, label: 결제 전에 쿠폰 차감 단계 더하기}
+              - {value: read, label: 흐름 전체를 읽어 보기}
+          sides:
+            - label: 오케스트레이션
+              items:
+                - {name: 지휘자, note: 순서와 보상을 모두 앎}
+                - {name: 주문 서비스, note: 명령을 받아 처리}
+                - {name: 결제 서비스, note: 명령을 받아 처리}
+                - {name: 재고 서비스, note: 명령을 받아 처리}
+            - label: 코레오그래피
+              items:
+                - {name: 주문 서비스, note: OrderCreated를 보냄}
+                - {name: 결제 서비스, note: OrderCreated를 듣고 결제}
+                - {name: 재고 서비스, note: PaymentCompleted를 듣고 차감}
+          scenes:
+            coupon:
+              sides:
+                - marks: [{name: 지휘자, tag: 고침}]
+                  add: [{name: 쿠폰 서비스, note: 명령을 받아 처리, tag: 새로 만듦}]
+                  result: [{k: 고치는 곳, v: 지휘자 한 곳}]
+                - marks: [{name: 결제 서비스, tag: 고침}]
+                  add: [{name: 쿠폰 서비스, note: OrderCreated를 듣고 CouponUsed를 보냄, tag: 새로 만듦}]
+                  result: [{k: 고치는 곳, v: 듣는 이벤트가 바뀌는 서비스들}]
+              verdict: '오케스트레이션은 지휘자만 고치고, 코레오그래피는 이벤트를 듣는 쪽들이 바뀌어요.'
+            read:
+              sides:
+                - marks: [{name: 지휘자, tag: 여기에 다 있음}]
+                  result: [{k: 흐름, v: 한 파일}]
+                - marks: [{name: 주문 서비스, tag: 일부}, {name: 결제 서비스, tag: 일부}, {name: 재고 서비스, tag: 일부}]
+                  result: [{k: 흐름, v: 여러 서비스에 흩어짐, mark: bad}]
+              verdict: '흐름을 이해하려면 오케스트레이션은 지휘자를, 코레오그래피는 모든 서비스의 이벤트를 따라가야 해요.'
+      - p: '단계가 둘셋이고 서비스가 서로 모르게 두고 싶으면 코레오그래피가 가벼워요. 단계와 보상이 많아지면 흐름이 한곳에 보이는 오케스트레이션이 다루기 쉬워요. 어느 쪽이든 서비스 사이의 명령과 이벤트는 [트랜잭셔널 아웃박스](lesson:transactional-outbox)로 보내 저장과 발행이 어긋나지 않게 해요.'
+      - quiz:
+          q: '단계가 7개이고 단계마다 보상이 있는 정산 사가예요. 장애가 났을 때 흐름 전체를 빨리 파악해야 해요. 어느 방식이 알맞나요?'
+          options:
+            - '오케스트레이션'
+            - '코레오그래피'
+            - '2PC'
+          answer: 1
+          explain: '지휘자 한 곳에 순서와 보상이 다 있어서 흐름을 한눈에 봐요. 단계가 많을수록 유리해요.'
+      - next: '사가로 결국 맞춰지긴 해요. 그런데 단계 사이의 시간에는 무슨 일이 생길 수 있을까요?'
+    recall: '오케스트레이션은 지휘자 하나가 다음 단계와 보상을 정하고 서비스에 명령해요. 코레오그래피는 지휘자 없이 서비스마다 이벤트를 듣고 자기 일을 한 뒤 결과를 이벤트로 보내요. 둘 다 같은 보상 흐름과 최종 상태가 돼요. 단계가 많으면 흐름이 한곳에 보이는 오케스트레이션이, 단계가 적고 서비스를 덜 묶고 싶으면 코레오그래피가 맞아요.'
+  - id: q4
+    title: 사가를 쓸 때 무엇을 조심하나요?
+    conclusion:
+      lead: '사가에는 격리가 없어서 보상 전까지 다른 요청이 중간 상태를 보고, 보상은 두 번 불릴 수 있어 멱등해야 해요.'
+      sub: '보상할 수 없는 단계(메일 발송)는 뒤로 미루고, 보상이 실패하면 다시 시도해요. 한 트랜잭션처럼 깔끔하지 않은 상태를 업무로 받아들이는 설계예요.'
+    says:
+      - '결제 뒤 재고 전에 다른 요청이 결제 상태를 보면 CHARGED. 끝나면 REFUNDED'
+      - '환불 보상이 두 번 불려도 한 번만 환불. 상태 확인으로'
+      - '더 알아보기: 보상할 수 없는 단계, 보상 실패'
+    asks:
+      - '본문의 예시: 결제 승인 뒤 재고 차감 전에 고객이 결제 내역을 조회하면 (CHARGED가 보인다. 사가가 끝나면 REFUNDED가 된다)'
+      - '옮긴 상황: 환불 보상 메시지가 재전송돼 두 번 왔다. 환불 메서드가 상태를 확인하지 않으면 (환불이 두 번 나간다)'
+    body:
+      - h3: 격리가 없어요
+      - p: '한 DB의 트랜잭션은 커밋 전까지 다른 트랜잭션이 중간 상태를 보지 못하게 할 수 있어요. 사가는 단계마다 이미 **커밋**하니, 보상 전까지 그 상태가 그대로 보여요. 결제 승인 뒤, 재고 차감 전에 다른 요청이 결제를 조회해 봤어요.'
+      - ci:
+          key: no-isolation
+          label: 실제 결과 보기
+          source: SagaTest.sagaHasNoIsolation
+      - p: '다른 요청은 CHARGED를 봤어요. 그 순간 고객이 앱을 열면 "결제 완료"가 보이고, 잠시 뒤 "환불"로 바뀌어요. 그래서 사가의 중간 상태는 업무에서 뜻을 정해 둬요. 주문이 PENDING인 동안은 "처리 중"으로 보여 주는 식이에요.'
+      - h3: 보상은 멱등하게
+      - p: '보상도 메시지나 재시도로 전해지니 **두 번 올 수 있어요**([메시지 큐](lesson:kafka-basics)의 최소 한 번). 환불이 두 번 나가면 고객이 돈을 두 번 받아요. 그래서 보상은 이미 했는지 확인하고, 했으면 아무것도 하지 않아요.'
+      - code: refund
+        notes:
+          - mark: 'if (p.getStatus() == REFUNDED) {'
+            as: code
+            text: '이미 환불했으면 바로 끝내요. 두 번 불려도 한 번만 환불돼요.'
+      - p: '테스트에서 환불 보상을 두 번 불렀는데 환불은 한 번만 됐어요. [멱등성과 중복 요청 방지](lesson:idempotency)의 원리를 보상에도 써요.'
+      - more:
+          summary: 보상할 수 없는 단계와 보상의 실패
+          body:
+            - p: '"주문 완료" 메일은 보낸 뒤 되돌릴 수 없어요. 이런 단계는 **사가의 맨 뒤**, 더 이상 실패할 단계가 없을 때 해요.'
+            - p: '보상도 실패할 수 있어요(결제 서비스가 잠시 죽음). 보상은 포기하면 안 되니, 성공할 때까지 다시 시도하고, 계속 실패하면 사람이 볼 수 있게 남겨요. 그래서 사가의 진행 상태를 기록해 둬요(실무 구역).'
+      - quiz:
+          q: '환불 보상 메시지가 재전송돼 결제 서비스에 두 번 왔어요. 환불 메서드가 상태를 확인하지 않고 바로 환불하면 어떻게 되나요?'
+          options:
+            - '한 번만 환불된다'
+            - '환불이 두 번 나간다'
+            - '두 번째 메시지는 브로커가 막는다'
+          answer: 2
+          explain: '보상도 두 번 올 수 있어요. 이미 환불했는지 확인해서 멱등하게 만들어요.'
+      - next: '원리는 여기까지예요. 이제 사가를 스프링으로 만들 때의 상태 기록과 흔한 실수를 볼게요.'
+    recall: '사가는 단계마다 이미 커밋해서 격리가 없어요. 결제 승인 뒤 재고 차감 전에 다른 요청은 CHARGED를 보고, 보상이 끝나면 REFUNDED로 바뀌니 중간 상태의 뜻을 업무로 정해요. 보상도 메시지나 재시도로 두 번 올 수 있어서 이미 했는지 확인해 멱등하게 만들어요. 보상할 수 없는 단계는 맨 뒤에 두고, 보상이 실패하면 다시 시도해요.'
+practice:
+  title: 스프링에서 사가를 만들 때
+  says:
+    - '사가의 진행 상태를 saga_instance 테이블에 기록하는 지휘자. 서버가 죽어도 이어서 보상'
+    - '흔한 실수: 보상으로 행을 지운다'
+  body:
+    - p: '지휘자가 메모리에서만 흐름을 들고 있으면, 결제 뒤에 서버가 죽었을 때 보상을 할 사람이 없어요. 그래서 사가마다 **진행 상태를 테이블에 기록**해요. 어느 단계까지 했는지, 보상 중인지를 적어 두면, 다시 뜬 지휘자나 주기적으로 도는 작업이 멈춘 사가를 찾아 이어서 보상해요.'
+    - code: sagaTable
+    - p: '단계마다 상태를 바꾸는 일과 다음 명령을 보내는 일은 [트랜잭셔널 아웃박스](lesson:transactional-outbox)로 한 트랜잭션에 묶어요. 이 테이블과 재개 작업은 이 레슨의 테스트에 넣지 않아서 [사가 패턴 설명](link:saga)이 근거예요.'
+    - h3: 흔한 실수 하나
+    - code: deleteComp
+      notes:
+        - mark: paymentRepository
+          as: code
+          text: '보상으로 결제와 주문 행을 지워요. PG에는 승인이 그대로 남아 있는데 우리 DB에는 흔적이 없어요.'
+    - p: '행을 지우면 PG의 승인 내역과 우리 기록을 맞출 수 없고(대사), 고객 문의에도 답할 수 없어요. PG 승인도 취소되지 않았어요. 고친 코드는 질문 2와 4의 모양이에요. 상태를 REFUNDED, CANCELLED로 바꾸고, PG에 취소를 요청하고, 이미 했으면 건너뛰어요.'
+interview:
+  question: 여러 서비스에 걸친 트랜잭션을 어떻게 처리하나요?
+  model:
+    - label: 정의
+      text: 서비스마다 DB가 따로라 한 트랜잭션으로 묶을 수 없습니다. 2PC는 준비한 참가자가 결정까지 락을 쥐고 조정자가 죽으면 멈추며, 브로커와 외부 API는 참여하지 못해 잘 쓰지 않습니다. 대신 사가를 씁니다.
+    - label: 원리
+      text: 사가는 단계마다 각 서비스가 로컬 트랜잭션으로 커밋하고, 뒤 단계가 실패하면 끝난 단계의 보상 트랜잭션을 역순으로 실행합니다. 보상은 지우지 않고 취소, 환불 상태로 남깁니다. 지휘자가 이끄는 오케스트레이션과 이벤트로 이어 가는 코레오그래피가 있습니다.
+    - label: 주의할 점
+      text: 사가에는 격리가 없어 보상 전까지 중간 상태가 보이니 업무에서 뜻을 정합니다. 보상은 두 번 올 수 있어 멱등해야 하고, 보상할 수 없는 단계는 뒤에 두며, 진행 상태를 기록해 서버가 죽어도 이어서 보상합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 재고 부족으로 주문이 실패해도 결제가 남던 문제를 사가로 바꿔, 재고 실패 시 결제 환불과 주문 취소를 역순으로 실행하게 했습니다.'
+verified: 보상의 순서와 최종 상태, 중간 상태, 보상의 멱등성, 코레오그래피의 결과, max_prepared_transactions는 스프링 부트 3.5와 PostgreSQL 16에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([SagaTest](link:test))가 다시 돌아요.
+footer: '근거: 사가는 [사가 패턴](link:saga), 2PC의 준비 트랜잭션은 [PostgreSQL 문서](link:pgPrepare)와 [설정 문서](link:pgConfig). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '모든 단계가 성공하면 주문 확정, 결제 승인, 재고 차감'
+    how: '세 서비스의 테이블'
+    test: SagaTest.orchestrationHappyPath
+  - claim: '재고 실패 시 결제 환불, 주문 취소가 역순으로 실행되고 기록은 REFUNDED, CANCELLED로 남는다'
+    how: '같은 구성'
+    test: SagaTest.orchestrationCompensatesInReverse
+  - claim: '보상 전까지 다른 요청은 CHARGED를 본다'
+    how: '결제 뒤 끼워 넣은 조회'
+    test: SagaTest.sagaHasNoIsolation
+  - claim: '환불 보상이 두 번 불려도 한 번만 환불된다'
+    how: '같은 구성'
+    test: SagaTest.compensationIsIdempotent
+  - claim: '코레오그래피도 같은 보상 흐름과 최종 상태가 된다'
+    how: '이벤트로 잇는 구성'
+    test: SagaTest.choreographyReachesSameState
+  - claim: 'PostgreSQL의 max_prepared_transactions 기본값은 0이다'
+    how: 'SHOW로 읽는다'
+    test: SagaTest.twoPhaseCommitIsOffByDefault
+sources:
+  - '사가 패턴: https://microservices.io/patterns/data/saga.html'
+  - 'PREPARE TRANSACTION: https://www.postgresql.org/docs/16/sql-prepare-transaction.html'
