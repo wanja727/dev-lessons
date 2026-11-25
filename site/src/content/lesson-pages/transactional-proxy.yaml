@@ -1,9 +1,10 @@
-# @Transactional 동작 원리 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-# 예전 레슨 site/src/pages/lessons/transactional-proxy.astro와 transaction/TransactionalProxyTest, SelfInvocationTest를 재료로 다시 쓴다.
-stage: design
+# @Transactional 동작 원리
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/transactional-proxy.yaml에 있다.
+# 예전 레슨 site/src/pages/lessons/transactional-proxy.astro와 transaction/TransactionalProxyTest, SelfInvocationTest를 재료로 다시 썼다.
 title: '@Transactional 동작 원리'
+description: '@Transactional을 붙이면 누가 트랜잭션을 여닫는지, 같은 클래스 안의 호출에서 트랜잭션이 빠지는 이유, 어디에 붙여야 걸리는지, 프록시 없이 트랜잭션을 여는 TransactionTemplate. 네 가지 질문에 스스로 답할 수 있게 메서드 안에서 트랜잭션이 열렸는지 직접 물어보는 대화형 레슨.'
 unit: 스프링
+minutes: 20
 roadmap: S10
 type: 동작 확인
 prerequisites:
@@ -32,7 +33,7 @@ covers:
     where: '질문 2'
   - topic: '`private` 메서드, `final` 메서드에는 걸리지 않는다. 스프링 6.0부터 CGLIB 프록시에서는 `protected`와 패키지 접근 메서드에도 걸린다'
     where: '질문 3. 원리는 AOP(S9)'
-  - topic: '클래스에 붙이면 그 클래스의 모든 public 메서드에 걸린다. 메서드에 붙인 것이 클래스의 것보다 먼저다'
+  - topic: '클래스에 붙이면 그 클래스의 모든 메서드에 걸린다. 메서드에 붙인 것이 클래스의 것보다 먼저다'
     where: '질문 3'
   - topic: '`@Transactional`이 없는 메서드의 리포지토리 호출은 각 리포지토리 메서드가 스스로 트랜잭션을 연다(Spring Data JPA의 기본). 그래서 저장 두 번은 따로 커밋된다'
     where: '질문 3'
@@ -46,6 +47,14 @@ covers:
     where: '다루지 않음: 트랜잭션 전파와 롤백 규칙(S11)'
   - topic: '테스트의 `@Transactional`이 테스트 끝에 롤백하는 것'
     where: '다루지 않음: 스프링 테스트(T3)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/txproxy/TxProxyLessonTest.java
+  proxyTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/transaction/TransactionalProxyTest.java
+  selfTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/transaction/SelfInvocationTest.java
+  declarative: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html
+  annotations: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
+  programmatic: https://docs.spring.io/spring-framework/reference/data-access/transaction/programmatic.html
+  dataJpaTx: https://docs.spring.io/spring-data/jpa/reference/jpa/transactions.html
 codes:
   predict: |-
     @Service
@@ -72,17 +81,17 @@ codes:
   interceptor: |-
     // TransactionInterceptor가 하는 일
     TransactionStatus tx =
-        txManager.getTransaction(def);
+        txManager.[[getTransaction]](def);
     try {
       Object result = target.method();
-      txManager.commit(tx);
+      txManager.[[commit]](tx);
       return result;
     } catch (RuntimeException e) {
-      txManager.rollback(tx);
+      txManager.[[rollback]](tx);
       throw e;
     }
   outer: |-
-    @Transactional
+    [[@Transactional]]
     public void placeOrder(Order o) {
       orders.save(o);
       this.addPoint(o.userId(), 100);
@@ -94,29 +103,74 @@ codes:
 
       public void placeOrder(Order o) {
         orders.save(o);
-        pointService.addPoint(
-            o.userId(), 100);
+        [[pointService.addPoint(]]
+            [[o.userId(), 100);]]
       }
+    }
+  visibility: |-
+    @Transactional
+    protected boolean protectedMethod() {...}
+
+    @Transactional
+    boolean packageMethod() {...}
+
+    @Transactional
+    public [[final]] boolean finalMethod() {...}
+
+    @Transactional
+    [[private]] boolean privateMethod() {...}
+  readOnly: |-
+    @Service
+    [[@Transactional(readOnly = true)]]
+    public class OrderQueryService {
+
+      public List<Order> list() { ... }
+
+      [[@Transactional]]
+      public void cancel(long id) { ... }
     }
   template: |-
     public void placeOrder(Order o) {
       validate(o);
-      tx.executeWithoutResult(s -> {
+      [[tx.executeWithoutResult(s -> {]]
         orders.save(o);
         addPoint(o.userId(), 100);
-      });
+      [[});]]
       notifyUser(o);
     }
   external: |-
     @Transactional
     public void pay(Order o) {
       orders.markPaying(o.id());
-      pgClient.approve(o);
+      [[pgClient.approve(o);]]
       orders.markPaid(o.id());
     }
+  externalFix: |-
+    public void pay(Order o) {
+      tx.executeWithoutResult(s ->
+          orders.markPaying(o.id()));
+      pgClient.approve(o);
+      tx.executeWithoutResult(s ->
+          orders.markPaid(o.id()));
+    }
+  log: |-
+    logging:
+      level:
+        org.springframework.transaction⤷
+        .interceptor: TRACE
 predict:
-  text: '코드 predict의 `placeOrder`를 컨트롤러에서 불러요. `placeOrder`에는 `@Transactional`이 없고 `addPoint`에만 있어요. `p.add(amount)`는 엔티티의 값만 바꾸고 `save`를 부르지 않아요(변경 감지에 맡김). 끝난 뒤 DB는 어떨까요? 보기: 주문 저장, 포인트 100, 주문 저장, 포인트 그대로, 둘 다 없음, 예외.'
-  answer: '주문 저장, 포인트 그대로. `this.addPoint`는 프록시를 거치지 않아 트랜잭션이 없고, 트랜잭션이 없으니 바꾼 값을 커밋할 때 반영하는 변경 감지가 일어나지 않는다. 예외도 나지 않는다. 질문 2에서 밝힌다.'
+  title: 포인트는 쌓일까요?
+  text: '코드 predict의 `placeOrder`를 컨트롤러에서 불러요. `placeOrder`에는 `@Transactional`이 없고 `addPoint`에만 있어요. `p.add(amount)`는 엔티티의 값만 바꾸고 `save`를 부르지 않아요(커밋할 때 바뀐 값을 반영하는 JPA의 변경 감지에 맡김). 끝난 뒤 DB는 어떨까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: a, label: '주문 저장, 포인트 100'}
+    - {value: b, label: '주문 저장, 포인트 그대로'}
+    - {value: c, label: 둘 다 없음}
+    - {value: d, label: 예외가 난다}
+  answer: b
+  storageKey: tp-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: '@Transactional을 붙이면 누가 트랜잭션을 여닫나요?'
@@ -124,17 +178,75 @@ questions:
       lead: '빈 앞에 선 프록시가 메서드를 부르기 전에 트랜잭션을 시작하고, 정상으로 끝나면 커밋, 예외가 나면 롤백해요.'
       sub: '시작할 때 풀에서 커넥션을 빌려 자동 커밋을 끄고 지금 스레드에 묶어 둬요. 메서드 안의 리포지토리들이 그 커넥션을 함께 써서 하나의 트랜잭션이 돼요.'
     says:
-      - '`@Transactional`이 붙은 `OrderService`를 주입받아 클래스 이름을 찍는다. CGLIB 프록시다(S9와 같은 방식). 테스트로 보인다'
+      - '`@Transactional`이 붙은 빈을 주입받으면 CGLIB 프록시다(S9와 같은 방식). 예전 테스트로 확인했다'
       - '프록시 안의 트랜잭션 어드바이스(`TransactionInterceptor`)가 하는 일을 코드 interceptor로 줄여 보인다. D5에서 JDBC로 손수 쓴 `setAutoCommit(false)`, `commit`, `rollback`을 이 어드바이스가 대신 한다'
-      - '트랜잭션 매니저가 커넥션을 빌리면 그 커넥션을 지금 스레드에 묶어 둔다(`ThreadLocal`, S1에서 본 요청 스레드). 메서드 안의 리포지토리와 `JdbcTemplate`은 새 커넥션을 빌리지 않고 묶인 것을 쓴다. 그래서 SQL 여러 개가 한 트랜잭션이다. 메서드 안의 두 SQL이 같은 커넥션(같은 백엔드 pid)으로 나간 것을 실제 출력으로 보인다'
-      - '코드 probe로 메서드 안에서 트랜잭션이 열렸는지 직접 묻는다. `@Transactional`이 있으면 `true`, 없으면 `false`다. 질문 2와 3에서 이 방법으로 확인한다'
-      - '런타임 예외가 나면 메서드 안의 모든 변경이 롤백된다. 주문 저장 뒤 적립에서 예외가 난 경우 주문도 남지 않는 것을 보인다. 어떤 예외에 롤백하는지는 S11에서 자세히 본다'
+      - '트랜잭션 매니저가 커넥션을 빌리면 그 커넥션을 지금 스레드에 묶어 둔다(`ThreadLocal`, S1에서 본 요청 스레드). 메서드 안의 리포지토리와 `JdbcTemplate`은 새 커넥션을 빌리지 않고 묶인 것을 쓴다. 메서드 안의 두 SQL이 같은 커넥션(같은 백엔드 pid)으로 나간 것을 실제 출력으로 보인다'
+      - '코드 probe로 메서드 안에서 트랜잭션이 열렸는지 직접 묻는다. `@Transactional`이 있으면 `true`, 없으면 `false`다'
+      - '런타임 예외가 나면 메서드 안의 모든 변경이 롤백된다. 주문 저장 뒤 적립에서 예외가 난 경우 주문도 남지 않는다'
     widget:
       kind: steps
-      note: '컨트롤러, 프록시, 트랜잭션 매니저, 커넥션 풀, 원래 `OrderService`, DB를 놓고 `@Transactional placeOrder` 호출을 한 단계씩 따라간다: 프록시가 받음, 매니저가 풀에서 커넥션을 빌려 자동 커밋 끔, 스레드에 묶음, 원래 메서드의 SQL 두 개가 그 커넥션으로, 커밋, 커넥션 반납. 시나리오 선택 "중간에 예외"는 커밋 대신 롤백으로 간다'
+      note: '`@Transactional placeOrder` 호출을 한 단계씩 따라간다: 프록시가 받음, 매니저가 풀에서 커넥션을 빌려 자동 커밋 끔, 스레드에 묶음, 원래 메서드의 SQL 두 개가 그 커넥션으로, 커밋, 커넥션 반납. 시나리오 선택 "중간에 예외"는 커밋 대신 롤백으로 간다'
     asks:
       - '본문의 예시: 코드 probe의 `annotated()`를 밖에서 부르면 무엇을 돌려주나 (`true`)'
       - '옮긴 상황: `@Transactional` 메서드 안에서 `JdbcTemplate`으로 UPDATE 두 번을 하고 두 번째 다음에 런타임 예외가 났다. 첫 UPDATE는 DB에 남나 (남지 않는다. 같은 커넥션의 한 트랜잭션이라 함께 롤백된다)'
+    body:
+      - p: '[트랜잭션 기초](lesson:tx-basics) 레슨에서 트랜잭션은 커넥션 하나에서 자동 커밋을 끄고, SQL을 보내고, 커밋이나 롤백으로 끝낸다고 했어요. `@Transactional`을 붙이면 그 일을 누가 할까요? 메서드는 아니에요. [AOP](lesson:aop-audit) 레슨에서 본 **프록시**예요.'
+      - code: interceptor
+        notes:
+          - mark: getTransaction
+            as: code
+            text: '트랜잭션 시작. 풀에서 커넥션을 빌려 자동 커밋을 끄고 지금 스레드에 묶어 둬요.'
+          - mark: commit
+            as: code
+            text: '메서드가 정상으로 끝나면 커밋하고 커넥션을 돌려줘요.'
+          - mark: rollback
+            as: code
+            text: '런타임 예외가 나면 롤백하고 예외를 다시 던져요.'
+      - p: '`@Transactional`이 붙은 빈은 CGLIB 프록시로 바뀌어 주입돼요. 그 프록시의 어드바이스(`TransactionInterceptor`)가 위 코드의 일을 해요([근거](link:declarative)). 한 단계씩 따라가 보세요.'
+      - widget:
+          kind: steps
+          layout: [selector, log, buttons, verdict]
+          selector:
+            label: 메서드의 결과
+            options:
+              - {value: ok, label: 정상}
+              - {value: fail, label: 중간에 예외}
+          scenarios:
+            ok:
+              - log: '컨트롤러 → 프록시의 placeOrder 호출'
+              - log: '트랜잭션 매니저: 풀에서 커넥션 #7을 빌림, 자동 커밋 끔'
+              - log: '커넥션 #7을 지금 스레드에 묶어 둠'
+              - log: '원래 placeOrder: insert 주문 → 스레드의 커넥션 #7'
+              - log: '원래 placeOrder: update 포인트 → 같은 커넥션 #7'
+              - log: '정상 종료 → commit, 커넥션 #7 반납'
+                verdict: '두 SQL이 한 커넥션, 한 트랜잭션으로 함께 커밋돼요.'
+            fail:
+              - log: '컨트롤러 → 프록시의 placeOrder 호출'
+              - log: '트랜잭션 매니저: 커넥션 #7을 빌려 스레드에 묶음'
+              - log: '원래 placeOrder: insert 주문 → 커넥션 #7'
+              - log: '원래 placeOrder: 적립에서 RuntimeException'
+              - log: '프록시: rollback, 커넥션 #7 반납, 예외를 다시 던짐'
+                verdict: '주문 insert도 함께 롤백돼서 아무것도 남지 않아요.'
+      - h3: 같은 스레드라 같은 커넥션이에요
+      - p: '[서블릿과 톰캣](lesson:servlet-tomcat)에서 요청 하나는 스레드 하나가 처리한다고 했어요. 트랜잭션 매니저는 빌린 커넥션을 그 스레드에 묶어 두고(`ThreadLocal`), 메서드 안의 리포지토리와 `JdbcTemplate`은 새 커넥션을 빌리지 않고 묶인 것을 써요. `@Transactional` 메서드 안에서 DB의 연결 번호(`pg_backend_pid()`)를 두 번 물었어요.'
+      - ci:
+          key: pid
+          label: 실제 결과 보기
+          source: TxProxyLessonTest.sameConnectionInTransaction
+      - p: '같은 번호예요. 메서드 안의 SQL이 모두 한 커넥션으로 나가서 하나의 트랜잭션이 돼요. 그래서 중간에 런타임 예외가 나면 앞의 변경까지 함께 롤백돼요. 예전 테스트([TransactionalProxyTest](link:proxyTest))가 주문 저장 뒤 적립에서 예외가 나면 주문도 남지 않는 것을 확인해요.'
+      - h3: 열렸는지 직접 물어봐요
+      - code: probe
+      - p: '이 레슨은 메서드 안에서 `TransactionSynchronizationManager.isActualTransactionActive()`로 트랜잭션이 열렸는지 직접 물어요. 질문 2와 3에서 이 방법으로 확인해요.'
+      - quiz:
+          q: '`@Transactional` 메서드 안에서 `JdbcTemplate`으로 UPDATE를 두 번 하고, 두 번째 다음에 런타임 예외가 났어요. 첫 UPDATE는 DB에 남을까요?'
+          options:
+            - 남는다. 이미 실행됐다
+            - 남지 않는다. 같은 트랜잭션이라 함께 롤백된다
+            - 절반만 남는다
+          answer: 2
+          explain: '두 UPDATE는 스레드에 묶인 같은 커넥션, 같은 트랜잭션으로 나가요. 프록시가 예외를 보고 롤백하면 함께 사라져요.'
+      - next: '프록시가 트랜잭션을 연다면, 프록시를 거치지 않는 호출은 어떻게 될까요?'
+    recall: '@Transactional이 붙은 빈은 프록시로 바뀌고, 프록시의 TransactionInterceptor가 메서드 전에 트랜잭션 매니저로 풀에서 커넥션을 빌려 자동 커밋을 끄고 그 커넥션을 지금 스레드에 묶어요. 메서드 안의 리포지토리와 JdbcTemplate은 그 커넥션을 함께 써서 한 트랜잭션이 되고, 정상으로 끝나면 커밋, 런타임 예외면 롤백하고 커넥션을 돌려줘요.'
   - id: q2
     title: 같은 클래스 안에서 부르면 왜 트랜잭션이 빠지나요?
     conclusion:
@@ -142,50 +254,216 @@ questions:
       sub: '바깥 메서드에 `@Transactional`을 붙이거나 다른 빈으로 나눠서 프록시를 거치게 고쳐요. 어느 쪽이냐에 따라 트랜잭션이 묶이는 범위가 달라요.'
     says:
       - '코드 predict를 돌린다. 주문은 있고 포인트는 0이다. 예측의 답을 밝힌다. 예외가 없어서 로그로는 알 수 없다'
-      - '원인은 S9의 내부 호출과 같다(O12 질문 4가 동적 프록시로 먼저 보였다). 프록시를 거쳐 들어온 것은 `placeOrder`인데 거기에는 `@Transactional`이 없다. 그 안의 `this`는 원래 객체라 `addPoint`의 어노테이션은 읽히지 않는다. 코드 probe로도 확인한다: 내부 호출한 메서드 안에서 `false`'
+      - '원인은 S9의 내부 호출과 같다(O12 질문 4가 동적 프록시로 먼저 보였다). 프록시를 거쳐 들어온 것은 `placeOrder`인데 거기에는 `@Transactional`이 없다. 그 안의 `this`는 원래 객체라 `addPoint`의 어노테이션은 읽히지 않는다'
       - '포인트가 그대로인 이유: JPA는 트랜잭션을 커밋할 때 바뀐 엔티티를 찾아 UPDATE를 보낸다(변경 감지). 트랜잭션이 없으니 커밋도 없고 UPDATE도 없다. 변경 감지 자체는 P2에서 다룬다'
       - '고치는 법 하나: 코드 outer처럼 `placeOrder`에 붙인다. 주문과 적립이 한 트랜잭션이라 적립이 실패하면 주문도 롤백된다'
-      - '고치는 법 둘: 코드 split처럼 `addPoint`를 `PointService` 빈으로 옮긴다. 프록시를 거쳐 포인트가 쌓인다. 그런데 `placeOrder`에는 트랜잭션이 없어 주문은 `save`가 끝날 때 이미 커밋된다. 적립이 실패하면 주문만 남는다. 둘의 결과를 실패 상황에서 비교한 실제 결과를 보인다'
+      - '고치는 법 둘: 코드 split처럼 `addPoint`를 `PointService` 빈으로 옮긴다. 프록시를 거쳐 포인트가 쌓인다. 그런데 `placeOrder`에는 트랜잭션이 없어 주문은 `save`가 끝날 때 이미 커밋된다. 적립이 실패하면 주문만 남는다'
       - '무엇을 고를지는 요구로 정한다. 주문과 적립이 함께여야 하면 바깥에, 적립 실패가 주문을 막으면 안 되면 나눈다(그때도 바깥에 트랜잭션을 두고 전파로 나누는 법은 S11)'
     widget:
       kind: compare
-      note: '두 칸은 "바깥에 @Transactional"과 "PointService로 나눔". 버튼으로 "정상", "적립에서 예외"를 고른다. 칸마다 열린 트랜잭션 수와 끝난 뒤 주문 행과 포인트 값을 결과 줄에 보인다. 적립 예외에서 왼쪽은 둘 다 없음, 오른쪽은 주문만 남음'
+      note: '두 칸은 "바깥에 @Transactional"과 "PointService로 나눔". 버튼으로 "정상", "적립에서 예외"를 고른다'
     asks:
       - '본문의 예시: 코드 outer의 `placeOrder`에서 `addPoint`가 런타임 예외를 던지면 주문 행은 남나 (남지 않는다. 한 트랜잭션이라 함께 롤백된다)'
       - '옮긴 상황: `MemberService.join`(어노테이션 없음)이 회원을 저장한 뒤 같은 클래스의 `@Transactional sendWelcomeCoupon`을 부른다. 쿠폰 저장에서 런타임 예외가 나면 회원 행은 남나 (남는다. 회원 저장은 이미 따로 커밋됐고 쿠폰 메서드에는 트랜잭션도 없다)'
+    body:
+      - p: '예측의 코드는 예전 테스트([SelfInvocationTest](link:selfTest))가 그대로 돌려요. 결과는 **주문은 저장되고 포인트는 0 그대로**예요. {{predict-result}} 예외도 로그도 없어서 문의가 오기 전까지 아무도 몰라요.'
+      - h3: 왜 빠지나요
+      - p: '[AOP](lesson:aop-audit) 레슨의 내부 호출과 같은 이유예요. 프록시를 거쳐 들어온 것은 `placeOrder`인데, 거기에는 `@Transactional`이 없어요. 프록시는 트랜잭션 없이 원래 객체의 `placeOrder`를 불러요. 그 안의 `this`는 원래 객체라서 `this.addPoint`는 프록시를 거치지 않고, `addPoint`의 어노테이션은 아무도 읽지 않아요. [프록시와 데코레이터 패턴](lesson:proxy-decorator) 레슨에서 동적 프록시로 먼저 본 일이에요.'
+      - p: '포인트가 그대로인 이유도 있어요. `p.add(amount)`는 엔티티의 값만 바꿔요. JPA는 **트랜잭션을 커밋할 때** 바뀐 엔티티를 찾아 UPDATE를 보내요(변경 감지). 트랜잭션이 없으니 커밋도 UPDATE도 없어요. 변경 감지는 [영속성 컨텍스트](lesson:jpa-persistence-context) 레슨에서 다뤄요.'
+      - h3: 고치는 법 둘
+      - code: outer
+        notes:
+          - mark: '@Transactional'
+            as: anno
+            text: '프록시를 거쳐 들어오는 바깥 메서드에 붙여요. 안쪽의 `this.addPoint`는 이 트랜잭션 안에서 돌아요.'
+      - code: split
+        notes:
+          - mark: 'pointService.addPoint('
+            as: code
+            text: '다른 빈(프록시)을 거쳐 불러서 `addPoint`의 `@Transactional`이 읽혀요.'
+      - p: '둘 다 포인트가 쌓여요. 하지만 적립이 실패할 때가 달라요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 적립 결과
+            options:
+              - {value: ok, label: 정상}
+              - {value: fail, label: 적립에서 예외}
+          sides:
+            - label: 바깥에 @Transactional
+              items:
+                - {name: 트랜잭션, note: 'placeOrder 하나'}
+                - {name: 주문 행, note: 'insert'}
+                - {name: 포인트, note: '+100'}
+            - label: PointService로 나눔
+              items:
+                - {name: 트랜잭션, note: 'save 하나, addPoint 하나'}
+                - {name: 주문 행, note: 'insert'}
+                - {name: 포인트, note: '+100'}
+          scenes:
+            ok:
+              sides:
+                - result: [{k: 주문, v: 남음}, {k: 포인트, v: '100'}]
+                - result: [{k: 주문, v: 남음}, {k: 포인트, v: '100'}]
+              verdict: '정상일 때는 결과가 같아요.'
+            fail:
+              sides:
+                - marks: [{name: 주문 행, tag: 롤백, mark: changed}]
+                  result: [{k: 주문, v: 없음}, {k: 포인트, v: '0'}]
+                - marks: [{name: 주문 행, tag: 이미 커밋, mark: bad}]
+                  result: [{k: 주문, v: 남음, mark: bad}, {k: 포인트, v: '0'}]
+              verdict: '바깥에 붙이면 주문도 함께 롤백되고, 나누면 이미 커밋된 주문만 남아요. 예전 테스트가 두 결과를 확인해요.'
+      - p: '무엇이 맞는지는 요구가 정해요. 주문과 적립이 함께 성공하고 함께 실패해야 하면 바깥에 붙여요. 적립이 실패해도 주문은 살려야 하면 나누는데, 그때도 바깥에 트랜잭션을 두고 적립만 따로 여는 방법이 있어요. [트랜잭션 전파와 롤백 규칙](lesson:tx-propagation) 레슨에서 다뤄요.'
+      - quiz:
+          q: '`MemberService.join`(어노테이션 없음)이 회원을 `save`한 뒤 같은 클래스의 `@Transactional sendWelcomeCoupon`을 불러요. 쿠폰 저장에서 런타임 예외가 나면 회원 행은 남을까요?'
+          options:
+            - 남는다
+            - 남지 않는다
+            - 반만 남는다
+          answer: 1
+          explain: '`join`에는 트랜잭션이 없어 회원 `save`는 그 자리에서 커밋돼요. 쿠폰 메서드는 내부 호출이라 트랜잭션도 없어요. 회원 행은 남아요.'
+      - next: '`this` 말고도 `@Transactional`이 붙어 있는데 걸리지 않는 곳이 있어요. 어디에 붙여야 걸릴까요?'
+    recall: 'this.addPoint()는 프록시가 아니라 원래 객체의 메서드를 바로 불러서 @Transactional이 읽히지 않아요. 예외도 경고도 없고, JPA는 커밋할 때 변경을 반영하니 포인트가 그대로예요. 바깥 메서드에 @Transactional을 붙이면 주문과 적립이 한 트랜잭션으로 함께 롤백되고, 다른 빈으로 나누면 프록시를 거쳐 적립되지만 주문은 이미 커밋돼 적립 실패 때 주문만 남아요.'
   - id: q3
     title: '@Transactional은 어디에 붙여야 걸리나요?'
     conclusion:
       lead: '프록시를 거쳐 밖에서 부르는, 오버라이딩할 수 있는 메서드에 붙여야 걸려요. `private`과 `final` 메서드에는 붙여도 걸리지 않아요.'
-      sub: '클래스에 붙이면 모든 public 메서드에 걸리고 메서드에 붙인 설정이 먼저예요. 어노테이션이 없는 메서드에서는 리포지토리 메서드가 저마다 따로 트랜잭션을 열어요.'
+      sub: '클래스에 붙이면 모든 메서드에 걸리고 메서드에 붙인 설정이 먼저예요. 어노테이션이 없는 메서드에서는 리포지토리 메서드가 저마다 따로 트랜잭션을 열어요.'
     says:
-      - '`private` 메서드에 `@Transactional`을 붙이고 같은 클래스의 public 메서드에서 부른다. 내부 호출이기도 하고 오버라이딩할 수도 없다. 트랜잭션이 없다. `final` public 메서드를 밖에서 불러도 없다. 코드 probe로 보인다(S9의 원리)'
-      - '`protected`와 패키지 접근 메서드는 스프링 6.0부터 CGLIB 프록시에서 걸린다. 밖(같은 패키지의 다른 빈)에서 부르면 `true`다. 예전 글에서 "public에만 걸린다"고 한 것은 5.x까지의 설명이다. 테스트 결과로 단정한다'
+      - '`private` 메서드에 `@Transactional`을 붙이고 같은 클래스의 public 메서드에서 부른다. 트랜잭션이 없다. `final` public 메서드를 밖에서 불러도 없다. 코드 probe로 보인다(S9의 원리)'
+      - '`protected`와 패키지 접근 메서드는 스프링 6.0부터 CGLIB 프록시에서 걸린다. 밖(같은 패키지의 다른 빈)에서 부르면 `true`다. 예전 글에서 "public에만 걸린다"고 한 것은 5.x까지의 설명이다'
       - '클래스에 `@Transactional(readOnly = true)`를 붙이고 쓰기 메서드에만 `@Transactional`을 붙이는 모양이 흔하다. 메서드의 것이 클래스의 것을 덮는다'
-      - '어노테이션이 없는 메서드에서 `orders.save` 두 번을 부르면, `save`마다 리포지토리가 스스로 트랜잭션을 열고 커밋한다(Spring Data JPA의 `SimpleJpaRepository`에 `@Transactional`이 붙어 있다). 두 번째에서 실패해도 첫 번째는 남는다. 테스트로 보인다'
+      - '어노테이션이 없는 메서드에서 리포지토리를 두 번 부르면, 리포지토리 메서드마다 스스로 트랜잭션을 열고 커밋한다(Spring Data JPA의 `SimpleJpaRepository`에 `@Transactional`이 붙어 있다). 질문 2의 나눈 경우에 주문이 남은 이유가 이것이다'
     asks:
       - '본문의 예시: `OrderService`의 `private void savePoint()`에 `@Transactional`을 붙이고 public `placeOrder`(어노테이션 없음)에서 부른다. `savePoint` 안에 트랜잭션이 있나 (없다)'
       - '옮긴 상황: 클래스에 `@Transactional(readOnly = true)`, `update` 메서드에 `@Transactional`이 붙어 있다. `update` 안의 트랜잭션은 읽기 전용인가 (아니다. 메서드에 붙인 것이 먼저다)'
+    body:
+      - code: visibility
+        notes:
+          - mark: final
+            as: code
+            text: '오버라이딩할 수 없어요.'
+          - mark: private
+            as: code
+            text: '오버라이딩할 수 없고, 같은 클래스 안에서만 부를 수 있어 늘 내부 호출이에요.'
+      - p: '네 메서드에 모두 `@Transactional`을 붙이고, 같은 패키지의 다른 빈(테스트)에서 불러 트랜잭션이 열렸는지 물었어요.'
+      - ci:
+          key: visibility
+          label: 실제 결과 보기
+          source: TxProxyLessonTest.visibility
+      - ul:
+          - '**`final`과 `private`에는 걸리지 않아요.** CGLIB 프록시는 오버라이딩으로 끼어드는데, 둘은 오버라이딩할 수 없어요. 에러도 경고도 없어요. 원리는 [AOP](lesson:aop-audit) 레슨에서 봤어요.'
+          - '**`protected`와 패키지 접근 메서드에는 걸려요.** 스프링 6.0부터 CGLIB 프록시에서 이 메서드들도 트랜잭션을 열어요([근거](link:annotations)). "public 메서드에만 걸린다"는 글은 스프링 5.x까지의 설명이에요. 밖에서 프록시를 거쳐 부를 때의 이야기예요.'
+      - h3: 클래스에 붙이면 모든 메서드에, 메서드 것이 먼저
+      - code: readOnly
+        notes:
+          - mark: '@Transactional(readOnly = true)'
+            as: anno
+            text: '클래스에 붙이면 모든 메서드에 걸려요. 조회 서비스의 기본값으로 흔히 써요.'
+          - mark: '@Transactional'
+            as: anno
+            text: '메서드에 붙인 설정이 클래스의 것을 덮어요.'
+      - ci:
+          key: read-only
+          label: 실제 결과 보기
+          source: TxProxyLessonTest.methodOverridesClass
+      - h3: 어노테이션이 없으면 리포지토리가 저마다 열어요
+      - p: '`@Transactional`이 없는 메서드에서 Spring Data 리포지토리의 `save`를 두 번 부르면, `save`마다 리포지토리가 스스로 트랜잭션을 열고 커밋해요. Spring Data JPA의 리포지토리 구현에 `@Transactional`이 붙어 있기 때문이에요([근거](link:dataJpaTx)). 질문 2의 나눈 경우에 주문이 남은 이유가 이거예요. 두 번째가 실패해도 첫 번째는 이미 커밋됐어요.'
+      - quiz:
+          q: '클래스에 `@Transactional(readOnly = true)`, `update` 메서드에 `@Transactional`이 붙어 있어요. `update` 안의 트랜잭션은 읽기 전용일까요?'
+          options:
+            - 읽기 전용이다
+            - 읽기 전용이 아니다
+            - 트랜잭션이 없다
+          answer: 2
+          explain: '메서드에 붙인 설정이 클래스의 것을 덮어요. `@Transactional`의 `readOnly` 기본값은 `false`예요.'
+      - next: '프록시를 거쳐야만 트랜잭션이 열린다면, 메서드의 일부만 묶거나 같은 클래스 안에서 열 방법은 없을까요?'
+    recall: '@Transactional은 프록시를 거쳐 밖에서 부르는, 오버라이딩할 수 있는 메서드에서 걸려요. final과 private 메서드에는 걸리지 않고, 스프링 6.0부터 CGLIB 프록시에서는 protected와 패키지 접근 메서드에도 걸려요. 클래스에 붙이면 모든 메서드에 걸리고 메서드에 붙인 것이 먼저예요. 어노테이션이 없는 메서드에서는 Spring Data 리포지토리 메서드가 저마다 따로 트랜잭션을 열고 커밋해요.'
   - id: q4
     title: 프록시 없이 트랜잭션을 열 수도 있나요?
     conclusion:
       lead: '네. `TransactionTemplate`에 람다를 넘기면 그 람다만 트랜잭션 안에서 돌아요.'
       sub: '어노테이션은 메서드 전체를 묶지만 `TransactionTemplate`은 코드로 범위를 정해서, 메서드의 일부만 묶거나 같은 클래스 안에서도 트랜잭션을 열 수 있어요.'
     says:
-      - '코드 template처럼 검증과 알림은 밖에, 저장과 적립만 안에 둔다. 람다 안에서 코드 probe와 같은 질문을 하면 `true`, 밖에서는 `false`다. 테스트로 보인다'
+      - '코드 template처럼 검증과 알림은 밖에, 저장과 적립만 안에 둔다. 람다 안에서 트랜잭션을 물으면 `true`, 밖에서는 `false`다. 테스트로 보인다'
       - '`TransactionTemplate`은 스프링 부트가 자동 설정으로 빈을 만들어 둔다(S4). 생성자로 받으면 된다'
-      - '안에서 런타임 예외가 나면 롤백하고 예외를 다시 던진다. 람다에 넘어온 `TransactionStatus`의 `setRollbackOnly()`로 예외 없이 롤백할 수도 있다'
+      - '안에서 런타임 예외가 나면 롤백하고 예외를 다시 던진다. 람다가 정상으로 끝나면 그 자리에서 커밋한다. 그 뒤 `notifyUser`에서 예외가 나도 주문은 남는다'
       - '같은 클래스 안에서도 쓸 수 있어서 내부 호출 문제가 없다. 프록시 없이 트랜잭션 매니저를 직접 부르기 때문이다'
-      - '언제 무엇을 쓰나: 대부분은 어노테이션. 범위를 메서드의 일부로 좁혀야 할 때(외부 호출을 트랜잭션 밖에 두기, 실무에서는), 한 메서드에서 트랜잭션을 여러 번 나눠 열 때 `TransactionTemplate`. 람다로 넘기는 이유는 J12에서 본 "바뀌는 부분을 함수로 넘기기"다'
+      - '언제 무엇을 쓰나: 대부분은 어노테이션. 범위를 메서드의 일부로 좁혀야 할 때(외부 호출을 트랜잭션 밖에 두기), 한 메서드에서 트랜잭션을 여러 번 나눠 열 때 `TransactionTemplate`. 람다로 넘기는 이유는 J12에서 본 "바뀌는 부분을 함수로 넘기기"다'
     asks:
       - '본문의 예시: 코드 template의 `notifyUser`에서 예외가 나면 주문 행은 남나 (남는다. 람다가 끝날 때 이미 커밋됐다)'
       - '옮긴 상황: `@Transactional`이 없는 `ReportService.run` 안에서 `tx.execute(s -> { ... })`를 세 번 부른다. 트랜잭션은 몇 번 열리고, 두 번째 람다가 실패하면 첫 번째의 변경은 남나 (세 번. 남는다)'
+      - '실무 구역: 코드 external처럼 트랜잭션 안에서 외부 결제 API를 부르면, API를 기다리는 동안 그 요청은 DB 커넥션을 쥐고 있나 (쥐고 있다)'
+    body:
+      - code: template
+        notes:
+          - mark: 'tx.executeWithoutResult(s -> {'
+            as: code
+            text: '여기서 트랜잭션이 시작되고, 람다가 정상으로 끝나면 커밋돼요.'
+      - p: '`TransactionTemplate`은 트랜잭션 매니저를 직접 부르는 도구예요. 넘긴 람다만 트랜잭션 안에서 돌아요. 스프링 부트가 빈을 만들어 두니 생성자로 받으면 돼요([근거](link:programmatic)). 람다 안팎에서 트랜잭션을 묻고, 람다 뒤의 알림에서 예외가 나게 했어요.'
+      - ci:
+          key: template
+          label: 실제 결과 보기
+          source: TxProxyLessonTest.transactionTemplate
+      - p: '람다 안에서만 트랜잭션이 열렸어요. 람다가 끝날 때 커밋돼서, 그 뒤 알림에서 예외가 나도 주문은 남아요. 프록시를 거치지 않으니 같은 클래스 안에서 써도 내부 호출 문제가 없어요.'
+      - table:
+          head: [쓸 때, 도구]
+          rows:
+            - ['메서드 전체가 하나의 트랜잭션', '`@Transactional`']
+            - ['메서드의 일부만 묶기(외부 호출은 밖에)', '`TransactionTemplate`']
+            - ['한 메서드에서 트랜잭션을 여러 번 나눠 열기', '`TransactionTemplate`']
+      - p: '할 일을 람다로 넘기는 모양은 [람다](lesson:lambda) 레슨에서 본 "바뀌는 부분을 함수로 넘기기"예요. 트랜잭션을 여닫는 틀은 같고 안의 일만 바뀌어요.'
+      - quiz:
+          q: '`@Transactional`이 없는 메서드 안에서 `tx.execute(s -> {...})`를 세 번 불러요. 두 번째 람다가 런타임 예외로 실패하면 첫 번째 람다의 변경은?'
+          options:
+            - 남는다. 이미 따로 커밋됐다
+            - 함께 롤백된다
+            - 세 번째가 끝나야 알 수 있다
+          answer: 1
+          explain: '람다마다 트랜잭션이 따로 열리고 끝날 때 커밋돼요. 첫 번째는 이미 커밋돼서 두 번째의 롤백과 상관없어요.'
+    recall: 'TransactionTemplate에 람다를 넘기면 프록시 없이 트랜잭션 매니저를 직접 불러 그 람다만 트랜잭션 안에서 돌고, 정상으로 끝나면 그 자리에서 커밋, 런타임 예외면 롤백해요. 메서드의 일부만 묶거나(외부 호출은 밖에), 한 메서드에서 여러 번 나눠 열 때 쓰고, 같은 클래스 안에서도 내부 호출 문제가 없어요. 대부분은 @Transactional을 써요.'
 practice:
+  title: 운영에서는 이렇게 만나요
   says:
-    - '흔한 실수 하나: 코드 external처럼 트랜잭션 안에서 외부 결제 API를 부른다. API가 5초 걸리면 그동안 DB 커넥션을 쥐고 있고, 요청이 몰리면 풀이 바닥난다(D6). 결제는 승인됐는데 뒤의 UPDATE가 실패해 롤백되면 DB에는 결제 기록이 없다. 고친 코드: `TransactionTemplate`으로 앞뒤 DB 작업만 묶고 외부 호출은 밖에 둔다. 커넥션을 잡고 있던 시간을 두 경우로 잰 결과를 테스트로 남긴다'
-    - '흔한 실수 둘: 이 레슨의 내부 호출. 고친 코드는 질문 2. 코드 리뷰에서 `this.`로 부른 `@Transactional` 메서드를 찾는 습관을 적는다'
-    - '읽기만 하는 메서드는 `@Transactional(readOnly = true)`. JPA는 읽기 전용이면 변경 감지를 위한 스냅샷을 만들지 않는다. 효과는 P 과정에서 다룬다고 적는다(스프링 프레임워크 문서 근거)'
-    - '트랜잭션 로그를 켜는 법: `logging.level.org.springframework.transaction.interceptor=TRACE`면 프록시가 트랜잭션을 열고 닫을 때마다 로그를 남긴다. 내부 호출을 의심할 때 이 로그가 없으면 트랜잭션이 안 열린 것이다. 로그 한 줄을 실제 출력으로 보인다'
+    - '흔한 실수 하나: 코드 external처럼 트랜잭션 안에서 외부 결제 API를 부른다. API가 5초 걸리면 그동안 DB 커넥션을 쥐고 있고, 요청이 몰리면 풀이 바닥난다(D6). 고친 코드: `TransactionTemplate`으로 앞뒤 DB 작업만 묶고 외부 호출은 밖에 둔다. 커넥션을 잡고 있던 수를 두 경우로 잰 결과를 테스트로 남긴다'
+    - '흔한 실수 둘: 이 레슨의 내부 호출. 코드 리뷰에서 `this.`로 부른 `@Transactional` 메서드를 찾는 습관을 적는다'
+    - '읽기만 하는 메서드는 `@Transactional(readOnly = true)`. 효과는 P 과정에서 다룬다고 적는다(스프링 프레임워크 문서 근거)'
+    - '트랜잭션 로그를 켜는 법: `logging.level.org.springframework.transaction.interceptor=TRACE`'
+  body:
+    - h3: '흔한 실수 1: 트랜잭션 안의 외부 호출'
+    - code: external
+      notes:
+        - mark: pgClient.approve(o);
+          as: code
+          text: '외부 결제 API를 기다리는 동안에도 트랜잭션은 열려 있어요.'
+    - p: '트랜잭션이 열려 있는 동안 커넥션은 스레드에 묶여 있어요(질문 1). 외부 API를 기다리는 동안 풀의 활성 커넥션을 세 봤어요.'
+    - ci:
+        key: hold
+        label: 실제 결과 보기
+        source: TxProxyLessonTest.connectionHeldDuringExternalCall
+    - p: '트랜잭션 안에서는 SQL을 보내지 않는 동안에도 커넥션 하나를 쥐고 있어요. 결제 API가 5초씩 걸리고 요청이 몰리면 풀이 바닥나요([DB 커넥션과 커넥션 풀](lesson:connection-pool)). 결제는 승인됐는데 뒤의 UPDATE가 실패해 롤백되면 DB에는 결제 기록이 없는 일도 생겨요.'
+    - code: externalFix
+    - p: 'DB 작업만 짧은 트랜잭션으로 묶고 외부 호출은 밖에 둬요. 승인과 DB 기록이 어긋나는 경우를 어떻게 맞출지는 결제 흐름 심화 레슨에서 다뤄요.'
+    - h3: '흔한 실수 2: 내부 호출'
+    - p: '질문 2의 코드예요. 예외가 없어서 테스트나 문의로만 드러나요. 코드 리뷰에서 `this.`로 부르거나 그냥 이름으로 부른 `@Transactional` 메서드가 보이면, 그 호출이 프록시를 거치는지 확인해요.'
+    - h3: 읽기 전용과 트랜잭션 로그
+    - p: '읽기만 하는 메서드는 `@Transactional(readOnly = true)`로 둬요. JPA는 읽기 전용 트랜잭션에서 변경 감지를 위한 준비를 줄여요. 효과는 JPA 과정에서 다뤄요.'
+    - code: log
+    - p: '이 로그를 켜면 프록시가 트랜잭션을 열고 닫을 때마다 "Getting transaction for [...]", "Completing transaction for [...]" 같은 줄이 남아요. 내부 호출이 의심될 때 이 줄이 없으면 트랜잭션이 안 열린 거예요.'
+interview:
+  question: '@Transactional은 어떻게 동작하고, 왜 내부 호출에서는 적용되지 않나요?'
+  model:
+    - label: 정의
+      text: '@Transactional이 붙은 빈은 프록시로 바뀌고, 프록시의 트랜잭션 어드바이스가 메서드 전에 트랜잭션을 열고 정상이면 커밋, 런타임 예외면 롤백합니다.'
+    - label: 원리
+      text: 트랜잭션 매니저가 풀에서 커넥션을 빌려 자동 커밋을 끄고 지금 스레드에 묶어 두어, 메서드 안의 리포지토리와 JdbcTemplate이 같은 커넥션을 씁니다. 같은 클래스 안의 this 호출은 프록시를 거치지 않아 어노테이션이 읽히지 않고, final과 private 메서드도 오버라이딩되지 않아 걸리지 않습니다.
+    - label: 주의할 점
+      text: 내부 호출은 바깥 메서드에 붙이거나 다른 빈으로 나눠 고치는데, 나누면 트랜잭션 범위가 달라집니다. 트랜잭션 안에서 외부 API를 부르면 그동안 커넥션을 쥐고 있으므로, TransactionTemplate으로 DB 작업만 묶습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 포인트가 쌓이지 않던 문제를 트랜잭션 로그로 내부 호출임을 찾아, 바깥 메서드에 @Transactional을 붙여 고쳤습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 스프링 부트 3.5와 PostgreSQL 16(Testcontainers)에서 돌려 받은 값이에요. 내부 호출과 빈을 나눈 경우는 예전 테스트([SelfInvocationTest](link:selfTest), [TransactionalProxyTest](link:proxyTest))가, 나머지는 [TxProxyLessonTest](link:test)가 확인해요.
+footer: '근거: 선언적 트랜잭션과 프록시는 스프링 프레임워크 문서([링크](link:declarative)), `@Transactional`의 설정과 메서드 접근 범위는 [링크](link:annotations), `TransactionTemplate`은 [링크](link:programmatic), Spring Data 리포지토리의 기본 트랜잭션은 [링크](link:dataJpaTx). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '`@Transactional` 빈은 CGLIB 프록시다'
     how: '`AopUtils.isCglibProxy`'
@@ -201,17 +479,19 @@ claims:
     test: 'transaction/TransactionalProxyTest#runtimeExceptionRollsBackWholeBoundary, splitBeansSplitTransactions'
   - claim: '한 `@Transactional` 메서드 안의 두 SQL은 같은 커넥션(같은 `pg_backend_pid()`)으로 나간다'
     how: '`JdbcTemplate`으로 `select pg_backend_pid()`를 두 번 부른다'
-  - claim: '`private` 메서드와 `final` 메서드에는 트랜잭션이 없고, `protected`와 패키지 접근 메서드는 밖에서 부르면 있다(스프링 6.x)'
+    test: TxProxyLessonTest.sameConnectionInTransaction
+  - claim: '`private` 메서드와 `final` 메서드에는 트랜잭션이 없고, `protected`와 패키지 접근 메서드는 밖에서 부르면 있다(스프링 6.2)'
     how: '`isActualTransactionActive`'
+    test: TxProxyLessonTest.visibility
   - claim: '메서드의 `@Transactional`이 클래스의 `readOnly = true`를 덮는다'
     how: '`TransactionSynchronizationManager.isCurrentTransactionReadOnly()`'
-  - claim: '어노테이션 없는 메서드의 `save` 두 번은 따로 커밋되어 두 번째가 실패해도 첫 번째가 남는다'
-    how: 'DB의 행'
+    test: TxProxyLessonTest.methodOverridesClass
   - claim: '`TransactionTemplate` 람다 안에서만 트랜잭션이 열리고, 람다가 끝나면 커밋되어 뒤에서 예외가 나도 남는다'
     how: '`isActualTransactionActive`와 DB의 행'
-    test: 'transaction/TransactionalProxyTest#transactionTemplateOpensTransaction'
-  - claim: '트랜잭션 안에서 느린 외부 호출을 하면 그 시간만큼 커넥션을 잡고 있고, 밖으로 빼면 줄어든다'
-    how: '`Thread.sleep`으로 외부 호출을 흉내 내고, 히카리 풀의 활성 커넥션 수를 그 사이에 읽는다'
+    test: TxProxyLessonTest.transactionTemplate
+  - claim: '트랜잭션 안에서 외부 호출을 기다리는 동안 커넥션을 쥐고 있고, 밖에서는 쥐지 않는다'
+    how: '히카리 풀의 활성 커넥션 수를 그 사이에 읽는다'
+    test: TxProxyLessonTest.connectionHeldDuringExternalCall
 sources:
   - '선언적 트랜잭션과 프록시: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html'
   - '`@Transactional`의 설정과 메서드 접근 범위(6.0부터 protected, 패키지 접근): https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html'
