@@ -143,16 +143,16 @@ questions:
     body: 조회한 상품 1만 개를 리스트에 차례로 담고, 화면에 그리며 처음부터 끝까지 한 번 읽어요. 어느 리스트가 맞을까요?
     choices:
       - LinkedList. 넣는 일이 많아서
-      - ArrayList. 뒤에 넣기는 비슷하고, 차례로 읽기는 더 빠르며 메모리도 덜 쓴다
-      - 어느 것이든 같다. 둘 다 O(n)이다
+      - ArrayList. 뒤에 넣기와 차례로 읽기는 비슷하고, LinkedList는 원소마다 노드 메모리를 더 쓴다
+      - LinkedList. 노드로 이어서 차례로 읽기가 늘 더 빠르다
       - LinkedList. 노드가 흩어져 있어 캐시를 잘 탄다
     answer: "2"
     explanation: |-
-      **ArrayList예요.** 맨 앞에서 넣고 빼는 일이 아니면 대부분 ArrayList가 빨라요.
+      **ArrayList예요.** 맨 앞에서 넣고 빼는 일이 없으면 LinkedList를 쓸 이유가 없어요.
 
-      - 뒤에 넣기는 둘 다 O(1)이에요
-      - 차례로 읽기는 둘 다 O(n)이지만, 배열은 다음 원소가 바로 옆이라 CPU 캐시를 잘 타요
+      - 뒤에 넣기는 둘 다 O(1), 차례로 읽기는 둘 다 O(n)이라 시간은 비슷해요
       - LinkedList는 원소마다 노드 객체와 참조 둘을 더 써요
+      - 나중에 get(i)가 필요해지면 ArrayList는 O(1), LinkedList는 O(n)이에요
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayList.html
   - key: al-get-loop-linked
     concept: core
@@ -190,11 +190,11 @@ questions:
 
       - **ArrayList:** 차면 1.5배 큰 배열로 옮긴다. get(i)는 O(1), 뒤에 넣기는 분할 상환 O(1), 중간과 맨 앞은 뒤를 밀어 O(n)
       - **LinkedList:** 넣고 빼는 것 자체는 O(1)이지만 그 자리까지 따라가서 get(i)와 가운데 넣기는 O(n)
-      - **실제로:** 노드가 흩어져 캐시를 덜 타고 메모리를 더 써서 대부분 ArrayList가 빠르다. 맨 앞을 자주 다루면 ArrayDeque
+      - **실제로:** LinkedList는 노드마다 메모리를 더 쓰고 get(i)가 느려서 대부분 ArrayList를 쓴다. 맨 앞을 자주 다루면 ArrayDeque
     checklist:
       - ArrayList는 배열이 차면 더 큰 배열로 옮긴다고 말했다
       - ArrayList의 get(i)는 O(1), 중간이나 맨 앞에 넣기는 뒤를 밀어 O(n)이라고 말했다
       - LinkedList는 노드를 참조로 잇고, 그 자리까지 따라가야 해서 get(i)가 O(n)이라고 말했다
       - LinkedList는 맨 앞에서 넣고 빼는 것이 O(1)이라고 말했다
-      - 메모리와 캐시 때문에 대부분 ArrayList가 빠르다고 말했다
+      - LinkedList는 노드마다 메모리를 더 써서 대부분 ArrayList를 쓴다고 말했다
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/LinkedList.html

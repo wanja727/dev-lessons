@@ -184,7 +184,7 @@ class ArrayAndLinkedListTest {
     }
 
     @Test
-    @DisplayName("맨 앞에 넣기는 LinkedList가 빠르고, 맨 뒤에 넣기와 차례로 읽기와 get(i)는 ArrayList가 같거나 빠르다")
+    @DisplayName("맨 앞에 넣기는 LinkedList가 빠르고 get(i)는 ArrayList가 빠르다. 맨 뒤에 넣기와 차례로 읽기는 남기기만 한다")
     void compareOperations() {
         Supplier<List<Integer>> array = ArrayList::new;
         Supplier<List<Integer>> linked = LinkedList::new;
@@ -211,7 +211,7 @@ class ArrayAndLinkedListTest {
 
         assertThat(frontLinked).isLessThan(frontArray);
         assertThat(getArray).isLessThan(getLinked);
-        assertThat(iterArray).isLessThanOrEqualTo(iterLinked);
+        // 맨 뒤에 넣기와 차례로 읽기는 둘 다 같은 복잡도라 실행마다 앞서는 쪽이 바뀐다 (CI에서 3ms와 10ms로 뒤집힌 적이 있다)
 
         CiOutput.record(LESSON, "compare", """
                 맨 앞에 넣기 10만 번
