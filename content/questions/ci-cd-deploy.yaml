@@ -1,0 +1,272 @@
+# CI/CD와 무중단 배포 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/ci-cd-deploy.yaml의 says).
+# 우아한 종료에 관한 정답은 verification의 GracefulShutdownTest로 확인했다 (스프링 부트 3.5).
+# 배포 방식과 워크플로 문법은 공식 문서가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: ci-cd-deploy
+  title: CI/CD와 무중단 배포
+  unit: 테스트와 운영
+  order: 906
+concepts:
+  - key: core
+    name: CI/CD와 무중단 배포
+coreQuestions:
+  - key: q1
+    text: "CI는 무엇을 자동으로 확인하나요?"
+  - key: q2
+    text: "CD는 무엇을 자동으로 하나요?"
+  - key: q3
+    text: "서버를 멈추지 않고 새 버전으로 바꾸려면 어떻게 하나요?"
+  - key: q4
+    text: "서버를 끌 때 처리 중이던 요청은 어떻게 되나요?"
+  - key: q5
+    text: "옛 버전과 새 버전이 함께 도는 동안 무엇을 지켜야 하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: cicd-paths
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 워크플로가 있는 저장소에서 docs/roadmap.md 한 파일만 고쳐 main에 push했어요. 이 워크플로는 돌까요?
+    code: |-
+      on:
+        push:
+          branches: [main]
+          paths: ["verification/**"]
+    choices:
+      - 돈다. main에 push했다
+      - 돌지 않는다. 바뀐 파일이 paths에 맞지 않는다
+      - PR이 열려 있을 때만 돈다
+      - 다음 날 일정에 맞춰 돈다
+    answer: "2"
+    explanation: |-
+      **돌지 않아요.** paths를 적으면 그 경로의 파일이 바뀐 push에서만 돌아요.
+
+      - on은 언제 돌지, branches와 paths는 조건이에요
+    source: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
+  - key: cicd-clean-runner
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 개발자 PC의 ~/.m2 폴더에만 설치해 둔 사내 라이브러리를 쓰는 프로젝트가 있어요. 로컬에서는 빌드가 되는데 깃허브 액션의 CI에서는 실패해요. 이유로 가장 맞는 것은?
+    choices:
+      - CI는 테스트를 건너뛰기 때문이다
+      - CI의 실행기는 매번 새로 만든 깨끗한 환경이라 그 라이브러리가 없다
+      - CI가 JDK를 쓰지 않기 때문이다
+      - PR이 아니라 push라서 그렇다
+    answer: "2"
+    explanation: |-
+      **실행기는 매번 깨끗한 환경이에요.** 내 PC에만 있는 파일이나 설정에 기댄 빌드는 CI에서 실패해요.
+
+      - 그래서 CI가 "제 PC에서는 되는데요"를 합치기 전에 드러내요
+    source: https://martinfowler.com/articles/continuousIntegration.html
+  # ── 질문 2 ──
+  - key: cicd-needs
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 워크플로에서 build 잡의 테스트가 실패했어요. deploy 잡은 어떻게 될까요?
+    code: |-
+      jobs:
+        build:
+          steps:
+            - run: gradle test
+        deploy:
+          needs: build
+          steps:
+            - uses: actions/deploy-pages@v5
+    choices:
+      - 그래도 돈다
+      - 돌지 않는다. build가 성공해야 돈다
+      - build와 동시에 돈다
+      - 지난번 결과물로 배포한다
+    answer: "2"
+    explanation: |-
+      **돌지 않아요.** needs로 이은 잡은 앞 잡이 성공해야 돌아요.
+
+      - 테스트를 통과한 것만 배포하는 장치예요
+    source: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
+  - key: cicd-build-once
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 검증 서버용과 운영 서버용 도커 이미지를 따로 빌드하고, 각 이미지 안에 그 환경의 DB 주소를 넣었어요. 이 방식의 문제는?
+    choices:
+      - 문제없다. 환경마다 이미지가 맞춰져 있다
+      - 검증에서 확인한 이미지와 운영에 간 이미지가 달라 확인이 의미가 줄어든다
+      - 이미지가 너무 작아진다
+      - 운영 이미지는 레지스트리에 올릴 수 없다
+    answer: "2"
+    explanation: |-
+      **검증한 것과 다른 것이 운영에 가요.** 이미지는 한 번 만들어 검증과 운영에 그대로 옮기고, 환경마다 다른 값은 환경 변수로 넘겨요.
+
+      - 커밋 해시를 태그로 붙이면 무엇이 배포됐는지 알 수 있어요
+    source: https://martinfowler.com/bliki/ContinuousDelivery.html
+  # ── 질문 3 ──
+  - key: cicd-rolling-mixed
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 로드 밸런서 뒤의 서버 세 대를 하나씩 빼고 새 버전으로 바꿔 넣는 롤링 배포를 하고 있어요. 두 번째 서버를 바꾸는 중일 때 맞는 것은?
+    choices:
+      - 모든 요청이 v1으로 간다
+      - v1과 v2가 함께 요청을 받는다
+      - 모든 요청이 v2로 간다
+      - 서버가 모두 멈춰 요청을 받지 않는다
+    answer: "2"
+    explanation: |-
+      **v1과 v2가 함께 받아요.** 롤링은 하나씩 바꿔서 바꾸는 동안 두 버전이 섞여 있어요.
+
+      - 서버를 더 쓰지 않는 대신 두 버전이 함께 돈다는 점을 챙겨야 해요
+    source: https://martinfowler.com/bliki/BlueGreenDeployment.html
+  - key: cicd-canary
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 새 결제 로직이 걱정돼요. 문제가 있더라도 소수의 사용자만 겪게 하고, 오류율을 본 뒤 넓히고 싶어요. 어느 배포 방식이 맞을까요?
+    choices:
+      - 블루그린 배포
+      - 카나리 배포
+      - 서버를 모두 내리고 한 번에 올리기
+      - 롤링 배포를 거꾸로 하기
+    answer: "2"
+    explanation: |-
+      **카나리 배포예요.** 새 버전에 일부 요청만 보내 지켜본 뒤 늘려요.
+
+      - 블루그린은 확인한 뒤 모든 요청을 한 번에 넘겨요
+    source: https://martinfowler.com/bliki/CanaryRelease.html
+  # ── 질문 4 ──
+  - key: cicd-immediate
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: server.shutdown=immediate로 둔 스프링 부트 3.5 서버가 3초 걸리는 결제 요청을 처리하는 중에 꺼졌어요. 그 요청은 어떻게 될까요?
+    choices:
+      - 끝까지 처리되어 응답을 받는다
+      - 연결이 끊겨 실패한다
+      - 다른 서버로 자동으로 옮겨져 처리된다
+      - 30초를 기다린 뒤 처리된다
+    answer: "2"
+    explanation: |-
+      **연결이 끊겨요.** immediate는 처리 중인 요청을 기다리지 않아요.
+
+      - 기본값인 graceful이면 새 요청은 받지 않고, 처리 중인 요청을 끝낸 뒤 꺼져요
+    source: https://docs.spring.io/spring-boot/reference/web/graceful-shutdown.html
+  - key: cicd-shutdown-timeout
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 우아한 종료가 켜져 있고 spring.lifecycle.timeout-per-shutdown-phase가 기본값 30초예요. 엑셀 내보내기 요청이 2분 걸려요. 배포로 서버가 꺼지기 시작했을 때 이 요청은 어떻게 될까요?
+    choices:
+      - 2분을 다 기다린 뒤 처리된다
+      - 30초를 기다린 뒤 끊긴다
+      - 바로 끊긴다
+      - 다음 버전 서버가 이어서 처리한다
+    answer: "2"
+    explanation: |-
+      **30초 뒤 끊겨요.** 우아한 종료도 기다리는 한도가 있어요.
+
+      - 오래 걸리는 일은 요청 안에서 끝내지 않고 따로 작업으로 돌리면 배포에 안전해요
+    source: https://docs.spring.io/spring-boot/reference/web/graceful-shutdown.html
+  - key: cicd-docker-kill
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스프링 부트 3.5 서버를 컨테이너로 돌려요. 배포 스크립트가 옛 컨테이너를 docker kill order-api로 꺼요. 처리 중이던 결제 요청은 어떻게 될까요?
+    choices:
+      - 우아한 종료로 끝까지 처리된다
+      - 끊긴다. docker kill은 SIGKILL이라 우아한 종료가 돌 틈이 없다
+      - 도커가 요청을 저장했다가 새 컨테이너로 넘긴다
+      - 30초 뒤에 끊긴다
+    answer: "2"
+    explanation: |-
+      **끊겨요.** docker kill은 SIGKILL을 보내 프로세스를 바로 죽여요.
+
+      - docker stop은 SIGTERM을 보내고 기다려서 스프링의 우아한 종료가 돌아요
+      - docker stop의 기본 대기 10초가 스프링의 30초보다 짧으니 --time으로 맞춰요
+    source: https://docs.docker.com/reference/cli/docker/container/stop/
+  # ── 질문 5 ──
+  - key: cicd-rename-column
+    concept: core
+    coreQuestion: q5
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 롤링 배포로 member.name 열을 nickname으로 바꾸는 마이그레이션과 새 코드를 한 번에 내보냈어요. 배포하는 동안 무엇이 실패할까요?
+    choices:
+      - 새 버전 서버의 nickname을 쓰는 쿼리
+      - 아직 도는 옛 버전 서버의 name을 쓰는 쿼리
+      - 아무것도 실패하지 않는다
+      - 로드 밸런서
+    answer: "2"
+    explanation: |-
+      **옛 버전 서버의 쿼리가 실패해요.** 롤링 중에는 두 버전이 같은 DB를 쓰는데 name 열이 사라졌어요.
+
+      - 늘리고(새 열을 더해 둘 다 씀), 옮기고, 줄이는(옛 열 삭제) 순서로 여러 배포에 나눠요
+    source: https://martinfowler.com/bliki/ParallelChange.html
+  - key: cicd-api-field
+    concept: core
+    coreQuestion: q5
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 응답 JSON의 price 필드 이름을 amount로 바꾸려 해요. 옛 버전의 모바일 앱이 아직 price를 읽어요. 어떻게 바꾸는 것이 맞을까요?
+    choices:
+      - 다음 배포에서 price를 amount로 바로 바꾼다
+      - amount를 더해 둘 다 보내고, 옛 앱이 줄어든 뒤 price를 뺀다
+      - price를 지우고 앱 업데이트를 강제한다
+      - 이름을 바꾸지 않는다
+    answer: "2"
+    explanation: |-
+      **새 필드를 더해 둘 다 보내고, 나중에 옛 필드를 빼요.** API도 DB 열과 같이 늘리고, 옮기고, 줄여요.
+
+      - 한 번에 바꾸면 옛 앱이 깨져요
+    source: https://martinfowler.com/bliki/ParallelChange.html
+  # ── 면접 ──
+  - key: cicd-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "CI/CD가 무엇이고, 서비스를 멈추지 않고 배포하려면 무엇을 해야 하는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **CI는 합칠 때마다 자동으로 확인하고 CD는 통과한 것을 자동으로 내보내며, 무중단 배포는 서버를 차례로 바꾸고 우아하게 끄고 두 버전이 함께 돌게 바꿔요.**
+
+      - **CI:** 깨끗한 실행기에서 빌드와 테스트, 실패하면 합치지 않는다
+      - **CD:** 지속적 전달과 지속적 배포, needs, 이미지는 한 번 만들어 옮긴다
+      - **배포 방식:** 롤링, 블루그린, 카나리
+      - **끄기:** 우아한 종료, 한도, SIGTERM과 준비 상태
+      - **호환:** 늘리고, 옮기고, 줄이기로 되돌릴 수 있게
+    checklist:
+      - CI가 합칠 때마다 깨끗한 환경에서 빌드와 테스트를 돌린다고 말했다
+      - 지속적 전달과 지속적 배포의 차이를 말했다
+      - 롤링, 블루그린, 카나리 가운데 둘 이상의 차이를 말했다
+      - 우아한 종료로 처리 중인 요청을 끝내고 끈다고 말했다
+      - 두 버전이 함께 도니 스키마와 API를 나눠 바꾼다고 말했다
+    source: https://martinfowler.com/bliki/ContinuousDelivery.html

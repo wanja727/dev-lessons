@@ -1,8 +1,9 @@
-# CI/CD와 무중단 배포 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# CI/CD와 무중단 배포
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/ci-cd-deploy.yaml에 있다.
 title: CI/CD와 무중단 배포
+description: CI가 자동으로 확인하는 것, CD가 자동으로 하는 것, 서버를 멈추지 않고 새 버전으로 바꾸는 방법, 서버를 끌 때 처리 중이던 요청, 두 버전이 함께 도는 동안 지킬 것. 다섯 가지 질문에 스스로 답할 수 있게 주문 서버와 이 저장소의 워크플로로 배우는 대화형 레슨.
 unit: 테스트와 운영
+minutes: 25
 roadmap: T6
 type: 개념 설명
 prerequisites:
@@ -50,6 +51,19 @@ covers:
     where: '질문 4에서 이름만 든다. 사용법은 다루지 않음: 특정 도구의 사용법은 로드맵의 "다루지 않는 것"'
   - topic: '배포 뒤에 지표와 로그로 이상을 알아채기'
     where: '다루지 않음: 로그와 모니터링(T7)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/cicd/GracefulShutdownTest.java
+  workflows: https://github.com/wanja727/dev-lessons/tree/main/.github/workflows
+  fowlerCi: https://martinfowler.com/articles/continuousIntegration.html
+  fowlerCd: https://martinfowler.com/bliki/ContinuousDelivery.html
+  ghSyntax: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions
+  blueGreen: https://martinfowler.com/bliki/BlueGreenDeployment.html
+  canary: https://martinfowler.com/bliki/CanaryRelease.html
+  graceful: https://docs.spring.io/spring-boot/reference/web/graceful-shutdown.html
+  boot34: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.4-Release-Notes
+  probes: https://docs.spring.io/spring-boot/reference/actuator/endpoints.html#actuator.endpoints.kubernetes-probes
+  dockerStop: https://docs.docker.com/reference/cli/docker/container/stop/
+  parallelChange: https://martinfowler.com/bliki/ParallelChange.html
 codes:
   predict: |-
     @GetMapping("/orders/{id}/pay")
@@ -60,7 +74,7 @@ codes:
     }
   verify: |-
     name: Verify lessons
-    on:
+    [[on]]:
       push:
         branches: [main]
         paths: ["verification/**"]
@@ -68,7 +82,7 @@ codes:
         paths: ["verification/**"]
     jobs:
       test:
-        runs-on: ubuntu-latest
+        [[runs-on]]: ubuntu-latest
         steps:
           - uses: actions/checkout@v7
           - uses: actions/setup-java@v6
@@ -84,24 +98,78 @@ codes:
           - uses: withastro/action@v6
       deploy:
         if: github.ref == 'refs/heads/main'
-        needs: build
+        [[needs: build]]
         steps:
           - uses: actions/deploy-pages@v5
+  workflowsRun: |-
+    // .github/workflows의 YAML을 읽어
+    pages.yml → jobs.deploy.needs, if
+    verify.yml → on.push.branches, paths
+  secret: |-
+    env:
+      GH_TOKEN: ${{ ⤷
+    secrets.RETRIEVO_DISPATCH_TOKEN }}
+  serverFlow: |-
+    env:
+      IMAGE: registry/order-api
+    jobs:
+      build:
+        steps:
+          - run: ./gradlew test bootJar
+          - run: docker build ⤶
+              -t $IMAGE:${{ github.sha }} .
+          - run: docker push ⤶
+              $IMAGE:${{ github.sha }}
+      deploy:
+        needs: build
+        environment: production
+  shutdownRun: |-
+    // 0초: GET /orders/1/pay (3초 걸림)
+    // 1초: 서버 끄기 시작 (context.close)
+    // 1.3초: GET /hello
   graceful: |-
     server:
       shutdown: graceful
     spring:
       lifecycle:
-        timeout-per-shutdown-phase: 30s
+        [[timeout-per-shutdown-phase: 30s]]
   probes: |-
     management:
       endpoint:
         health:
           probes:
             enabled: true
+  warmupRun: |-
+    // 서버를 띄운 직후
+    for (int i = 0; i < 100; i++) {
+      GET /hello 의 응답 시간 재기
+    }
+  rename: |-
+    -- 배포 1: 늘리기
+    ALTER TABLE member ADD nickname TEXT;
+    -- v2는 name과 nickname에 둘 다 쓴다
+    UPDATE member SET nickname = name;
+
+    -- 배포 2: 옮기기
+    -- v3은 nickname만 읽고 쓴다
+
+    -- 배포 3: 줄이기 (v1, v2가 모두 사라진 뒤)
+    ALTER TABLE member DROP COLUMN name;
+  stopBad: |-
+    docker kill order-api
+  stopGood: |-
+    docker stop --time 40 order-api
 predict:
-  text: '결제 API(코드 predict)는 응답에 3초가 걸려요. 요청이 들어오고 1초 뒤에 배포 때문에 서버를 끄기 시작했어요. 스프링 부트 3.5의 기본 설정이라면 이 요청은 어떻게 될까요? 보기: 3초를 마저 채우고 "paid"를 받는다, 연결이 끊겨 실패한다.'
-  answer: '"paid"를 받는다. 스프링 부트 3.4부터 우아한 종료가 기본이라, 새 요청은 받지 않고 처리 중인 요청을 끝낸 뒤 꺼진다. `server.shutdown=immediate`면 연결이 끊긴다. 질문 4에서 밝힌다.'
+  title: 끄는 중에 처리하던 결제는 어떻게 될까요?
+  text: '결제 API는 응답에 3초가 걸려요. 요청이 들어오고 1초 뒤에 배포 때문에 서버를 끄기 시작했어요. 스프링 부트 3.5의 기본 설정이라면 이 요청은 어떻게 될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 4에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: paid, label: '3초를 마저 채우고 "paid"를 받는다'}
+    - {value: cut, label: 연결이 끊겨 실패한다}
+  answer: paid
+  storageKey: cicd-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: CI는 무엇을 자동으로 확인하나요?
@@ -117,6 +185,33 @@ questions:
     asks:
       - '본문의 예시: 코드 verify의 워크플로는 `docs/roadmap.md`만 고친 push에서 도나 (돌지 않는다. `paths`가 `verification/**`다)'
       - '옮긴 상황: 개발자 PC의 `~/.m2`에만 있는 사내 라이브러리를 쓰는 프로젝트가 있다. 로컬에서 빌드는 되는데 CI에서 실패한다. 이유는 (실행기는 깨끗한 환경이라 그 라이브러리가 없다)'
+    body:
+      - p: '**CI**(Continuous Integration, 지속적 통합)는 모두가 `main`에 작게 자주 합치고, 합칠 때마다 **자동으로** 빌드하고 테스트하는 방식이에요([Martin Fowler](link:fowlerCi)). Git 브랜치와 병합 레슨에서 충돌 없이 합쳐졌는데 컴파일이 깨지는 것을 봤어요. 사람이 매번 확인하기를 기대하지 않고, 기계가 합칠 때마다 확인해요.'
+      - p: '이 레슨이 들어 있는 저장소의 실제 워크플로예요. 깃허브 액션은 저장소의 `.github/workflows/` 폴더에 있는 YAML 파일을 읽어 돌려요([워크플로 폴더](link:workflows)).'
+      - code: verify
+        notes:
+          - mark: on
+            as: code
+            text: '언제 도는지예요. main에 push할 때와 PR에서, 그리고 `paths`의 파일이 바뀌었을 때만 돌아요.'
+          - mark: runs-on
+            as: code
+            text: '어느 실행기에서 도는지예요. 깃허브가 빌려주는 리눅스 가상 머신이에요.'
+      - ul:
+          - '**`on`**은 언제 돌지예요. `push`와 `pull_request` 같은 이벤트에, `branches`와 `paths`로 조건을 더해요. 이 워크플로는 검증 코드가 바뀐 push와 PR에서만 돌아요. 문서만 고친 커밋에서는 돌지 않아요.'
+          - '**`jobs`**는 할 일의 묶음, **`steps`**는 그 안에서 차례로 할 명령이에요. 저장소를 받고(checkout), JDK 21을 깔고, 테스트를 돌려요.'
+          - '**`runs-on`**은 실행기예요. 깃허브가 매번 **새로 만든 깨끗한 가상 머신**을 빌려줘요([워크플로 문법](link:ghSyntax)).'
+      - p: '깨끗한 실행기가 중요해요. 내 PC에만 있는 파일, 내 PC의 JDK 버전, 지난번 빌드가 남긴 결과물에 기댄 코드는 실행기에서 실패해요. "제 PC에서는 되는데요"가 합치기 전에 드러나요. 이 저장소의 Testcontainers 테스트도 실행기에 도커가 있어서 그대로 돌아요.'
+      - p: 'PR을 열면 CI 결과가 PR에 붙어요. 브랜치 보호 규칙으로 "CI가 통과해야 합칠 수 있다"를 걸면 깨진 코드는 `main`에 들어가지 못해요.'
+      - quiz:
+          q: '코드 verify의 워크플로는 `docs/roadmap.md`만 고친 push에서 돌까요?'
+          options:
+            - 돈다. main에 push했다
+            - '돌지 않는다. `paths`가 `verification/**`이다'
+            - PR일 때만 돈다
+          answer: 2
+          explain: '`paths`로 정한 파일이 바뀌었을 때만 돌아요.'
+      - next: '테스트가 통과했으면 그다음 배포도 자동으로 할 수 있을까요?'
+    recall: 'CI는 코드를 합칠 때마다 깨끗한 실행기에서 빌드와 테스트를 자동으로 돌려, 깨진 코드가 `main`에 들어가지 않게 하는 거예요. 깃허브 액션은 `.github/workflows`의 YAML에서 `on`(언제, 어느 브랜치와 경로), `jobs`와 `steps`(무엇을), `runs-on`(어느 실행기)을 읽어요. 실행기는 매번 새 환경이라 내 PC에만 있는 것에 기댄 코드가 드러나요. PR에 결과가 붙고 통과해야 합쳐요.'
   - id: q2
     title: CD는 무엇을 자동으로 하나요?
     conclusion:
@@ -131,6 +226,40 @@ questions:
     asks:
       - '본문의 예시: 코드 pages에서 `build` 잡의 테스트가 실패하면 `deploy` 잡은 어떻게 되나 (돌지 않는다. `needs: build`라서 `build`가 성공해야 돈다)'
       - '옮긴 상황: 검증 서버용과 운영 서버용 이미지를 따로 빌드하고, 각 이미지에 그 환경의 DB 주소를 넣었다. 무엇이 문제인가 (검증한 이미지와 운영 이미지가 다르다. 한 번 만든 이미지를 옮기고 주소는 환경 변수로 넘긴다)'
+    body:
+      - p: '**CD**는 두 가지 뜻으로 써요([Martin Fowler](link:fowlerCd)).'
+      - ul:
+          - '**지속적 전달**(Continuous Delivery): CI를 통과하면 언제든 배포할 수 있는 결과물(jar, 이미지)이 자동으로 준비돼요. 운영에 내보내는 버튼은 사람이 눌러요.'
+          - '**지속적 배포**(Continuous Deployment): 테스트를 통과하면 사람 없이 운영까지 자동으로 가요.'
+      - p: '이 저장소의 배포 워크플로는 지속적 배포예요. 테스트와 사이트 빌드가 통과하면 바로 공개 사이트에 올라가요.'
+      - code: pages
+        notes:
+          - mark: 'needs: build'
+            as: code
+            text: '`build` 잡이 성공해야 이 잡이 돌아요.'
+      - p: '워크플로 파일을 테스트에서 읽어 값을 확인했어요. 파일이 바뀌면 이 테스트가 실패해 레슨을 함께 고치게 돼요.'
+      - ci:
+          key: workflows
+          label: 실제 값 보기
+          source: GracefulShutdownTest.repositoryWorkflows
+          code: workflowsRun
+      - p: '`deploy` 잡은 **`needs: build`**라서 `build` 잡의 테스트가 실패하면 돌지 않아요. `if`로 `main`일 때만 배포하고, PR에서는 빌드까지만 확인해요.'
+      - h3: 결과물은 한 번 만들어 그대로 옮겨요
+      - p: '스프링 서버라면 흐름은 보통 이래요. 테스트하고, 이미지를 만들어 **커밋 해시를 태그로** 레지스트리에 올리고, 서버에 그 태그를 배포해요. 태그가 커밋을 가리키니 지금 운영에 무엇이 올라가 있는지 알 수 있어요. 이 흐름은 이 저장소에 서버 배포가 없어서 돌려 보지 않았고, 깃허브 액션 문서가 근거예요.'
+      - code: serverFlow
+      - p: '검증 서버에서 확인한 이미지와 운영에 올라간 이미지는 **같아야** 해요. 환경마다 이미지를 따로 빌드하면 검증한 것과 다른 것이 운영에 가요. 환경마다 다른 DB 주소 같은 값은 이미지에 넣지 않고, 도커와 컨테이너 레슨에서 본 대로 환경 변수로 넘겨요.'
+      - p: '비밀번호와 토큰은 워크플로 파일에 쓰지 않아요. 저장소 설정의 **시크릿**에 두고 `secrets.이름`으로 읽어요. 이 저장소의 문제 워크플로가 이렇게 토큰을 읽어요.'
+      - code: secret
+      - quiz:
+          q: '코드 pages에서 `build` 잡의 테스트가 실패하면 `deploy` 잡은 어떻게 될까요?'
+          options:
+            - 그래도 돈다
+            - '돌지 않는다. `needs: build`다'
+            - 이전 결과물로 배포한다
+          answer: 2
+          explain: '`needs`로 이은 잡은 앞 잡이 성공해야 돌아요.'
+      - next: '자동으로 배포하더라도 서버를 끄고 켜는 동안 요청은 어떻게 될까요?'
+    recall: 'CD는 CI를 통과한 코드로 배포할 결과물을 자동으로 만들고 내보내는 거예요. 운영 배포 직전에 사람이 누르면 지속적 전달, 끝까지 자동이면 지속적 배포예요. `needs`로 테스트가 통과해야 배포 잡이 돌게 하고, 비밀 값은 시크릿으로 넘겨요. 결과물(이미지)은 커밋 해시 태그로 한 번 만들어 검증과 운영에 그대로 옮기고, 환경마다 다른 값은 환경 변수로 넘겨요.'
   - id: q3
     title: 서버를 멈추지 않고 새 버전으로 바꾸려면 어떻게 하나요?
     conclusion:
@@ -148,6 +277,97 @@ questions:
     asks:
       - '본문의 예시: 서버 세 대를 롤링 배포하는 중간에 v1과 v2가 함께 요청을 받나 (받는다. 하나씩 바꾸는 동안 섞여 있다)'
       - '옮긴 상황: 새 결제 로직이 걱정돼서 문제가 있으면 소수의 사용자만 겪게 하고 싶다. 어느 배포 방식이 맞나 (카나리)'
+    body:
+      - p: '서버가 한 대면 새 버전으로 바꾸는 동안 서버가 없는 순간이 생겨요. 그래서 서버를 여럿 두고 앞에 **로드 밸런서**를 둬요. 로드 밸런서는 요청을 받아 뒤의 서버들에 나눠 보내는 장치예요(서버를 늘리는 방법 레슨). 서버 하나를 로드 밸런서에서 빼면 그 서버로는 요청이 가지 않아요. 이걸 이용해 서버를 차례로 바꾸는 방법이 셋 있어요. 이 질문은 테스트가 아니라 공식 설명을 근거로 해요.'
+      - table:
+          head: [방식, 하는 일, 더 드는 서버, 되돌리기, 두 버전이 함께 도나]
+          rows:
+            - [롤링, '서버를 하나씩 빼고 새 버전으로 바꿔 다시 넣어요', 없음, '다시 하나씩 바꿔야 해서 느려요', 네]
+            - [블루그린, '지금 버전(블루)과 같은 수의 새 버전(그린)을 띄워 확인한 뒤 로드 밸런서를 한 번에 그린으로 돌려요', '잠깐 두 배', '로드 밸런서를 블루로 돌리면 바로예요', '아니요. 한 번에 넘겨요']
+            - [카나리, '새 버전에 일부(예: 5%) 요청만 보내 오류율을 보고 문제가 없으면 늘려요', '조금', '새 버전으로 가는 몫을 0으로', 네]
+      - p: '[블루그린](link:blueGreen)은 되돌리기가 빠른 대신 서버가 잠깐 두 배로 들어요. [카나리](link:canary)는 탄광에서 유독 가스를 먼저 알아채려고 데려가던 카나리아에서 온 이름이에요. 문제가 생겨도 일부 사용자만 겪어서 위험한 변경에 써요.'
+      - p: '방식을 골라 한 단계씩 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [selector, duo, log, buttons, verdict]
+          selector:
+            label: 배포 방식
+            options:
+              - {value: rolling, label: 롤링}
+              - {value: bluegreen, label: 블루그린}
+              - {value: canary, label: 카나리}
+          initial:
+            duo:
+              - label: 서버
+                rows: [{k: A, v: v1}, {k: B, v: v1}, {k: C, v: v1}]
+              - label: 로드 밸런서가 보내는 곳
+                text: 'A, B, C (v1)'
+          scenarios:
+            rolling:
+              - log: 'A를 로드 밸런서에서 빼고 v2로 바꿔 다시 넣어요'
+                duo:
+                  - label: 서버
+                    rows: [{k: A, v: v2, mark: changed}, {k: B, v: v1}, {k: C, v: v1}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v1, v: 'B, C'}, {k: v2, v: A, mark: changed}]
+              - log: 'B도 같은 방법으로 바꿔요'
+                duo:
+                  - label: 서버
+                    rows: [{k: A, v: v2}, {k: B, v: v2, mark: changed}, {k: C, v: v1}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v1, v: C}, {k: v2, v: 'A, B', mark: changed}]
+              - log: 'C까지 바꾸면 끝이에요'
+                duo:
+                  - label: 서버
+                    rows: [{k: A, v: v2}, {k: B, v: v2}, {k: C, v: v2, mark: changed}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v2, v: 'A, B, C'}]
+                verdict: '서버를 더 쓰지 않았지만, 바꾸는 동안 v1과 v2가 함께 요청을 받았어요.'
+            bluegreen:
+              - log: '그린(D, E, F)을 v2로 띄워요. 요청은 아직 블루로만 가요'
+                duo:
+                  - label: 서버
+                    rows: [{k: '블루 A, B, C', v: v1}, {k: '그린 D, E, F', v: v2, mark: changed}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: 블루, v: 'A, B, C (v1)'}]
+              - log: '그린을 확인한 뒤 로드 밸런서를 한 번에 그린으로 돌려요'
+                duo:
+                  - label: 서버
+                    rows: [{k: '블루 A, B, C', v: 'v1 (남겨 둠)'}, {k: '그린 D, E, F', v: v2}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: 그린, v: 'D, E, F (v2)', mark: changed}]
+                verdict: '잠깐 서버가 두 배로 들지만, 문제가 생기면 블루로 바로 되돌려요.'
+            canary:
+              - log: 'v2 서버 하나를 더하고 요청의 5%만 보내요'
+                duo:
+                  - label: 서버
+                    rows: [{k: 'A, B, C', v: v1}, {k: D, v: v2, mark: changed}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v1, v: 95%}, {k: v2, v: 5%, mark: changed}]
+              - log: 'v2의 오류율이 v1과 같아서 50%로 늘려요'
+                duo:
+                  - label: 서버
+                    rows: [{k: 'A, B', v: v1}, {k: 'C, D', v: v2, mark: changed}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v1, v: 50%}, {k: v2, v: 50%, mark: changed}]
+              - log: '문제가 없어 모두 v2로 바꿔요'
+                duo:
+                  - label: 서버
+                    rows: [{k: 'A, B, C, D', v: v2, mark: changed}]
+                  - label: 로드 밸런서가 보내는 곳
+                    rows: [{k: v2, v: 100%}]
+                verdict: '문제가 있었다면 처음 5%의 사용자만 겪었을 거예요.'
+      - p: '셋 다 결국 "요청을 어느 서버로 보낼지"를 로드 밸런서가 바꾸는 거예요. 실무에서는 쿠버네티스의 롤링 업데이트나 클라우드의 배포 서비스가 이 순서를 대신 밟아요. 도구의 사용법은 이 레슨에서 다루지 않아요.'
+      - quiz:
+          q: '서버 세 대를 롤링 배포하는 중간에, v1과 v2가 함께 요청을 받을까요?'
+          options:
+            - 받지 않는다. 한 번에 넘긴다
+            - 받는다. 하나씩 바꾸는 동안 섞여 있다
+            - v2만 받는다
+          answer: 2
+          explain: '롤링은 서버를 하나씩 바꿔서, 바꾸는 동안 옛 버전과 새 버전이 함께 돌아요.'
+      - next: '서버 하나를 빼고 끌 때, 그 서버가 처리하던 요청은 어떻게 될까요?'
+    recall: '로드 밸런서 뒤에 서버를 여럿 두고 차례로 바꿔요. 롤링은 하나씩 빼고 바꿔 넣어 서버를 더 쓰지 않지만 바꾸는 동안 두 버전이 함께 돌아요. 블루그린은 같은 수의 새 버전을 띄워 확인한 뒤 로드 밸런서를 한 번에 넘겨, 서버가 잠깐 두 배 들지만 되돌리기가 빨라요. 카나리는 일부 요청만 새 버전으로 보내 보고 늘려서 문제가 생겨도 일부만 겪어요.'
   - id: q4
     title: 서버를 끌 때 처리 중이던 요청은 어떻게 되나요?
     conclusion:
@@ -166,6 +386,79 @@ questions:
     asks:
       - '본문의 예시: `server.shutdown=immediate`인 서버에서 3초 걸리는 결제 요청을 처리하는 중에 서버를 끄면 그 요청은 (연결이 끊겨 실패한다)'
       - '옮긴 상황: 우아한 종료가 켜져 있고 `timeout-per-shutdown-phase`가 30초다. 엑셀 내보내기 요청이 2분 걸린다. 배포 중에 이 요청은 어떻게 되나 (30초를 기다린 뒤 끊긴다)'
+    body:
+      - p: '롤링 배포에서 서버 하나를 끄는 순간, 그 서버가 처리하던 결제 요청이 있었다면 어떻게 될까요? 내장 톰캣으로 스프링 부트 서버를 띄우고, 3초 걸리는 요청을 보낸 1초 뒤에 서버를 껐어요. 끄기 시작한 직후에는 새 요청도 하나 보냈어요.'
+      - ci:
+          key: graceful
+          label: 기본 설정의 실제 결과
+          source: GracefulShutdownTest.gracefulByDefault
+          code: shutdownRun
+      - p: '예측의 답이에요. {{predict-result}} 처리 중이던 결제는 **끝까지 처리되어 "paid"**를 받았어요. 서버는 그 요청이 끝날 때까지 기다렸다가 꺼졌어요. 끄기 시작한 뒤 보낸 새 요청은 **연결조차 되지 않았어요**. 이것이 **우아한 종료**(graceful shutdown)예요. 새 요청은 받지 않고, 처리 중인 요청은 마치고 꺼져요. 스프링 부트 3.4부터 기본으로 켜져 있어요([스프링 부트 문서](link:graceful), [3.4 릴리스 노트](link:boot34)).'
+      - p: '바로 끄도록 설정하면 달라요.'
+      - ci:
+          key: immediate
+          label: 'server.shutdown=immediate의 실제 결과'
+          source: GracefulShutdownTest.immediateCutsRequest
+      - p: '서버는 0.3초 만에 꺼졌고, 처리 중이던 결제는 응답을 받지 못하고 **연결이 끊겼어요**. 결제사에는 결제가 됐는데 사용자는 실패 화면을 볼 수 있어요.'
+      - h3: 기다리는 데도 한도가 있어요
+      - code: graceful
+        notes:
+          - mark: 'timeout-per-shutdown-phase: 30s'
+            as: code
+            text: '처리 중인 요청을 기다리는 한도예요. 기본 30초예요.'
+      - p: '우아한 종료는 끝없이 기다리지 않아요. `spring.lifecycle.timeout-per-shutdown-phase`(기본 30초)가 지나면 남은 요청을 끊고 꺼져요. 한도를 1초로 줄여 3초짜리 요청으로 확인했어요.'
+      - ci:
+          key: timeout
+          label: '한도 1초의 실제 결과'
+          source: GracefulShutdownTest.shutdownTimeoutCutsLongRequest
+      - p: '그래서 2분 걸리는 엑셀 내보내기 같은 요청은 기본 설정에서도 30초 뒤에 끊겨요. 오래 걸리는 일은 요청 안에서 끝내지 않고 따로 작업으로 돌리는 편이 배포에 안전해요.'
+      - p: '시간 순서로 보면 이래요.'
+      - widget:
+          kind: timeline
+          layout: [selector, timeline, buttons, verdict]
+          lanes: [클라이언트, 서버]
+          initial: {}
+          selector:
+            label: server.shutdown
+            options:
+              - {value: graceful, label: 'graceful (3.4부터 기본)'}
+              - {value: immediate, label: immediate}
+          scenarios:
+            graceful:
+              - event: {dir: right, title: '0초: 결제 요청', text: 'GET /orders/1/pay', note: 처리에 3초가 걸려요.}
+              - event: {dir: left, title: '1초: SIGTERM을 받음', text: '[[새 요청 받지 않음]]', note: '처리 중인 결제는 계속 처리해요.'}
+              - event: {dir: right, title: '1.3초: 새 요청', text: 'GET /hello → 연결 거부', note: 끄는 중인 서버는 새 연결을 받지 않아요.}
+              - event: {dir: left, title: '3초: 결제 응답', text: '200 paid', note: 처리 중이던 요청이 끝났어요.}
+                verdict: '처리 중이던 결제는 끝까지 처리되고, 그 뒤에 서버가 꺼졌어요.'
+            immediate:
+              - event: {dir: right, title: '0초: 결제 요청', text: 'GET /orders/1/pay', note: 처리에 3초가 걸려요.}
+              - event: {dir: left, title: '1초: SIGTERM을 받음', text: '[[바로 종료]]', note: 기다리지 않아요.}
+              - event: {dir: left, title: '결제 응답 없음', text: '연결 끊김 (IOException)', note: 사용자는 실패를 봐요.}
+                verdict: '처리 중이던 결제의 연결이 끊겼어요.'
+      - h3: SIGTERM과 준비 상태
+      - p: '배포 도구(도커, 쿠버네티스)가 서버를 끄라고 보내는 신호는 보통 **SIGTERM**이에요. JVM은 SIGTERM을 받으면 종료 훅을 돌리고, 스프링 부트는 그 안에서 컨텍스트를 닫으며 우아한 종료를 해요. 반면 `kill -9`(SIGKILL)는 프로세스가 아무것도 못 하게 바로 죽여요. 도커와 컨테이너 레슨의 137이 그 결과였어요.'
+      - p: '서버가 새 요청을 거절하기 전에, 로드 밸런서가 애초에 그 서버로 보내지 않는 편이 좋아요. 액추에이터의 프로브를 켜면 `/actuator/health/readiness`가 생기고, 로드 밸런서나 쿠버네티스가 이 주소로 "지금 요청을 보내도 되나"를 물어요. 스프링 부트는 끄기 시작하면 이 준비 상태를 "받지 않음"으로 바꿔요([액추에이터 문서](link:probes)). 이 부분은 문서가 근거예요.'
+      - code: probes
+      - more:
+          summary: '더 알아보기: 새로 띄운 서버의 첫 요청은 느려요'
+          body:
+            - p: '서버를 띄우자마자 같은 요청을 100번 보내 응답 시간을 쟀어요.'
+            - ci:
+                key: warmup
+                label: 실제 결과 보기
+                source: GracefulShutdownTest.firstRequestIsSlow
+                code: warmupRun
+            - p: '첫 요청이 나머지보다 몇 배 느려요. JVM이 그 요청에 필요한 클래스를 처음 읽고, 자주 도는 코드를 JIT가 아직 기계어로 바꾸지 않았기 때문이에요(자바 프로그램이 실행되는 과정 레슨). 새 버전으로 바꾼 직후 사용자들이 이 느린 요청을 겪어요. 준비 상태를 몇 번의 연습 요청(워밍업) 뒤에 켜면 사용자가 겪는 첫 요청이 줄어요.'
+      - quiz:
+          q: '`server.shutdown=immediate`인 서버가 3초 걸리는 결제 요청을 처리하는 중에 꺼지면, 그 요청은 어떻게 될까요?'
+          options:
+            - 끝까지 처리되어 응답을 받는다
+            - 연결이 끊겨 실패한다
+            - 다른 서버로 자동으로 옮겨진다
+          answer: 2
+          explain: 'immediate는 처리 중인 요청을 기다리지 않아요. 기본값인 graceful이면 끝까지 처리해요.'
+      - next: '롤링 배포 중에는 v1과 v2가 함께 돈다고 했어요. 두 버전이 함께 도는 동안 무엇이 깨질 수 있을까요?'
+    recall: '스프링 부트 3.4부터 기본인 우아한 종료는 SIGTERM을 받으면 새 요청을 받지 않고, 처리 중인 요청을 끝낸 뒤 꺼져요. 기다리는 한도는 `timeout-per-shutdown-phase`(기본 30초)이고 넘으면 끊어요. `server.shutdown=immediate`나 SIGKILL은 처리 중인 요청을 끊어요. 끄기 전에 준비 상태(readiness)를 "받지 않음"으로 바꿔 로드 밸런서가 새 요청을 보내지 않게 해요.'
   - id: q5
     title: 옛 버전과 새 버전이 함께 도는 동안 무엇을 지켜야 하나요?
     conclusion:
@@ -180,25 +473,88 @@ questions:
     asks:
       - '본문의 예시: 롤링 배포로 `name` 열을 `nickname`으로 바꾸는 마이그레이션과 새 코드를 한 번에 내보냈다. 무엇이 실패하나 (아직 도는 v1 서버의 `name`을 쓰는 쿼리)'
       - '옮긴 상황: 주문 응답 JSON의 `price`를 `amount`로 바꾸려 한다. 모바일 앱의 옛 버전이 아직 `price`를 읽는다. 어떻게 바꾸나 (`amount`를 더해 둘 다 보내고, 옛 앱이 줄어든 뒤 `price`를 뺀다)'
+    body:
+      - p: '롤링 배포의 중간에는 v1 서버와 v2 서버가 **같은 DB**를 함께 써요(질문 3). v2에서 회원 테이블의 `name` 열 이름을 `nickname`으로 바꾸고, 그 변경을 v2 배포와 함께 한 번에 내보냈다고 해 봐요. 열 이름이 바뀐 순간, 아직 돌고 있는 v1 서버의 `SELECT name ...`이 "없는 열"로 실패해요. 이 질문은 테스트가 아니라 원리와 공식 설명이 근거예요.'
+      - p: '그래서 한 번에 바꾸지 않고 **늘리고, 옮기고, 줄이는** 순서로 여러 배포에 나눠요([Martin Fowler의 병렬 변경](link:parallelChange)).'
+      - code: rename
+      - ol:
+          - '**늘리기:** `nickname` 열을 더해요. 이 배포의 v2는 두 열에 모두 쓰고, 읽기는 아직 `name`에서 해요. 옛 데이터는 `nickname`으로 옮겨요. v1과 함께 돌아도 깨지지 않아요.'
+          - '**옮기기:** 다음 배포의 v3은 `nickname`만 읽고 써요. 이때 함께 도는 v2도 두 열을 다 알아서 깨지지 않아요.'
+          - '**줄이기:** v1, v2가 모두 사라진 뒤에야 `name`을 지워요.'
+      - p: '배포마다 바로 앞 버전과 함께 돌 수 있어요. 테이블 변경을 실제로 돌리는 마이그레이션 도구와 큰 테이블을 멈추지 않고 고치는 법은 스키마 변경과 마이그레이션 레슨에서 다뤄요.'
+      - h3: API도 같아요
+      - p: '응답 JSON에서 필드를 지우거나 이름을 바꾸면, 옛 버전의 모바일 앱이나 우리 API를 부르는 다른 서비스가 깨져요. 이름을 바꿀 때는 새 필드(`amount`)를 **더해 둘 다 보내고**, 클라이언트들이 새 필드로 옮긴 뒤에 옛 필드(`price`)를 빼요.'
+      - h3: 되돌릴 수 있어야 해요
+      - p: '새 버전에 문제가 생기면 옛 이미지로 다시 배포해요(롤백). 이미지는 레지스트리에 그대로 있어서 빨라요. 하지만 DB에서 `name`을 이미 지웠다면 옛 버전은 돌지 못해요. 줄이기를 맨 마지막에, 옛 버전으로 돌아갈 일이 없을 때 하는 이유예요.'
+      - more:
+          summary: '더 알아보기: 기능 플래그'
+          body:
+            - p: '코드는 배포하되 새 기능은 설정 값(기능 플래그)으로 꺼 둬요. 배포와 기능 공개를 떼어 놓는 거예요. 기능을 켰다가 문제가 생기면 다시 배포하지 않고 값만 꺼요. Git 브랜치와 병합 레슨의 트렁크 기반 개발이 덜 된 기능을 이렇게 숨겨요.'
+      - quiz:
+          q: '롤링 배포로 `name` 열을 `nickname`으로 바꾸는 변경과 새 코드를 한 번에 내보냈어요. 무엇이 실패할까요?'
+          options:
+            - 새 버전의 쿼리
+            - 아직 도는 옛 버전 서버의 `name`을 쓰는 쿼리
+            - 아무것도 실패하지 않는다
+          answer: 2
+          explain: '바꾸는 동안 옛 버전도 같은 DB를 쓰는데, 그 열이 사라졌어요.'
+    recall: '롤링과 블루그린에서는 옛 버전과 새 버전이 같은 DB와 같은 클라이언트를 함께 써요. 그래서 스키마와 API를 두 버전이 다 받을 수 있게, 늘리고(새 열을 더해 둘 다 씀), 옮기고(새 열로 읽기), 줄이기(옛 버전이 다 사라진 뒤 옛 열 삭제)로 여러 배포에 나눠 바꿔요. 줄이기를 마지막에 해야 문제가 생겼을 때 옛 이미지로 되돌릴 수 있어요.'
 practice:
+  title: 실무에서는 이렇게 써요
   says:
     - '이 저장소의 워크플로 넷(`pages.yml`, `verify.yml`, `questions.yml`, `sources.yml`)이 각각 무엇을 언제 하는지 표로 보인다. `sources.yml`은 `schedule`로 매주 돈다. 바깥 사이트 사정으로 실패할 수 있는 검사를 push마다 돌리지 않으려는 것이다'
     - '스프링 서버의 워크플로 모양: 테스트, `bootBuildImage`나 Dockerfile로 이미지 빌드, 커밋 해시 태그로 레지스트리에 올리기. 레지스트리 로그인은 시크릿으로 한다 (깃허브 액션 문서 근거. 이 저장소에 서버 배포가 없어 돌려 보지 않았다고 밝힌다)'
     - '흔한 실수 하나: `server.shutdown=immediate`로 두거나, 컨테이너를 `docker kill`(SIGKILL)로 끈다. 처리 중인 결제가 끊긴다. 고친 코드: graceful을 두고 `docker stop`(SIGTERM 뒤 기다림)을 쓴다. 도커의 기본 대기 10초가 스프링의 30초보다 짧으면 그전에 SIGKILL이 오니 둘을 맞춘다 (도커 문서 근거, 스프링 쪽은 질문 4의 테스트)'
     - '흔한 실수 둘: 열 이름 바꾸기를 한 번의 배포로 한다. 질문 5의 순서로 나눈다'
+  body:
+    - p: '이 저장소의 워크플로 넷이에요. 무엇을 언제 확인하는지 정해 둔 모양을 보세요.'
+    - table:
+        head: [워크플로, 언제, 무엇을]
+        rows:
+          - ['`verify.yml` (Verify lessons)', '`verification/**`이 바뀐 push와 PR', '레슨의 주장을 확인하는 테스트 전체']
+          - ['`pages.yml` (Deploy site)', '`site/**`나 `verification/**`이 바뀐 push와 PR', '테스트를 돌려 실제 출력을 만들고 사이트를 빌드해요. `main`이면 배포까지 해요']
+          - ['`questions.yml` (Check questions)', '`content/**`가 바뀐 push와 PR', '문제 파일의 형식과 표준을 검사하고, `main`이면 학습 앱에 다시 배포하라고 알려요']
+          - ['`sources.yml` (Check sources)', '매주 월요일(`schedule`)', '레슨에 적은 출처 주소가 열리는지 봐요']
+    - p: '`sources.yml`이 push마다 돌지 않는 이유가 있어요. 바깥 사이트가 잠깐 안 열리면 실패하는 검사라, push마다 돌리면 내 변경과 상관없는 실패로 합치기가 막혀요. 그래서 일정으로만 돌려요.'
+    - h3: '흔한 실수: 서버를 기다리지 않고 끈다'
+    - code: stopBad
+    - p: '`docker kill`은 SIGKILL을 보내서 우아한 종료가 돌 틈이 없어요. 처리 중인 결제가 질문 4의 immediate처럼 끊겨요. `server.shutdown=immediate`로 두는 것도 같아요.'
+    - code: stopGood
+    - p: '`docker stop`은 SIGTERM을 보내고 기다렸다가, 그래도 안 꺼지면 SIGKILL을 보내요. 기다리는 시간의 기본값은 **10초**예요([도커 문서](link:dockerStop)). 스프링 쪽 한도(30초)보다 짧으면 스프링이 요청을 기다리는 도중에 SIGKILL이 와요. 그래서 `--time`(또는 쿠버네티스의 종료 유예 시간)을 스프링의 한도보다 길게 맞춰요. 도커 쪽 동작은 문서가 근거이고, 스프링 쪽은 질문 4의 테스트가 근거예요.'
+    - h3: '흔한 실수: 열 이름을 한 번에 바꾼다'
+    - p: '마이그레이션 파일 하나에 `ALTER TABLE ... RENAME COLUMN`을 넣고 새 코드와 함께 롤링 배포하면, 바꾸는 동안 옛 서버의 쿼리가 실패해요. 질문 5의 늘리고, 옮기고, 줄이기로 세 번의 배포에 나눠요.'
+interview:
+  question: 'CI/CD가 무엇이고, 서비스를 멈추지 않고 배포하려면 무엇을 해야 하는지 설명해 주세요'
+  model:
+    - label: 정의
+      text: CI는 코드를 합칠 때마다 깨끗한 환경에서 빌드와 테스트를 자동으로 돌려 깨진 코드가 main에 들어가지 않게 하는 것이고, CD는 통과한 결과물을 자동으로 배포할 수 있게 만들거나(지속적 전달) 운영까지 자동으로 내보내는 것(지속적 배포)입니다.
+    - label: 원리
+      text: 무중단 배포는 로드 밸런서 뒤의 서버를 차례로 바꾸는 롤링, 새 묶음을 띄워 한 번에 넘기는 블루그린, 일부 요청만 먼저 보내는 카나리로 합니다. 끄는 서버는 스프링 부트의 우아한 종료로 새 요청을 받지 않고 처리 중인 요청을 끝낸 뒤 꺼지고, 준비 상태를 내려 로드 밸런서가 새 요청을 보내지 않게 합니다.
+    - label: 주의할 점
+      text: 우아한 종료에도 기다리는 한도가 있고 SIGKILL이나 immediate는 요청을 끊으니, 도커나 쿠버네티스의 종료 유예 시간을 스프링의 한도보다 길게 맞춥니다. 바꾸는 동안 두 버전이 같은 DB를 쓰므로 스키마는 늘리고, 옮기고, 줄이는 순서로 나눠 바꿔 되돌릴 수 있게 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 배포 때마다 결제 몇 건이 실패해서 보니 컨테이너를 바로 죽이고 있었고, 우아한 종료와 종료 유예 시간을 맞춰 해결했습니다.'
+verified: '우아한 종료, 바로 종료, 기다리는 한도, 첫 요청이 느린 것은 스프링 부트 3.5의 내장 톰캣을 띄워 실제로 확인했고, 이 저장소의 워크플로 값은 파일을 읽어 확인했어요. 배포 방식과 준비 상태, 도커의 종료 신호는 공식 문서가 근거예요. 코드가 바뀔 때마다 테스트([GracefulShutdownTest](link:test))가 다시 돌아요.'
+footer: '근거: CI와 CD의 정의는 [Martin Fowler의 CI](link:fowlerCi)와 [지속적 전달](link:fowlerCd), 워크플로 문법은 [깃허브 액션 문서](link:ghSyntax), 배포 방식은 [블루그린](link:blueGreen)과 [카나리](link:canary), 우아한 종료는 [스프링 부트 문서](link:graceful)와 [3.4 릴리스 노트](link:boot34), 준비 상태는 [액추에이터 문서](link:probes), `docker stop`은 [도커 문서](link:dockerStop), 늘리고 옮기고 줄이기는 [병렬 변경](link:parallelChange). 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '스프링 부트 3.5의 기본 설정에서 처리 중인 3초 요청은 컨텍스트를 닫아도 끝까지 처리되어 200을 받는다'
-    how: '`MiniWeb`처럼 내장 톰캣을 띄우고, 다른 스레드에서 요청을 보낸 뒤 1초 뒤에 컨텍스트를 닫는다. 응답과 닫는 데 걸린 시간을 남긴다'
+    how: '웹 자동 설정만 켠 작은 앱을 내장 톰캣으로 띄우고, 다른 스레드에서 요청을 보낸 뒤 1초 뒤에 컨텍스트를 닫는다'
+    test: GracefulShutdownTest.gracefulByDefault
   - claim: '`server.shutdown=immediate`면 같은 요청의 연결이 끊긴다'
     how: '같은 방법. 클라이언트가 받은 예외를 남긴다'
-  - claim: '우아한 종료 중에 새로 보낸 요청은 처리되지 않는다'
-    how: '끄기 시작한 직후 새 요청을 보내 결과(연결 거부나 503)를 남긴다. 실제로 받은 것을 그대로 레슨에 적는다'
+    test: GracefulShutdownTest.immediateCutsRequest
+  - claim: '우아한 종료 중에 새로 보낸 요청은 연결되지 않는다'
+    how: '끄기 시작한 직후 새 요청을 보내 결과를 남긴다'
+    test: GracefulShutdownTest.gracefulByDefault
   - claim: '`timeout-per-shutdown-phase=1s`면 3초 요청이 끊긴다'
     how: '같은 방법'
-  - claim: '새로 띄운 서버의 첫 요청은 그 뒤 요청보다 느리다'
-    how: '같은 요청 100번의 응답 시간을 재서 첫 요청과 나머지의 중앙값을 남긴다. 단정은 "첫 요청이 중앙값보다 느리다"만 한다'
-  - claim: '이 저장소의 `pages.yml`에서 `deploy`는 `needs: build`이고 main에서만 돈다. `verify.yml`은 `verification/**` 경로에서만 돈다'
-    how: '워크플로 파일을 YAML로 읽어 값을 확인하는 테스트로 남긴다. 파일이 바뀌면 레슨을 함께 고치게 된다'
+    test: GracefulShutdownTest.shutdownTimeoutCutsLongRequest
+  - claim: '새로 띄운 서버의 첫 요청은 그 뒤 요청들의 중앙값보다 느리다'
+    how: '같은 요청 100번의 응답 시간을 잰다. 단정은 "첫 요청이 중앙값보다 느리다"만 한다'
+    test: GracefulShutdownTest.firstRequestIsSlow
+  - claim: '이 저장소의 `pages.yml`에서 `deploy`는 `needs: build`이고 main에서만 돈다. `verify.yml`은 main의 `verification/**` 경로에서 돈다'
+    how: '워크플로 파일을 SnakeYAML로 읽어 값을 확인한다'
+    test: GracefulShutdownTest.repositoryWorkflows
 sources:
   - 'CI와 지속적 전달, 지속적 배포의 정의: Martin Fowler https://martinfowler.com/articles/continuousIntegration.html , https://martinfowler.com/bliki/ContinuousDelivery.html'
   - '깃허브 액션의 워크플로 문법(`on`, `paths`, `needs`, `if`, `secrets`): https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions'
