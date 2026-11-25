@@ -69,6 +69,7 @@ questions:
       **true예요.** Boolean.valueOf는 새 객체를 만들지 않고 Boolean.TRUE나 Boolean.FALSE를 돌려줘요.
 
       - 매번 새 객체를 만들지 않아도 되는 것이 정적 팩토리 메서드가 생성자와 다른 점이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   # ── 질문 2 ──
   - key: fa-private-ctor
     concept: core
@@ -89,6 +90,7 @@ questions:
       **컴파일 오류예요.** 생성자가 private이라 밖에서는 create로만 만들 수 있어요.
 
       - 총액 계산 같은 생성 규칙을 create 한 곳에 모으면 규칙을 건너뛴 객체가 생기지 않아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   - key: fa-name-from
     concept: core
     coreQuestion: q2
@@ -106,6 +108,7 @@ questions:
       **from이에요.** Date.from(instant)처럼 다른 타입 하나에서 바꿀 때 써요.
 
       - of는 여러 값으로, valueOf는 값으로(캐시하기도 함), getInstance는 같은 객체일 수 있을 때, newInstance나 create는 항상 새 객체일 때 써요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   # ── 질문 3 ──
   - key: fa-sms-alert
     concept: core
@@ -137,6 +140,7 @@ questions:
     answer: "2"
     explanation: |-
       **AligoSmsNotifier예요.** 무엇을 만들지를 자식이 createNotifier를 오버라이드해 정했어요. 이것이 팩토리 메서드 패턴이에요.
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   - key: fa-editor
     concept: core
     coreQuestion: q3
@@ -154,6 +158,7 @@ questions:
       **팩토리 메서드 패턴이에요.** 무엇을 만들지를 자식 클래스의 메서드가 정해요.
 
       - 단순 팩토리는 한 클래스가 switch 같은 조건문으로 고르는 것이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   # ── 질문 4 ──
   - key: fa-seven-services
     concept: core
@@ -171,6 +176,7 @@ questions:
       **0개예요.** 서비스는 Notifier와 팩토리만 알아요. 팩토리 한 파일과 새 구현만 바뀌어요.
 
       - 서비스마다 new AligoSmsNotifier()를 했다면 일곱 파일을 고쳐야 했어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   - key: fa-toss-key
     concept: core
     coreQuestion: q4
@@ -185,6 +191,7 @@ questions:
     answer: "1"
     explanation: |-
       **직접 만들면 모든 서비스, 모으면 팩토리 한 곳이에요.** 만드는 방법이 흩어져 있으면 그 방법이 바뀔 때 흩어진 곳을 모두 고쳐요.
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   - key: fa-optional-of
     concept: core
     coreQuestion: q4
@@ -205,6 +212,7 @@ questions:
       **NullPointerException이에요.** Optional.of는 null이 아닌 값을 약속받는 팩토리라서 null이면 바로 예외를 던져요.
 
       - null일 수 있는 값은 Optional.ofNullable로 만들어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java
   # ── 네 질문을 하나로 ──
   - key: fa-interview
     concept: core
@@ -226,3 +234,4 @@ questions:
       - 하위 타입이나 감춘 클래스를 돌려줄 수 있다고 말했다
       - 팩토리 메서드 패턴은 무엇을 만들지 자식 클래스가 정한다고 말했다
       - 만드는 코드를 모으면 구현을 바꿀 때 한 곳만 고친다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/factory/FactoryTest.java

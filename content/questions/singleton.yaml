@@ -60,6 +60,7 @@ questions:
       **0개예요.** 객체는 Holder의 static 필드라서 Holder가 처음 쓰일 때 만들어져요. version()은 Holder를 쓰지 않아요.
 
       - getInstance()가 처음 Holder.INSTANCE를 읽을 때 만들어져요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   - key: si-private-ctor
     concept: core
     coreQuestion: q1
@@ -76,6 +77,7 @@ questions:
       **컴파일 오류예요.** 생성자가 private이라 밖에서 부를 수 없어요.
 
       - 싱글톤의 네 방법 모두 생성자를 막아서 만드는 곳을 클래스 안 한 곳으로 둬요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   # ── 질문 2 ──
   - key: si-lazy-race
     concept: core
@@ -93,6 +95,7 @@ questions:
       **객체가 둘 생길 수 있어요.** 한 스레드가 생성자를 실행하는 동안 instance는 아직 null이라, 다른 스레드도 확인을 통과해요.
 
       - 테스트에서 열 번 돌려 열 번 모두 두 번 만들어졌어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   - key: si-which-safe
     concept: core
     coreQuestion: q2
@@ -126,6 +129,7 @@ questions:
       **없어요.** OrderService가 getInstance()를 직접 불러서 테스트가 다른 객체를 넣을 자리가 없어요.
 
       - AppConfig를 생성자로 받게 바꾸면 테스트에서 원하는 값을 넣을 수 있어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   - key: si-counter-order
     concept: core
     coreQuestion: q3
@@ -142,6 +146,7 @@ questions:
       **실패해요.** 싱글톤은 JVM에 하나라서 A가 바꾼 상태가 B까지 남아요.
 
       - 테스트 순서에 따라 결과가 달라지는 테스트가 돼요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   # ── 질문 4 ──
   - key: si-get-bean
     concept: core
@@ -172,6 +177,7 @@ questions:
       **다른 객체예요.** 스프링 싱글톤은 컨테이너마다 하나예요.
 
       - 싱글톤 패턴은 클래스 로더에 하나, 스프링 싱글톤은 컨테이너에 하나예요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   - key: si-stateful-bean
     concept: core
     coreQuestion: q4
@@ -188,6 +194,7 @@ questions:
       **다른 요청의 금액을 읽을 수 있어요.** 모든 요청이 같은 빈 객체의 같은 필드를 써요.
 
       - 요청의 값은 지역 변수나 메서드 인자로 다뤄요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java
   # ── 네 질문을 하나로 ──
   - key: si-interview
     concept: core
@@ -209,3 +216,4 @@ questions:
       - 홀더 클래스나 enum이 안전한 이유(클래스 초기화)를 말했다
       - 테스트에서 가짜로 바꾸기 어렵고 상태가 남는다고 말했다
       - 스프링 싱글톤은 컨테이너가 하나를 만드는 것이라고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/singleton/SingletonTest.java

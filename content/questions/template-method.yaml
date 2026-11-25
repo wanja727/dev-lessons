@@ -55,6 +55,7 @@ questions:
       **<table><tr>1</tr><tr>2</tr></table>예요.** 순서는 부모의 export가 정하고, HtmlExporter는 각 단계의 모양만 채워요.
 
       - footer를 채우지 않았다면 부모의 기본값(빈 글)이 붙어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java
   - key: tm-settlement
     concept: core
     coreQuestion: q1
@@ -72,6 +73,7 @@ questions:
       **부모의 run() 하나예요.** 순서는 템플릿 메서드에 있어서, 순서에 대한 요구는 부모만 고쳐요.
 
       - 자식은 단계만 채우고 순서를 다시 쓰지 않아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java
   # ── 질문 2 ──
   - key: tm-override-final
     concept: core
@@ -96,6 +98,7 @@ questions:
       **컴파일 오류예요.** final 메서드는 자식이 오버라이드할 수 없어요.
 
       - 순서를 지키는 것이 이 패턴의 목적이라 템플릿 메서드를 final로 막아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java
   - key: tm-default-final
     concept: core
     coreQuestion: q2
@@ -133,6 +136,7 @@ questions:
       **9개와 6개예요.** 템플릿 메서드는 조합마다 자식이 필요해서 3 곱하기 3이고, 전략은 형식 3개와 압축 3개를 따로 만들어 넣어요.
 
       - 바뀌는 축이 둘 이상이면 전략이 나아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java
   - key: tm-which-feature
     concept: core
     coreQuestion: q3
@@ -150,6 +154,7 @@ questions:
       **상속으로 단계를 채우고 순서는 부모가 정해요.** 나머지는 전략 패턴(조합)의 특징이에요.
 
       - 템플릿 메서드는 객체를 만들 때 자식이 정해지고 부모의 내부에 묶여요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java
   - key: tm-filter-override
     concept: core
     coreQuestion: q3
@@ -188,3 +193,4 @@ questions:
       - 순서에 대한 변경을 부모 한 곳에서 한다고 말했다
       - 템플릿 메서드는 상속, 전략은 조합이라는 차이를 말했다
       - 바뀌는 축이 여럿이면 전략이 낫다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/templatemethod/TemplateMethodTest.java

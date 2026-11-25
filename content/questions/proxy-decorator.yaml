@@ -43,6 +43,7 @@ questions:
     answer: "2"
     explanation: |-
       **3번이에요.** 처음 보는 id(1, 2, 3)마다 한 번씩만 진짜에게 넘기고, 다시 나온 id는 캐시에서 답해요.
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   - key: pd-member-repo
     concept: core
     coreQuestion: q1
@@ -59,6 +60,7 @@ questions:
       **고치지 않아요.** 감싼 것도 MemberRepository라서 진짜 자리에 그대로 들어가요.
 
       - 쓰는 쪽은 인터페이스만 알아서 감싼 것인지 몰라요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   # ── 질문 2 ──
   - key: pd-timing-calls
     concept: core
@@ -77,6 +79,7 @@ questions:
       **3번이고 데코레이터예요.** 진짜는 늘 부르고 그 앞뒤에 시간 재기를 덧붙여요.
 
       - 캐시처럼 진짜를 부르지 않기도 하며 접근을 다루는 것이 프록시예요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   - key: pd-admin-guard
     concept: core
     coreQuestion: q2
@@ -93,6 +96,7 @@ questions:
       **프록시예요.** 권한이 없으면 진짜를 부르지 않아요. 진짜로 가는 길을 다루는 것이 프록시의 의도예요.
 
       - 구조는 데코레이터와 같고, 이름은 무엇을 하려고 감쌌는지로 붙여요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   # ── 질문 3 ──
   - key: pd-stack-b
     concept: core
@@ -114,6 +118,7 @@ questions:
       **1번이에요.** 처음 한 번만 캐시를 지나 안쪽 시간 재기와 진짜까지 가요. 나머지는 바깥 캐시가 답해서 안쪽까지 호출이 가지 않아요.
 
       - 시간 재기를 바깥에 두면 다섯 번 모두 찍혀요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   - key: pd-log-outside
     concept: core
     coreQuestion: q3
@@ -130,6 +135,7 @@ questions:
       **로그 데코레이터를 바깥에 둬요.** 바깥이 먼저 호출을 받아서, 안쪽의 권한 확인이 막아도 로그는 이미 남아요.
 
       - 권한 확인이 바깥이면 막힌 호출은 로그까지 가지 않아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   # ── 질문 4 ──
   - key: pd-handler-count
     concept: core
@@ -158,6 +164,7 @@ questions:
     answer: X
     explanation: |-
       **placeOrder 하나만 받아요.** 진짜 객체 안의 this는 프록시가 아니라 진짜 자신이라, this로 부른 메서드는 프록시를 지나지 않아요.
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java
   - key: pd-transactional-self
     concept: core
     coreQuestion: q4
@@ -196,3 +203,4 @@ questions:
       - 겹쳐 감쌀 때 순서가 결과를 바꾼다고 말했다
       - 동적 프록시나 스프링 AOP가 실행 중에 프록시를 만든다고 말했다
       - 자기 호출은 프록시를 지나지 않는다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/proxydecorator/ProxyDecoratorTest.java

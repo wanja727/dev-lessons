@@ -44,6 +44,7 @@ questions:
       **고쳐야 해요.** 서비스가 구현을 직접 만들어서, 구현이 바뀌면 서비스의 코드가 바뀌어요.
 
       - 같은 이유로 테스트에서도 가짜로 바꿀 수 없어서 진짜 발송 코드가 돌아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   - key: dd-toss-test
     concept: core
     coreQuestion: q1
@@ -60,6 +61,7 @@ questions:
       **코드를 고치지 않으면 진짜 서버에서 실패를 일으켜야 해요.** 서비스가 구현을 안에서 만들어서 테스트가 다른 객체를 넣을 자리가 없어요.
 
       - 생성자로 받게 바꿔야 가짜를 넣을 수 있어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   # ── 질문 2 ──
   - key: dd-interface-place
     concept: core
@@ -95,6 +97,7 @@ questions:
       **주문 쪽에 인터페이스를 두고 토스용 구현이 그것을 구현해요.** 주문 정책은 인터페이스만 알고, 토스 SDK에 기대는 것은 구현 쪽이 돼요.
 
       - 인터페이스의 이름과 메서드는 쓰는 쪽(주문)의 말로 지어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   # ── 질문 3 ──
   - key: dd-fake-sent
     concept: core
@@ -125,6 +128,7 @@ questions:
 
       - 메일은 나가지 않고 누구에게 보내려 했는지만 남아요
       - 밖에서 넣어 주니 테스트에서 바꿔 끼울 수 있어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   - key: dd-three-services
     concept: core
     coreQuestion: q3
@@ -141,6 +145,7 @@ questions:
       **0개예요.** 세 서비스는 Notifier만 알아요. KakaoNotifier를 새로 만들고 조립하는 곳의 new만 바꿔요.
 
       - 만들고 잇는 코드가 한 곳에 모인 덕분이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   # ── 질문 4 ──
   - key: dd-concrete-di
     concept: core
@@ -166,6 +171,7 @@ questions:
       **DI이지만 DIP는 아니에요.** 밖에서 받으니 주입이지만, 받는 타입이 구체 클래스라서 구현을 바꾸면 서비스의 타입을 고쳐야 해요.
 
       - DIP는 무엇에 기댈지, DI는 어떻게 얻을지에 대한 것이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java
   - key: dd-which-true
     concept: core
     coreQuestion: q4
@@ -234,3 +240,4 @@ questions:
       - 인터페이스를 쓰는 쪽에 두어 의존 방향이 뒤집힌다고 말했다
       - DI를 필요한 객체를 밖에서(생성자로) 받는 것이라고 말했다
       - 구체 클래스를 주입받으면 DI지만 DIP는 아니라고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dipdi/DipDiTest.java

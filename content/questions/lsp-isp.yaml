@@ -53,6 +53,7 @@ questions:
 
       - 컴파일러는 메서드가 있는지만 보고, 약속대로 동작하는지는 보지 않아요
       - 부모 자리에서 맞게 동작하지 못하니 리스코프 치환 원칙을 어겼어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   - key: li-penguin
     concept: core
     coreQuestion: q1
@@ -109,6 +110,7 @@ questions:
 
       - Coupon을 쓰는 코드는 어떤 금액이든 받는다고 믿어요
       - 받는 조건을 강하게 하는 것도 리스코프 치환 원칙을 깨는 모양이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   - key: li-silent-save
     concept: core
     coreQuestion: q2
@@ -122,6 +124,7 @@ questions:
 
       - 저장한 뒤 읽어서 확인하는 코드는 파일이 없어서 틀린 결과를 내요
       - 결과를 덜 보장하는 것도 깨는 모양이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   # ── 질문 3 ──
   - key: li-split-gift
     concept: core
@@ -141,6 +144,7 @@ questions:
 
       - 할 수 없는 메서드에서 예외를 던질 일이 없어져요
       - 쓰지 않는 메서드에 기대지 않게 나누는 것이 인터페이스 분리 원칙이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   - key: li-printer
     concept: core
     coreQuestion: q3
@@ -184,6 +188,7 @@ questions:
       **컴파일 오류예요.** GiftCardPayment는 PartialRefundable이 아니라서 넘길 수 없어요.
 
       - 큰 인터페이스였을 때 실행 중에 나던 예외가 컴파일 시점으로 앞당겨졌어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   - key: li-four-payments
     concept: core
     coreQuestion: q4
@@ -201,6 +206,7 @@ questions:
       **4개와 2개예요.** 큰 인터페이스는 부분 환불을 못 하는 구현까지 그 메서드를 가져서 넷 다 고쳐요.
 
       - 나눈 인터페이스는 부분 환불을 구현한 둘만 고쳐요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java
   - key: li-list-of
     concept: core
     coreQuestion: q4
@@ -245,3 +251,4 @@ questions:
       - 예외를 던지거나 조건을 까다롭게 하는 자식이 원칙을 깬다는 예를 들었다
       - 쓰는 쪽에 맞춰 인터페이스를 작게 나눈다고 말했다
       - 나누면 할 수 없는 호출이 컴파일 오류로 잡힌다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/lspisp/LspIspTest.java

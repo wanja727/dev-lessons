@@ -50,6 +50,7 @@ questions:
 
       - Checkout은 어떤 정책이 들어 있는지 묻지 않아요
       - 정책을 바꿔 넣으면 Checkout을 고치지 않고 결과가 바뀌어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   - key: st-roles
     concept: core
     coreQuestion: q1
@@ -67,6 +68,7 @@ questions:
 
       - 전략을 들고 쓰는 쪽이 컨텍스트예요
       - 같은 일(압축)을 하는 여러 방법이 구체 전략이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   # ── 질문 2 ──
   - key: st-region
     concept: core
@@ -85,6 +87,7 @@ questions:
       **RegionFee를 새로 만들고 조립하는 곳만 고쳐요.** Checkout과 기존 정책은 그대로예요.
 
       - if로 나눈 코드였다면 계산 메서드를 열어 else if를 더해야 했어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   - key: st-slack
     concept: core
     coreQuestion: q2
@@ -97,6 +100,7 @@ questions:
       **고치지 않아요.** 발송 클래스는 Notifier만 알아요. 슬랙 구현을 더하고 어느 전략을 넣을지 정하는 곳만 바뀌어요.
 
       - 고르는 코드는 사라지지 않고 조립하는 곳에 모여요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   # ── 질문 3 ──
   - key: st-lambda-bundle
     concept: core
@@ -119,6 +123,7 @@ questions:
       **39000이에요.** 메서드가 하나인 인터페이스라서 람다로 전략을 만들 수 있어요. 상자 3개면 배송비 9000원이에요.
 
       - Checkout은 넘어온 것이 클래스의 객체인지 람다인지 몰라요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   - key: st-comparator
     concept: core
     coreQuestion: q3
@@ -155,6 +160,7 @@ questions:
 
       - 전략 인터페이스였다면 새 클래스 파일만 만들었어요
       - 방법이 닫힌 목록이면 enum으로 충분해요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   - key: st-pg
     concept: core
     coreQuestion: q4
@@ -171,6 +177,7 @@ questions:
       **전략 인터페이스와 구현 빈이에요.** 구현마다 다른 객체를 생성자로 주입받을 수 있고, 대행사가 늘면 새 빈을 더해요.
 
       - enum 상수는 스프링이 만들지 않아 주입받기 어려워요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
   - key: st-map-key
     concept: core
     coreQuestion: q4
@@ -210,3 +217,4 @@ questions:
       - 고르는 코드는 조립하는 곳에 남는다고 말했다
       - 람다나 Comparator를 전략의 예로 들었다
       - enum이나 if가 나은 경우를 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java

@@ -42,6 +42,7 @@ questions:
       **새 리스너를 만들고 목록에 넣어요.** SignupService는 리스너 목록만 알아서 그대로예요.
 
       - 직접 부르는 코드였다면 가입 서비스에 필드와 호출을 더해야 했어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   - key: ob-soldout
     concept: core
     coreQuestion: q1
@@ -58,6 +59,7 @@ questions:
       **품절 이벤트와 리스너 인터페이스뿐이에요.** 할 일은 각 리스너가 알아요.
 
       - 듣는 쪽이 이벤트와 인터페이스를 알고, 알리는 쪽은 듣는 쪽을 몰라요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   # ── 질문 2 ──
   - key: ob-duplicate-check
     concept: core
@@ -76,6 +78,7 @@ questions:
 
       - 중복이면 가입이 실패해야 하니 중복 확인은 가입의 일부라 직접 불러요
       - 메일은 가입 뒤에 따라오는 일이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   - key: ob-payment
     concept: core
     coreQuestion: q2
@@ -92,6 +95,7 @@ questions:
       **결제 승인이에요.** 실패하면 주문도 실패해야 하는 일은 주문의 일부라 직접 불러요.
 
       - 이벤트로 떼면 코드만 봐서는 무엇이 실행되는지 보이지 않는 비용도 있어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   # ── 질문 3 ──
   - key: ob-failing
     concept: core
@@ -109,6 +113,7 @@ questions:
       **메일만 실행되고 signup이 예외로 끝나요.** 리스너는 for 문 안의 평범한 메서드 호출이라 예외가 for 문을 깨고 올라가요.
 
       - 떼어 놓은 것은 코드의 의존이지 실행이 아니에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   - key: ob-slow-sum
     concept: core
     coreQuestion: q3
@@ -125,6 +130,7 @@ questions:
       **0.6초 이상이에요.** 같은 스레드에서 차례로 실행되니 시간이 더해져요.
 
       - 느린 리스너 하나가 알리는 쪽 전체를 늦춰요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java
   - key: ob-spring-listener
     concept: core
     coreQuestion: q3
@@ -163,3 +169,4 @@ questions:
       - 코드만 봐서는 흐름이 안 보이는 비용을 말했다
       - 기본은 같은 스레드라 리스너의 예외가 알리는 쪽으로 올라간다고 말했다
       - 실패하면 본 작업도 실패해야 하는 일은 직접 부른다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/observer/ObserverTest.java

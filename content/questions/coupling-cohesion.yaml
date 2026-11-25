@@ -46,6 +46,7 @@ questions:
 
       - 화면이 주소 클래스의 메서드까지 알면 그 메서드가 바뀔 때 함께 깨져요
       - 클래스 하나를 바꿨을 때 깨지는 파일 수가 결합도를 보여 줘요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   - key: cc-public-fields
     concept: core
     coreQuestion: q1
@@ -59,6 +60,7 @@ questions:
 
       - 상대의 내부를 직접 아는 것은 결합도가 높은 모양이에요
       - B가 메서드로 필요한 값을 주게 하면 필드를 나눠도 A는 그대로예요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   # ── 질문 2 ──
   - key: cc-multi-address
     concept: core
@@ -115,6 +117,7 @@ questions:
 
       - 하나를 빠뜨리면 결제와 영수증의 금액이 어긋나요
       - 같은 이유로 바뀌는 것을 데이터를 가진 클래스 곁에 모아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   - key: cc-password-rule
     concept: core
     coreQuestion: q3
@@ -131,6 +134,7 @@ questions:
       **관리자 화면만 옛 규칙으로 동작해요.** 컴파일러는 같은 규칙이 여러 곳에 있다는 것을 모르니 빠뜨려도 알려 주지 않아요.
 
       - 응집도가 낮으면 규칙 하나를 바꿀 때 여러 파일을 고쳐야 하고, 빠뜨리기 쉬워요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   - key: cc-coupon-service
     concept: core
     coreQuestion: q3
@@ -148,6 +152,7 @@ questions:
       **Coupon.use(orderTotal)에 둬요.** 쿠폰을 쓰는 규칙이 쿠폰 쪽 한 곳에 모이고, 서비스들은 use()를 부르기만 해요.
 
       - 그러면 쿠폰 규칙이 바뀌어도 주문 서비스와 선물하기 서비스는 그대로예요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   # ── 질문 4 ──
   - key: cc-cohesive-remote
     concept: core
@@ -165,6 +170,7 @@ questions:
       **0개예요.** 세 클래스는 shippingFee()만 알고, 도서산간 판단은 Order 안에 있어요.
 
       - 응집도를 높이자 밖에서 알아야 할 것이 줄어 결합도도 낮아졌어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   - key: cc-zero-coupling
     concept: core
     coreQuestion: q4
@@ -183,6 +189,7 @@ questions:
 
       - 객체들이 함께 일하려면 서로를 알아야 해서 결합도는 0이 될 수 없어요
       - 줄일 것은 바뀌기 쉬운 내부 구조에 기대는 결합이에요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java
   # ── 네 질문을 하나로 ──
   - key: cc-interview
     concept: core
@@ -204,3 +211,4 @@ questions:
       - 응집도를 관련된 것이 한 모듈에 모여 있는 정도라고 말했다
       - 흩어진 규칙은 여러 파일을 고치게 하고 빠뜨리면 결과가 어긋난다고 말했다
       - 응집도를 높이면 결합도가 함께 낮아진다고 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/couplingcohesion/CouplingCohesionTest.java

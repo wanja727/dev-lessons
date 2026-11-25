@@ -59,6 +59,7 @@ questions:
       **5예요.** add로 1, addAll에서 2를 더하고, 부모의 addAll이 부른 add가 자식의 것이라 2를 또 더해요.
 
       - 자식이 맞게 짜려면 부모의 addAll이 안에서 add를 부른다는 내부 구현을 알아야 해요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   - key: co-logger
     concept: core
     coreQuestion: q1
@@ -75,6 +76,7 @@ questions:
       **0이에요.** 자식은 "부모의 sendAll이 send를 부른다"는 내부 구현에 기대고 있었어요.
 
       - 부모의 내부를 고치면 자식 코드는 그대로인데 동작이 깨져요. 취약한 부모 클래스 문제예요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   # ── 질문 2 ──
   - key: co-stack
     concept: core
@@ -118,6 +120,7 @@ questions:
 
       - addAll, add(int, E)도 같은 길이에요
       - 물려받은 메서드가 자식의 규칙을 건너뛰는 길을 내요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   # ── 질문 3 ──
   - key: co-composed-count
     concept: core
@@ -136,6 +139,7 @@ questions:
       **둘 다 3이에요.** 조합한 PointCart는 Cart의 공개 메서드만 부르고, Cart 안에서 무엇을 부르든 다시 세지 않아요.
 
       - 부모의 내부 구현이 바뀌어도 깨지지 않아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   - key: co-members-composed
     concept: core
     coreQuestion: q3
@@ -161,6 +165,7 @@ questions:
       **컴파일 오류예요.** 조합한 클래스는 직접 연 메서드만 밖에 보여요. Members에는 set이 없어요.
 
       - 규칙을 건너뛰는 길이 처음부터 없어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   # ── 질문 4 ──
   - key: co-final
     concept: core
@@ -197,6 +202,7 @@ questions:
       **상속을 위해 설계하고 문서화한 추상 클래스를 구현할 때예요.** 오버라이드할 곳과 그것이 불리는 때를 부모가 약속했어요.
 
       - 나머지는 재사용만을 위한 상속이라 조합이 나아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   - key: co-base-service
     concept: core
     coreQuestion: q4
@@ -214,6 +220,7 @@ questions:
       **헬퍼를 컴포넌트로 빼고 주입받아요.** 상속하면 BaseService가 바뀔 때 모든 서비스가 영향을 받고, 쓰지 않는 메서드도 물려받아요.
 
       - 자바는 클래스 상속이 하나뿐이라 다른 부모가 필요해지면 둘 수도 없어요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
   # ── 네 질문을 하나로 ──
   - key: co-interview
     concept: core
@@ -235,3 +242,4 @@ questions:
       - 부모의 public 메서드를 모두 물려받아 규칙이 깨지는 예를 들었다
       - 조합을 필드로 갖고 위임하는 것이라고 말했다
       - 상속을 써도 되는 조건(대신할 수 있고 상속을 위해 설계된 부모)을 말했다
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/composition/CompositionTest.java
