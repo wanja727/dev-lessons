@@ -1,0 +1,236 @@
+# 상속보다 조합 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/composition-over-inheritance.yaml의 says).
+# 동작에 관한 정답은 verification의 CompositionTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: composition-over-inheritance
+  title: 상속보다 조합
+  unit: 객체지향 설계와 패턴
+  order: 306
+concepts:
+  - key: core
+    name: 상속보다 조합
+coreQuestions:
+  - key: q1
+    text: "상속으로 코드를 재사용하면 어떤 문제가 생기나요?"
+  - key: q2
+    text: "부모의 메서드를 모두 물려받으면 무엇이 문제인가요?"
+  - key: q3
+    text: "조합으로 바꾸면 무엇이 달라지나요?"
+  - key: q4
+    text: "그러면 상속은 언제 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: co-point-cart
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 부모 Cart의 addAll은 for 문으로 add(i)를 하나씩 불러요. PointCart가 Cart를 상속해 아래처럼 셌어요. add로 하나, addAll로 둘을 넣으면 count는 얼마일까요?
+    code: |-
+      class PointCart extends Cart {
+        int count = 0;
+        @Override
+        void add(Item item) {
+          count++;
+          super.add(item);
+        }
+        @Override
+        void addAll(List<Item> list) {
+          count += list.size();
+          super.addAll(list);
+        }
+      }
+    choices:
+      - "3"
+      - "5"
+      - "6"
+      - "1"
+    answer: "2"
+    explanation: |-
+      **5예요.** add로 1, addAll에서 2를 더하고, 부모의 addAll이 부른 add가 자식의 것이라 2를 또 더해요.
+
+      - 자식이 맞게 짜려면 부모의 addAll이 안에서 add를 부른다는 내부 구현을 알아야 해요
+  - key: co-logger
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 부모 Notifier의 sendAll(list)가 for 문으로 send(msg)를 불러요. 자식은 send에서만 보낸 수를 세도록 만들어서 잘 동작했어요. 그런데 부모 작성자가 sendAll을 한 번에 묶어 보내는 코드로 바꿨어요(send를 부르지 않는다). 자식 코드는 그대로일 때 sendAll로 10개를 보내면 자식이 센 수는?
+    choices:
+      - "10"
+      - "20"
+      - "0"
+    answer: "3"
+    explanation: |-
+      **0이에요.** 자식은 "부모의 sendAll이 send를 부른다"는 내부 구현에 기대고 있었어요.
+
+      - 부모의 내부를 고치면 자식 코드는 그대로인데 동작이 깨져요. 취약한 부모 클래스 문제예요
+  # ── 질문 2 ──
+  - key: co-stack
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Stack은 Vector를 상속해요. 아래 코드에서 pop()을 세 번 하면 어떤 순서로 나올까요?
+    code: |-
+      Stack<String> stack = new Stack<>();
+      stack.push("A");
+      stack.push("B");
+      stack.add(0, "X");
+    choices:
+      - X, B, A
+      - B, A, X
+      - A, B, X
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **B, A, X예요.** Vector에서 물려받은 add(0, x)가 맨 아래에 X를 끼워 넣었어요.
+
+      - 마지막에 넣은 X가 가장 나중에 나와 스택의 규칙이 깨져요
+      - 부모의 public 메서드를 모두 물려받기 때문이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Stack.html
+  - key: co-members-set
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: class Members extends ArrayList<Member>를 만들고, "같은 이메일은 두 번 넣지 않는다"를 add를 오버라이딩해 지켰어요. set과 addAll은 오버라이딩하지 않았어요. 다음 가운데 이 규칙을 건너뛸 수 있는 호출은 무엇일까요?
+    choices:
+      - members.add(m)
+      - members.set(0, m)
+      - members.size()
+      - 없다. add에서 검사한다
+    answer: "2"
+    explanation: |-
+      **members.set(0, m)이에요.** 오버라이딩하지 않은 메서드는 부모의 것이 그대로 쓰여 검사하지 않아요.
+
+      - addAll, add(int, E)도 같은 길이에요
+      - 물려받은 메서드가 자식의 규칙을 건너뛰는 길을 내요
+  # ── 질문 3 ──
+  - key: co-composed-count
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: PointCart가 Cart를 상속하지 않고 필드로 가지며, add와 addAll에서 센 뒤 cart.add(), cart.addAll()로 넘겨요. Cart.addAll이 안에서 add를 부르는 판과 items.addAll로 한 번에 넣는 판에서 addAll([A, B, C]) 뒤 count는 각각 얼마일까요?
+    choices:
+      - 6과 0
+      - 3과 3
+      - 6과 3
+      - 3과 0
+    answer: "2"
+    explanation: |-
+      **둘 다 3이에요.** 조합한 PointCart는 Cart의 공개 메서드만 부르고, Cart 안에서 무엇을 부르든 다시 세지 않아요.
+
+      - 부모의 내부 구현이 바뀌어도 깨지지 않아요
+  - key: co-members-composed
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: Members가 ArrayList를 필드로 갖고 add와 size만 열었어요. 다른 클래스에서 아래 코드를 쓰면 어떻게 될까요?
+    code: |-
+      class Members {
+        private final List<Member> list =
+            new ArrayList<>();
+        void add(Member m) {...}
+        int size() { return list.size(); }
+      }
+
+      members.set(0, m);
+    choices:
+      - 규칙을 건너뛰고 0번을 바꾼다
+      - 컴파일 오류
+      - UnsupportedOperationException
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** 조합한 클래스는 직접 연 메서드만 밖에 보여요. Members에는 set이 없어요.
+
+      - 규칙을 건너뛰는 길이 처음부터 없어요
+  # ── 질문 4 ──
+  - key: co-final
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Cart의 작성자는 Cart가 상속을 위해 만든 클래스가 아니라서, 누군가 PointCart처럼 상속해 부모의 내부에 기대는 일을 막고 싶어요. 무엇을 하면 될까요?
+    choices:
+      - add를 private으로 바꾼다
+      - final class Cart로 선언한다
+      - 생성자를 public으로 둔다
+      - addAll을 지운다
+    answer: "2"
+    explanation: |-
+      **final class로 선언해요.** final 클래스는 상속할 수 없어요. String과 Integer가 그래요.
+
+      - 상속을 위해 설계하고 문서화한 클래스만 상속을 열어 둬요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.2
+  - key: co-when-inherit
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 다음 가운데 클래스 상속이 맞는 경우는 무엇일까요?
+    choices:
+      - Stack이 Vector의 저장 기능을 재사용하려고 상속한다
+      - 추상 클래스 PaymentProcessor가 "approve 단계만 오버라이드하라"고 문서화해 둔 것을 구현한다
+      - 서비스들이 로깅 헬퍼를 쓰려고 BaseService를 상속한다
+      - Members가 ArrayList의 메서드를 쓰려고 상속한다
+    answer: "2"
+    explanation: |-
+      **상속을 위해 설계하고 문서화한 추상 클래스를 구현할 때예요.** 오버라이드할 곳과 그것이 불리는 때를 부모가 약속했어요.
+
+      - 나머지는 재사용만을 위한 상속이라 조합이 나아요
+  - key: co-base-service
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스프링 서비스 다섯 개가 currentMember()와 log()를 쓰려고 BaseService를 상속해요. 이 구조를 고치는 방법으로 가장 알맞은 것은?
+    choices:
+      - BaseService를 final로 바꾼다
+      - 헬퍼를 @Component로 만들고 필요한 서비스가 생성자로 주입받는다
+      - 서비스마다 같은 헬퍼 코드를 복사한다
+      - BaseService에 메서드를 더 모은다
+    answer: "2"
+    explanation: |-
+      **헬퍼를 컴포넌트로 빼고 주입받아요.** 상속하면 BaseService가 바뀔 때 모든 서비스가 영향을 받고, 쓰지 않는 메서드도 물려받아요.
+
+      - 자바는 클래스 상속이 하나뿐이라 다른 부모가 필요해지면 둘 수도 없어요
+  # ── 네 질문을 하나로 ──
+  - key: co-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "상속보다 조합을 쓰라는 이유를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **상속은 부모의 내부 구현과 모든 public 메서드에 묶이고, 조합은 공개 약속에만 기대서 덜 깨져요.**
+
+      - **내부에 묶임:** 부모 addAll이 add를 부르면 자식이 두 번 센다. 부모를 고치면 자식이 깨진다
+      - **모두 물려받음:** Stack이 Vector의 add(0, x)로 스택 규칙을 깬다
+      - **조합:** 필드로 갖고 위임한다. 연 메서드만 보이고 실행 중에 바꿀 수 있다
+      - **상속을 쓸 때:** 모든 자리에서 대신할 수 있고 상속을 위해 설계된 부모일 때. 아니면 final
+    checklist:
+      - 상속한 자식이 부모의 내부 구현에 기댄다고 말했다
+      - 부모를 고치면 자식이 깨지는 예(취약한 부모 클래스)를 들었다
+      - 부모의 public 메서드를 모두 물려받아 규칙이 깨지는 예를 들었다
+      - 조합을 필드로 갖고 위임하는 것이라고 말했다
+      - 상속을 써도 되는 조건(대신할 수 있고 상속을 위해 설계된 부모)을 말했다
