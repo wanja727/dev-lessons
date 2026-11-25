@@ -1,4 +1,4 @@
-package lab.devlessons.concurrency;
+package lab.devlessons.threadpool;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

@@ -1,8 +1,9 @@
-# 스레드 풀 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 스레드 풀
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/thread-pool.yaml에 있다.
 title: 스레드 풀
+description: 스레드를 매번 만들지 않고 풀을 쓰는 이유, 작업이 몰리면 풀이 받는 순서, Executors가 만드는 풀의 함정, 풀을 끝내는 법과 작업의 예외가 가는 곳. 작은 풀에 작업을 하나씩 넣으며 스레드와 큐를 세어 보며 배우는 대화형 레슨.
 unit: 운영체제와 동시성
+minutes: 22
 roadmap: C7
 type: 자바 실행
 prerequisites:
@@ -108,9 +109,31 @@ codes:
       return pool.submit(this::build)
           .get();
     }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/threadpool/ThreadPoolTest.java
+  outputTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/threadpool/ThreadPoolOutputTest.java
+  tpe: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
+  executors: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  executorService: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  blockingQueue: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/BlockingQueue.html
+  forkJoin: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html
+  springScheduling: https://docs.spring.io/spring-framework/reference/integration/scheduling.html
+  bootTask: https://docs.spring.io/spring-boot/reference/features/task-execution-and-scheduling.html
 predict:
-  text: '코드 predict는 core 2, max 4, 큐 2칸인 풀에 오래 걸리는 작업을 하나씩 7개 넣어요. 일곱째 작업은 어떻게 될까요? 보기: 큐에서 기다린다 / 새 스레드가 만들어져 실행된다 / RejectedExecutionException으로 거절된다'
-  answer: '거절된다. 스레드 2개, 큐 2칸, 늘린 스레드 2개로 작업 6개가 찬 뒤라 둘 곳이 없다. 질문 2에서 밝힌다.'
+  title: 일곱째 작업은 어디로
+  text: 'core 2, max 4, 큐 2칸인 풀에 오래 걸리는 작업을 하나씩 7개 넣어요. 일곱째 작업은 어떻게 될까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: queue
+      label: 큐에서 기다린다
+    - value: thread
+      label: 새 스레드가 만들어져 실행된다
+    - value: reject
+      label: RejectedExecutionException으로 거절된다
+  answer: reject
+  storageKey: thread-pool-predict-v2
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 스레드를 매번 만들지 않고 스레드 풀을 쓰는 이유는 무엇인가요?
@@ -126,6 +149,31 @@ questions:
     asks:
       - '본문의 예시: 작업 20개를 `newFixedThreadPool(2)`에 넣었다. 작업을 실행한 스레드는 몇 가지인가 (2가지. 같은 스레드를 다시 쓴다)'
       - '옮긴 상황: 읽지 않은 메일 수를 다른 스레드에서 세어 그 숫자를 받아 쓰고 싶다. `Runnable`과 `Callable` 가운데 무엇으로 넘기나 (Callable. 값을 돌려준다)'
+    body:
+      - p: '스레드 하나를 만들면 운영체제의 스레드와 스택 메모리가 생겨요(JVM 메모리 구조 레슨). 작업마다 `new Thread`로 만들면 그 비용을 매번 치르고, 작업이 몰리면 스레드가 작업 수만큼 생겨 메모리와 전환 비용(컨텍스트 스위칭 레슨)이 커져요.'
+      - p: '**스레드 풀**은 스레드를 정한 수만큼 두고 작업을 **큐**에 받아요. 쉬는 스레드가 큐에서 꺼내 실행하고, 끝나면 다음 것을 꺼내요. 스레드는 버리지 않고 다시 써요.'
+      - code: reuse
+      - ci:
+          key: reuse
+          label: 실행한 스레드의 실제 이름 보기
+          source: ThreadPoolTest.reusesThreads
+      - p: '작업은 20개인데 스레드 이름은 두 가지뿐이에요.'
+      - h3: 할 일을 넘기는 두 가지
+      - code: callable
+      - ul:
+          - '결과가 없는 일은 `Runnable`로 `execute`해요.'
+          - '결과가 필요하면 `Callable`을 `submit`하고 `Future`를 받아요. `Future`로 결과를 받는 법은 Future와 CompletableFuture 레슨에서 다뤄요.'
+      - muted: '이름 정리: `Executor`는 "작업을 실행한다"(execute)만 가진 인터페이스, `ExecutorService`는 submit과 종료를 더한 것, `ThreadPoolExecutor`는 스레드 풀 구현이에요. `Executors`는 이것들을 만들어 주는 도구 클래스예요.'
+      - quiz:
+          q: '작업 20개를 `newFixedThreadPool(2)`에 넣었어요. 작업을 실행한 스레드는 몇 가지일까요?'
+          options:
+            - 20가지
+            - 2가지
+            - 1가지
+          answer: 2
+          explain: '풀은 스레드 2개를 만들어 두고 다시 써요. 실제 출력에서도 이름이 둘뿐이었어요.'
+      - next: '스레드가 모두 바쁠 때 작업이 계속 들어오면 풀은 어떻게 할까요?'
+    recall: '스레드를 미리 몇 개 만들어 두고 작업을 받아 다시 쓰면, 만드는 비용을 아끼고 스레드 수가 끝없이 늘지 않게 막을 수 있어요. 할 일은 결과가 없으면 `Runnable`을 `execute`로, 결과가 있으면 `Callable`을 `submit`으로 넘겨요. 풀은 작업을 큐에 받아 두고 쉬는 스레드가 꺼내 실행해요.'
   - id: q2
     title: 작업이 몰리면 스레드 풀은 어떤 순서로 받나요?
     conclusion:
@@ -143,6 +191,89 @@ questions:
     asks:
       - '본문의 예시: core 2, max 4, 큐 2칸인 풀에 오래 걸리는 작업을 하나씩 넣는다. 다섯째 작업을 넣은 직후 스레드 수와 큐의 길이는 (스레드 3개, 큐 2개)'
       - '옮긴 상황: core 4, max 20, 큐 1000칸인 풀에 오래 걸리는 작업 500개를 한꺼번에 넣었다. 스레드는 몇 개까지 늘어나나 (4개. 큐가 차지 않아 max까지 늘지 않는다)'
+    body:
+      - p: '`ThreadPoolExecutor`가 작업을 받을 때의 순서예요([API 문서](link:tpe)).'
+      - ol:
+          - '스레드가 **core**보다 적으면 새 스레드를 만들어 실행해요.'
+          - '아니면 **큐**에 넣어요.'
+          - '큐가 가득이면 **max**까지 새 스레드를 만들어요.'
+          - '그것도 안 되면 **거절**해요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          buttons: each
+          initial:
+            duo:
+              - {label: '스레드 (core 2, max 4)', state: dim, text: 없음}
+              - {label: '큐 (2칸)', state: dim, text: 비어 있음}
+          scenarios:
+            default:
+              - label: 작업 1 넣기
+                log: '작업 1 → 스레드가 core보다 적어 새 스레드'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1, mark: changed}]}
+                  - {label: '큐 (2칸)', text: 비어 있음}
+              - label: 작업 2 넣기
+                log: '작업 2 → 새 스레드 (core를 채움)'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2, mark: changed}]}
+                  - {label: '큐 (2칸)', text: 비어 있음}
+              - label: 작업 3 넣기
+                log: '작업 3 → core가 다 바빠서 큐로'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2}]}
+                  - {label: '큐 (2칸)', rows: [{k: 1번 칸, v: 작업 3, mark: changed}]}
+              - label: 작업 4 넣기
+                log: '작업 4 → 큐로. 큐가 가득 참'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2}]}
+                  - {label: '큐 (2칸)', rows: [{k: 1번 칸, v: 작업 3}, {k: 2번 칸, v: 작업 4, mark: changed}]}
+              - label: 작업 5 넣기
+                log: '작업 5 → 큐가 가득이라 max까지 새 스레드'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2}, {k: 스레드 3, v: 작업 5, mark: changed}]}
+                  - {label: '큐 (2칸)', rows: [{k: 1번 칸, v: 작업 3}, {k: 2번 칸, v: 작업 4}]}
+              - label: 작업 6 넣기
+                log: '작업 6 → 새 스레드 (max를 채움)'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2}, {k: 스레드 3, v: 작업 5}, {k: 스레드 4, v: 작업 6, mark: changed}]}
+                  - {label: '큐 (2칸)', rows: [{k: 1번 칸, v: 작업 3}, {k: 2번 칸, v: 작업 4}]}
+              - label: 작업 7 넣기
+                log: '작업 7 → 둘 곳이 없어 RejectedExecutionException'
+                duo:
+                  - {label: '스레드 (core 2, max 4)', rows: [{k: 스레드 1, v: 작업 1}, {k: 스레드 2, v: 작업 2}, {k: 스레드 3, v: 작업 5}, {k: 스레드 4, v: 작업 6}]}
+                  - {label: '큐 (2칸)', rows: [{k: 1번 칸, v: 작업 3}, {k: 2번 칸, v: 작업 4}, {k: 작업 7, v: 거절, mark: bad}]}
+                verdict: '큐가 먼저 차고 나서야 스레드가 max까지 늘었어요. 그다음은 거절이에요.'
+      - p: '처음 예측의 답은 **거절된다**예요. {{predict-result}} 작업을 넣을 때마다 스레드 수와 큐의 길이를 실제로 셌어요.'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: ThreadPoolOutputTest.predictExample
+          code: predict
+      - callout: '많은 사람이 "바쁘면 max까지 늘고 그다음 큐"라고 생각해요. 실제는 **큐가 먼저**예요. 큐를 1000칸으로 두면 작업이 1000개 쌓이기 전에는 스레드가 core에서 늘지 않아요.'
+      - p: 'core보다 많은 스레드는 keepAlive(코드의 60초) 동안 일이 없으면 줄어들어요.'
+      - h3: 거절될 때 무엇을 할까요
+      - table:
+          head: [거절 정책, 하는 일]
+          rows:
+            - ['`AbortPolicy` (기본)', '`RejectedExecutionException`을 던져요']
+            - ['`CallerRunsPolicy`', '작업을 넣은 스레드가 직접 실행해요. 넣는 쪽이 느려져 자연스럽게 속도가 줄어요']
+            - ['`DiscardPolicy`', '조용히 버려요']
+            - ['`DiscardOldestPolicy`', '큐에서 가장 오래된 것을 버리고 넣어요']
+      - ci:
+          key: caller-runs
+          label: CallerRunsPolicy의 실제 결과 보기
+          source: ThreadPoolTest.callerRuns
+      - quiz:
+          q: 'core 2, max 4, 큐 2칸인 풀에 오래 걸리는 작업을 하나씩 넣어요. 다섯째 작업을 넣은 직후 스레드 수와 큐의 길이는?'
+          options:
+            - 스레드 2개, 큐 3개
+            - 스레드 3개, 큐 2개
+            - 스레드 4개, 큐 1개
+          answer: 2
+          explain: '큐 2칸이 셋째와 넷째로 찬 뒤라, 다섯째는 max까지 늘리는 새 스레드가 받아요.'
+      - next: '이 순서를 알고 나면 `Executors`가 만들어 주는 풀의 설정이 다르게 보여요.'
+    recall: '기본 스레드(core)가 다 바쁘면 큐에 넣고, 큐가 가득 차야 최대(max)까지 스레드를 늘리고, 그것도 다 차면 거절해요. 큐가 먼저라서 큐가 크면 스레드는 core보다 늘지 않아요. 거절될 때는 기본으로 예외를 던지고, `CallerRunsPolicy`면 넣은 스레드가 직접 실행해요.'
   - id: q3
     title: Executors가 만들어 주는 풀에는 어떤 함정이 있나요?
     conclusion:
@@ -157,6 +288,49 @@ questions:
     asks:
       - '본문의 예시: `newFixedThreadPool(2)`에 오래 걸리는 작업 100개를 넣었다. 스레드 수와 큐의 길이는 (스레드 2개, 큐 98개)'
       - '옮긴 상황: 외부 API가 느려져 응답이 30초씩 걸리는데 요청마다 `newCachedThreadPool()` 하나에 호출을 넣는다. 초당 100건이 들어오면 무엇이 늘어나나 (스레드 수. 쉬는 스레드가 없어 작업마다 새로 만든다)'
+    body:
+      - p: '`Executors`의 팩토리 메서드는 질문 2의 `ThreadPoolExecutor`를 정해진 설정으로 만들어 줘요([API 문서](link:executors)). 그 설정을 들여다보면 함정이 보여요.'
+      - code: fixed
+        notes:
+          - mark: LinkedBlockingQueue
+            as: code
+            text: '크기를 주지 않아 제한이 없는 큐예요. 큐가 차지 않으니 스레드도 늘지 않고 거절도 없어요.'
+      - ci:
+          key: fixed
+          label: 작업 100개를 넣은 실제 결과 보기
+          source: ThreadPoolTest.fixedPoolUnboundedQueue
+      - p: '큐에 쌓인 작업은 각자 데이터를 들고 있어서 힙을 채워요. 거절이 없으니 **늦어지는 것을 알기 어려워요.** 몇 시간 뒤에야 메일이 가고, 결국 `OutOfMemoryError`가 나요.'
+      - code: cached
+        notes:
+          - mark: Integer.MAX_VALUE
+            as: code
+            text: 'max가 사실상 끝이 없어요. 큐(`SynchronousQueue`)는 한 칸도 담지 않아서 쉬는 스레드가 없으면 바로 새 스레드예요.'
+      - ci:
+          key: cached
+          label: 작업 50개를 넣은 실제 결과 보기
+          source: ThreadPoolTest.cachedPoolGrowsPerTask
+      - p: '몰리는 순간 처음의 `new Thread`와 같아져요. 느린 외부 호출에 쓰면 스레드가 수천 개까지 늘어요.'
+      - h3: BlockingQueue
+      - p: '풀의 큐는 `BlockingQueue`예요. 비어 있을 때 꺼내는 쪽이, 가득 찼을 때 넣는 쪽이 기다리게 하는 큐예요([API 문서](link:blockingQueue)). 풀의 스레드는 `take()`로 기다리다가 작업이 들어오면 깨어나요.'
+      - ul:
+          - '`ArrayBlockingQueue(n)`: 크기를 정한 큐'
+          - '`LinkedBlockingQueue()`: 크기를 주지 않으면 제한이 없어요'
+          - '`SynchronousQueue`: 담지 않고 받는 쪽에게 바로 넘겨요'
+      - callout: '**고친 모양:** 몰릴 수 있는 곳에서는 코드 predict처럼 `new ThreadPoolExecutor`에 크기를 정한 `ArrayBlockingQueue`와 거절 정책을 줘요. 넘치면 거절되어 알 수 있어요.'
+      - more:
+          summary: '더 알아보기: PriorityBlockingQueue'
+          body:
+            - p: '`PriorityBlockingQueue`는 여러 스레드가 함께 쓰는 우선순위 큐예요(힙과 우선순위 큐 레슨). 풀의 큐로 주면 급한 작업을 먼저 꺼내요. 크기 제한이 없다는 점은 조심해요.'
+      - quiz:
+          q: '`newFixedThreadPool(2)`에 오래 걸리는 작업 100개를 넣었어요. 스레드 수와 큐의 길이는?'
+          options:
+            - 스레드 100개, 큐 0개
+            - 스레드 2개, 큐 98개
+            - 스레드 2개, 98개는 거절
+          answer: 2
+          explain: '큐가 끝이 없어서 거절 없이 98개가 큐에 쌓여요.'
+      - next: '풀은 쓰고 나면 어떻게 끝낼까요? 그리고 작업에서 난 예외는 어디로 갈까요?'
+    recall: '`newFixedThreadPool`은 끝이 없는 큐를 써서 작업이 밀리면 큐에 계속 쌓이고, `newCachedThreadPool`은 큐 없이 스레드를 끝없이 늘려요. 어느 쪽도 거절하지 않아서 넘치는 순간을 알 수 없고 결국 메모리를 채워요. 몰릴 수 있는 곳에서는 크기가 정해진 큐로 `ThreadPoolExecutor`를 직접 만들어요.'
   - id: q4
     title: 스레드 풀은 어떻게 끝내고, 작업의 예외는 어디로 가나요?
     conclusion:
@@ -173,41 +347,103 @@ questions:
       - '본문의 예시: 오래 걸리는 작업 3개가 실행과 큐에 있을 때 `shutdown()`을 불렀다. 그 뒤 넣은 넷째 작업과 이미 받은 3개는 각각 어떻게 되나 (넷째는 거절, 3개는 끝까지 실행)'
       - '옮긴 상황: `pool.submit(() -> { throw new IllegalStateException(); })`만 하고 `get()`을 부르지 않았다. 로그에 예외가 찍히나 (찍히지 않는다. Future 안에 숨는다)'
       - '실무 구역: 코드 perRequest를 요청마다 부른다. 요청 1000번 뒤 서버의 스레드 수는 (계속 늘어난다. 풀을 끝내지 않아 요청마다 스레드 4개짜리 풀이 남는다)'
+    body:
+      - table:
+          head: [메서드, 새 작업, 받은 작업]
+          rows:
+            - ['`shutdown()`', '거절해요', '실행 중인 것과 큐의 것을 끝까지 해요']
+            - ['`shutdownNow()`', '거절해요', '실행 중인 스레드를 인터럽트하고, 큐에서 기다리던 작업 목록을 돌려줘요']
+      - p: '`shutdownNow()`의 인터럽트는 부탁일 뿐이에요. 인터럽트를 확인하지 않는 계산 작업은 멈추지 않아요. 흔히 쓰는 끝내기 순서는 이래요([API 문서](link:executorService)).'
+      - code: shutdown
+      - callout: '풀의 스레드는 기본으로 **데몬이 아니에요**(프로세스와 스레드 레슨). `main`이 끝나도 풀을 끝내지 않으면 JVM이 끝나지 않아요.'
+      - h3: 작업의 예외는 어디로 가나요
+      - ci:
+          key: exceptions
+          label: execute와 submit의 실제 결과 보기
+          source: ThreadPoolTest.executeVsSubmitExceptions
+      - ul:
+          - '**`execute`:** 예외가 나면 그 스레드는 죽고(풀이 새로 만들어요), 예외는 스레드의 `UncaughtExceptionHandler`로 가서 기본으로 표준 에러에 찍혀요.'
+          - '**`submit`:** `Future`가 예외를 잡아 둬요. 아무도 `get()`을 부르지 않으면 **어디에도 찍히지 않아요.** 받는 법은 Future와 CompletableFuture 레슨에서 다뤄요.'
+      - quiz:
+          q: '`pool.submit(() -> { throw new IllegalStateException(); })`만 하고 `get()`을 부르지 않았어요. 로그에 예외가 찍힐까요?'
+          options:
+            - 찍힌다. 스레드가 죽으며 남긴다
+            - 찍히지 않는다. Future 안에 숨는다
+            - 다음 submit에서 던져진다
+          answer: 2
+          explain: '`submit`은 예외를 `Future`에 잡아 둬요. `get()`을 불러야 `ExecutionException`으로 나와요.'
+    recall: '`shutdown()`은 새 작업을 받지 않고 받은 작업은 끝까지 하고, `shutdownNow()`는 실행 중인 작업을 인터럽트하고 남은 작업을 돌려줘요. 끝내지 않은 풀은 JVM이 끝나지 못하게 해요. `execute`로 넘긴 작업의 예외는 스레드의 예외 처리기로 가서 찍히고, `submit`으로 넘긴 작업의 예외는 `Future` 안에 숨어 `get()`을 불러야 보여요.'
 practice:
   says:
     - '스프링에서는 풀을 빈으로 하나 만들어 함께 쓴다. 코드 springExecutor는 메일 발송용 `ThreadPoolTaskExecutor`다. core 4, max 8, 큐 100칸, 넘치면 넣은 스레드가 직접 보낸다. 스레드 이름 앞머리를 정하면 로그에서 알아본다. 스프링이 빈을 닫을 때 풀도 끝낸다(스프링 문서 근거)'
     - '스프링 부트가 만드는 기본 풀(`@Async`, `applicationTaskExecutor`)의 설정은 `spring.task.execution.pool.core-size`, `max-size`, `queue-capacity`다. 기본 큐는 크기 제한이 없어서 질문 3의 함정과 같다. @Async의 자세한 것은 S14'
     - '흔한 실수: 코드 perRequest처럼 요청마다 풀을 만들고 끝내지 않는다. 요청마다 스레드가 남아 쌓인다. 고친 코드: 풀을 빈으로 하나 두고 주입받아 쓴다. 풀 열 개를 만들고 끝내지 않은 뒤 살아 있는 스레드 수가 는 것을 테스트로 보인다'
     - '병렬 스트림(`parallelStream()`)은 JVM 전체가 함께 쓰는 `ForkJoinPool.commonPool()`에서 돈다. 크기는 코어 수보다 하나 적다(J13). 요청 처리 안에서 병렬 스트림으로 느린 입출력을 하면 공용 풀이 막혀 다른 병렬 스트림과 `CompletableFuture`까지 느려진다. 스레드 이름 `ForkJoinPool.commonPool-worker-1`과 공용 풀의 크기를 테스트로 남긴다'
+  body:
+    - p: '스프링에서는 풀을 **빈으로 하나 만들어 함께** 써요. 설정과 기본값은 스프링과 스프링 부트 문서가 근거이고, 실수는 테스트로 돌렸어요.'
+    - h3: 풀을 빈으로
+    - code: springExecutor
+    - p: '메일 발송용 풀이에요. core 4, max 8, 큐 100칸이고, 넘치면 넣은 스레드가 직접 보내요(질문 2). 스레드 이름 앞머리를 정하면 로그에서 알아봐요. 스프링이 컨텍스트를 닫을 때 빈의 풀도 끝내요([스프링 문서](link:springScheduling)).'
+    - p: '스프링 부트가 만드는 기본 풀(`@Async`가 쓰는 `applicationTaskExecutor`)의 설정은 `spring.task.execution.pool.core-size`, `max-size`, `queue-capacity`예요([스프링 부트 문서](link:bootTask)). 기본 큐는 크기 제한이 없어서 질문 3의 함정과 같아요. 자세한 것은 @Async 레슨에서 다뤄요.'
+    - h3: '흔한 실수: 요청마다 풀을 만들기'
+    - code: perRequest
+    - p: '요청마다 풀을 만들고 끝내지 않으면, 요청이 끝나도 풀의 스레드는 살아서 다음 작업을 기다려요. 요청 10번 뒤 살아 있는 스레드 수를 셌어요.'
+    - ci:
+        key: per-request
+        label: 실제 결과 보기
+        source: ThreadPoolTest.poolPerRequestLeaksThreads
+    - p: '요청마다 스레드가 남아 쌓여요. 고친 모양은 위의 빈을 주입받아 쓰는 거예요.'
+    - h3: 병렬 스트림은 공용 풀에서 돌아요
+    - p: '`parallelStream()`은 JVM 전체가 함께 쓰는 `ForkJoinPool.commonPool()`에서 돌아요(스트림과 Optional 레슨). 크기는 코어 수보다 하나 적고, 부른 스레드도 함께 일해요([ForkJoinPool 문서](link:forkJoin)).'
+    - ci:
+        key: parallel
+        label: 실제 결과 보기
+        source: ThreadPoolTest.parallelStreamUsesCommonPool
+    - p: '요청 처리 안에서 병렬 스트림으로 느린 입출력(외부 API, DB)을 하면 몇 안 되는 공용 풀의 스레드가 막혀요. 같은 JVM의 다른 병렬 스트림과 `CompletableFuture`까지 느려져요. 입출력은 따로 만든 풀에 맡겨요.'
+interview:
+  question: 스레드 풀이 작업을 받는 방식과 주의할 점을 설명해 주세요
+  model:
+    - label: 정의
+      text: 스레드를 미리 만들어 두고 작업을 큐로 받아 다시 쓰는 구조입니다. 스레드를 만드는 비용을 아끼고 스레드 수가 끝없이 늘지 않게 막습니다.
+    - label: 원리
+      text: ThreadPoolExecutor는 core만큼 스레드를 만들고, 그 뒤는 큐에 넣고, 큐가 가득 차야 max까지 늘리고, 그것도 차면 거절 정책을 따릅니다. 큐가 먼저라 큐가 크면 스레드는 core에서 늘지 않습니다.
+    - label: 주의할 점
+      text: newFixedThreadPool은 끝이 없는 큐, newCachedThreadPool은 끝이 없는 스레드라 몰리면 메모리를 채우니, 크기를 정한 큐와 거절 정책을 줍니다. 풀은 빈으로 하나 두고 shutdown으로 끝내며, submit의 예외는 get을 불러야 보입니다. 병렬 스트림은 공용 풀을 쓰니 입출력에 쓰지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 메일 발송 풀의 큐가 끝이 없어 행사 날 메일이 몇 시간 늦어져, 큐 크기와 CallerRunsPolicy를 줬습니다.'
+verified: 이 레슨의 숫자는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 붙잡아 둔 작업으로 스레드와 큐를 하나씩 셌어요. 코드가 바뀔 때마다 테스트([ThreadPoolTest](link:test), [ThreadPoolOutputTest](link:outputTest))가 다시 돌아요.
+footer: '근거: 작업 받는 규칙과 거절 정책은 ThreadPoolExecutor API 문서([링크](link:tpe)), 팩토리가 만드는 것은 Executors API 문서, 종료는 ExecutorService API 문서, 공용 풀은 ForkJoinPool API 문서, 스프링의 풀과 설정은 스프링과 스프링 부트 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '작업 20개를 스레드 2개 풀에 넣으면 실행한 스레드는 두 가지다'
     how: '스레드 이름을 모아 센다'
     test: ThreadPoolTest.reusesThreads
   - claim: 'core 2, max 4, 큐 2칸 풀에 작업을 하나씩 넣으면 1~2는 스레드, 3~4는 큐, 5~6은 늘린 스레드, 7은 거절이다'
     how: '래치로 작업을 붙잡아 두고 넣을 때마다 getPoolSize와 getQueue().size()를 남긴다'
-    test: ThreadPoolTest.coreQueueMaxReject
+    test: ThreadPoolTest.coreQueueMaxReject, ThreadPoolOutputTest.predictExample
   - claim: 'CallerRunsPolicy에서 거절된 작업은 넣은 스레드가 직접 실행한다'
     how: '거절될 작업이 기록한 스레드 이름이 main 테스트 스레드인지 본다'
     test: ThreadPoolTest.callerRuns
   - claim: 'newFixedThreadPool(2)에 작업 100개를 넣으면 스레드 2개, 큐 98개다'
     how: '래치로 붙잡고 센다'
-    test: ThreadPoolTest.fixedUnboundedQueue
+    test: ThreadPoolTest.fixedPoolUnboundedQueue
   - claim: 'newCachedThreadPool에 붙잡힌 작업 50개를 넣으면 스레드 50개다'
     how: '래치로 붙잡고 센다'
-    test: ThreadPoolTest.cachedUnboundedThreads
+    test: ThreadPoolTest.cachedPoolGrowsPerTask
   - claim: 'shutdown 뒤 새 작업은 거절되고 받은 작업은 끝까지 실행된다'
     how: '작업 3개를 넣고 shutdown한 뒤 넷째를 넣고 완료 수를 본다'
-    test: ThreadPoolTest.shutdownFinishesAccepted
+    test: ThreadPoolTest.shutdownFinishesAcceptedTasks
   - claim: 'shutdownNow는 실행 중인 작업을 인터럽트하고 대기 작업 목록을 돌려준다'
     how: 'sleep 중인 작업이 InterruptedException을 받는지, 돌려받은 목록의 크기를 본다'
-    test: ThreadPoolTest.shutdownNowInterrupts
+    test: ThreadPoolTest.shutdownNowReturnsQueued
   - claim: 'execute의 예외는 UncaughtExceptionHandler로 가고, submit의 예외는 get을 불러야 ExecutionException으로 보인다'
     how: '스레드 팩토리로 처리기를 달아 비교한다'
-    test: ThreadPoolTest.exceptionsExecuteVsSubmit
+    test: ThreadPoolTest.executeVsSubmitExceptions
   - claim: '요청마다 만들고 끝내지 않은 풀은 스레드를 남긴다'
     how: '풀 10개를 만들어 작업 하나씩 넣은 뒤 살아 있는 스레드 수의 차이를 본다. 테스트 끝에 모두 끝낸다'
+    test: ThreadPoolTest.poolPerRequestLeaksThreads
   - claim: '병렬 스트림은 ForkJoinPool.commonPool의 스레드에서 돌고, 공용 풀의 크기는 코어 수보다 하나 적다(코어가 하나면 1)'
     how: '병렬 스트림 안에서 스레드 이름을 모으고 getParallelism을 남긴다'
+    test: ThreadPoolTest.parallelStreamUsesCommonPool
 sources:
   - '`ThreadPoolExecutor`의 작업 받는 규칙과 거절 정책: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html'
   - '`Executors`의 팩토리가 만드는 것: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html'

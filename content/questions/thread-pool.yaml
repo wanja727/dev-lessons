@@ -1,127 +1,233 @@
-# 스레드 풀과 ExecutorService 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 스레드 풀 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/thread-pool.yaml의 says).
+# 동작에 관한 정답은 verification의 threadpool/ThreadPoolTest, ThreadPoolOutputTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: thread-pool
-  title: 스레드 풀과 ExecutorService
-  unit: 동시성·분산
-  order: 6
+  title: 스레드 풀
+  unit: 운영체제와 동시성
+  order: 407
 concepts:
   - key: core
-    name: 스레드 풀과 ExecutorService
+    name: 스레드 풀
+coreQuestions:
+  - key: q1
+    text: "스레드를 매번 만들지 않고 스레드 풀을 쓰는 이유는 무엇인가요?"
+  - key: q2
+    text: "작업이 몰리면 스레드 풀은 어떤 순서로 받나요?"
+  - key: q3
+    text: "Executors가 만들어 주는 풀에는 어떤 함정이 있나요?"
+  - key: q4
+    text: "스레드 풀은 어떻게 끝내고, 작업의 예외는 어디로 가나요?"
 questions:
-  - key: q-c3c0be3a
+  # ── 질문 1 ──
+  - key: tp-reuse
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: 스레드 풀을 쓰는 이유와 ThreadPoolExecutor가 작업을 받는 순서를 설명해 보세요
-    explanation: |-
-      - 이유: 스레드 재사용(생성 비용), 동시 스레드 수와 대기 작업에 상한
-      - 순서: core보다 적으면 새 스레드 → 큐 → 큐가 가득 차면 max까지 → 거절 정책
-    checklist:
-      - 재사용과 상한 두 가지 이유를 말했다
-      - core까지는 새 스레드를 만든다고 말했다
-      - core가 차면 스레드보다 큐가 먼저라고 말했다
-      - 큐가 가득 차야 max까지 늘어난다고 말했다
-      - 거절 정책(AbortPolicy, CallerRunsPolicy)을 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
-  - key: q-3f21c752
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: newFixedThreadPool과 newCachedThreadPool의 내부 설정과 각각의 위험을 비교해 보세요
-    explanation: |-
-      - fixed: core = max, 무제한 큐 → 작업이 쌓여 메모리·지연 증가, 거절 없음
-      - cached: core 0, max 무제한, 크기 0 큐(SynchronousQueue) → 쉬는 스레드가 없으면 작업마다 새 스레드, 스레드 폭증
-      - 운영에서는 큐 크기와 거절 정책을 직접 정한다
-    checklist:
-      - fixed의 무제한 큐를 말했다
-      - 그 위험(메모리, 지연)을 말했다
-      - cached의 무제한 스레드와 크기 0 큐를 말했다
-      - 그 위험(스레드 폭증)을 말했다
-      - 대안(제한된 큐 + 거절 정책)을 말했다
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
-  - key: q-bb4a75e9
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: "@Async로 리포트를 만드는데 트래픽이 몰리자 리포트가 몇 분씩 늦게 나오고 메모리 사용량이 계속 오른다. 예상 원인과 개선 방법을 말해 보세요"
-    explanation: |-
-      - Spring Boot 기본 실행기는 core 8, 큐 무제한이라 max가 무시되고 작업이 큐에 쌓인다 → 대기 시간과 메모리 증가
-      - 개선: 리포트 전용 ThreadPoolTaskExecutor를 만들고 core/max/큐 크기/거절 정책을 정한다. 큐 길이·활성 스레드를 모니터링한다. 무거운 작업은 배치나 메시지 큐로 분리도 검토
-    checklist:
-      - 기본 실행기의 큐가 무제한이라고 말했다
-      - 그래서 스레드가 늘지 않고 작업이 쌓인다고 말했다
-      - 전용 실행기와 큐 크기·거절 정책을 말했다
-      - 모니터링(큐 길이 등)을 말했다
-      - 작업 분리(배치, 메시지 큐) 같은 다른 대안을 말했다
-    source: https://docs.spring.io/spring-boot/appendix/application-properties/index.html
-  - key: q-6838ebeb
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: core 2, max 4, 큐 크기 2인 풀에 오래 걸리는 작업 7개를 연달아 넣으면?
+    status: draft
+    difficulty: 1
+    body: 작업 20개를 Executors.newFixedThreadPool(2)에 넣고, 각 작업이 실행한 스레드의 이름을 모았어요. 이름은 몇 가지일까요?
     choices:
-      - 스레드 4개, 큐 3개
-      - 스레드 4개, 큐 2개, 7번째는 RejectedExecutionException
-      - 스레드 2개, 큐 5개
-      - 스레드 7개
+      - 20가지
+      - 2가지 이하
+      - 10가지
+      - 1가지뿐
     answer: "2"
     explanation: |-
-      - 1·2번째: core 스레드, 3·4번째: 큐, 5·6번째: 큐가 가득 차서 max까지 스레드 추가, 7번째: 거절(기본 AbortPolicy)
-      - 검증: ThreadPoolTest (coreQueueMaxReject)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
-  - key: q-48a982e3
+      **2가지 이하예요.** 풀은 스레드 2개를 만들어 두고 작업을 큐로 받아 다시 써요.
+
+      - 작업마다 스레드를 만들지 않아 비용을 아끼고 스레드 수가 끝없이 늘지 않아요
+      - 검증: ThreadPoolTest.reusesThreads
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  - key: tp-callable
     concept: core
-    type: ox
-    status: reviewed
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 읽지 않은 메일 수를 다른 스레드에서 세고, 그 숫자를 받아 화면에 쓰고 싶어요. 무엇으로 넘기는 게 맞을까요?
+    choices:
+      - Runnable을 execute로
+      - Callable을 submit으로, Future로 결과를 받는다
+      - Runnable을 run()으로 직접 부른다
+      - Thread를 새로 만들어 start()한다
+    answer: "2"
+    explanation: |-
+      **Callable을 submit해요.** Callable은 값을 돌려주고, submit은 그 결과를 받을 Future를 줘요.
+
+      - Runnable은 결과가 없어서 값을 돌려받을 수 없어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  # ── 질문 2 ──
+  - key: tp-fifth-task
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
     difficulty: 1
-    body: "\"newFixedThreadPool(4)는 작업이 몰리면 RejectedExecutionException을 던져 과부하를 막는다\""
+    body: 아래 풀에 끝나지 않는 작업을 하나씩 넣어요. 다섯째 작업을 넣은 직후 스레드 수와 큐의 길이는?
+    code: |-
+      var pool = new ThreadPoolExecutor(
+          2, 4,                // core, max
+          60, SECONDS,
+          new ArrayBlockingQueue<>(2));
+    choices:
+      - 스레드 2개, 큐 3개
+      - 스레드 3개, 큐 2개
+      - 스레드 4개, 큐 1개
+      - 스레드 5개, 큐 0개
+    answer: "2"
+    explanation: |-
+      **스레드 3개, 큐 2개예요.** core 2개가 찬 뒤 셋째와 넷째는 큐로 가고, 큐가 가득 찬 뒤에야 다섯째를 위해 스레드를 늘려요.
+
+      - 일곱째는 스레드도 큐도 가득이라 RejectedExecutionException이에요
+      - 검증: ThreadPoolOutputTest.predictExample
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
+  - key: tp-big-queue
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: core 4, max 20, 큐 1000칸인 ThreadPoolExecutor에 오래 걸리는 작업 500개를 한꺼번에 넣었어요. 스레드는 몇 개까지 늘어날까요?
+    choices:
+      - 20개
+      - 4개
+      - 500개
+      - 24개
+    answer: "2"
+    explanation: |-
+      **4개예요.** 큐가 먼저라서, 큐 1000칸이 차기 전에는 스레드가 core에서 늘지 않아요.
+
+      - 나머지 496개는 큐에서 기다려요
+      - 바쁘면 max까지 먼저 는다고 생각하기 쉬운데 반대예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html
+  # ── 질문 3 ──
+  - key: tp-fixed-queue
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Executors.newFixedThreadPool(2)에 끝나지 않는 작업 100개를 넣었어요. 스레드 수와 큐의 길이는?
+    choices:
+      - 스레드 100개, 큐 0개
+      - 스레드 2개, 큐 98개
+      - 스레드 2개, 98개는 거절
+      - 스레드 4개, 큐 96개
+    answer: "2"
+    explanation: |-
+      **스레드 2개, 큐 98개예요.** newFixedThreadPool의 큐는 크기 제한이 없는 LinkedBlockingQueue라 거절 없이 계속 쌓여요.
+
+      - 쌓인 작업이 힙을 채우고, 늦어지는 것을 알기 어려워요
+      - 검증: ThreadPoolTest.fixedPoolUnboundedQueue
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  - key: tp-cached-slow-api
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 외부 API가 느려져 응답이 30초씩 걸리는데, 호출을 newCachedThreadPool() 하나에 맡기고 있어요. 초당 100건이 들어오면 무엇이 계속 늘어날까요?
+    choices:
+      - 큐의 길이
+      - 스레드 수
+      - 거절된 작업 수
+      - 아무것도 늘지 않는다
+    answer: "2"
+    explanation: |-
+      **스레드 수예요.** newCachedThreadPool은 max가 사실상 끝이 없고 큐가 한 칸도 담지 않아서, 쉬는 스레드가 없으면 작업마다 새 스레드를 만들어요.
+
+      - 30초 동안 3000개 가까이 생길 수 있어요
+      - 검증: ThreadPoolTest.cachedPoolGrowsPerTask (붙잡힌 작업 50개 → 스레드 50개)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+  # ── 질문 4 ──
+  - key: tp-shutdown
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 오래 걸리는 작업 3개가 실행과 큐에 있을 때 pool.shutdown()을 불렀어요. 그 뒤 넣은 넷째 작업과 이미 받은 3개는 각각 어떻게 될까요?
+    choices:
+      - 넷째는 거절, 받은 3개는 끝까지 실행
+      - 넷째도 실행, 받은 3개도 실행
+      - 넷째는 거절, 받은 3개는 바로 멈춤
+      - 넷째는 큐에서 기다렸다 실행
+    answer: "1"
+    explanation: |-
+      **넷째는 거절되고 받은 3개는 끝까지 실행돼요.** shutdown은 새 작업만 막아요.
+
+      - 실행 중인 것을 인터럽트하고 큐의 것을 돌려받으려면 shutdownNow예요
+      - 검증: ThreadPoolTest.shutdownFinishesAcceptedTasks
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  - key: tp-submit-hidden
+    concept: core
+    coreQuestion: q4
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"pool.submit(() -> { throw new IllegalStateException(); })만 하고 get()을 부르지 않아도, 예외는 스레드의 예외 처리기를 거쳐 로그에 찍힌다\""
     answer: X
     explanation: |-
-      - 큐가 무제한(LinkedBlockingQueue)이라 거절되지 않고 큐에 계속 쌓인다
-      - 검증: ThreadPoolTest (fixedPoolUnboundedQueue)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
-  - key: q-f2b87f2d
-    concept: core
-    type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: pool.shutdown()을 부른 뒤 일어나는 일은?
-    choices:
-      - 실행 중인 작업을 즉시 인터럽트한다
-      - 큐에 남은 작업을 버리고 목록을 돌려준다
-      - 새 작업은 거절하고, 이미 받은 작업은 끝까지 처리한다
-      - 모든 작업이 끝날 때까지 호출한 스레드가 기다린다
-    answer: "3"
-    explanation: |-
-      - 1·2번은 shutdownNow(), 4번은 awaitTermination()이 하는 일이다. shutdown()은 기다리지 않고 바로 돌아온다
-      - 검증: ThreadPoolTest (shutdownFinishesAcceptedTasks, shutdownNowReturnsQueued)
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
-  - key: q-f37cb0b2
-    concept: core
-    type: line_pick
-    status: reviewed
-    difficulty: 2
-    body: "[코드 5-A] 리포트 생성이 가끔 실패하는데 로그에 아무것도 남지 않는다. 원인이 되는 줄은?"
-    code: |-
-      ExecutorService pool = Executors.newFixedThreadPool(4);
+      **틀렸어요.** submit은 예외를 Future에 잡아 둬서, get()을 부르지 않으면 어디에도 찍히지 않아요.
 
-      public void requestReport(Long id) {
-          pool.submit(() -> reportService.generate(id));
-          log.info("리포트 요청 접수: {}", id);
-      }
-    answer: "4"
-    explanation: |-
-      - submit은 작업의 예외를 Future 안에 보관하는데, 돌려받은 Future를 버려서 아무도 get()을 부르지 않는다. 예외가 조용히 사라진다
-      - 고치기: 작업 안에서 try-catch로 기록하거나, 결과가 필요 없으면 execute를 쓰고 UncaughtExceptionHandler로 기록
-      - 1번 줄(무제한 큐)은 다른 문제를 만들 수 있지만 "로그 없는 실패"의 원인은 아니다
-      - 검증: ThreadPoolTest (executeVsSubmitExceptions)
+      - execute로 넘긴 작업의 예외는 UncaughtExceptionHandler로 가서 찍혀요
+      - 검증: ThreadPoolTest.executeVsSubmitExceptions
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  - key: tp-per-request
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 컨트롤러 메서드를 요청마다 부르고, 요청이 1000번 들어왔어요. 서버의 스레드 수는 어떻게 될까요?
+    code: |-
+      @GetMapping("/report")
+      String report() throws Exception {
+        var pool = Executors
+            .newFixedThreadPool(4);
+        return pool.submit(this::build)
+            .get();
+      }
+    choices:
+      - 그대로다. 요청이 끝나면 풀도 사라진다
+      - 계속 늘어난다. 끝내지 않은 풀의 스레드가 남는다
+      - 4개로 고정된다
+      - 첫 요청 뒤로는 풀을 다시 쓴다
+    answer: "2"
+    explanation: |-
+      **계속 늘어나요.** 풀의 스레드는 데몬이 아니고 다음 작업을 기다리며 살아 있어요. shutdown하지 않은 풀이 요청마다 남아요.
+
+      - 풀은 빈으로 하나 만들어 주입받아 써요
+      - 검증: ThreadPoolTest.poolPerRequestLeaksThreads (요청 10번에 스레드 10개 넘게 늘어남)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html
+  # ── 네 질문을 하나로 ──
+  - key: tp-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스레드 풀이 작업을 받는 방식과 주의할 점을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **core만큼 스레드를 쓰고, 넘치면 큐, 큐가 차면 max까지, 그것도 차면 거절해요. 끝이 없는 큐와 스레드를 피해요.**
+
+      - **이유:** 스레드를 만드는 비용과 끝없이 느는 것을 막고 다시 쓴다
+      - **순서:** core → 큐 → max → 거절(AbortPolicy, CallerRunsPolicy 등). 큐가 먼저다
+      - **함정:** newFixedThreadPool은 끝없는 큐, newCachedThreadPool은 끝없는 스레드. 크기를 정한 큐를 준다
+      - **운영:** 빈으로 하나 두고 shutdown으로 끝낸다. submit의 예외는 get에서. 병렬 스트림은 공용 풀이다
+    checklist:
+      - 풀을 쓰는 이유(만드는 비용, 스레드 수 제한)를 말했다
+      - core, 큐, max, 거절의 순서를 말했다
+      - Executors 팩토리의 끝없는 큐나 스레드의 위험을 말했다
+      - 거절 정책이나 종료 방법을 말했다
+      - submit의 예외가 Future에 숨는 것이나 공용 풀 이야기를 했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html

@@ -1,4 +1,4 @@
-package lab.devlessons.concurrency;
+package lab.devlessons.threadpool;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -16,11 +16,12 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import lab.devlessons.support.CiOutput;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-/** 레슨 "스레드 풀과 ExecutorService"의 주장을 검증한다. */
+/** 레슨 "스레드 풀"(C7)의 주장을 검증한다. 붙잡아 둘 작업은 release 래치로 끝나지 않게 한다. */
 class ThreadPoolTest {
 
     private ExecutorService pool;
@@ -56,6 +57,8 @@ class ThreadPoolTest {
         }
 
         assertThat(names).hasSizeLessThanOrEqualTo(2);
+        CiOutput.record("thread-pool", "reuse", "작업 20개를 newFixedThreadPool(2)에 넣음\n실행한 스레드 → "
+                + new java.util.TreeSet<>(names));
     }
 
     @Test
@@ -95,6 +98,8 @@ class ThreadPoolTest {
 
         assertThat(executor.getPoolSize()).isEqualTo(2);
         assertThat(executor.getQueue()).hasSize(98);
+        CiOutput.record("thread-pool", "fixed", "newFixedThreadPool(2)에 붙잡힌 작업 100개\n스레드 → "
+                + executor.getPoolSize() + "개, 큐 → " + executor.getQueue().size() + "개");
     }
 
     @Test
@@ -108,6 +113,8 @@ class ThreadPoolTest {
         }
 
         assertThat(executor.getPoolSize()).isEqualTo(50);
+        CiOutput.record("thread-pool", "cached", "newCachedThreadPool()에 붙잡힌 작업 50개\n스레드 → "
+                + executor.getPoolSize() + "개");
     }
 
     @Test
@@ -123,6 +130,8 @@ class ThreadPoolTest {
         executor.execute(() -> ranOn.set(Thread.currentThread().getName()));
 
         assertThat(ranOn.get()).isEqualTo(Thread.currentThread().getName());
+        CiOutput.record("thread-pool", "caller-runs", "core 1, max 1, 큐 1칸이 찬 풀에 셋째 작업\n실행한 스레드 → "
+                + ranOn.get() + " (작업을 넣은 스레드)");
     }
 
     @Test
@@ -194,6 +203,44 @@ class ThreadPoolTest {
         });
         assertThat(handled.await(5, TimeUnit.SECONDS)).isTrue();
         assertThat(uncaught.get()).hasMessage("execute");
+        CiOutput.record("thread-pool", "exceptions", "submit의 예외 → get()을 부르기 전까지 아무 데도 없음, get()에서 ExecutionException\n"
+                + "execute의 예외 → UncaughtExceptionHandler가 받음: " + uncaught.get());
+    }
+
+    @Test
+    @DisplayName("요청마다 만들고 끝내지 않은 풀은 스레드를 남긴다")
+    void poolPerRequestLeaksThreads() throws Exception {
+        int before = Thread.activeCount();
+        List<ExecutorService> pools = new java.util.ArrayList<>();
+        try {
+            for (int i = 0; i < 10; i++) {
+                ExecutorService perRequest = Executors.newFixedThreadPool(4);
+                pools.add(perRequest);
+                perRequest.submit(() -> "보고서").get();
+            }
+            int after = Thread.activeCount();
+            assertThat(after - before).isGreaterThanOrEqualTo(10);
+            CiOutput.record("thread-pool", "per-request", "요청 10번, 요청마다 newFixedThreadPool(4)를 만들고 끝내지 않음\n"
+                    + "살아 있는 스레드 → " + before + "개에서 " + after + "개로");
+        } finally {
+            pools.forEach(ExecutorService::shutdownNow);
+        }
+    }
+
+    @Test
+    @DisplayName("병렬 스트림은 ForkJoinPool.commonPool의 스레드에서 돌고, 공용 풀의 크기는 코어 수보다 하나 적다")
+    void parallelStreamUsesCommonPool() {
+        Set<String> names = ConcurrentHashMap.newKeySet();
+        java.util.stream.IntStream.range(0, 10_000).parallel()
+                .forEach(i -> names.add(Thread.currentThread().getName().replaceAll("[0-9]+$", "N")));
+        int cores = Runtime.getRuntime().availableProcessors();
+        int parallelism = java.util.concurrent.ForkJoinPool.commonPool().getParallelism();
+        assertThat(parallelism).isEqualTo(Math.max(1, cores - 1));
+        if (cores > 1) {
+            assertThat(names).contains("ForkJoinPool.commonPool-worker-N");
+        }
+        CiOutput.record("thread-pool", "parallel", "코어 " + cores + "개\ncommonPool().getParallelism() → " + parallelism
+                + "\n병렬 스트림을 실행한 스레드 → " + new java.util.TreeSet<>(names));
     }
 
     private static void sleep(long millis) {
