@@ -121,10 +121,11 @@ codes:
     COPY build/libs/shop.jar app.jar
     ENTRYPOINT ["java", "-jar", "app.jar"]
   versionLog: |-
-    Exception in thread "main" java.lang.Unsupported⤷
-    ClassVersionError: shop/OrderApp has been ⤶
-    compiled by a more recent version of the Java ⤶
-    Runtime (class file version [[65.0]]), this ⤶
+    Exception in thread "main" java.lang.⤷
+    UnsupportedClassVersionError: shop/OrderApp ⤶
+    has been compiled by a more recent ⤶
+    version of the Java Runtime ⤶
+    (class file version [[65.0]]), this ⤶
     version of the Java Runtime only recognizes ⤶
     class file versions up to [[61.0]]
 links:

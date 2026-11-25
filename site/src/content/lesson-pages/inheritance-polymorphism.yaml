@@ -130,9 +130,11 @@ codes:
     }
 
     @Component
-    class SmsNotifier implements Notifier { ... }
+    class SmsNotifier
+        implements Notifier { ... }
     @Component
-    class EmailNotifier implements Notifier { ... }
+    class EmailNotifier
+        implements Notifier { ... }
 
     @Service
     class OrderService {

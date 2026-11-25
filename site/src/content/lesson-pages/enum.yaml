@@ -96,7 +96,9 @@ codes:
         this.cancellable = cancellable;
       }
 
-      boolean canCancel() { return cancellable; }
+      boolean canCancel() {
+        return cancellable;
+      }
     }
   payMethod: |-
     enum PayMethod {
@@ -112,7 +114,8 @@ codes:
         }
       };
 
-      [[abstract]] BigDecimal fee(BigDecimal amount);
+      [[abstract]] BigDecimal fee(
+          BigDecimal amount);
     }
   richRun: |-
     PAID.canCancel();

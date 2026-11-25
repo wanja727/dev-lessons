@@ -87,7 +87,8 @@ codes:
   money: |-
     record Money(long amount, String currency) {
       Money plus(long more) {
-        return [[new Money(amount + more, currency)]];
+        return [[new Money(amount + more,]]
+            currency);
       }
     }
 
@@ -98,7 +99,8 @@ codes:
     final int[] scores = {1, 2, 3};
     scores[0] = 9;
 
-    final List<String> items = new ArrayList<>();
+    final List<String> items =
+        new ArrayList<>();
     items.add("A");
     items = List.of("A");
   copied: |-
@@ -121,7 +123,8 @@ codes:
       }
     }
   recordRun: |-
-    record Money(long amount, String currency) {}
+    record Money(long amount,
+        String currency) {}
 
     Money a = new Money(1000, "KRW");
     Money b = new Money(1000, "KRW");
@@ -226,7 +229,7 @@ questions:
       - p: '금액을 더하고 싶으면 자기를 고치지 않고 **합계를 가진 새 객체를 돌려줘요.**'
       - code: money
         notes:
-          - mark: new Money(amount + more, currency)
+          - mark: new Money(amount + more,
             as: code
             text: '`a`의 필드는 건드리지 않아요. 새 객체를 만들어 돌려줘요.'
       - p: 'String 레슨에서 본 `toUpperCase`가 이렇게 동작했어요. 자바에는 이런 불변 클래스가 많아요. `String`, `Integer` 같은 래퍼, 날짜의 `LocalDate`, 돈의 `BigDecimal`이 그래요. `date.plusDays(1);`만 쓰고 결과를 받지 않으면 아무 일도 일어나지 않는 이유가 이거예요.'
