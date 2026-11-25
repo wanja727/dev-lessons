@@ -1,0 +1,7 @@
+payment:
+  pg:
+    url: https://pg.example.com
+    timeout: 2s
+    secret: ${PG_SECRET:none}
+mail:
+  retryCount: 5

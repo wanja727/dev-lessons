@@ -1,0 +1,233 @@
+# 설정과 프로파일 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/config-profiles.yaml의 says).
+# 동작에 관한 정답은 verification의 ConfigProfilesTest로 확인했다 (스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: config-profiles
+  title: 설정과 프로파일
+  unit: 스프링
+  order: 705
+concepts:
+  - key: core
+    name: 설정과 프로파일
+coreQuestions:
+  - key: q1
+    text: "스프링 부트는 설정 값을 어디서 읽나요?"
+  - key: q2
+    text: "같은 키가 여러 곳에 있으면 무엇이 이기나요?"
+  - key: q3
+    text: "환경마다 다른 설정은 어떻게 나누나요?"
+  - key: q4
+    text: "설정 값을 코드에서 안전하게 받으려면 어떻게 하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: cp-env-name
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 설정 키 payment.pg.timeout을 운영체제 환경 변수로 넣으려고 해요. 스프링 부트가 이 키로 읽게 하려면 환경 변수 이름을 무엇으로 적을까요?
+    choices:
+      - payment.pg.timeout
+      - PAYMENT_PG_TIMEOUT
+      - PaymentPgTimeout
+      - payment-pg-timeout
+    answer: "2"
+    explanation: |-
+      **PAYMENT_PG_TIMEOUT이에요.** 환경 변수 이름에는 점을 쓰기 어려워서 점을 밑줄로 바꾸고 대문자로 적어요. 스프링이 payment.pg.timeout으로 맞춰 읽어요.
+
+      - 이것을 느슨한 바인딩이라고 해요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  - key: cp-same-jar
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 같은 jar를 개발 서버와 운영 서버에 올리고 DB 주소만 다르게 하고 싶어요. jar를 다시 빌드하지 않는 방법으로 알맞은 것은 무엇일까요?
+    choices:
+      - 서버마다 application.yml을 고쳐 다시 빌드한다
+      - 서버마다 환경 변수 SPRING_DATASOURCE_URL을 다르게 넣고 띄운다
+      - 코드에서 서버 이름을 보고 주소를 고르는 if문을 쓴다
+      - 불가능하다. 설정은 빌드할 때 굳는다
+    answer: "2"
+    explanation: |-
+      **서버마다 환경 변수를 다르게 넣어요.** 스프링 부트는 환경 변수도 설정 값으로 읽어 Environment에 모으고, 코드는 출처를 모른 채 키 이름으로 꺼내요.
+
+      - 실행 인자 --spring.datasource.url=...로 넣어도 돼요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  # ── 질문 2 ──
+  - key: cp-no-arg
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 'payment.pg.url이 application.yml(pg.example.com), application-local.yml(localhost:9000), 환경 변수 PAYMENT_PG_URL(env.example.com)에 있어요. spring.profiles.active=local로 띄우고 실행 인자로는 url을 주지 않았어요. 앱이 읽는 값은 무엇일까요?'
+    choices:
+      - pg.example.com
+      - localhost:9000
+      - env.example.com
+      - 앱이 뜨지 않는다. 값이 셋이다
+    answer: "3"
+    explanation: |-
+      **env.example.com이에요.** 환경 변수가 프로파일 파일과 기본 파일을 이겨요.
+
+      - 순서는 실행 인자, 시스템 속성, 환경 변수, 프로파일 파일, 기본 파일이에요
+      - 실행 인자로 주었다면 그 값이 이겼을 거예요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  - key: cp-per-key
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 'application.yml에 server.port: 8080과 logging.level.root: INFO가 있고, java -jar app.jar --server.port=9090으로 띄웠어요. 포트와 로그 레벨은 각각 무엇일까요?'
+    choices:
+      - 9090, INFO
+      - 9090, 로그 레벨은 스프링의 기본값
+      - 8080, INFO
+      - 9090, 설정 파일 전체가 무시되어 로그가 꺼진다
+    answer: "1"
+    explanation: |-
+      **9090, INFO예요.** 이기는 규칙은 키마다 따로 적용돼요. 포트는 실행 인자가 이기고, 로그 레벨은 실행 인자에 없으니 파일 값이 남아요.
+
+      - 그래서 파일에 기본값을 두고 필요한 것만 밖에서 덮어써요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  # ── 질문 3 ──
+  - key: cp-profile-file
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: application-prod.yml에만 payment.pg.url이 운영 주소로 적혀 있고, application.yml에는 테스트 주소가 있어요. 프로파일을 켜지 않고 앱을 띄우면 어느 주소를 쓸까요?
+    choices:
+      - 운영 주소. prod 파일이 있으면 읽는다
+      - 테스트 주소. 프로파일 파일은 그 프로파일이 켜졌을 때만 읽는다
+      - 앱이 뜨지 않는다
+      - 둘 중 나중에 만든 파일의 주소
+    answer: "2"
+    explanation: |-
+      **테스트 주소예요.** application-prod.yml은 spring.profiles.active=prod일 때만 읽어요.
+
+      - 운영 서버에서는 보통 환경 변수 SPRING_PROFILES_ACTIVE=prod로 켜요
+    source: https://docs.spring.io/spring-boot/reference/features/profiles.html
+  - key: cp-profile-bean
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 두 메일 발송 빈이 있어요. 프로파일을 아무것도 켜지 않고 띄우면 MailSender 타입의 빈은 무엇이 될까요?
+    code: |-
+      @Bean
+      @Profile("prod")
+      MailSender smtpMailSender() {
+        return new SmtpMailSender();
+      }
+
+      @Bean
+      @Profile("!prod")
+      MailSender logMailSender() {
+        return new LogMailSender();
+      }
+    choices:
+      - SmtpMailSender
+      - LogMailSender
+      - 둘 다 빈이 되어 앱이 뜨지 않는다
+      - 둘 다 빈이 되지 않는다
+    answer: "2"
+    explanation: |-
+      **LogMailSender예요.** prod가 켜지지 않았으니 @Profile("prod") 빈은 만들지 않고, @Profile("!prod") 빈만 만들어요.
+
+      - 둘 가운데 하나만 빈이 되어 같은 타입이 둘이 되지 않아요
+    source: https://docs.spring.io/spring-boot/reference/features/profiles.html
+  # ── 질문 4 ──
+  - key: cp-duration-fail
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: '@ConfigurationProperties("payment.pg") record PgProperties(String url, Duration timeout)를 쓰는데, 설정 파일에 payment.pg.timeout: 2초라고 적었어요. 앱은 어떻게 될까요?'
+    choices:
+      - 뜨고 timeout은 null이다
+      - 뜨고 timeout은 2초다
+      - 시작할 때 Duration으로 바꾸지 못해 뜨지 않는다
+      - 뜨고 timeout을 처음 쓸 때 예외가 난다
+    answer: "3"
+    explanation: |-
+      **뜨지 않아요.** 2초는 Duration으로 바꿀 수 없어서 바인딩이 실패하고, 어느 키가 왜 틀렸는지 알려 줘요.
+
+      - 2s처럼 적으면 Duration 2초로 바뀌어요
+      - 잘못된 설정을 요청 처리 중이 아니라 시작할 때 알 수 있어요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  - key: cp-value-relaxed
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 3
+    body: '@Value("${mail.retry-count:3}") int retry로 받는데, 설정 파일에는 mail.retryCount: 5라고 카멜 표기로 적었어요. retry에 들어가는 값은 무엇일까요?'
+    choices:
+      - "3. 이름이 달라 기본값이 들어간다"
+      - "5. 느슨한 바인딩으로 같은 키로 본다"
+      - 0
+      - 앱이 뜨지 않는다
+    answer: "2"
+    explanation: |-
+      **5예요.** @Value에 소문자와 하이픈 모양(mail.retry-count)으로 적으면 스프링 부트가 retryCount, RETRY_COUNT 같은 다른 표기도 같은 키로 맞춰 읽어요.
+
+      - 스프링 부트 문서도 @Value에는 이 모양으로 적으라고 권해요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  - key: cp-value-typo
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: '설정 파일에는 payment.pg.timeout: 2s가 있어요. 아래 코드로 받은 timeout은 얼마일까요?'
+    code: |-
+      @Value("${payment.pg.timout:3s}")
+      Duration timeout;
+    choices:
+      - 2초
+      - 3초
+      - "null"
+      - 앱이 뜨지 않는다
+    answer: "2"
+    explanation: |-
+      **3초예요.** 키 이름을 timout으로 잘못 적어 값을 찾지 못하고, 기본값 3s가 조용히 들어가요.
+
+      - 기본값이 없었다면 "Could not resolve placeholder"로 시작할 때 실패해 바로 알았을 거예요
+      - 설정 묶음은 @ConfigurationProperties record로 받으면 이런 실수가 줄어요
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
+  # ── 전체 ──
+  - key: cp-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스프링 부트에서 설정 값은 어떻게 읽히고, 환경마다 다른 값은 어떻게 다루나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **여러 출처의 값을 Environment에 모으고, 밖에서 넣은 값이 이기며, 환경마다 다른 값은 프로파일로 나눠요.**
+
+      - **출처:** application.yml, 프로파일 파일, 환경 변수, 시스템 속성, 실행 인자를 Environment에 모은다
+      - **순서:** 실행 인자, 시스템 속성, 환경 변수, 프로파일 파일, 기본 파일. 키마다 따로 이긴다
+      - **프로파일:** spring.profiles.active로 켜면 그 파일이 덮어쓰고, @Profile로 빈도 고른다
+      - **안전하게:** @ConfigurationProperties record로 받아 시작할 때 타입과 검증을 확인한다. 비밀 값은 환경 변수로 넣는다
+    checklist:
+      - 설정 값이 여러 출처에서 와서 Environment에 모인다고 말했다
+      - 실행 인자와 환경 변수가 파일을 이긴다는 순서를 말했다
+      - 프로파일로 환경마다 다른 파일이나 빈을 고른다고 말했다
+      - '@ConfigurationProperties나 비밀 값을 밖에서 넣는 것을 말했다'
+    source: https://docs.spring.io/spring-boot/reference/features/external-config.html
