@@ -1,8 +1,9 @@
-# String (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# String
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/string.yaml에 있다.
 title: String
+description: String이 불변이라는 것과 그렇게 만든 이유, 리터럴이 저장되는 문자열 상수 풀, 문자열을 ==로 비교하면 틀리는 때, 이어 붙일 때 조심할 것. 네 가지 질문에 스스로 답할 수 있게, 주문 상태 "PAID"를 여러 방법으로 만들어 비교하며 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 20
 roadmap: J4
 type: 자바 실행
 prerequisites:
@@ -59,27 +60,96 @@ codes:
     System.out.println(a == b);
     System.out.println(a == c);
     System.out.println(a.equals(c));
-  runtime: |-
-    String half = "PA";
-    String d = half + "ID";
-    String e = "PA" + "ID";
+  immutableRun: |-
+    String s = "paid";
+    [[s.toUpperCase()]];
+    print(s);
 
-    System.out.println(a == d);
-    System.out.println(a == e);
+    String s = "A";
+    String t = s;
+    s = s + "B";
+    print(s);
+    print(t);
+  internRun: |-
+    String a = "PAID";
+    String c = new String("PAID");
+    print(a == [[c.intern()]]);
+  runtime: |-
+    String a = "PAID";
+    String half = "PA";
+    final String finalHalf = "PA";
+
+    String d = [[half + "ID"]];
+    String e = "PA" + "ID";
+    String f = finalHalf + "ID";
   loop: |-
     String csv = "";
     for (String id : ids) {
-      csv += id + ",";
+      [[csv += id + ","]];
     }
   builder: |-
     StringBuilder sb = new StringBuilder();
     for (String id : ids) {
-      sb.append(id).append(',');
+      sb.[[append(id)]].append(',');
     }
     String csv = sb.toString();
+  loopRun: |-
+    // 같은 ids로 두 메서드를 돌려
+    // 걸린 시간을 잰다
+    withPlus(ids);     // 코드 loop
+    withBuilder(ids);  // 코드 builder
+  controllerBad: |-
+    @GetMapping("/orders")
+    List<Order> orders(
+        @RequestParam String status) {
+      if (status [[==]] "PAID") {
+        return orderService.paid();
+      }
+      return List.of();
+    }
+  controllerFixed: |-
+    if ([["PAID".equals(status)]]) {
+      return orderService.paid();
+    }
+  requestRun: |-
+    // 요청 본문의 바이트에서 읽은 "PAID"
+    String status = new String(bytes, UTF_8);
+  logBad: |-
+    log.debug([["주문 " + order]]);
+  logFixed: |-
+    log.debug("주문 {}", [[order]]);
+  logRun: |-
+    // 로그 수준을 INFO로 두고
+    log.debug("주문 " + order);
+    log.debug("주문 {}", order);
+  blank: |-
+    "".isEmpty()      // true
+    "  ".isEmpty()    // false
+    "  ".isBlank()    // true
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/string/StringTest.java
+  jlsLiteral: https://docs.oracle.com/javase/specs/jls/se21/html/jls-3.html#jls-3.10.5
+  jlsConstant: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.29
+  stringApi: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html
+  jep280: https://openjdk.org/jeps/280
+  slf4j: https://www.slf4j.org/faq.html#logging_performance
 predict:
-  text: '코드 predict를 실행하면 세 줄에 무엇이 출력될까요? 보기: true, true, true / true, false, true / false, false, true / false, false, false.'
-  answer: 'true, false, true. 같은 리터럴 `"PAID"`는 풀에 있는 같은 객체이고, `new String`은 새 객체를 만든다. `equals`는 글자를 비교한다. 질문 2에서 밝힌다.'
+  title: 세 문자열은 서로 같을까요?
+  text: '같은 글자 `"PAID"`를 세 가지로 만들어 비교해요. 세 줄에 무엇이 출력될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: ttt
+      label: true, true, true
+    - value: tft
+      label: true, false, true
+    - value: fft
+      label: false, false, true
+    - value: fff
+      label: false, false, false
+  answer: tft
+  storageKey: str-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 'String이 불변이라는 것은 무슨 뜻이고, 왜 그렇게 만들었나요?'
@@ -97,6 +167,36 @@ questions:
     asks:
       - '본문의 예시: `String s = "paid"; s.toUpperCase(); System.out.println(s);`의 출력은 무엇인가 (paid)'
       - '옮긴 상황: `String s = "A"; String t = s; s = s + "B";`를 실행한 뒤 `t`의 값은 무엇인가 ("A". `s`가 새 객체를 가리키게 됐을 뿐 원래 객체는 그대로다)'
+    body:
+      - p: '`String`에는 대문자로 바꾸고, 앞뒤 공백을 지우고, 일부를 잘라 내는 메서드가 많아요. 그런데 이 메서드들은 **원래 문자열을 고치지 않아요.** 두 코드의 출력을 예상해 보고 열어 보세요.'
+      - ci:
+          key: immutable
+          label: 실제 출력 보기
+          source: StringTest.immutable
+          code: immutableRun
+      - ul:
+          - '**`s.toUpperCase()`는 `s`를 바꾸지 않았어요.** 대문자로 된 새 문자열을 만들어 돌려줬는데, 받지 않아서 버려졌어요. `s = s.toUpperCase();`처럼 받아야 해요.'
+          - '**`s = s + "B"`도 객체를 고친 게 아니에요.** "AB"라는 새 문자열을 만들고 변수 `s`가 그것을 가리키게 했어요. 같은 객체를 가리키던 `t`는 원래의 "A"를 그대로 가리켜요.'
+      - p: '`concat`, `replace`, `trim`, `substring`도 모두 새 객체를 돌려줘요. `String`에는 안의 글자를 고치는 메서드가 하나도 없어요. 한 번 만든 뒤 상태가 바뀌지 않는 객체를 **불변 객체**라고 해요.'
+      - h3: 왜 불변으로 만들었나요
+      - ul:
+          - '**같은 객체를 안심하고 함께 써요.** 값과 참조 레슨에서 본 대로 참조형은 넘기면 같은 객체를 가리켜요. 문자열이 바뀔 수 있다면 한 메서드가 고친 글자가 그 문자열을 든 모든 곳에 보일 거예요. 불변이라 그럴 일이 없어요. 다음 질문의 문자열 상수 풀도 이 덕분에 가능해요.'
+          - '**맵의 키로 안전해요.** `HashMap`은 키를 넣을 때의 `hashCode`로 자리를 정해요. 넣은 뒤 키가 바뀌면 찾지 못하는데(equals와 hashCode 레슨), `String`은 바뀌지 않아요. 그래서 `hashCode`도 한 번만 계산해 객체 안에 저장해 둬요.'
+          - '**여러 스레드가 동시에 읽어도 안전해요.** 파일 경로나 접속 주소처럼 확인한 뒤에 쓰는 값이 그 사이에 바뀌지도 않아요.'
+      - more:
+          summary: '더 알아보기: length()가 세는 것'
+          body:
+            - p: '`length()`는 글자 수가 아니라 UTF-16이라는 방식으로 셀 때의 단위 수예요. 한글 한 글자는 1이지만, 이모지 하나는 2로 세어지기도 해요. 글자를 바이트로 바꾸는 `getBytes()`는 자바 18부터 기본으로 UTF-8을 써요.'
+      - quiz:
+          q: '`String s = "A"; String t = s; s = s + "B";`를 실행한 뒤 `t`는?'
+          options:
+            - '"AB"'
+            - '"A"'
+            - '"B"'
+          answer: 2
+          explain: '`s + "B"`는 새 문자열을 만들고 `s`가 그것을 가리키게 해요. `t`는 원래 객체 "A"를 그대로 가리켜요.'
+      - next: '불변이라 같은 객체를 함께 써도 된다고 했어요. 그렇다면 자바는 같은 글자의 문자열을 실제로 하나만 두고 함께 쓸까요?'
+    recall: '한 번 만든 `String` 객체의 글자는 바뀌지 않아요. `toUpperCase`, `+` 같은 것은 모두 새 객체를 만들어 돌려주니 결과를 받아야 해요. 불변이라서 여러 곳이 같은 객체를 함께 써도 안전하고, `HashMap`의 키로 쓰기 좋고, 여러 스레드가 동시에 읽어도 돼요.'
   - id: q2
     title: 문자열 리터럴은 어디에 저장되나요?
     conclusion:
@@ -115,6 +215,76 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 `c`로 `a == c.intern()`을 실행하면 결과는 무엇인가 (true)'
       - '옮긴 상황: 클래스 `A`에 `static String x = "KRW";`가, 클래스 `B`에 `static String y = "KRW";`가 있다. `A.x == B.y`의 결과는 무엇인가 (true. 클래스가 달라도 같은 리터럴은 풀의 같은 객체다)'
+    body:
+      - p: '코드에 `"PAID"`처럼 따옴표로 직접 쓴 문자열을 **리터럴**이라고 해요. JVM은 리터럴을 **문자열 상수 풀**이라는 곳에 글자마다 하나씩만 둬요. 코드 여러 곳에, 다른 클래스에 `"PAID"`를 써도 모두 풀에 있는 그 객체 하나를 가리켜요.'
+      - p: '처음 예측의 답은 **true, false, true**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: StringTest.predict
+          code: predict
+      - p: '아래에서 한 줄씩 넘기며 세 변수가 어디를 가리키는지 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 변수, state: dim, text: 아직 없음}
+              - {label: 객체, state: dim, text: 아직 없음}
+          scenarios:
+            default:
+              - log: 'String a = "PAID";'
+                duo:
+                  - label: 변수
+                    rows: [{k: a, v: '→ 풀의 "PAID"', mark: changed}]
+                  - label: 객체
+                    rows: [{k: '풀', v: '"PAID"', mark: changed}]
+              - log: 'String b = "PAID";  (같은 리터럴)'
+                duo:
+                  - label: 변수
+                    rows: [{k: a, v: '→ 풀의 "PAID"'}, {k: b, v: '→ 풀의 "PAID"', mark: changed}]
+                  - label: 객체
+                    rows: [{k: '풀', v: '"PAID"'}]
+              - log: 'String c = new String("PAID");'
+                duo:
+                  - label: 변수
+                    rows: [{k: a, v: '→ 풀의 "PAID"'}, {k: b, v: '→ 풀의 "PAID"'}, {k: c, v: '→ 새 객체', mark: changed}]
+                  - label: 객체
+                    rows: [{k: '풀', v: '"PAID"'}, {k: 풀 밖, v: '"PAID"', mark: changed}]
+              - log: 'a == b → true,  a == c → false,  a.equals(c) → true'
+                duo:
+                  - label: 변수
+                    rows: [{k: a, v: '→ 풀의 "PAID"'}, {k: b, v: '→ 풀의 "PAID"'}, {k: c, v: '→ 새 객체', mark: bad}]
+                  - label: 객체
+                    rows: [{k: '풀', v: '"PAID"'}, {k: 풀 밖, v: '"PAID"'}]
+              - log: 'c.intern() → 풀의 "PAID"를 돌려줌.  a == c.intern() → true'
+                duo:
+                  - label: 변수
+                    rows: [{k: a, v: '→ 풀의 "PAID"'}, {k: c.intern(), v: '→ 풀의 "PAID"', mark: changed}]
+                  - label: 객체
+                    rows: [{k: '풀', v: '"PAID"'}, {k: 풀 밖, v: '"PAID"'}]
+                verdict: '같은 리터럴은 풀의 객체 하나를 가리켜서 ==가 true예요. new는 언제나 새 객체를 만들어서 ==가 false예요. 글자는 같으니 equals는 true예요.'
+      - ul:
+          - '**`a == b`는 true예요.** 둘 다 풀에 있는 같은 객체를 가리켜요.'
+          - '**`a == c`는 false예요.** `new`는 풀과 상관없이 언제나 새 객체를 만들어요.'
+          - '**`a.equals(c)`는 true예요.** 글자가 같아요.'
+      - p: '같은 글자를 객체 하나로 모아도 되는 것은 **질문 1의 불변 덕분**이에요. 누가 풀의 `"PAID"`를 고칠 수 있다면 프로그램의 모든 `"PAID"`가 바뀌어 버릴 거예요.'
+      - ci:
+          key: intern
+          label: intern의 실제 결과 보기
+          source: StringTest.predict
+          code: internRun
+      - p: '`intern()`은 풀에 있는 같은 글자의 객체를 찾아 돌려줘요. 실무 코드에서 직접 부를 일은 드물어요. `new String("PAID")`도 쓸 이유가 없어요. 이 레슨에서는 풀에 없는 문자열을 일부러 만들려고 썼어요.'
+      - quiz:
+          q: '클래스 `A`에 `static String x = "KRW";`, 클래스 `B`에 `static String y = "KRW";`가 있어요. `A.x == B.y`는?'
+          options:
+            - 'true'
+            - 'false'
+            - 컴파일 오류
+          answer: 1
+          explain: '클래스가 달라도 같은 리터럴은 문자열 상수 풀의 같은 객체를 가리켜요.'
+      - next: '리터럴끼리는 `==`가 true였어요. 그러면 문자열을 `==`로 비교해도 되는 걸까요? 언제 틀릴까요?'
+    recall: '리터럴은 문자열 상수 풀에 글자마다 하나만 저장되고, 같은 내용의 리터럴은 클래스가 달라도 모두 그 객체를 가리켜요. 그래서 리터럴끼리의 `==`는 true예요. `new String`은 풀과 상관없이 새 객체를 만들어서 `==`가 false예요. 같은 객체를 함께 써도 되는 것은 `String`이 불변이기 때문이에요.'
   - id: q3
     title: '그러면 문자열을 ==로 비교하면 언제 틀리나요?'
     conclusion:
@@ -130,6 +300,35 @@ questions:
       - '본문의 예시: 코드 runtime의 두 줄은 각각 무엇을 출력하나. 조건: `a`는 코드 predict의 리터럴 `"PAID"`이고 `half`는 `final`이 아니다 (false와 true)'
       - '옮긴 상황: `String a = "PAID"; String f = "paid".toUpperCase();`에서 `a == f`와 `a.equals(f)`의 결과는 무엇인가 (false와 true)'
       - '실무 구역: 컨트롤러가 `@RequestParam String status`로 받은 값으로 `if (status == "PAID")`를 실행한다. 요청은 `?status=PAID`다. 이 조건의 결과는 무엇인가 (false. 요청에서 읽어 만든 문자열은 풀의 객체가 아니다)'
+    body:
+      - p: '풀에 들어가는 것은 **컴파일할 때 이미 정해진 문자열**뿐이에요. 실행하는 동안 새로 만들어진 문자열은 풀에 있지 않은 새 객체예요. 네 가지를 비교해 봤어요.'
+      - ci:
+          key: runtime
+          label: 실제 출력 보기
+          source: StringTest.runtimeConcat
+          code: runtime
+      - ul:
+          - '**`half + "ID"`는 false예요.** 변수 `half`가 끼어 있어서 실행할 때 이어 붙여요. 그때 새 객체가 만들어져요.'
+          - '**`"PA" + "ID"`는 true예요.** 리터럴끼리라 컴파일러가 미리 `"PAID"`로 계산해서 클래스 파일에 적어 둬요. 풀의 객체가 돼요.'
+          - '**`final` 변수를 이어 붙인 것도 true예요.** 값이 바뀌지 않는 `final` 변수라서 컴파일러가 상수로 계산해요.'
+      - p: '겉보기는 거의 같은데 결과가 갈려요. 그래서 문자열의 `==`는 **믿을 수 없어요.** 실행 중에 만들어지는 문자열은 이것 말고도 많아요. 파일, 네트워크, DB에서 읽은 값, `substring`과 `toUpperCase`의 결과, `String.valueOf(10)`이 모두 그래요.'
+      - p: '도입부의 사고가 이거예요. 테스트는 `"PAID"` 리터럴을 넘겨서 `==`가 우연히 true였고, 운영에서는 요청 본문에서 읽어 만든 문자열이 들어왔어요.'
+      - ci:
+          key: request
+          label: 요청에서 읽은 문자열의 실제 비교 보기
+          source: StringTest.readAtRuntime
+          code: requestRun
+      - p: '문자열은 **`equals`로 비교해요.** 한쪽이 null일 수 있으면 `"PAID".equals(status)`처럼 리터럴 쪽에서 불러요(값과 참조 레슨). 대소문자를 무시하려면 `equalsIgnoreCase`를 써요.'
+      - quiz:
+          q: '`String a = "PAID"; String f = "paid".toUpperCase();`에서 `a == f`와 `a.equals(f)`는?'
+          options:
+            - true와 true
+            - false와 true
+            - false와 false
+          answer: 2
+          explain: '`toUpperCase`의 결과는 실행 중에 만들어진 새 객체라 풀의 `"PAID"`와 다른 객체예요. 글자는 같아서 `equals`는 true예요.'
+      - next: '실행 중에 문자열을 만드는 대표적인 일이 이어 붙이기예요. 이어 붙일 때는 무엇을 조심해야 할까요?'
+    recall: '실행 중에 만들어진 문자열은 풀의 객체가 아니라서 글자가 같아도 `==`가 false예요. 변수를 이어 붙인 값, 요청이나 DB에서 읽은 값, `toUpperCase`의 결과가 그래요. 리터럴끼리 이어 붙인 것처럼 컴파일할 때 정해지는 것만 풀에 들어가요. 문자열은 `equals`로, null일 수 있으면 리터럴 쪽에서 비교해요.'
   - id: q4
     title: 문자열을 이어 붙일 때 무엇을 조심해야 하나요?
     conclusion:
@@ -144,30 +343,124 @@ questions:
     asks:
       - '본문의 예시: `ids`에 원소가 1000개 있을 때 코드 loop가 도는 동안 `csv`에 대입되는 `String` 객체는 몇 번 새로 만들어지나 (1000번. 돌 때마다 하나)'
       - '옮긴 상황: `StringBuilder sb = new StringBuilder("A"); StringBuilder sb2 = sb; sb.append("B");`를 실행한 뒤 `sb2.toString()`은 무엇인가 ("AB". `StringBuilder`는 같은 객체를 고친다. 질문 1의 `String`과 반대다)'
+    body:
+      - p: '주문 번호 목록을 쉼표로 이어 CSV 한 줄을 만들어요. 가장 먼저 떠오르는 코드는 이거예요.'
+      - code: loop
+        notes:
+          - mark: csv += id + ","
+            as: code
+            text: '`String`은 불변이라 `csv`의 뒤에 붙일 수 없어요. 지금까지의 글자를 모두 복사한 새 문자열을 만들고 `csv`가 그것을 가리키게 해요.'
+      - p: '돌 때마다 새 문자열이 하나씩 생기고, 만들 때마다 **지금까지 쌓인 글자를 전부 복사해요.** 첫 번째는 조금, 마지막에는 거의 전부를 복사하니 원소가 n개면 복사하는 양이 n의 제곱에 비례해서 늘어요.'
+      - p: '`StringBuilder`는 반대로 **가변**이에요. 안에 고칠 수 있는 버퍼가 있어서 `append`가 같은 객체의 뒤에 덧붙여요. 마지막에 `toString()`으로 `String`을 한 번만 만들어요.'
+      - code: builder
+        notes:
+          - mark: append(id)
+            as: code
+            text: '같은 `StringBuilder` 객체에 덧붙이고, 그 객체 자신을 돌려줘요. 그래서 `.append(...)`를 이어 쓸 수 있어요.'
+      - p: '원소 수를 늘려 가며 두 코드의 시간을 쟀어요. 벌어지는 모양을 예상해 보고 열어 보세요.'
+      - ci:
+          key: loop
+          label: 실제 측정값 보기
+          source: StringTest.concatInLoop
+          code: loopRun
+      - p: '원소가 10배 늘 때 `+=`는 10배보다 훨씬 더 느려져요. `StringBuilder`는 5만 개에도 거의 걸리지 않아요. 숫자는 이 페이지를 배포한 CI 서버에서 잰 값이라 기계마다 달라요. 볼 것은 벌어지는 모양이에요.'
+      - muted: '`StringBuffer`도 있어요. 메서드마다 여러 스레드가 동시에 쓰지 못하게 막는 장치(`synchronized`)가 붙은 것이에요. 메서드 안의 지역 변수로 쓸 때는 `StringBuilder`면 돼요. 동기화는 경쟁 상태와 동기화 레슨에서 다뤄요.'
+      - more:
+          summary: '더 알아보기: 한 줄의 +는 그대로 둬도 돼요'
+          body:
+            - ul:
+                - '`"주문 " + id + " 완료"`처럼 한 줄에서 끝나는 연결은 컴파일러가 한 번에 만드는 코드로 바꿔 줘요. `StringBuilder`로 바꿀 필요가 없어요. 조심할 것은 반복문 안의 누적이에요.'
+                - '구분자로 잇는 것은 `String.join(",", ids)`, 틀에 값을 채우는 것은 `"%d원".formatted(price)`, 여러 줄 문자열은 따옴표 세 개로 여는 텍스트 블록이 읽기 쉬워요.'
+      - quiz:
+          q: '`StringBuilder sb = new StringBuilder("A"); StringBuilder sb2 = sb; sb.append("B");`를 실행한 뒤 `sb2.toString()`은?'
+          options:
+            - '"A"'
+            - '"AB"'
+            - '"B"'
+          answer: 2
+          explain: '`StringBuilder`는 같은 객체를 고쳐요. `sb2`도 그 객체를 가리켜서 "AB"가 보여요. 불변인 `String`과 반대예요.'
+    recall: '반복문 안에서 `+=`로 누적하면 `String`이 불변이라 돌 때마다 지금까지의 글자를 전부 복사한 새 문자열이 만들어져서, 원소가 늘수록 급격히 느려져요. 그런 곳에서는 가변인 `StringBuilder`로 같은 객체에 덧붙이고 마지막에 한 번 `toString()`을 불러요. 한 줄로 끝나는 `+`는 그대로 둬도 돼요.'
 practice:
+  title: 스프링에서는 이렇게 만나요
   says:
     - '요청으로 받은 문자열 비교. 컨트롤러와 서비스에서 `"PAID".equals(status)`로 쓴다. 정해진 값이면 문자열 대신 enum으로 받는 것이 낫고 그것은 J8에서 다룬다'
     - '흔한 실수: `if (status == "PAID")`. 테스트가 리터럴을 넘기면 통과한다. 요청에서 온 값은 false다. 고친 코드: `"PAID".equals(status)`. 실행 중에 만든 문자열(바이트에서 읽어 만든 것)로 두 조건을 돌려 결과를 붙인다 (순수 자바 테스트)'
     - '로그. `log.debug("주문 " + order)`는 debug가 꺼져 있어도 문자열을 먼저 만든다. `order.toString()`이 불리고 연결이 일어난다. `log.debug("주문 {}", order)`는 로그를 남길 때만 만든다. 로그 수준을 INFO로 두고 두 줄을 각각 불러 `toString`이 불린 횟수를 센다 (SLF4J와 Logback으로 돌리는 테스트. 스프링 부트에 들어 있다)'
     - '빈 값 검사. `isEmpty()`는 길이가 0일 때만, `isBlank()`는 공백만 있어도 true다. 요청 값 검증에는 `@NotBlank`를 쓰고 그 동작은 S8에서 다룬다'
     - '반복문에서 문자열을 누적하는 곳(CSV 내보내기, 긴 메시지 조립)은 `StringBuilder`나 `String.join`, 스트림의 `Collectors.joining`을 쓴다. SQL은 문자열로 이어 붙이지 않고 파라미터로 넘긴다는 것만 말하고 이유는 N10에 넘긴다'
+  body:
+    - p: '스프링 서버에 들어오는 값은 거의 다 실행 중에 만들어진 문자열이에요. 요청 파라미터도, JSON 본문도, DB에서 읽은 값도요. 비교는 순수 자바 테스트로, 로그는 스프링 부트에 든 SLF4J와 Logback으로 확인했어요.'
+    - h3: '흔한 실수: 요청 값을 ==로 비교'
+    - code: controllerBad
+      notes:
+        - mark: '=='
+          as: code
+          text: '`status`는 스프링이 요청에서 읽어 새로 만든 문자열이에요. 풀의 `"PAID"`와 다른 객체라 언제나 false예요.'
+    - p: '이 컨트롤러를 테스트할 때 `"PAID"` 리터럴을 직접 넘기면 통과해요. 실제 요청은 질문 3에서 본 대로 false가 나와요.'
+    - code: controllerFixed
+      notes:
+        - mark: '"PAID".equals(status)'
+          as: code
+          text: '글자를 비교하고, `status`가 null이어도 예외 없이 false예요.'
+    - p: 'PAID, SHIPPED처럼 정해진 값 몇 개라면 문자열이 아니라 enum으로 받는 편이 나아요. 스프링이 요청의 글자를 enum 상수로 바꿔 주고, 오타는 400 응답이 돼요. enum 레슨에서 다뤄요.'
+    - h3: 로그는 {}로 넘겨요
+    - p: '운영 서버는 보통 로그 수준을 INFO로 둬서 debug 로그는 남지 않아요. 그러면 아래 코드는 아무 일도 하지 않을까요?'
+    - code: logBad
+      notes:
+        - mark: '"주문 " + order'
+          as: code
+          text: '`log.debug`를 부르기 전에 인자부터 계산해요. `order.toString()`을 부르고 문자열을 이어 붙여요. 그다음에야 debug가 꺼진 것을 알고 버려요.'
+    - ci:
+        key: logging
+        label: 실제 호출 횟수 보기
+        source: StringTest.loggingPlaceholder
+        code: logRun
+    - p: '`+`로 쓴 줄은 로그를 남기지 않는데도 `toString()`을 불렀어요. 요청마다 도는 코드라면 버려질 문자열을 계속 만드는 셈이에요. `{}` 자리 표시를 쓰면 SLF4J가 로그를 실제로 남길 때만 `toString()`을 부르고 이어 붙여요.'
+    - code: logFixed
+    - muted: '근거: [SLF4J FAQ의 로그 성능](link:slf4j). 스프링 부트는 SLF4J와 Logback을 기본으로 써요.'
+    - h3: 빈 값과 공백
+    - code: blank
+    - p: '요청 값이 비었는지 볼 때 `isEmpty()`는 길이가 0일 때만 true라서 공백만 든 값을 통과시켜요. 공백까지 걸러야 하면 `isBlank()`를 써요. 요청 DTO의 필드에 `@NotBlank`를 붙여 거르는 방법은 예외 처리와 검증 레슨에서 다뤄요.'
+    - h3: 문자열을 쌓는 곳
+    - p: 'CSV 내보내기, 긴 메시지 조립처럼 반복문에서 문자열을 쌓는 곳은 `StringBuilder`나 `String.join`, 스트림의 `Collectors.joining`을 써요(질문 4). SQL만은 예외예요. 사용자 입력을 SQL 문자열에 이어 붙이지 않고 파라미터로 넘겨요. 그 이유는 웹 보안 기초 레슨에서 다뤄요.'
+interview:
+  question: String은 왜 불변이고, 문자열은 왜 equals로 비교해야 하나요?
+  model:
+    - label: 정의
+      text: String은 한 번 만들면 글자가 바뀌지 않는 불변 객체입니다. toUpperCase나 + 같은 연산은 원래 객체를 고치지 않고 새 객체를 돌려줍니다.
+    - label: 원리
+      text: 불변이라서 여러 곳이 같은 객체를 함께 써도 안전하고, 그래서 JVM은 리터럴을 문자열 상수 풀에 하나만 두고 공유합니다. 리터럴끼리는 같은 객체라 ==가 true지만, 요청이나 DB에서 읽거나 변수를 이어 붙여 실행 중에 만든 문자열은 새 객체라 ==가 false입니다. 그래서 문자열은 equals로 비교합니다.
+    - label: 주의할 점
+      text: 반복문에서 +=로 누적하면 돌 때마다 전체를 복사한 새 문자열이 생겨 느려지므로 StringBuilder를 씁니다. 로그는 +로 이어 붙이지 않고 {} 자리 표시로 넘겨 로그를 남길 때만 문자열을 만들게 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 상태 문자열을 ==로 비교한 코드가 테스트에서는 통과하고 실제 요청에서 false가 나는 버그를 equals로 고치고, 나중에 enum으로 바꿨습니다.'
+verified: 이 레슨의 출력과 측정값은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 로그 호출 횟수는 스프링 부트에 든 SLF4J와 Logback으로 확인했어요. 코드가 바뀔 때마다 테스트([StringTest](link:test))가 다시 돌아요.
+footer: '근거: 문자열 리터럴과 상수 풀은 자바 언어 명세 3.10.5([링크](link:jlsLiteral)), 상수식은 15.29([링크](link:jlsConstant)), 불변과 intern은 String API 문서([링크](link:stringApi)), 한 줄의 + 연결을 컴파일하는 방식은 JEP 280([링크](link:jep280)). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '코드 predict의 출력은 true, false, true다'
+  - claim: '코드 predict의 출력은 true, false, true다. `new String("PAID").intern()`은 리터럴 `"PAID"`와 `==`가 true다'
     how: '코드를 그대로 돌린다'
+    test: StringTest.predict
+  - claim: '다른 클래스에 쓴 같은 리터럴은 `==`가 true다'
+    how: '두 클래스의 static 필드를 비교한다'
+    test: StringTest.literalAcrossClasses
   - claim: '`toUpperCase`를 부르고 받지 않으면 원래 문자열은 그대로다. `s = s + "B"` 뒤에도 앞서 같은 객체를 가리키던 변수의 값은 그대로다'
     how: '두 코드를 돌려 값을 본다'
-  - claim: '`new String("PAID").intern()`은 리터럴 `"PAID"`와 `==`가 true다'
-    how: '그대로 돌린다'
-  - claim: '변수를 이어 붙여 만든 문자열은 리터럴과 `==`가 false이고, 리터럴끼리 이어 붙인 것과 `final` 변수를 이어 붙인 것은 true다'
-    how: '코드 runtime과 `final` 변형을 돌린다. 컴파일러의 상수 계산에 기대는 결과라서 테스트에서 변수가 상수로 바뀌지 않게 메서드 인자로 받는 변형도 둔다'
+    test: StringTest.immutable
+  - claim: '변수를 이어 붙여 만든 문자열은 리터럴과 `==`가 false이고, 리터럴끼리 이어 붙인 것과 `final` 변수를 이어 붙인 것은 true다. 메서드 인자로 받아 이어 붙인 것도 false다'
+    how: '코드 runtime과 변형들을 돌린다'
+    test: StringTest.runtimeConcat
   - claim: '`toUpperCase`의 결과와 바이트에서 만든 문자열은 리터럴과 `==`가 false이고 `equals`가 true다'
     how: '`new String(bytes, UTF_8)`과 `"paid".toUpperCase()`로 비교한다'
+    test: StringTest.readAtRuntime
   - claim: '`StringBuilder.append`는 자기 자신을 돌려주고, 같은 객체를 가리키는 다른 변수에서도 덧붙인 내용이 보인다'
     how: '`sb.append("B") == sb`와 `sb2.toString()`을 본다'
+    test: StringTest.builderIsMutable
   - claim: '반복문의 `+=` 누적은 원소 수가 늘수록 `StringBuilder`보다 훨씬 느려진다'
-    how: '원소 수 세 가지로 두 방식의 시간을 재어 `CiOutput`에 남긴다. 값은 단정하지 않고 기록만 한다'
+    how: '원소 수 세 가지로 두 방식의 시간을 재어 `CiOutput`에 남긴다. 가장 큰 입력에서 `+=`가 더 오래 걸린다는 것만 단정한다'
+    test: StringTest.concatInLoop
   - claim: '로그 수준이 INFO일 때 `log.debug("주문 " + order)`는 `order.toString()`을 부르고 `log.debug("주문 {}", order)`는 부르지 않는다'
-    how: '`toString` 호출을 세는 객체로 두 줄을 각각 부르고 횟수를 본다. 로거의 수준은 테스트에서 INFO로 맞춘다'
+    how: '`toString` 호출을 세는 객체로 두 줄을 각각 부르고 횟수를 본다'
+    test: StringTest.loggingPlaceholder
 sources:
   - '문자열 리터럴은 같은 객체를 가리키고, 상수식이 아닌 연결은 새 객체를 만든다: 자바 언어 명세 3.10.5 https://docs.oracle.com/javase/specs/jls/se21/html/jls-3.html#jls-3.10.5'
   - '상수식: 자바 언어 명세 15.29 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.29'
