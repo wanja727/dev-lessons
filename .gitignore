@@ -8,3 +8,6 @@ build/
 site/public/ci/
 # VS Code의 자바 확장이 컴파일한 결과
 verification/bin/
+# ChatGPT 데스크톱 앱(Codex)이 CLAUDE.md와 스킬을 복사해 만드는 것. 규칙은 CLAUDE.md와 .claude에만 둔다
+AGENTS.md
+.agents/
