@@ -1,0 +1,170 @@
+# 가상 메모리 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/virtual-memory.yaml의 says).
+# VmSize와 VmRSS에 관한 정답은 verification의 virtualmemory/VirtualMemoryTest로 확인했다 (자바 21, 리눅스 CI).
+# 스왑과 OOM 킬러는 리눅스 커널 문서가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: virtual-memory
+  title: 가상 메모리
+  unit: 운영체제와 동시성
+  order: 410
+concepts:
+  - key: core
+    name: 가상 메모리
+coreQuestions:
+  - key: q1
+    text: "프로세스마다 주소 공간이 따로인 이유는 무엇인가요?"
+  - key: q2
+    text: "페이징은 어떻게 동작하고, 가상 크기와 실제 사용은 왜 다른가요?"
+  - key: q3
+    text: "물리 메모리가 모자라면 무슨 일이 생기나요?"
+questions:
+  # ── 질문 1 ──
+  - key: vm-same-address
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 프로세스 A와 B가 각자 가상 주소 0x1000에 값을 썼어요. 두 값은 어디에 있을까요?
+    choices:
+      - 같은 물리 메모리 칸에 있어 나중 값이 덮는다
+      - 서로 다른 물리 메모리 칸에 있다
+      - 한쪽은 쓰기에 실패한다
+      - 둘 다 디스크에 있다
+    answer: "2"
+    explanation: |-
+      **서로 다른 물리 칸에 있어요.** 프로세스마다 페이지 테이블이 따로라 같은 가상 주소도 다른 물리 메모리에 연결돼요.
+
+      - 표에 없는 곳에는 닿을 수 없어서 프로세스끼리 격리돼요
+    source: https://docs.kernel.org/admin-guide/mm/concepts.html
+  - key: vm-threads-share
+    concept: core
+    coreQuestion: q1
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"같은 프로세스의 스레드도 스레드마다 페이지 테이블이 따로라서, 같은 객체의 주소를 써도 서로 다른 물리 메모리를 본다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 같은 프로세스의 스레드는 그 프로세스의 페이지 테이블을 함께 써서 같은 물리 메모리를 봐요. 그래서 힙을 함께 써요.
+
+      - 페이지 테이블이 따로인 것은 프로세스끼리예요
+    source: https://docs.kernel.org/admin-guide/mm/concepts.html
+  # ── 질문 2 ──
+  - key: vm-rss-small
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: java -Xms512m -Xmx512m으로 띄운 JVM이 힙을 거의 쓰지 않은 채 /proc/self/status를 읽었어요. VmRSS(실제로 쓰는 물리 메모리)로 맞는 것은? (리눅스)
+    choices:
+      - 512MB보다 크다
+      - 512MB보다 훨씬 작다
+      - 정확히 512MB
+      - VmSize와 같다
+    answer: "2"
+    explanation: |-
+      **512MB보다 훨씬 작아요.** 운영체제는 주소 공간만 예약하고, 처음 만지는 페이지에만 물리 메모리를 붙여요(요구 페이징).
+
+      - VmSize는 예약한 주소 공간 전체라 수 GB예요
+      - 검증: VirtualMemoryTest.reservedVersusTouched
+    source: https://man7.org/linux/man-pages/man5/proc.5.html
+  - key: vm-pretouch
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 같은 JVM(java -Xms512m -Xmx512m)에 -XX:+AlwaysPreTouch를 더해 띄웠어요. 힙을 거의 쓰지 않아도 VmRSS는 어떻게 될까요? (리눅스)
+    choices:
+      - 그대로 작다
+      - 512MB를 넘는다
+      - 0이 된다
+      - VmSize가 512MB로 줄어든다
+    answer: "2"
+    explanation: |-
+      **512MB를 넘어요.** AlwaysPreTouch는 시작할 때 힙의 모든 페이지를 만져서 물리 메모리를 미리 붙여요.
+
+      - 시작은 느려지지만 실행 중의 페이지 폴트가 줄고, 메모리가 모자라면 시작할 때 드러나요
+      - 검증: VirtualMemoryTest.reservedVersusTouched
+    source: https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html
+  # ── 질문 3 ──
+  - key: vm-thrashing
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서버의 CPU 사용률은 낮은데 디스크 읽기와 쓰기가 계속 바쁘고, 자바의 GC 시간이 크게 늘었어요. 가장 먼저 의심할 것은?
+    choices:
+      - 스레드가 너무 적다
+      - 물리 메모리가 모자라 힙의 페이지가 스왑을 오간다
+      - 네트워크가 느리다
+      - 데드락
+    answer: "2"
+    explanation: |-
+      **스왑이에요.** 페이지가 디스크를 자주 오가면 CPU는 놀고 디스크만 바쁜 스래싱이 돼요.
+
+      - GC는 힙의 넓은 범위를 훑어서, 힙이 스왑에 나가 있으면 특히 느려져요
+    source: https://docs.kernel.org/admin-guide/mm/concepts.html
+  - key: vm-oom-killer
+    concept: core
+    coreQuestion: q3
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"스왑이 없는 컨테이너에서 자바 프로세스의 실제 사용이 메모리 한도를 넘으면, JVM이 먼저 OutOfMemoryError를 로그에 남기고 끝난다\""
+    answer: X
+    explanation: |-
+      **틀렸어요.** 프로세스 전체가 한도를 넘으면 커널의 OOM 킬러가 프로세스를 끝내요. JVM은 알 틈이 없어 로그를 남기지 못해요.
+
+      - OutOfMemoryError는 JVM 안의 힙 같은 영역이 찼을 때예요
+    source: https://docs.kernel.org/admin-guide/mm/concepts.html
+  - key: vm-virt-res
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 메모리가 4GB인 서버에서 top을 보니 자바 프로세스의 VIRT가 6.1g, RES가 0.7g이에요. 이 프로세스가 지금 쓰는 물리 메모리는 대략 얼마일까요?
+    choices:
+      - 6.1GB. 서버 메모리를 넘어 스왑을 쓰는 중이다
+      - 0.7GB쯤. VIRT는 예약한 주소 공간이다
+      - 6.8GB. 둘을 더한다
+      - 알 수 없다
+    answer: "2"
+    explanation: |-
+      **0.7GB쯤이에요.** RES가 실제로 물리 메모리에 올라와 있는 양이고, VIRT는 예약한 가상 주소 공간 전체예요.
+
+      - 자바 프로세스의 VIRT가 서버 메모리보다 큰 것은 흔하고 이상하지 않아요
+    source: https://man7.org/linux/man-pages/man1/top.1.html
+  # ── 세 질문을 하나로 ──
+  - key: vm-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "가상 메모리가 무엇이고 왜 쓰는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **가상 주소를 프로세스마다 다른 페이지 테이블로 물리 메모리에 연결해, 격리하고 필요한 만큼만 물리 메모리를 써요.**
+
+      - **주소 공간:** 같은 가상 주소도 프로세스마다 다른 물리 칸. 남의 메모리에 닿지 못한다
+      - **페이징:** 4KB 페이지 단위로 연결하고, 처음 만질 때 페이지 폴트로 붙인다
+      - **숫자:** VmSize(VIRT)는 예약, RSS(RES)는 실제 사용
+      - **모자랄 때:** 스왑과 스래싱, 컨테이너는 OOM 킬러. 자바 힙은 스왑과 맞지 않는다
+    checklist:
+      - 가상 주소와 페이지 테이블로 물리 메모리에 연결한다고 말했다
+      - 프로세스끼리 격리되는 이유를 말했다
+      - 페이지 단위와 처음 만질 때 붙인다는 것을 말했다
+      - 가상 크기와 실제 사용(RSS)의 차이를 말했다
+      - 스왑이나 OOM 킬러, 컨테이너 한도 이야기를 했다
+    source: https://docs.kernel.org/admin-guide/mm/concepts.html
