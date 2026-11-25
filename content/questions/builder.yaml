@@ -1,0 +1,221 @@
+# 빌더 패턴 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/builder.yaml의 says).
+# 동작에 관한 정답은 verification의 BuilderTest로 확인했다 (자바 21). 롬복 문제는 롬복 문서가 근거다.
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: builder
+  title: 빌더 패턴
+  unit: 객체지향 설계와 패턴
+  order: 310
+concepts:
+  - key: core
+    name: 빌더 패턴
+coreQuestions:
+  - key: q1
+    text: "인자가 많은 생성자는 무엇이 문제인가요?"
+  - key: q2
+    text: "setter로 하나씩 채우면 해결되나요?"
+  - key: q3
+    text: "빌더 패턴은 어떻게 이 문제를 푸나요?"
+  - key: q4
+    text: "빌더는 언제 쓰고, 무엇은 막지 못하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: bu-swap
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 생성자는 Product(String name, int price, int stock, String category, int discountRate, String description, boolean visible)예요. 아래 코드는 어떻게 될까요?
+    code: |-
+      new Product("머그컵", 100, 25000,
+          "주방", 0, null, true);
+    choices:
+      - 컴파일 오류
+      - 가격 100원, 재고 25000개인 상품이 만들어진다
+      - 가격 25000원, 재고 100개인 상품이 만들어진다
+      - 실행 중 예외
+    answer: "2"
+    explanation: |-
+      **가격 100원, 재고 25000개인 상품이 만들어져요.** 자바는 인자를 이름이 아니라 순서와 타입으로 맞춰요.
+
+      - 둘 다 int라서 순서를 바꿔도 컴파일러가 알 수 없어요
+  - key: bu-transfer
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 송금 객체 new Transfer(fromId, toId, amount)에서 fromId와 toId가 모두 long이에요. 개발자가 두 값을 바꿔 넣었어요. 어떻게 될까요?
+    choices:
+      - 컴파일 오류로 알 수 있다
+      - 컴파일되고 돈이 반대 방향으로 간다
+      - 실행할 때 예외가 난다
+    answer: "2"
+    explanation: |-
+      **컴파일되고 돈이 반대 방향으로 가요.** 같은 타입의 인자는 순서가 바뀌어도 구별되지 않아요.
+
+      - 인자가 많고 같은 타입이 이어질수록 이런 실수가 쉬워요
+  # ── 질문 2 ──
+  - key: bu-beans-stock
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 repository.save(p)가 불린 시점의 재고는 얼마일까요? (int 필드의 기본값은 0이에요)
+    code: |-
+      Product p = new Product();
+      p.setName("머그컵");
+      p.setPrice(25000);
+      repository.save(p);
+      p.setStock(100);
+    choices:
+      - "100"
+      - "0"
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **0이에요.** setter로 채우는 중의 불완전한 객체가 그대로 저장됐어요.
+
+      - 자바빈즈 방식은 객체가 다 만들어졌다는 때가 없어요
+  - key: bu-mail-config
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 설정 객체 MailConfig를 기본 생성자와 setter로 채워서 여러 스레드가 함께 써요. setter로 채우는 방식의 문제로 맞는 것은?
+    choices:
+      - 순서를 바꿔 넣는 실수가 생긴다
+      - 만든 뒤에도 setter로 값이 바뀔 수 있어 불변으로 둘 수 없다
+      - 필드를 final로 둘 수 있어 안전하다
+    answer: "2"
+    explanation: |-
+      **불변으로 둘 수 없어요.** setter가 있으면 필드가 final일 수 없고, 한 스레드가 바꾸면 다른 스레드가 바뀐 값을 봐요.
+
+      - 이름으로 넣으니 순서 실수는 없어요
+  # ── 질문 3 ──
+  - key: bu-order-free
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 빌더의 메서드는 값을 필드에 넣고 return this를 해요. 아래 상품의 가격은 얼마일까요?
+    code: |-
+      Product p = Product.builder()
+          .stock(100)
+          .price(25000)
+          .name("컵")
+          .build();
+    choices:
+      - "100"
+      - "25000"
+      - 컴파일 오류. 순서가 틀렸다
+    answer: "2"
+    explanation: |-
+      **25000이에요.** 빌더는 값을 이름으로 받아서 부르는 순서와 상관없이 같은 결과가 나와요.
+  - key: bu-coupon-rate
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 빌더로 만드는 Coupon의 build()가 "할인율은 0에서 100 사이"를 검사하고, 아니면 IllegalStateException을 던져요. Coupon.builder().name("가입").discountRate(150).build()를 실행하면?
+    choices:
+      - 할인율 150인 쿠폰이 만들어진다
+      - 예외가 나고 쿠폰은 만들어지지 않는다
+      - 할인율이 100으로 잘린다
+    answer: "2"
+    explanation: |-
+      **예외가 나고 쿠폰은 만들어지지 않아요.** build()가 검사하는 곳이라, 검사를 통과해야만 객체가 생겨요.
+
+      - setter 방식에서는 다 채운 때를 몰라 이런 검사를 둘 곳이 없었어요
+  # ── 질문 4 ──
+  - key: bu-missing-name
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: Product.builder()는 인자가 없고, 이름이 없으면 build()에서 IllegalStateException을 던져요. Product.builder().price(25000).build()는 어떻게 될까요?
+    choices:
+      - 컴파일 오류
+      - 컴파일되고 실행할 때 IllegalStateException
+      - 이름이 빈 상품이 만들어진다
+    answer: "2"
+    explanation: |-
+      **컴파일되고 실행할 때 예외가 나요.** 빌더는 빠진 필수값을 실행 시점에 잡아요.
+
+      - 컴파일 때 잡으려면 builder(name, price)처럼 필수값을 인자로 받아요
+  - key: bu-point
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: record Point(int x, int y)를 만들어요. 빌더를 붙여야 할까요?
+    choices:
+      - 붙인다. 같은 타입 인자가 이어진다
+      - 붙이지 않는다. 필드 둘이 모두 필수라 정식 생성자로 충분하다
+      - record에는 빌더를 붙일 수 없다
+    answer: "2"
+    explanation: |-
+      **붙이지 않아요.** 필드가 둘뿐이고 모두 필수면, 클래스를 하나 더 쓰는 비용이 빌더의 이득보다 커요.
+
+      - record에도 static 중첩 빌더를 붙일 수는 있어요
+  - key: bu-lombok-default
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 롬복 @Builder를 붙인 클래스예요. 아래 코드의 결과는?
+    code: |-
+      @Builder
+      class Product {
+        private String name;
+        private boolean visible = true;
+      }
+
+      Product.builder().name("컵").build()
+          .isVisible();
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **false예요.** 롬복 @Builder는 필드의 초기값을 쓰지 않아서, 빌더에서 넣지 않은 boolean은 기본값 false예요.
+
+      - 초기값을 쓰려면 필드에 @Builder.Default를 붙여요
+    source: https://projectlombok.org/features/Builder
+  # ── 네 질문을 하나로 ──
+  - key: bu-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "빌더 패턴을 쓰는 이유와 주의할 점을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **이름으로 값을 받아 build()에서 검사하고 불변 객체를 만들어서, 생성자와 setter의 문제를 피해요.**
+
+      - **생성자의 문제:** 같은 타입 인자의 순서를 바꿔도 컴파일된다. 선택 인자마다 생성자가 는다
+      - **setter의 문제:** 불완전한 객체가 보이고 불변으로 만들 수 없다
+      - **빌더:** 순서 실수 없음, build()에서 검사, final 필드
+      - **주의:** 빠진 필수값은 실행할 때 잡힌다. 필수값은 builder 인자로. @Builder.Default. 필드가 적으면 생성자
+    checklist:
+      - 인자가 많은 생성자는 같은 타입 순서 실수가 컴파일된다고 말했다
+      - setter 방식은 불완전한 상태가 보이고 불변이 아니라고 말했다
+      - 빌더는 이름으로 받고 build()에서 검사한다고 말했다
+      - 빠진 필수값은 실행 시점에 잡힌다고 말했다
+      - 필드가 적으면 생성자나 record로 충분하다고 말했다
