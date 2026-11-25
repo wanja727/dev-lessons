@@ -1,0 +1,184 @@
+# 뮤텍스와 세마포어 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 뮤텍스와 세마포어
+unit: 운영체제와 동시성
+roadmap: C4
+type: 자바 실행
+prerequisites:
+  - {slug: synchronization, title: 경쟁 상태와 동기화}
+assume: '자바 21(OpenJDK). 경쟁 상태와 임계 영역, `synchronized`가 같은 락으로 한 스레드만 들어가게 한다는 것(경쟁 상태와 동기화 레슨). try-finally.'
+example: '외부 결제 API를 부르는 `PaymentClient`. 결제사는 동시 호출을 3개까지만 받아요. 한 번에 하나만 들어가는 구간은 뮤텍스(`ReentrantLock`)로, 정해진 수만 들어가는 구간은 세마포어(`Semaphore`)로 지켜요. 실무 구역에서는 스프링 서비스에서 동시 호출 수를 제한하고, 허가를 돌려주지 않는 실수를 봐요.'
+intro:
+  - '외부 결제사가 "동시에 3건까지만 호출하세요, 넘으면 429를 돌려줍니다"라고 알려 왔어요. 우리 서버의 요청 스레드는 200개라 몰리는 시간에는 수십 건이 한꺼번에 나가요. 한 번에 하나만 들어가게 막으면 너무 느리고, 아무것도 안 하면 거절당해요.'
+  - '"한 번에 하나만"과 "한 번에 N개까지"는 운영체제가 오래전부터 따로 이름 붙여 온 두 도구예요. 자바에서는 `synchronized`와 `ReentrantLock`이 앞의 것이고 `Semaphore`가 뒤의 것이에요. 커넥션 풀, 서킷 브레이커의 벌크헤드처럼 스프링 개발자가 매일 쓰는 것들이 이 위에 있어요.'
+  - '이 레슨에서는 `ReentrantLock`으로 임계 영역을 지키고 기다리다 포기하는 법을 보고, `Semaphore(3)`에 스레드 10개를 보내 동시에 들어간 수를 세 봐요.'
+covers:
+  - topic: '뮤텍스: 한 번에 하나만 임계 영역에 들어가게 하는 락. 잡은 스레드가 주인이고 주인만 푼다'
+    where: '질문 1'
+  - topic: '자바의 뮤텍스: synchronized(모니터)와 ReentrantLock. lock과 unlock은 try-finally로 짝짓는다'
+    where: '질문 1'
+  - topic: '주인이 아닌 스레드가 unlock하면 IllegalMonitorStateException'
+    where: '질문 1'
+  - topic: 'ReentrantLock만 할 수 있는 것: tryLock(기다리지 않거나 시간을 정해 기다리기), lockInterruptibly, 공정 모드'
+    where: '질문 2'
+  - topic: 'Condition과 wait/notify: 락을 잡은 채 조건이 맞을 때까지 기다리기'
+    where: '질문 2의 더 알아보기'
+  - topic: '읽기는 여럿, 쓰기는 하나: ReadWriteLock'
+    where: '질문 2의 더 알아보기'
+  - topic: '세마포어: 허가(permit) N개. acquire로 하나 받고 release로 돌려준다. 허가가 없으면 기다린다'
+    where: '질문 3'
+  - topic: '세마포어에는 주인이 없다. 받은 스레드가 아니어도 돌려줄 수 있다. 허가 1개인 세마포어는 뮤텍스와 비슷하지만 같지 않다'
+    where: '질문 3'
+  - topic: 'tryAcquire로 기다리지 않거나 시간을 정해 기다리기'
+    where: '질문 3'
+  - topic: '언제 무엇을: 값을 고치는 구간은 뮤텍스, 자원의 동시 사용 수 제한은 세마포어'
+    where: '질문 4'
+  - topic: '커넥션 풀과 벌크헤드는 세마포어와 같은 일을 한다'
+    where: '실무에서는. 커넥션 풀은 DB 커넥션과 커넥션 풀(D6), 벌크헤드는 타임아웃, 재시도, 서킷 브레이커(A10)'
+  - topic: 'release를 finally에 두지 않으면 허가가 새어 결국 모두 멈춘다'
+    where: '실무에서는'
+  - topic: '서버 여러 대의 동시 수 제한'
+    where: '다루지 않음: 분산 락(A12), 요청 수 제한(A13)'
+  - topic: '락 둘을 서로 기다리는 상황'
+    where: '다루지 않음: 데드락(C5)'
+codes:
+  predict: |-
+    Semaphore permits = new Semaphore(3);
+
+    Runnable call = () -> {
+      permits.acquire();
+      try {
+        callPaymentApi(); // 200ms
+      } finally {
+        permits.release();
+      }
+    };
+    // 스레드 10개가 call을 동시에 실행한다
+  lock: |-
+    private final ReentrantLock lock =
+        new ReentrantLock();
+
+    void refreshToken() {
+      [[lock.lock()]];
+      try {
+        token = fetchNewToken();
+      } finally {
+        [[lock.unlock()]];
+      }
+    }
+  tryLock: |-
+    if (lock.tryLock(100, MILLISECONDS)) {
+      try {
+        refresh();
+      } finally {
+        lock.unlock();
+      }
+    } else {
+      useOldToken();
+    }
+  semaphore: |-
+    Semaphore permits = new Semaphore(3);
+
+    permits.acquire();
+    try {
+      callPaymentApi();
+    } finally {
+      permits.release();
+    }
+  leak: |-
+    void pay() throws Exception {
+      permits.acquire();
+      callPaymentApi(); // 예외가 나면?
+      permits.release();
+    }
+predict:
+  text: '코드 predict는 허가 3개인 세마포어 앞에 스레드 10개를 보내요. 결제 API 호출은 200ms 걸려요. 같은 순간에 결제 API를 부르고 있는 스레드는 최대 몇 개일까요? 보기: 1개 / 3개 / 10개'
+  answer: '3개. 허가가 3개라 넷째 스레드부터는 누가 돌려줄 때까지 기다린다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 뮤텍스는 무엇이고 자바에서는 무엇으로 쓰나요?
+    conclusion:
+      lead: '한 번에 하나만 임계 영역에 들어가게 하는 락이에요. 잡은 스레드가 주인이고, 주인만 풀 수 있어요.'
+      sub: '자바에서는 `synchronized`와 `ReentrantLock`이 뮤텍스예요. `ReentrantLock`은 `lock()`과 `unlock()`을 직접 부르니 `unlock()`을 꼭 `finally`에 둬요.'
+    says:
+      - '뮤텍스(mutual exclusion)는 "서로 배제"다. 임계 영역(C3)에 한 스레드만 들어가게 한다. C3의 `synchronized`가 자바에 들어 있는 뮤텍스다'
+      - '코드 lock. `ReentrantLock`은 같은 일을 객체로 한다. 토큰을 새로 받는 동안 다른 스레드가 같이 받지 않게 막는다. 두 스레드가 10만 번씩 lock 안에서 세면 정확히 20만이다'
+      - '`synchronized`는 블록을 벗어나면 자동으로 풀린다. `ReentrantLock`은 직접 `unlock()`을 불러야 하므로 반드시 `finally`에 둔다. 예외가 나서 풀지 못하면 다른 스레드는 영원히 기다린다'
+      - '주인: 락을 잡은 스레드만 풀 수 있다. 다른 스레드가 `unlock()`을 부르면 `IllegalMonitorStateException`이다. 테스트로 보인다'
+      - '이름의 "재진입(Reentrant)": 잡은 스레드가 다시 `lock()`을 불러도 멈추지 않고, 부른 만큼 `unlock()`해야 풀린다'
+    asks:
+      - '본문의 예시: 코드 lock에서 `fetchNewToken()`이 예외를 던졌다. `unlock()`이 `finally`에 없다면 다음에 `refreshToken()`을 부르는 스레드는 어떻게 되나 (영원히 기다린다. 락이 풀리지 않았다)'
+      - '옮긴 상황: 스레드 A가 `lock.lock()`으로 잡은 락을 스레드 B가 `lock.unlock()`으로 풀려고 한다. 결과는 (`IllegalMonitorStateException`. 주인만 풀 수 있다)'
+  - id: q2
+    title: ReentrantLock은 synchronized로 못 하는 무엇을 하나요?
+    conclusion:
+      lead: '기다리지 않고 바로 포기하거나 정한 시간만 기다리는 `tryLock`, 기다리는 중에 인터럽트로 깨우는 `lockInterruptibly`, 온 순서대로 주는 공정 모드를 써요.'
+      sub: '`synchronized`는 락이 풀릴 때까지 끝없이 기다리는 것 하나뿐이에요. 이런 기능이 필요 없으면 더 짧은 `synchronized`를 써요.'
+    says:
+      - '`tryLock()`은 락이 비어 있으면 잡고 true, 아니면 기다리지 않고 false를 돌려준다. 코드 tryLock처럼 시간을 주면 그만큼만 기다린다. 다른 스레드가 잡고 있는 동안 `tryLock(100ms)`는 100ms 남짓 뒤에 false다. 테스트로 보인다'
+      - '쓰임: 이미 다른 스레드가 토큰을 새로 받고 있으면 기다리지 않고 지금 토큰을 쓴다. 기다림이 길어져 요청 스레드가 묶이는 것을 막는다'
+      - '`lockInterruptibly()`는 기다리는 동안 다른 스레드가 `interrupt()`하면 `InterruptedException`을 던지고 기다림을 그만둔다. `synchronized`에서 기다리는 스레드는 인터럽트로 깨울 수 없다'
+      - '`new ReentrantLock(true)`는 공정 모드다. 오래 기다린 스레드에게 먼저 준다. 기본은 공정하지 않고, 그쪽이 처리량이 높다'
+      - '고르는 기준: 위 기능이 필요하면 `ReentrantLock`, 아니면 `synchronized`'
+      - '더 알아보기: 락을 잡은 채 "큐가 비지 않을 때까지" 같은 조건을 기다리려면 `Condition`의 `await()`와 `signal()`을 쓴다. `synchronized`에서는 `wait()`와 `notify()`가 같은 일을 한다. 읽기는 여럿이 함께, 쓰기는 혼자 하게 하려면 `ReentrantReadWriteLock`을 쓴다'
+    asks:
+      - '본문의 예시: 스레드 A가 락을 잡고 1초 동안 일하는 중에 스레드 B가 `tryLock(100, MILLISECONDS)`를 불렀다. B가 받는 값과 걸리는 시간은 (false, 100ms 남짓)'
+      - '옮긴 상황: 캐시를 다시 채우는 일은 한 스레드만 하고, 나머지 스레드는 기다리지 말고 지난 값을 바로 돌려줘야 한다. 무엇을 쓰나. 보기: synchronized, tryLock(), lock() (tryLock(). 잡지 못하면 바로 다른 길로 간다)'
+  - id: q3
+    title: 세마포어는 무엇이고 뮤텍스와 무엇이 다른가요?
+    conclusion:
+      lead: '허가 N개를 나눠 주어 한 번에 N개까지만 들어가게 하는 도구예요. 들어갈 때 `acquire()`로 하나 받고 나올 때 `release()`로 돌려줘요.'
+      sub: '뮤텍스와 달리 주인이 없어서 받은 스레드가 아니어도 돌려줄 수 있어요. 그래서 "값을 지키는 락"보다 "자원의 동시 사용 수를 세는 계수기"에 가까워요.'
+    says:
+      - '세마포어는 허가의 수를 센다. `acquire()`는 허가가 남아 있으면 하나 줄이고 들어가고, 0이면 누가 돌려줄 때까지 기다린다. `release()`는 하나 늘리고 기다리는 스레드를 깨운다'
+      - '예측의 답을 밝힌다. 코드 predict에서 스레드 10개 가운데 결제 API를 부르는 중인 스레드는 최대 3개다. 호출 안에서 지금 몇 개가 안에 있는지 세어 가장 큰 값을 보인다. 200ms 호출 10개가 세 개씩 나가서 약 0.8초(네 묶음)에 끝난다'
+      - '주인이 없다: 스레드 A가 받은 허가를 스레드 B가 돌려줘도 된다. 테스트로 보인다. 그래서 허가 1개인 세마포어는 "한 번에 하나"는 같지만 주인 검사가 없어 뮤텍스와 같지 않다'
+      - '조심: `release()`를 받지도 않고 부르면 허가가 처음보다 늘어난다. 세마포어는 막지 않는다'
+      - '`tryAcquire()`와 `tryAcquire(시간)`은 tryLock과 같은 방식이다. 허가가 없으면 바로 또는 정한 시간 뒤에 false다'
+    asks:
+      - '본문의 예시: 허가 3개인 세마포어에 200ms 걸리는 호출 9개를 동시에 보냈다. 모두 끝나는 데 대략 얼마나 걸리나 (600ms쯤. 세 개씩 세 묶음)'
+      - '옮긴 상황: 허가 2개인 세마포어에서 어떤 스레드도 `acquire()`하지 않았는데 한 스레드가 `release()`를 한 번 불렀다. 지금 동시에 들어갈 수 있는 수는 (3개. 세마포어에는 주인 검사가 없어 허가가 늘어난다)'
+  - id: q4
+    title: 뮤텍스와 세마포어는 각각 언제 쓰나요?
+    conclusion:
+      lead: '함께 쓰는 값을 고치는 구간은 뮤텍스로 한 번에 하나만, 개수가 정해진 자원을 나눠 쓰는 곳은 세마포어로 N개까지만 들여보내요.'
+      sub: '세마포어로 감싼 안쪽에서 함께 쓰는 값을 고친다면 그 값은 여전히 뮤텍스가 필요해요. 세 스레드가 동시에 들어와 있기 때문이에요.'
+    says:
+      - '뮤텍스: 카운터, 잔액, 토큰 갱신처럼 값을 읽고 고치는 구간. 둘이 동시에 들어오면 틀어진다'
+      - '세마포어: 외부 API의 동시 호출 수, 무거운 작업의 동시 실행 수, 한정된 연결. 동시에 여럿 들어와도 되지만 너무 많으면 안 된다'
+      - '세마포어 안쪽은 임계 영역이 아니다. 허가 3개면 세 스레드가 동시에 안에 있으니, 안에서 함께 쓰는 카운터를 `++`하면 C3의 문제가 그대로다'
+      - '이미 이 모양을 한 도구가 많다. 커넥션 풀은 연결 수만큼의 허가를 가진 세마포어처럼 동작한다(D6). 스레드 풀의 크기도 동시에 실행하는 수를 정한다(C7)'
+    widget:
+      kind: classify
+      note: '상황마다 뮤텍스, 세마포어, 둘 다 필요 없음을 고른다. 항목: 토큰을 한 스레드만 새로 받기, 결제사 동시 호출 3건 제한, 재고 차감, 리포트 생성은 동시에 2개까지, 요청마다 새로 만든 지역 리스트에 넣기'
+    asks:
+      - '본문의 예시: 허가 3개인 세마포어 안에서 함께 쓰는 `int calls`를 `calls++`한다. `calls`는 정확한가 (정확하지 않을 수 있다. 안에 세 스레드가 동시에 있다)'
+      - '옮긴 상황: PDF 생성이 메모리를 많이 써서 서버에서 동시에 2개까지만 돌게 하고 싶다. 무엇을 쓰나 (허가 2개인 세마포어)'
+      - '실무 구역: 코드 leak의 `pay()`에서 결제 API가 예외를 세 번 던졌다(허가 3개). 다음 `pay()`는 어떻게 되나 (영원히 기다린다. 예외로 release를 건너뛰어 허가가 0이 됐다)'
+practice:
+  says:
+    - '스프링 서비스에서 결제사의 동시 호출 제한을 지키는 코드: 빈의 필드에 `new Semaphore(3)`을 두고, `tryAcquire(1, SECONDS)`로 잠깐만 기다린 뒤 못 받으면 "잠시 뒤 다시"로 답한다. 무한히 기다리면 요청 스레드가 묶인다(C2의 톰캣 스레드)'
+    - '흔한 실수: 코드 leak처럼 `release()`를 `finally`에 두지 않는다. 예외가 날 때마다 허가가 하나씩 사라지다가 0이 되면 모든 호출이 멈춘다. 고친 코드: 코드 semaphore의 try-finally. 예외를 세 번 낸 뒤 남은 허가가 0인 것과, 고친 뒤 3인 것을 테스트로 비교한다'
+    - '직접 만들기 전에: Resilience4j의 벌크헤드(`SemaphoreBulkhead`)가 같은 일을 설정으로 한다(Resilience4j 문서 근거, A10)'
+    - '세마포어와 락은 JVM 하나 안에서만 센다. 서버가 세 대면 동시 호출은 9건이 될 수 있다. 서버 전체의 제한은 A12, A13'
+claims:
+  - claim: '두 스레드가 ReentrantLock 안에서 10만 번씩 세면 정확히 20만이다'
+    how: 'lock과 unlock을 try-finally로 감싼다'
+  - claim: '주인이 아닌 스레드의 unlock은 IllegalMonitorStateException이다'
+    how: '한 스레드가 잡고 다른 스레드가 푼다'
+  - claim: '다른 스레드가 락을 잡고 있으면 tryLock()은 바로 false이고, tryLock(100ms)는 100ms 남짓 기다린 뒤 false다'
+    how: '래치로 한 스레드가 잡은 것을 확인하고 시간을 잰다. 90ms 이상인지만 단정한다'
+  - claim: 'lockInterruptibly로 기다리는 스레드는 interrupt하면 InterruptedException으로 기다림을 그만둔다'
+    how: '잡힌 락을 기다리게 하고 interrupt한다'
+  - claim: '허가 3개인 세마포어에 스레드 10개를 보내면 동시에 안에 있는 수는 최대 3이다'
+    how: '안에서 지금 수를 AtomicInteger로 세어 최대값을 남긴다. 3 이하이고, 시작을 래치로 맞춰 3에 닿는지 본다'
+  - claim: '다른 스레드가 받은 허가를 돌려줄 수 있고, 받지 않고 release하면 허가가 처음보다 늘어난다'
+    how: 'availablePermits를 본다'
+  - claim: 'acquire 뒤 예외로 release를 건너뛰면 허가가 줄어들고, try-finally면 그대로다'
+    how: '예외를 던지는 호출을 세 번 하고 availablePermits를 비교한다'
+sources:
+  - '`ReentrantLock`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html'
+  - '`Lock`의 tryLock, lockInterruptibly, Condition: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html'
+  - '`Semaphore`와 주인이 없다는 것: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Semaphore.html'
+  - '벌크헤드: Resilience4j 문서 https://resilience4j.readme.io/docs/bulkhead'
