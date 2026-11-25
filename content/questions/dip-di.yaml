@@ -1,0 +1,235 @@
+# 의존 역전 원칙과 의존성 주입 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/dip-di.yaml의 says).
+# 동작에 관한 정답은 verification의 DipDiTest로 확인했다 (자바 21, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: dip-di
+  title: 의존 역전 원칙과 의존성 주입
+  unit: 객체지향 설계와 패턴
+  order: 305
+concepts:
+  - key: core
+    name: 의존 역전 원칙과 의존성 주입
+coreQuestions:
+  - key: q1
+    text: "구현 클래스를 안에서 직접 만들면 어떤 문제가 생기나요?"
+  - key: q2
+    text: "의존 역전 원칙은 무엇이고, 무엇이 역전되나요?"
+  - key: q3
+    text: "의존성 주입은 무엇이고, 무엇이 좋아지나요?"
+  - key: q4
+    text: "의존 역전 원칙과 의존성 주입은 같은 것인가요?"
+questions:
+  # ── 질문 1 ──
+  - key: dd-direct-kakao
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: SignupService가 필드에서 private final SmtpMailSender mail = new SmtpMailSender();로 메일 발송 객체를 직접 만들어요. 알림을 카카오 알림톡으로 바꾸려면 SignupService 파일을 고쳐야 할까요?
+    choices:
+      - 고쳐야 한다. 필드 타입과 new를 바꿔야 한다
+      - 고치지 않아도 된다. 조립 코드만 바꾼다
+      - 고치지 않아도 된다. 스프링이 알아서 바꾼다
+    answer: "1"
+    explanation: |-
+      **고쳐야 해요.** 서비스가 구현을 직접 만들어서, 구현이 바뀌면 서비스의 코드가 바뀌어요.
+
+      - 같은 이유로 테스트에서도 가짜로 바꿀 수 없어서 진짜 발송 코드가 돌아요
+  - key: dd-toss-test
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: OrderService가 placeOrder() 안에서 new TossPaymentClient()를 만들어 결제를 요청해요. OrderService를 고치지 않고 "결제 실패" 경우를 테스트하려면 어떻게 해야 할까요?
+    choices:
+      - 테스트에서 가짜 결제 클라이언트를 생성자로 넘긴다
+      - 실제 결제 서버에서 실패를 일으켜야 한다
+      - TossPaymentClient를 상속한 테스트 클래스를 만들면 자동으로 쓰인다
+    answer: "2"
+    explanation: |-
+      **코드를 고치지 않으면 진짜 서버에서 실패를 일으켜야 해요.** 서비스가 구현을 안에서 만들어서 테스트가 다른 객체를 넣을 자리가 없어요.
+
+      - 생성자로 받게 바꿔야 가짜를 넣을 수 있어요
+  # ── 질문 2 ──
+  - key: dd-interface-place
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 가입 정책은 member 패키지, SMTP 메일 발송은 infra 패키지에 있어요. 의존 역전 원칙대로 Notifier 인터페이스를 만들 때, 인터페이스는 어디에 두고 import는 어느 쪽이 하게 될까요?
+    choices:
+      - infra에 둔다. member가 infra를 import한다
+      - member에 둔다. infra가 member를 import한다
+      - 아무 데나 둬도 import 방향은 같다
+    answer: "2"
+    explanation: |-
+      **member에 두고, infra의 구현이 member를 import해요.** 인터페이스를 쓰는 쪽에 두면 소스 코드의 의존 방향이 세부에서 정책 쪽으로 뒤집혀요.
+
+      - 그래서 member 패키지는 infra 없이 컴파일돼요
+    source: https://web.archive.org/web/20110714224327/http://www.objectmentor.com/resources/articles/dip.pdf
+  - key: dd-toss-dip
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 정책(OrderService)이 결제 대행사 SDK의 TossClient를 직접 import해요. 의존 역전 원칙대로 고치는 방법은 무엇일까요?
+    choices:
+      - TossClient를 상속한 클래스를 주문 쪽에 만든다
+      - 주문 쪽에 결제를 요청하는 인터페이스를 두고, 토스용 구현이 그것을 구현하게 한다
+      - OrderService를 SDK 패키지로 옮긴다
+      - TossClient를 static으로 부른다
+    answer: "2"
+    explanation: |-
+      **주문 쪽에 인터페이스를 두고 토스용 구현이 그것을 구현해요.** 주문 정책은 인터페이스만 알고, 토스 SDK에 기대는 것은 구현 쪽이 돼요.
+
+      - 인터페이스의 이름과 메서드는 쓰는 쪽(주문)의 말로 지어요
+  # ── 질문 3 ──
+  - key: dd-fake-sent
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: SignupService는 생성자로 Notifier를 받고, signup(email)에서 notifier.notify(email, ...)를 불러요. 아래 코드를 실행한 뒤 fake.sent에는 무엇이 들어 있을까요?
+    code: |-
+      class FakeNotifier implements Notifier {
+        List<String> sent = new ArrayList<>();
+        public void notify(String to,
+                           String msg) {
+          sent.add(to);
+        }
+      }
+
+      var fake = new FakeNotifier();
+      new SignupService(fake).signup("a@b.c");
+    choices:
+      - 빈 리스트
+      - "[a@b.c]"
+      - 컴파일 오류
+      - 진짜 메일이 나가고 sent는 비어 있다
+    answer: "2"
+    explanation: |-
+      **[a@b.c]예요.** 가입 서비스는 받은 Notifier를 부를 뿐이라, 가짜를 넣으면 가짜가 불려요.
+
+      - 메일은 나가지 않고 누구에게 보내려 했는지만 남아요
+      - 밖에서 넣어 주니 테스트에서 바꿔 끼울 수 있어요
+  - key: dd-three-services
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 가입, 주문, 배송 세 서비스가 모두 Notifier를 생성자로 받아요. 조립하는 곳에서 new SmtpNotifier()를 넘기고 있어요. 알림톡으로 바꿀 때 세 서비스 가운데 고칠 파일은 몇 개일까요?
+    choices:
+      - 3개
+      - 1개
+      - 0개
+    answer: "3"
+    explanation: |-
+      **0개예요.** 세 서비스는 Notifier만 알아요. KakaoNotifier를 새로 만들고 조립하는 곳의 new만 바꿔요.
+
+      - 만들고 잇는 코드가 한 곳에 모인 덕분이에요
+  # ── 질문 4 ──
+  - key: dd-concrete-di
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: SignupService가 생성자로 SmtpMailSender(구체 클래스)를 받아요. 이 코드에 대한 설명으로 맞는 것은?
+    code: |-
+      class SignupService {
+        private final SmtpMailSender mail;
+        SignupService(SmtpMailSender mail) {
+          this.mail = mail;
+        }
+      }
+    choices:
+      - DI이고 DIP도 지켰다
+      - DI이지만 DIP는 아니다. 알림톡으로 바꾸면 SignupService를 고친다
+      - DI가 아니다. new를 쓰지 않았다
+      - DIP를 지켰지만 DI는 아니다
+    answer: "2"
+    explanation: |-
+      **DI이지만 DIP는 아니에요.** 밖에서 받으니 주입이지만, 받는 타입이 구체 클래스라서 구현을 바꾸면 서비스의 타입을 고쳐야 해요.
+
+      - DIP는 무엇에 기댈지, DI는 어떻게 얻을지에 대한 것이에요
+  - key: dd-which-true
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 다음 가운데 맞는 말은 무엇일까요?
+    choices:
+      - 스프링을 쓰면 의존 역전 원칙이 저절로 지켜진다
+      - 생성자 주입만 쓰면 의존 역전 원칙을 지킨 것이다
+      - 인터페이스 타입으로 주입받아야 구현을 바꿀 때 쓰는 쪽을 고치지 않는다
+      - 서비스 로케이터로 인터페이스를 찾아오면 의존성 주입이다
+    answer: "3"
+    explanation: |-
+      **인터페이스 타입으로 주입받아야 해요.** 인터페이스에 기대는 것(DIP)과 밖에서 받는 것(DI)을 함께 써야 구현을 바꿀 때 쓰는 쪽이 그대로예요.
+
+      - 서비스 로케이터는 스스로 찾아오는 것이라 주입이 아니에요
+    source: https://martinfowler.com/articles/injection.html
+  - key: dd-field-injection
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 스프링 서비스를 테스트 코드에서 new로 만들어 불렀어요. 어떻게 될까요?
+    code: |-
+      @Service
+      class SignupService {
+        @Autowired
+        private Notifier notifier;
+
+        void signup(String email) {
+          notifier.notify(email, "환영");
+        }
+      }
+
+      new SignupService().signup("a@b.c");
+    choices:
+      - 스프링이 Notifier를 넣어 줘서 정상으로 실행된다
+      - NullPointerException
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **NullPointerException이 나요.** 필드 주입은 컨테이너가 객체를 만든 뒤 넣는 방식이라 new로 만들면 notifier가 null이에요.
+
+      - 생성자 주입으로 바꾸면 new SignupService(fake)로 바로 테스트해요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  # ── 네 질문을 하나로 ──
+  - key: dd-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "의존 역전 원칙과 의존성 주입이 무엇이고, 둘은 어떻게 다른지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **DIP는 인터페이스에 기대라는 원칙, DI는 기댈 객체를 밖에서 받는 방법이고, 함께 써야 구현을 바꿔도 쓰는 쪽이 그대로예요.**
+
+      - **문제:** 안에서 new하면 테스트에서 바꿀 수 없고 구현을 바꿀 때 쓰는 쪽을 고친다
+      - **DIP:** 인터페이스를 쓰는 쪽에 두면 구현이 정책을 import해서 의존 방향이 뒤집힌다
+      - **DI:** 생성자로 받고, 조립하는 곳(스프링 컨테이너)이 넣는다. 테스트는 가짜를 넣는다
+      - **차이:** 구체 클래스를 주입받으면 DI지만 DIP는 아니다. 필드 주입보다 생성자 주입
+    checklist:
+      - 구현을 안에서 new하면 테스트와 교체가 어렵다고 말했다
+      - DIP를 상위 정책과 하위 구현이 둘 다 인터페이스에 기대는 것이라고 말했다
+      - 인터페이스를 쓰는 쪽에 두어 의존 방향이 뒤집힌다고 말했다
+      - DI를 필요한 객체를 밖에서(생성자로) 받는 것이라고 말했다
+      - 구체 클래스를 주입받으면 DI지만 DIP는 아니라고 말했다
