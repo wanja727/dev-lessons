@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/spring-beans.yaml의 says).
 # 동작에 관한 정답은 verification의 SpringBeansLessonTest로 확인했다 (스프링 프레임워크 6.2).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CoffeeService가 생성자로 CoffeeMenuRepository와 NoticeSender를 받고, CoffeeController가 생성자로 CoffeeService를 받아요. 스프링 컨테이너는 이 넷 가운데 무엇을 가장 나중에 만들까요?
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '@SpringBootApplication이 붙은 클래스가 com.shop 패키지에 있어요. @Service가 붙은 com.shop.order.OrderService와 @Component가 붙은 com.common.MailSender 가운데 빈이 되는 것은 무엇일까요? 다른 스캔 설정은 하지 않았어요.'
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 서비스를 단위 테스트에서 new로 만들고 notify("kim")을 불렀어요. 어떻게 될까요?
     code: |-
@@ -101,7 +102,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: PaymentService가 생성자로 PgClient 인터페이스를 받는데, PgClient의 구현 클래스에 @Component를 붙이는 것을 잊었어요. 다른 곳에도 PgClient 빈은 없어요. 이 앱은 언제 실패할까요?
     choices:
@@ -121,7 +122,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래처럼 문자 쪽에 @Primary가 있고, 서비스는 @Qualifier로 받아요. CoffeeService의 sender에는 무엇이 들어갈까요?
     code: |-
@@ -156,7 +157,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 결제 대행사 클라이언트 PgClient의 구현이 TossPgClient와 KakaoPgClient 둘이고, 둘 다 @Component만 붙어 있어요(@Primary 없음). 정산 서비스가 생성자로 List<PgClient>를 받으면 어떻게 될까요?
     choices:
@@ -174,7 +175,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 메인 클래스가 com.shop.ShopApplication이에요. 팀원이 공통 알림 클래스 com.common.SlackNotifier에 @Component를 붙이고 OrderService의 생성자로 받게 했더니 앱이 뜨지 않아요. 가장 간단한 해결은 무엇일까요?
     choices:
@@ -194,7 +195,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: CoffeeController와 OrderReportService가 둘 다 생성자로 CoffeeService를 받아요. 스코프는 따로 정하지 않았어요. 두 곳에 들어간 CoffeeService는 어떤 관계일까요?
     choices:
@@ -212,7 +213,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 아래 설정에서 daily와 weekly가 받은 Clock은 몇 개의 서로 다른 객체일까요?
     code: |-
@@ -246,7 +247,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링의 의존성 주입은 어떻게 동작하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

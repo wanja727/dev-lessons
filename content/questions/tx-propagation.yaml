@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/tx-propagation.yaml의 says).
 # 동작에 관한 정답은 verification의 TxPropagationLessonTest와 propagation/PropagationTest로 확인했다.
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 # 2026-11-25에 핵심 질문 구조로 다시 썼다. 예전 문제는 지웠다.
 subject:
   key: dev
@@ -32,7 +33,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 두 메서드 모두 기본 설정의 @Transactional이고 서로 다른 빈이에요. place가 끝나면 어떻게 될까요?
     code: |-
@@ -64,7 +65,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '@Transactional OrderService.place가 다른 빈의 @Transactional CouponService.use를 부르고, use는 예외 없이 끝났어요. 그 뒤 place에서 런타임 예외가 났어요. use가 저장한 쿠폰 사용 기록은 남을까요?'
     choices:
@@ -81,7 +82,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 'place가 주문을 저장하고, propagation = REQUIRES_NEW인 AuditService.record로 감사 기록을 남긴 뒤, place에서 런타임 예외가 났어요. 주문과 감사 기록은 각각 남을까요?'
     choices:
@@ -97,7 +98,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 바깥 트랜잭션이 회원을 저장(아직 커밋 전)한 뒤 propagation = REQUIRES_NEW인 메서드가 그 회원을 id로 조회해요. 찾을 수 있을까요?
     choices:
@@ -114,7 +115,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: '@Transactional 메서드가 행을 저장한 뒤 내가 만든 class SoldOutException extends Exception을 던졌어요. rollbackFor는 적지 않았어요. 행은 남을까요?'
     choices:
@@ -132,7 +133,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 같은 메서드가 이번에는 class SoldOutException extends RuntimeException을 던져요. 행은 남을까요?
     choices:
@@ -149,9 +150,9 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
-    body: 아래에서 deposit이 런타임 예외를 던졌어요(SQL을 보내기 전, 자바에서 실패). transfer가 끝나면 출금은 DB에 남을까요?
+    body: 아래에서 accounts는 @Transactional이 붙지 않은 일반 빈이고, deposit이 SQL을 보내기 전에 자바에서 런타임 예외를 던졌어요. transfer가 끝나면 출금은 DB에 남을까요?
     code: |-
       @Transactional
       public void transfer(long from,
@@ -179,7 +180,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: '@Transactional 메서드에서 try { coupons.save(c); } catch (DataIntegrityViolationException e) { }로 중복 쿠폰이면 넘어가려 해요. coupons는 Spring Data 리포지토리예요. 실제로 중복이 나면 메서드가 끝날 때 어떻게 될까요?'
     choices:
@@ -197,7 +198,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 실패한 결제 시도를 남기는 AuditService.record를 REQUIRES_NEW가 아니라 기본 전파(@Transactional)로 두었어요. 결제가 런타임 예외로 롤백될 때 감사 기록은 남을까요?
     choices:
@@ -214,7 +215,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "트랜잭션 전파와 롤백 규칙을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

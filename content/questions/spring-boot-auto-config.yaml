@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/spring-boot-auto-config.yaml의 says).
 # 동작에 관한 정답은 verification의 AutoConfigTest로 확인했다 (스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: '컨트롤러만 둔 스프링 부트 웹 앱에서 @SpringBootApplication 대신 @SpringBootConfiguration과 @ComponentScan만 붙였어요(@EnableAutoConfiguration은 뺐어요). 이 앱에 자동 설정의 ObjectMapper 빈이 생길까요?'
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 팀원이 "spring-boot-starter-data-redis jar 안에 Redis 빈을 만드는 설정 코드가 있다"고 말해요. 이 말에 대해 맞는 것은 무엇일까요?
     choices:
@@ -69,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: JacksonAutoConfiguration에는 클래스에 @ConditionalOnClass(ObjectMapper.class), ObjectMapper를 만드는 메서드에 @ConditionalOnMissingBean이 붙어 있어요. 클래스패스에 잭슨이 있고 내가 만든 ObjectMapper 빈은 없어요. 자동 설정이 ObjectMapper를 만들까요?
     choices:
@@ -87,7 +88,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '어떤 자동 설정 클래스에 @ConditionalOnClass(name = "io.lettuce.core.RedisClient")가 붙어 있고, 안에 @Bean 메서드가 세 개 있어요. 앱에 Lettuce 라이브러리가 없으면 어떻게 될까요?'
     choices:
@@ -106,7 +107,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래처럼 내 ObjectMapper 빈을 만들고 설정 값도 적었어요. 컨트롤러가 OrderSummary(1, "latte", 2)를 돌려주면 응답 JSON의 첫 키는 무엇일까요?
     code: |-
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 'DataSource 자동 설정은 DataSource 빈이 없을 때만 커넥션 풀을 만들어요. 내가 @Bean으로 HikariDataSource를 직접 만들어 돌려주고, application.yml에는 spring.datasource.hikari.maximum-pool-size: 30을 적었어요. 내 빈에서 그 값을 따로 읽지는 않아요. 풀 크기는 30이 될까요?'
     choices:
@@ -160,7 +161,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 응답 JSON의 키를 order_id 같은 밑줄 모양으로 바꾸고, LocalDate 같은 날짜 처리는 그대로 두고 싶어요. 가장 알맞은 방법은 무엇일까요?
     choices:
@@ -178,7 +179,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 설정 목록(spring.jackson.*)에 없는 잭슨 기능 하나를 켜고 싶어요. 자동 설정의 다른 설정은 모두 유지해야 해요. 무엇을 만들까요?
     choices:
@@ -196,7 +197,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: spring-boot-starter-data-jpa와 PostgreSQL 드라이버를 넣고, spring.datasource.url은 적지 않은 채 앱을 띄웠어요. 내장 DB 라이브러리(H2 등)는 없어요. 어떻게 될까요?
     choices:
@@ -215,7 +216,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 부트의 자동 설정은 어떻게 동작하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

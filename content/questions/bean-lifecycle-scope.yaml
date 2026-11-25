@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/bean-lifecycle-scope.yaml의 says).
 # 동작에 관한 정답은 verification의 BeanLifecycleTest로 확인했다 (스프링 프레임워크 6.2).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: '@Autowired 필드 하나와 @PostConstruct, @PreDestroy 메서드를 가진 빈이 있어요. 컨테이너가 이 빈을 다룰 때 일어나는 일의 순서로 맞는 것은 무엇일까요?'
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: ReportService가 생성자로 MailClient를 받아요. 둘 다 @PreDestroy 메서드가 있어요. 앱을 정상 종료하면 어느 쪽의 @PreDestroy가 먼저 불릴까요?
     choices:
@@ -69,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 설정에 coupon.max=50이 있어요. 아래 빈을 만들 때 생성자 안에서 찍히는 값은 무엇일까요?
     code: |-
@@ -98,7 +99,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 시작할 때 금칙어 파일을 읽어 두는 빈의 @PostConstruct 메서드가, 파일이 없어 IllegalStateException을 던졌어요. 앱은 어떻게 될까요?
     choices:
@@ -117,7 +118,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 싱글톤 빈 OrderCounter의 필드를 private int count에서 private final AtomicLong count로 바꾸고 increase()에서 count.incrementAndGet()을 불러요. 스레드 두 개가 increase()를 1만 번씩 부르면 결과는 어떻게 될까요?
     choices:
@@ -136,7 +137,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 싱글톤 서비스에 두 요청이 거의 동시에 들어왔어요. 무슨 일이 생길 수 있을까요?
     code: |-
@@ -169,7 +170,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '싱글톤 GreetingService가 private String userName 필드에 요청의 이름을 넣고, audit()를 부른 뒤 "안녕하세요 " + userName을 돌려줘요. 동시 요청에서 다른 사람의 이름이 섞이는 문제를 고치는 가장 알맞은 방법은 무엇일까요?'
     choices:
@@ -189,7 +190,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: '@Scope("prototype")인 Cart를 싱글톤 CartService가 생성자로 받아 필드에 담았어요. kim과 lee가 차례로 CartService를 통해 상품을 담으면 어떻게 될까요?'
     choices:
@@ -207,7 +208,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 요청마다 고유한 추적 id를 가진 TraceContext 객체가 필요해요. 여러 사용자가 동시에 요청해도 요청마다 다른 id가 보장되는 방법은 무엇일까요?
     choices:
@@ -227,7 +228,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 빈의 생명주기와 스코프를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

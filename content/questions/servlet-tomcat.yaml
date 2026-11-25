@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/servlet-tomcat.yaml의 says).
 # 동작에 관한 정답은 verification의 ServletTomcatTest로 확인했다 (자바 21, 스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스프링 부트 웹 앱에 컨트롤러가 세 개 있어요. GET /orders/7과 POST /members 요청은 각각 어느 서블릿이 받을까요?
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 다음 가운데 서블릿 컨테이너(톰캣)가 하는 일이 아닌 것은 무엇일까요?
     choices:
@@ -69,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 사용자 둘이 같은 순간에 GET /orders/1과 GET /orders/2를 보냈어요. 스프링 부트의 내장 톰캣에서 두 요청의 컨트롤러는 어떻게 실행될까요?
     choices:
@@ -88,7 +89,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 필터에서 ThreadLocal에 요청 id를 넣었어요. 같은 요청의 서비스 메서드가 이 값을 읽으면 어떻게 될까요? 그 서비스가 일을 new Thread(...)로 만든 새 스레드에 맡기고, 새 스레드에서 읽으면 어떻게 될까요?
     choices:
@@ -108,7 +109,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: server.tomcat.threads.max=2인 앱에 1초 걸리는 요청 4개를 동시에 보냈어요. 네 번째 요청은 약 몇 초에 응답할까요?
     choices:
@@ -126,7 +127,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 스레드 200개(기본값)인 서버에서 외부 API가 갑자기 30초씩 걸리기 시작했어요. 그 API를 부르는 요청이 초당 10개씩 들어와요. 외부 API를 부르지 않는 다른 요청은 언제쯤부터 기다리게 될까요?
     choices:
@@ -145,7 +146,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 외부 결제 API를 부르는 RestClient에 읽기 타임아웃 2초를 줬어요(JdkClientHttpRequestFactory.setReadTimeout). 결제 서버가 멈춰 응답을 주지 않으면, 이 호출을 한 톰캣 스레드는 얼마 동안 묶일까요?
     choices:
@@ -165,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 톰캣에 등록한 서블릿 하나에 요청 100개가 왔어요. init과 service는 각각 몇 번 불렸을까요?
     choices:
@@ -183,7 +184,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 서블릿에 kim과 lee가 거의 동시에 요청했어요. 무슨 일이 생길 수 있을까요?
     code: |-
@@ -218,7 +219,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 부트 앱에서 요청 하나가 처리되는 동안 톰캣은 무엇을 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

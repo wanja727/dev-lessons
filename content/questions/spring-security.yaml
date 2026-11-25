@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/spring-security.yaml의 says).
 # 동작에 관한 정답은 verification의 SpringSecurityLessonTest로 확인했다 (스프링 시큐리티 6.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 규칙에서 회원 kim(역할 USER)이 올바른 아이디와 비밀번호로 GET /admin/stats를 요청하면 응답은 몇일까요?
     code: |-
@@ -57,7 +58,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 사내 시스템에서 사원 lee가 로그인한 뒤 다른 부서의 급여 화면을 열자 "권한이 없습니다"가 나와요. 이것은 무엇의 실패이고 상태 코드는 몇이 맞을까요?
     choices:
@@ -77,7 +78,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스프링 시큐리티를 켠 앱에 로그인 없이 GET /orders를 보내 401을 받았어요. 이 401 응답을 만든 것은 무엇일까요?
     choices:
@@ -93,7 +94,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 401 응답 본문을 회사의 에러 형식으로 바꾸려고 @RestControllerAdvice에 AuthenticationException 핸들러를 만들었어요. 로그인 없는 요청의 응답이 바뀔까요?
     choices:
@@ -112,7 +113,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 로그인한 kim의 요청을 처리하는 컨트롤러에서 new Thread(...)로 새 스레드를 만들고, 그 스레드에서 SecurityContextHolder.getContext().getAuthentication()을 읽었어요. 기본 설정에서 무엇이 나올까요?
     choices:
@@ -130,7 +131,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 폼 로그인(세션 방식)으로 로그인한 사용자가 브라우저의 쿠키를 모두 지우고 로그인이 필요한 /orders를 요청했어요. 어떻게 될까요?
     choices:
@@ -147,7 +148,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: sessionCreationPolicy(STATELESS)와 Authorization 헤더의 토큰을 검증하는 필터로 설정한 API에, 토큰 없이 GET /orders를 보냈어요. 응답과 Set-Cookie 헤더는 어떨까요?
     choices:
@@ -163,7 +164,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 세션 쿠키로 로그인하는 앱에서 CSRF 보호를 끄지 않았어요. 로그인한 브라우저가 CSRF 토큰 없이 POST /orders를 보내면 응답은 몇일까요?
     choices:
@@ -182,7 +183,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: PasswordEncoderFactories.createDelegatingPasswordEncoder()로 같은 비밀번호 "kim-pw"를 두 번 encode했어요. 결과로 맞는 것은 무엇일까요?
     choices:
@@ -199,7 +200,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 시큐리티의 동작 과정과 세션 방식, 토큰 방식의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
