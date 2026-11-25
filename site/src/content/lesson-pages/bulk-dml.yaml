@@ -1,8 +1,9 @@
-# 대량 DML 안전하게 하기 (설계서)
+# 대량 DML 안전하게 하기
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
 # 예전 레슨 site/src/pages/lessons/bulk-dml.astro와 dml/BulkDmlTest.java를 재료로 다시 쓴다.
-stage: design
 title: 대량 DML 안전하게 하기
+description: 많은 행을 한 번에 고치면 무엇이 위험한지, 나눠서 하면 무엇이 달라지고 실패하면 어떻게 다시 하는지, 하기 전과 후에 무엇을 확인하는지, 잘못 고쳤으면 어떻게 되돌리는지. 네 가지 질문에 스스로 답할 수 있게 주문 5,000건의 상태를 바꾸는 운영 작업을 해 보며 배우는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D15
 type: 동작 확인
@@ -10,7 +11,7 @@ prerequisites:
   - {slug: tx-basics, title: 트랜잭션 기초}
   - {slug: locking, title: 낙관적 락과 비관적 락}
 assume: 'PostgreSQL 16. 커밋과 롤백(트랜잭션 기초 레슨), UPDATE가 고친 행을 커밋까지 잠그고 다른 수정은 기다린다는 것(낙관적 락과 비관적 락 레슨).'
-example: '쿠폰 지급 테이블에서 잘못 발급된 쿠폰 5,000건의 상태를 PENDING에서 CANCELED로 바꾸는 운영 작업. 한 번에 바꾸기, 나눠서 바꾸기, 되돌리기를 차례로 해 봐요.'
+example: '주문 10,000건 가운데 결제가 끝나지 않은 PENDING 5,000건을 EXPIRED로 바꾸는 운영 작업. 한 번에 바꾸기, 나눠서 바꾸기, 되돌리기를 차례로 해 봐요.'
 intro:
   - '"어제 배포 버그로 잘못 발급된 쿠폰 5,000건을 취소해 주세요." 운영 DB에서 UPDATE 한 줄이면 될 것 같아요. 그런데 그 한 줄이 도는 몇 분 동안 같은 쿠폰을 쓰려는 결제가 줄줄이 멈추고, 끝에서 실패하면 처음부터 다시 해야 해요. 조건을 잘못 써서 엉뚱한 쿠폰까지 바꿨다면 되돌릴 방법도 있어야 해요.'
   - '백엔드 개발자는 데이터 보정, 일괄 상태 변경, 오래된 데이터 정리를 직접 SQL로 하게 돼요. 이 작업은 코드 리뷰도 테스트도 없이 운영 DB에 바로 닿는 일이라, 정해진 절차가 있어요: 먼저 세고, 백업하고, 나눠서 하고, 다시 세고, 되돌릴 길을 둬요.'
@@ -38,32 +39,106 @@ covers:
     where: '다루지 않음: 벌크 연산과 영속성 컨텍스트(P8)'
   - topic: '스프링 배치로 청크마다 커밋하기'
     where: '다루지 않음: 스프링 배치(S15)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dml/BulkDmlLessonTest.java
+  oldTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dml/BulkDmlTest.java
+  update: https://www.postgresql.org/docs/16/sql-update.html
+  ctas: https://www.postgresql.org/docs/16/sql-createtableas.html
+  client: https://www.postgresql.org/docs/16/runtime-config-client.html
+  hibernateBulk: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#batch-bulk-hql
 codes:
   predict: |-
-    -- PENDING 쿠폰 5,000건
+    -- PENDING 주문 5,000건
     begin;
-    update coupon
-       set status = 'CANCELED'
+    update orders
+       set status = 'EXPIRED'
      where status = 'PENDING';
     -- 4,999건째에서 오류가 나면?
   batch: |-
-    update coupon
-       set status = 'CANCELED'
+    update orders
+       set status = 'EXPIRED'
      where id between ? and ?
        and status = 'PENDING';
     -- 묶음마다 commit
   backup: |-
-    create table coupon_bak_20261125
-    as select * from coupon
+    create table orders_bak_20261125
+    as select * from orders
      where status = 'PENDING';
   restore: |-
-    update coupon c
+    update orders c
        set status = b.status
-      from coupon_bak_20261125 b
+      from orders_bak_20261125 b
      where b.id = c.id;
+  pointRerun: |-
+    -- 회원 1,000명씩 1000점 지급
+    update member_point
+       set point = point + 1000,
+           [[paid = true]]
+     where member_id between ? and ?
+       [[and not paid]];
+  wrongWhere: |-
+    update orders
+       set status = 'EXPIRED'
+     where status = 'PENDING'
+       and created_at < '2026-03-01'
+        or id < 100;
+  runbook: |-
+    -- 0. 작업 세션 설정
+    set lock_timeout = '3s';
+
+    -- 1. 대상 건수
+    select count(*) from orders
+     where status = 'PENDING';
+
+    -- 2. 백업
+    create table orders_bak_20261125
+    as select * from orders
+     where status = 'PENDING';
+
+    -- 3. 묶음마다 (id 범위를 바꿔 가며)
+    update orders
+       set status = 'EXPIRED'
+     where id between ? and ?
+       and status = 'PENDING';
+    commit;
+
+    -- 4. 확인: 대상 0건
+    select count(*) from orders
+     where status = 'PENDING';
+
+    -- 5. 원복 (필요할 때만)
+    update orders o
+       set status = b.status
+      from orders_bak_20261125 b
+     where b.id = o.id;
+  jpaLoop: |-
+    @Transactional
+    public void expireAll() {
+      orderRepository
+          .findByStatus(PENDING)
+          .forEach(Order::expire);
+    }
+  jpaBulk: |-
+    @Modifying
+    @Query("""
+        update Order o
+           set o.status = 'EXPIRED'
+         where o.id between :from and :to
+           and o.status = 'PENDING'
+        """)
+    int expire(long from, long to);
 predict:
-  text: '코드 predict는 쿠폰 5,000건을 한 트랜잭션으로 취소해요. 거의 끝에서 오류가 나서 실패했어요. 취소된 쿠폰은 몇 건 남을까요? 보기: 0건, 4,999건 가까이, 5,000건.'
-  answer: '0건. 한 트랜잭션이라 전부 롤백된다. 질문 1에서 밝힌다.'
+  title: 끝에서 실패하면 몇 건이 남을까?
+  text: '주문 5,000건의 상태를 한 트랜잭션으로 바꿔요. 거의 끝에서 오류가 나서 실패했어요. 바뀐 주문은 몇 건 남을까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: zero, label: 0건}
+    - {value: most, label: '4,999건 가까이'}
+    - {value: all, label: '5,000건'}
+  answer: zero
+  storageKey: bulk-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 많은 행을 한 번에 고치면 무엇이 위험한가요?
@@ -78,6 +153,31 @@ questions:
     asks:
       - '본문의 예시: 쿠폰 5,000건을 한 트랜잭션으로 바꾸다 마지막 묶음에서 실패했다. 바뀐 건수는 (0건)'
       - '옮긴 상황: 주문 50만 건의 상태를 한 UPDATE로 바꾸는 3분 동안, 그 주문 가운데 하나를 결제 취소하려는 요청은 (UPDATE가 커밋할 때까지 기다리거나 lock_timeout으로 실패한다)'
+    body:
+      - p: '처음 예측의 답은 **0건**이에요. {{predict-result}}'
+      - ci:
+          key: one-tx
+          label: 실제 결과 보기
+          source: BulkDmlLessonTest.oneTransaction
+          code: predict
+      - p: '5,000건을 바꾼 뒤 마지막 문장에서 오류가 났고, 한 트랜잭션이라 **전부 롤백**됐어요. [트랜잭션 기초](lesson:tx-basics)에서 본 원자성 그대로예요. 몇 분 걸린 작업이었다면 그 몇 분을 처음부터 다시 해야 해요.'
+      - h3: 그동안 다른 요청은
+      - p: 'UPDATE는 고친 행을 **커밋까지** 잠가요([낙관적 락과 비관적 락](lesson:locking)). 대량 UPDATE가 커밋하기 전에, 결제 요청이 그 가운데 주문 하나를 고치려 했어요. 요청 쪽에는 `lock_timeout`을 1초로 걸어 두었어요.'
+      - ci:
+          key: lock
+          label: 실제 결과 보기
+          source: BulkDmlLessonTest.lockTimeout
+      - p: '결제 요청은 1초 기다린 뒤 실패했어요. `lock_timeout`이 없었다면 대량 작업이 끝날 때까지 계속 기다려요. 작업이 길수록 막히는 요청이 쌓여서, 운영 시간에는 장애처럼 보여요. 긴 트랜잭션은 옛 버전 청소도 막아요([MVCC](lesson:mvcc)).'
+      - quiz:
+          q: '주문 50만 건의 상태를 한 UPDATE로 바꾸는 데 3분이 걸려요. 그동안 그 가운데 한 주문을 결제 취소하려는 요청은 어떻게 되나요?'
+          options:
+            - '바로 성공한다'
+            - 'UPDATE가 커밋할 때까지 기다리거나, lock_timeout이 있으면 실패한다'
+            - '대량 UPDATE가 롤백된다'
+          answer: 2
+          explain: '대량 UPDATE가 그 행을 커밋까지 잠가요. 같은 행을 고치려는 요청은 기다려요.'
+      - next: '한 번에 몰아서 하는 것이 문제였어요. 나눠서 하면 어떨까요?'
+    recall: '한 트랜잭션으로 몰아서 고치면 그동안 대상 행을 모두 잠가 같은 행을 고치려는 요청을 막고, 끝에서 실패하면 진행한 것까지 전부 롤백돼요. 오래 걸리는 작업일수록 막히는 요청이 많고 잃는 시간도 커요.'
   - id: q2
     title: 나눠서 하면 무엇이 달라지고, 실패하면 어떻게 다시 하나요?
     conclusion:
@@ -94,6 +194,66 @@ questions:
     asks:
       - '본문의 예시: 1,000건씩 묶어 커밋하다 네 번째 묶음에서 실패했다. 바뀐 채 남은 건수는 (앞의 세 묶음만큼)'
       - '옮긴 상황: "회원 id 1~10만에게 포인트 1000 더하기"를 1만 명씩 나눠 하다 중간에 실패했다. 처음부터 다시 돌리면 생기는 일과 막는 법은 (이미 더한 회원에게 두 번 더해진다. 지급 기록 테이블에 없는 회원만 대상으로 하는 조건을 둔다)'
+    body:
+      - p: 'id 1,000개 범위씩 묶어 **묶음마다 커밋**해요.'
+      - code: batch
+      - p: '넷째 묶음에서 실패하게 한 뒤, 같은 작업을 처음부터 다시 돌렸어요(다섯째부터 아홉째 묶음도 500건씩이라 줄였어요).'
+      - ci:
+          key: batches
+          label: 실제 결과 보기
+          source: BulkDmlLessonTest.batchesAndRerun
+      - ul:
+          - '**한 번에 잠그는 행이 적고 짧아요.** 묶음마다 커밋해서 락을 놓아요. 다른 요청은 길어야 한 묶음만큼 기다려요.'
+          - '**실패해도 앞 묶음은 남아요.** 넷째 묶음에서 실패했지만 1,500건은 이미 커밋됐어요.'
+          - '**대신 일부만 바뀐 상태가 생겨요.** 그래서 다시 돌릴 수 있어야 해요.'
+      - p: '다시 돌린 결과를 보세요. 앞의 세 묶음은 **0건**을 바꿨어요. `and status = ''PENDING''` 조건 때문에 이미 EXPIRED인 행은 대상이 아니에요. 몇 번을 다시 돌려도 결과가 같아요. 이렇게 여러 번 돌려도 결과가 같은 성질을 **재실행 가능**(멱등)이라고 해요.'
+      - h3: 조건이 없으면
+      - p: '상태를 바꾸는 작업은 덮어쓰기라 두 번 해도 같아요. 하지만 **값을 더하는** 작업은 달라요. 회원 3,000명에게 1000점씩 주다 둘째 묶음 뒤 실패하고, 처음부터 다시 돌렸어요.'
+      - code: pointRerun
+      - ci:
+          key: point
+          label: 조건 없이와 조건 있게
+          source: BulkDmlLessonTest.rerunWithoutCondition
+      - p: '조건 없이 다시 돌리자 이미 받은 2,000명이 **두 번** 받았어요. 지급했다는 표시(`paid`)를 함께 쓰고 `and not paid`로 거르면 한 번씩만 받아요.'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 방식
+            options:
+              - {value: one, label: 한 트랜잭션}
+              - {value: batch, label: 묶음마다 커밋}
+              - {value: rerun, label: 묶음 + 처음부터 다시}
+          scenes:
+            one:
+              duo:
+                - {label: 넷째 묶음에서 실패한 뒤, rows: [{k: 바뀐 건수, v: '0', mark: bad}, {k: 다시 할 일, v: '5,000건 전부'}]}
+                - {label: 잠금, rows: [{k: 잡은 행, v: '5,000건을 끝까지', mark: bad}]}
+              verdict: '실패하면 처음부터예요. 그동안 5,000건이 계속 잠겨 있어요.'
+            batch:
+              duo:
+                - {label: 넷째 묶음에서 실패한 뒤, rows: [{k: 바뀐 건수, v: '1,500'}, {k: 다시 할 일, v: '남은 3,500건'}]}
+                - {label: 잠금, rows: [{k: 잡은 행, v: '한 묶음 500건씩 잠깐'}]}
+              verdict: '앞 묶음은 남고, 잠그는 시간이 짧아요. 대신 일부만 바뀐 상태예요.'
+            rerun:
+              duo:
+                - {label: 처음부터 다시 돌린 뒤, rows: [{k: 앞 세 묶음, v: '0건 (이미 바뀜)'}, {k: 바뀐 건수 합, v: '5,000', mark: changed}]}
+                - {label: 조건, rows: [{k: "and status = 'PENDING'", v: 이미 바뀐 행을 거름}]}
+              verdict: '대상 조건 덕분에 처음부터 다시 돌려도 안전해요.'
+      - more:
+          summary: '더 알아보기: 묶음 크기와 쉬는 시간'
+          body:
+            - p: '묶음 하나가 1초 안팎에 끝나는 크기로 잡고, 묶음 사이에 잠깐 쉬어 다른 요청이 들어올 틈을 줘요. 복제 DB를 쓰면 복제가 따라올 시간도 돼요(DB 복제와 샤딩 A15).'
+      - quiz:
+          q: '회원 10만 명에게 쿠폰 발급 행을 1만 명씩 INSERT하다 중간에 실패했어요. 처음부터 다시 돌리면 무슨 일이 생기고, 어떻게 막나요?'
+          options:
+            - '아무 일도 없다'
+            - '이미 받은 회원이 쿠폰을 두 번 받는다. 이미 발급된 회원은 거르는 조건(또는 유니크 제약)을 둔다'
+            - 'INSERT가 모두 실패한다'
+          answer: 2
+          explain: '조건 없이 다시 돌리면 이미 한 묶음도 다시 해요. 발급 기록이 없는 회원만 대상으로 하거나 `unique (member_id, coupon_id)`로 막아요.'
+      - next: '나눠서 하더라도, 대상을 잘못 고르면 소용이 없어요. 하기 전과 후에 무엇을 확인할까요?'
+    recall: 'id 범위로 묶어 묶음마다 커밋하면 한 번에 잠그는 행이 적고 짧아지고, 실패해도 앞 묶음은 남아요. 대신 일부만 바뀐 상태가 생기니 대상 조건(status = PENDING, not paid)을 WHERE에 둬서 처음부터 다시 돌려도 이미 바꾼 행은 건드리지 않게 해요.'
   - id: q3
     title: 하기 전과 후에 무엇을 확인하나요?
     conclusion:
@@ -107,6 +267,40 @@ questions:
     asks:
       - '본문의 예시: 미리 센 대상은 5,000건인데 UPDATE가 7,200건을 바꿨다고 나왔다. 할 일은 (커밋하지 않고 롤백한 뒤 조건을 다시 본다)'
       - '옮긴 상황: 오래된 로그 30만 건을 DELETE하려 한다. 하기 전에 해 둘 것은 (지울 건수를 세고, 필요하면 백업 테이블에 복사한다. 지운 건수가 같은지 본다)'
+    body:
+      - p: '운영 작업의 절차예요. 테스트로 차례로 돌렸어요.'
+      - ci:
+          key: steps
+          label: 다섯 단계의 실제 결과
+          source: BulkDmlLessonTest.backupVerifyRestore
+      - ol:
+          - '**대상 건수를 세요.** 바꿀 행이 몇 개여야 하는지 먼저 알아요.'
+          - '**백업 테이블을 만들어요.** `create table ... as select`로 대상 행을 그대로 복사해요. 백업 건수가 대상 건수와 같은지 봐요.'
+          - '**UPDATE가 바꾼 건수를 비교해요.** JDBC의 `executeUpdate`나 psql의 `UPDATE 5000`이 알려 줘요. 미리 센 건수와 같으면 커밋, 다르면 롤백이에요.'
+          - '**끝난 뒤 대상 조건으로 다시 세요.** 0건이어야 해요.'
+      - code: backup
+      - h3: 건수가 다르면 멈춰요
+      - p: '`and`와 `or`가 섞인 조건에서 괄호를 빠뜨렸어요.'
+      - code: wrongWhere
+        notes:
+          - mark: or id < 100;
+            as: code
+            text: '`and`가 먼저 묶여서 "PENDING이고 3월 전" **또는** "id가 100 미만"이 돼요. id가 100 미만이면 PAID 주문까지 바뀌어요.'
+      - ci:
+          key: wrong
+          label: 미리 센 건수와 바뀐 건수
+          source: BulkDmlLessonTest.wrongCondition
+      - p: '미리 센 건수와 다르니 **커밋하지 않고 롤백**해요. 건수를 세 두지 않았다면 PAID 주문이 EXPIRED가 된 것을 한참 뒤에야 알았을 거예요.'
+      - quiz:
+          q: '미리 센 대상은 5,000건인데, UPDATE가 7,200건을 바꿨다고 나왔어요. 아직 커밋 전이에요. 할 일은?'
+          options:
+            - '커밋한다. 더 많이 바뀌었을 뿐이다'
+            - '롤백하고 조건을 다시 본다'
+            - '2,200건을 골라 되돌린다'
+          answer: 2
+          explain: '건수가 다르면 조건이 생각과 다르다는 뜻이에요. 커밋 전이면 롤백 한 번으로 끝나요.'
+      - next: '확인했는데도 커밋한 뒤에야 잘못을 알았다면요?'
+    recall: '하기 전에 대상 건수를 세고 원래 값을 백업 테이블에 복사해 두고, 한 뒤에 바꾼 건수가 미리 센 건수와 같은지와 대상 조건이 0건 남았는지 확인해요. 건수가 다르면 조건이 생각과 다르다는 뜻이라 커밋하기 전에 롤백해요.'
   - id: q4
     title: 잘못 고쳤으면 어떻게 되돌리나요?
     conclusion:
@@ -119,11 +313,62 @@ questions:
     asks:
       - '본문의 예시: 백업 테이블과 id로 조인해 되돌리면 원래 값과 같아지나 (같아진다)'
       - '옮긴 상황: 백업 없이 커밋까지 한 대량 UPDATE가 잘못됐다는 것을 알았다. 할 수 있는 일은 (DB의 백업이나 시점 복구 같은 큰 수단밖에 없다. 그래서 작업 전 백업 테이블을 만든다)'
+    body:
+      - p: '커밋한 뒤에는 롤백할 수 없어요. 그래서 **되돌릴 데이터와 SQL을 작업 전에** 준비해요. 백업 테이블과 id로 조인해서 원래 값으로 되돌려요.'
+      - code: restore
+      - p: '질문 3의 결과 마지막 줄이 이것을 돌린 결과예요. 백업과 다른 행이 0개, PENDING이 다시 5,000건이에요.'
+      - ul:
+          - '원복 스크립트도 작업처럼 나눠서, 건수를 확인하며 돌려요.'
+          - '백업 테이블에는 날짜를 붙여 두고, 확인이 끝나면 정한 기간 뒤에 지워요.'
+          - '백업 없이 커밋했다면 남은 수단은 DB 전체의 백업이나 특정 시점으로 복구하는 큰 작업뿐이에요. 테이블 하나 되돌리려고 DB 전체를 건드려야 해요.'
+      - quiz:
+          q: '백업 테이블 없이 커밋까지 한 대량 UPDATE가 잘못됐다는 것을 알았어요. 할 수 있는 일은?'
+          options:
+            - '`rollback`을 실행한다'
+            - 'DB 전체의 백업이나 시점 복구 같은 큰 수단밖에 없다'
+            - '같은 UPDATE를 한 번 더 돌린다'
+          answer: 2
+          explain: '커밋한 변경은 롤백되지 않아요. 원래 값이 어디에도 없으니 DB 단위의 복구가 필요해요. 그래서 작업 전에 백업 테이블을 만들어요.'
+    recall: '백업 테이블과 id로 조인해서 원래 값으로 되돌리는 원복 스크립트를 작업 전에 써 둬요. 커밋한 뒤에는 롤백할 수 없어서, 되돌릴 데이터와 SQL이 미리 있어야 해요. 백업 없이 커밋했다면 DB 전체를 복구하는 큰 수단밖에 남지 않아요.'
 practice:
   says:
     - '운영 작업 절차서 하나를 SQL로 보인다: 1 대상 건수 세기, 2 백업 테이블, 3 묶음 UPDATE(조건 포함), 4 건수 비교, 5 대상 0건 확인, 6 원복 SQL. 모든 단계를 테스트로 돌린다'
     - '`set lock_timeout = ''3s''`를 작업 세션에 먼저 걸어, 운영 요청과 엮였을 때 작업 쪽이 먼저 물러나게 한다'
     - '흔한 실수: JPA로 `findAll()` 해서 엔티티를 하나씩 고친다. 5,000건을 메모리에 올리고 UPDATE를 5,000번 보낸다. 고친 것: 벌크 UPDATE 쿼리 하나(묶음마다). JPA 벌크 연산이 영속성 컨텍스트와 어긋나는 것은 P8에서 다룬다(하이버네이트 문서 근거)'
+  title: 운영에서는 이렇게 해요
+  body:
+    - p: '대량 작업은 아래처럼 **한 문서**에 SQL로 적어 두고, 같이 일하는 사람이 검토한 뒤 그대로 돌려요. 이 레슨의 테스트가 이 순서로 돌았어요.'
+    - code: runbook
+      notes:
+        - mark: set lock_timeout = '3s';
+          as: code
+          text: '작업 세션에 먼저 걸어요. 운영 요청과 엮이면 작업 쪽이 3초 뒤 물러나요. 작업은 다시 돌리면 되지만, 막힌 운영 요청은 사용자의 실패예요.'
+    - h3: '흔한 실수: JPA로 하나씩 고치기'
+    - code: jpaLoop
+      notes:
+        - mark: .forEach(Order::expire);
+          as: code
+          text: '5,000건을 모두 메모리에 올리고, 변경 감지로 UPDATE를 5,000번 보내요. 한 트랜잭션이라 질문 1의 문제도 그대로예요.'
+    - code: jpaBulk
+      notes:
+        - mark: '@Modifying'
+          as: anno
+          text: '벌크 UPDATE 쿼리 하나로 한 묶음을 바꿔요. 묶음마다 이 메서드를 새 트랜잭션에서 불러요.'
+    - p: '벌크 쿼리는 영속성 컨텍스트를 거치지 않아서, 이미 읽어 둔 엔티티와 DB의 값이 어긋날 수 있어요. 그 문제는 벌크 연산과 영속성 컨텍스트(P8)에서 다뤄요.'
+    - muted: '근거: 벌크 쿼리는 [하이버네이트 문서](link:hibernateBulk), lock_timeout은 [PostgreSQL 문서](link:client). SQL 절차는 테스트로 돌렸어요.'
+interview:
+  question: 운영 DB에서 수천 건 이상을 고쳐야 할 때 어떻게 하나요?
+  model:
+    - label: 정의
+      text: 대량 DML은 운영 DB에서 많은 행을 한 번에 바꾸는 작업입니다. 한 트랜잭션으로 몰아서 하면 대상 행을 커밋까지 잠가 운영 요청을 막고, 끝에서 실패하면 전부 롤백되어 처음부터 다시 해야 합니다.
+    - label: 원리
+      text: id 범위로 묶어 묶음마다 커밋하면 잠그는 시간이 짧아지고 실패해도 앞 묶음이 남습니다. 대신 일부만 바뀐 상태가 생기므로 대상 조건을 WHERE에 둬서 처음부터 다시 돌려도 결과가 같게 만듭니다.
+    - label: 주의할 점
+      text: 하기 전에 대상 건수를 세고 백업 테이블을 만들고, 바뀐 건수가 같은지 보고 다르면 커밋 전에 롤백합니다. 원복 스크립트를 미리 쓰고, 작업 세션에는 lock_timeout을 걸어 운영 요청에 양보합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 잘못 발급된 쿠폰 수만 건을 취소할 때 백업 테이블과 1,000건 단위 커밋, 건수 비교로 진행했고, 중간에 끊겨도 같은 스크립트로 이어서 끝냈습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에 주문 10,000건을 넣고 작업 절차를 그대로 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([BulkDmlLessonTest](link:test), [BulkDmlTest](link:oldTest))가 다시 돌아요.
+footer: '근거: UPDATE와 바뀐 건수는 [PostgreSQL 16 문서](link:update), 백업 테이블은 [CREATE TABLE AS](link:ctas), lock_timeout은 [클라이언트 설정](link:client). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '백업 테이블 건수 = 대상 건수'
     how: '예전 테스트'

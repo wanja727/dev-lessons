@@ -1,18 +1,19 @@
 ---
 title: 대량 DML 안전하게 하기
 unit: DB
-order: 22
+order: 615
 stage: DB와 운영
-summary: 운영 DB에서 수천~수십만 건을 고칠 때의 절차. 백업 테이블, 전후 건수 비교, 분할 커밋, 재실행 가능한 조건, 원복 스크립트를 시뮬레이터와 테스트로 확인하고 작업 SQL 템플릿까지 가져가요.
-minutes: 30
+summary: 많은 행을 한 번에 고치면 무엇이 위험한지, 나눠서 하면 무엇이 달라지고 실패하면 어떻게 다시 하는지, 하기 전과 후에 무엇을 확인하는지, 잘못 고쳤으면 어떻게 되돌리는지. 네 가지 질문에 스스로 답할 수 있게 주문 5,000건의 상태를 바꾸는 운영 작업을 해 보며 배워요.
+minutes: 20
 page: bulk-dml
 verifiedBy:
+  - verification/src/test/java/lab/devlessons/dml/BulkDmlLessonTest.java
   - verification/src/test/java/lab/devlessons/dml/BulkDmlTest.java
 sources:
   - https://www.postgresql.org/docs/16/sql-update.html
   - https://www.postgresql.org/docs/16/sql-createtableas.html
   - https://www.postgresql.org/docs/16/runtime-config-client.html
-updated: 2026-11-16
+updated: 2026-11-25
 ---
 
-선수 레슨: 격리 수준과 이상 현상.
+선수 레슨: 트랜잭션 기초, 낙관적 락과 비관적 락. 커밋과 롤백, UPDATE가 행을 잠근다는 것을 알면 돼요.
