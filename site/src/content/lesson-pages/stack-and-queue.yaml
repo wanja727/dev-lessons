@@ -1,8 +1,9 @@
-# 스택과 큐 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 스택과 큐
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/stack-and-queue.yaml에 있다.
 title: 스택과 큐
+description: 스택과 큐가 꺼내는 순서가 어떻게 다른지, 자바에서는 무엇으로 쓰는지, ArrayDeque는 맨 앞에서 빼도 왜 느려지지 않는지. 세 가지 질문에 스스로 답할 수 있게, 주문 번호를 스택과 큐에 넣고 꺼내며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 20
 roadmap: K3
 type: 자바 실행
 prerequisites:
@@ -56,31 +57,81 @@ codes:
     boolean balanced(String s) {
       Deque<Character> st = new ArrayDeque<>();
       for (char c : s.toCharArray()) {
-        if (c == '(') st.push(c);
+        if (c == '(') [[st.push(c)]];
         else if (c == ')') {
           if (st.isEmpty()) return false;
-          st.pop();
+          [[st.pop()]];
         }
       }
       return st.isEmpty();
     }
+  bracketsRun: |-
+    balanced("(())");
+    balanced("(()");
+    balanced("())");
+  emptyRun: |-
+    Deque<Integer> d = new ArrayDeque<>();
+    d.poll();  d.peek();
+    d.pop();   d.remove();
+    d.offer(null);
+  queueOnly: |-
+    [[Queue]]<Order> waiting =
+        new ArrayDeque<>();
+    waiting.offer(order);
+    Order next = waiting.poll();
   listQueue: |-
     List<Integer> q = new ArrayList<>();
     // 꺼낼 때
-    int first = q.remove(0);
+    int first = [[q.remove(0)]];
+  ringRun: |-
+    // 안쪽 배열의 길이가 8이 되게 만든다
+    Deque<Integer> d = new ArrayDeque<>(7);
+    // offer 1~5, poll 두 번,
+    // offer 6~8, offer 9
+  drainRun: |-
+    while (!q.isEmpty()) {
+      q.remove(0);  // ArrayList
+    }
+    while (!d.isEmpty()) {
+      d.poll();     // ArrayDeque
+    }
   mixed: |-
     Deque<String> history = new ArrayDeque<>();
-    history.offer("홈");
-    history.offer("상품 목록");
-    history.offer("상품 상세");
+    history.[[offer]]("홈");
+    history.[[offer]]("상품 목록");
+    history.[[offer]]("상품 상세");
+    // 뒤로 가기
+    System.out.println(history.pop());
+  mixedFixed: |-
+    Deque<String> history = new ArrayDeque<>();
+    history.[[push]]("홈");
+    history.[[push]]("상품 목록");
+    history.[[push]]("상품 상세");
     // 뒤로 가기
     System.out.println(history.pop());
   executor: |-
     ExecutorService pool =
-        Executors.newFixedThreadPool(4);
+        Executors.[[newFixedThreadPool(4)]];
+    pool.submit(() -> sendMail(order));
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/stackqueue/StackAndQueueTest.java
+  deque: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html
+  stack: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Stack.html
+  arrayDeque: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayDeque.html
+  executors: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
 predict:
-  text: '코드 predict는 1, 2, 3을 같은 순서로 `stack`과 `queue`에 넣고 하나씩 꺼내요. 두 줄의 출력은 각각 무엇일까요? 보기: 1과 1, 3과 1, 1과 3, 3과 3.'
-  answer: '3과 1. 스택은 마지막에 넣은 3을, 큐는 먼저 넣은 1을 꺼낸다. 질문 1에서 밝힌다.'
+  title: 같은 순서로 넣고 꺼내면?
+  text: '코드 predict는 1, 2, 3을 같은 순서로 `stack`과 `queue`에 넣고 하나씩 꺼내요. 두 줄의 출력은 각각 무엇일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '11', label: '1과 1'}
+    - {value: '31', label: '3과 1'}
+    - {value: '13', label: '1과 3'}
+    - {value: '33', label: '3과 3'}
+  answer: '31'
+  storageKey: sq-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 스택과 큐는 꺼내는 순서가 어떻게 다른가요?
@@ -96,6 +147,49 @@ questions:
     asks:
       - '본문의 예시: 코드 brackets에 `"(()"`를 넣으면 무엇을 돌려주나 (false. 끝났을 때 스택에 여는 괄호가 하나 남는다)'
       - '옮긴 상황: 문서 편집기에서 글자 A, B, C를 차례로 입력한 뒤 "되돌리기"를 두 번 눌렀다. 남는 글자는 무엇이고, 되돌린 기록을 담기에 맞는 것은 스택과 큐 가운데 무엇인가 (A. 스택)'
+    body:
+      - p: '스택과 큐는 둘 다 값을 넣고 꺼내는 줄이에요. 다른 것은 **어느 것을 먼저 꺼내는지** 하나예요.'
+      - ul:
+          - '**스택**은 접시를 쌓는 것과 같아요. 위에 놓고 위에서 꺼내요. **마지막에 넣은 것이 먼저** 나와요. 영어 약자로 LIFO(Last In, First Out)라고 해요.'
+          - '**큐**는 줄 서기와 같아요. 뒤에 서고 앞에서 나가요. **먼저 넣은 것이 먼저** 나와요. FIFO(First In, First Out)라고 해요.'
+      - p: '처음 예측의 답은 **3과 1**이에요. {{predict-result}} 1, 2, 3을 같은 순서로 넣어도 스택은 마지막에 넣은 3을, 큐는 처음 넣은 1을 꺼내요.'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: StackAndQueueTest.lifoAndFifo
+          code: predict
+      - h3: 스택은 "가장 최근 것부터 되돌아갈 때"
+      - ul:
+          - '**메서드 호출.** `a()`가 `b()`를 부르고 `b()`가 `c()`를 부르면, 끝나는 순서는 `c`, `b`, `a`예요. JVM이 호출을 쌓는 곳이 [JVM 메모리 구조](lesson:jvm-memory)에서 본 호출 스택이에요.'
+          - '**되돌리기.** 가장 최근에 한 일부터 되돌려요. 화면의 "뒤로 가기"도 같아요.'
+          - '**괄호 짝 맞추기.** 닫는 괄호는 가장 최근에 연 괄호와 짝이에요.'
+      - code: brackets
+        notes:
+          - mark: st.push(c)
+            as: code
+            text: '여는 괄호를 쌓아요.'
+          - mark: st.pop()
+            as: code
+            text: '닫는 괄호가 오면 가장 최근의 여는 괄호를 꺼내 짝지어요. 꺼낼 게 없으면 짝이 없는 닫는 괄호예요.'
+      - ci:
+          key: brackets
+          label: 세 입력의 실제 결과 보기
+          source: StackAndQueueTest.brackets
+          code: bracketsRun
+      - p: '`"(()"`는 끝났을 때 스택에 여는 괄호가 하나 남아서 false예요.'
+      - h3: 큐는 "온 순서대로 처리할 때"
+      - p: '먼저 들어온 주문부터 처리하는 대기열, 가까운 곳부터 차례로 둘러보는 너비 우선 탐색이 큐를 써요. 너비 우선 탐색은 그래프와 탐색 레슨에서 다뤄요.'
+      - p: '스택과 큐는 넣기, 꺼내기, 맨 앞 보기만 해요. **중간의 원소를 꺼내지 않아요.** 할 일을 이렇게 줄였기 때문에 구현이 단순하고 빨라요. 질문 3에서 그 구현을 봐요.'
+      - quiz:
+          q: '문서 편집기에서 글자 A, B, C를 차례로 입력한 뒤 "되돌리기"를 두 번 눌렀어요. 남는 글자는 무엇이고, 되돌릴 기록을 담기에 맞는 것은 무엇일까요?'
+          options:
+            - 'A. 스택'
+            - 'C. 큐'
+            - 'A. 큐'
+          answer: 1
+          explain: '되돌리기는 가장 최근 입력부터 취소해요. C, B 순서로 취소되어 A가 남아요. 마지막에 넣은 것을 먼저 꺼내는 스택이 맞아요.'
+      - next: '자바에서는 이 둘을 무엇으로 만들까요? `Stack` 클래스를 쓰면 될까요?'
+    recall: '스택은 마지막에 넣은 것을 먼저 꺼내고(LIFO), 큐는 먼저 넣은 것을 먼저 꺼내요(FIFO). 1, 2, 3을 넣으면 스택은 3을, 큐는 1을 먼저 꺼내요. 메서드 호출, 되돌리기, 괄호 짝 맞추기처럼 가장 최근 것부터 되돌아가는 일에는 스택을, 대기열이나 너비 우선 탐색처럼 온 순서대로 처리하는 일에는 큐를 써요.'
   - id: q2
     title: 자바에서는 스택과 큐를 무엇으로 쓰나요?
     conclusion:
@@ -112,6 +206,57 @@ questions:
       - '본문의 예시: 빈 `ArrayDeque`에서 `poll()`과 `pop()`을 부르면 각각 어떻게 되나 (`poll`은 null을 돌려주고 `pop`은 `NoSuchElementException`을 던진다)'
       - '옮긴 상황: 동료가 `Stack<Integer> history = new Stack<>();`을 썼다. 무엇으로 바꾸라고 할지와 그 이유 하나를 고르면 (`Deque<Integer> history = new ArrayDeque<>()`. `Stack`은 모든 메서드가 동기화되어 있고 중간 원소를 건드리는 메서드도 열려 있다)'
       - '실무 구역: 코드 mixed는 무엇을 출력하나 ("홈". `offer`는 뒤에 넣고 `pop`은 앞에서 빼서 큐처럼 동작한다)'
+    body:
+      - p: '코드 predict에서 스택과 큐를 모두 `Deque<Integer> ... = new ArrayDeque<>()`로 만들었어요. 같은 클래스인데 하나는 스택, 하나는 큐로 동작했어요.'
+      - p: '`Deque`(덱)는 **양쪽 끝에서 넣고 뺄 수 있는 줄**이에요. 한쪽 끝에서만 넣고 빼면 스택이 되고, 한쪽에 넣고 반대쪽에서 빼면 큐가 돼요. 어느 끝을 쓰는지는 부르는 메서드가 정해요.'
+      - table:
+          head: [쓰임, 메서드, 하는 일]
+          rows:
+            - ['스택', '`push(x)`', '**앞**에 넣기 (`addFirst`)']
+            - ['스택', '`pop()`', '**앞**에서 빼기 (`removeFirst`)']
+            - ['큐', '`offer(x)`', '**뒤**에 넣기 (`offerLast`)']
+            - ['큐', '`poll()`', '**앞**에서 빼기 (`pollFirst`)']
+            - ['둘 다', '`peek()`', '**앞**을 보기만 하기']
+      - p: '꺼내는 쪽은 둘 다 **앞**이에요. 다른 것은 넣는 쪽이에요. 스택은 앞에 넣어서 방금 넣은 것이 다음에 나오고, 큐는 뒤에 넣어서 오래된 것이 먼저 나와요. 실무 구역에서 이 짝을 섞으면 어떻게 되는지 봐요.'
+      - p: '큐로만 쓸 것이면 `Queue` 타입으로 받으면 돼요. `push`, `pop` 같은 스택 메서드가 보이지 않아서 섞어 쓸 수 없어요.'
+      - code: queueOnly
+        notes:
+          - mark: Queue
+            as: code
+            text: '`Queue`에는 `offer`, `poll`, `peek` 같은 큐 메서드만 있어요. 구현은 그대로 `ArrayDeque`예요.'
+      - h3: Stack 클래스는 쓰지 않아요
+      - p: '자바에는 `java.util.Stack`이 있지만 쓰지 않아요. `Stack`의 API 문서 스스로가 `Deque`를 쓰라고 적어 둬요. 이유는 둘이에요.'
+      - ul:
+          - '**`Vector`를 상속했어요.** `Vector`는 리스트라서 `get(i)`, `add(i, x)`처럼 스택이 해서는 안 될 일, 중간 원소를 건드리는 일도 할 수 있어요.'
+          - '**모든 메서드가 동기화되어 있어요.** 여러 스레드가 동시에 써도 깨지지 않게 메서드마다 잠금을 거는데, 한 스레드만 쓰는 대부분의 코드에서는 쓸데없는 비용이에요.'
+      - h3: 비었을 때 null인지 예외인지
+      - p: '`Deque`의 메서드는 실패할 때 두 방식 가운데 하나로 알려요. 빈 덱에서 불러 봤어요.'
+      - ci:
+          key: empty
+          label: 실제 결과 보기
+          source: StackAndQueueTest.emptyAndNull
+          code: emptyRun
+      - table:
+          head: [하는 일, 예외를 던지는 쪽, 값으로 알리는 쪽]
+          rows:
+            - ['넣기', '`add`', '`offer` (false)']
+            - ['빼기', '`remove`, `pop`', '`poll` (null)']
+            - ['보기', '`element`', '`peek` (null)']
+      - p: '비어 있을 수 있는 곳에서는 `poll`을 쓰고 null인지 확인해요. 비어 있으면 안 되는 곳에서는 `pop`이나 `remove`가 예외로 바로 알려 줘요.'
+      - more:
+          summary: '더 알아보기: ArrayDeque에는 null을 넣을 수 없어요'
+          body:
+            - p: '`offer(null)`은 `NullPointerException`을 던져요. `poll`이 null로 "비었다"를 알리기 때문이에요. null이 들어 있으면 "꺼낸 값이 null"과 "비었다"를 구분할 수 없어요.'
+      - quiz:
+          q: '빈 `ArrayDeque`에서 `poll()`과 `pop()`을 부르면 각각 어떻게 될까요?'
+          options:
+            - '둘 다 null을 돌려준다'
+            - '`poll`은 null을 돌려주고, `pop`은 `NoSuchElementException`을 던진다'
+            - '둘 다 `NoSuchElementException`을 던진다'
+          answer: 2
+          explain: '`poll`과 `peek`은 값(null)으로 알리고, `pop`, `remove`, `element`는 예외를 던져요.'
+      - next: '`ArrayDeque`는 이름처럼 안에 배열을 써요. 그런데 질문 1의 큐는 맨 앞에서 꺼냈어요. `ArrayList`는 맨 앞에서 빼면 원소를 모두 당겼는데, `ArrayDeque`는 괜찮을까요?'
+    recall: '둘 다 `Deque` 인터페이스로 쓰고 구현은 `ArrayDeque`를 써요. 스택은 `push`와 `pop`, 큐는 `offer`와 `poll`이고, 꺼내는 쪽은 둘 다 앞이에요. `Stack` 클래스는 `Vector`를 상속해 중간 원소를 건드릴 수 있고 모든 메서드가 동기화되어 있어서 쓰지 않아요. 비었을 때 `poll`과 `peek`은 null을, `pop`과 `remove`는 예외를 내요.'
   - id: q3
     title: ArrayDeque는 맨 앞에서 빼도 왜 느려지지 않나요?
     conclusion:
@@ -129,26 +274,155 @@ questions:
     asks:
       - '본문의 예시: 원소 5개가 든 `ArrayDeque`에서 `poll()`을 한 번 하면 자리를 옮기는 원소는 몇 개인가 (0개. `head`만 한 칸 옮긴다)'
       - '옮긴 상황: 원소 n개가 든 `ArrayList`를 큐로 쓰며 `remove(0)`으로 모두 꺼낸다. 전체 시간 복잡도는 무엇인가 (O(n²). 꺼낼 때마다 남은 원소를 당긴다)'
+    body:
+      - p: '`ArrayList`로 큐를 만들면 꺼낼 때 맨 앞을 빼야 해요.'
+      - code: listQueue
+        notes:
+          - mark: q.remove(0)
+            as: code
+            text: '배열과 연결 리스트 레슨에서 본 대로, 0번을 빼면 뒤의 원소를 모두 한 칸씩 당겨요. 꺼낼 때마다 O(n)이에요.'
+      - p: '`ArrayDeque`도 배열을 써요. 그런데 배열 말고 번호 둘을 더 가져요. 맨 앞 원소의 칸 번호 **`head`**와, 맨 뒤 원소의 다음 칸 번호 **`tail`**이에요. 길이 8의 배열로 같은 일을 `ArrayList`와 나란히 해 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - label: ArrayDeque (배열 길이 8)
+                rows: [{k: 칸, v: '_ _ _ _ _ _ _ _'}, {k: head, v: '0'}, {k: tail, v: '0'}]
+              - label: ArrayList
+                rows: [{k: 칸, v: '(비어 있음)'}, {k: 당긴 원소, v: '0개'}]
+          scenarios:
+            default:
+              - log: 'offer 1~5 → 둘 다 뒤에 차례로 넣어요'
+                duo:
+                  - label: ArrayDeque (배열 길이 8)
+                    rows: [{k: 칸, v: '1 2 3 4 5 _ _ _', mark: changed}, {k: head, v: '0'}, {k: tail, v: '5', mark: changed}]
+                  - label: ArrayList
+                    rows: [{k: 칸, v: '1 2 3 4 5', mark: changed}, {k: 당긴 원소, v: '0개'}]
+              - log: 'poll → 1을 꺼내요'
+                duo:
+                  - label: ArrayDeque (배열 길이 8)
+                    rows: [{k: 칸, v: '_ 2 3 4 5 _ _ _'}, {k: head, v: '1', mark: changed}, {k: tail, v: '5'}]
+                  - label: ArrayList
+                    rows: [{k: 칸, v: '2 3 4 5', mark: bad}, {k: 당긴 원소, v: '4개', mark: bad}]
+                verdict: 'ArrayDeque는 칸을 비우고 head만 한 칸 옮겼어요. ArrayList는 남은 네 원소를 한 칸씩 당겼어요.'
+              - log: 'poll → 2를 꺼내요'
+                duo:
+                  - label: ArrayDeque (배열 길이 8)
+                    rows: [{k: 칸, v: '_ _ 3 4 5 _ _ _'}, {k: head, v: '2', mark: changed}, {k: tail, v: '5'}]
+                  - label: ArrayList
+                    rows: [{k: 칸, v: '3 4 5', mark: bad}, {k: 당긴 원소, v: '7개 (3개 더)', mark: bad}]
+              - log: 'offer 6~8 → 배열의 끝까지 채워요'
+                duo:
+                  - label: ArrayDeque (배열 길이 8)
+                    rows: [{k: 칸, v: '_ _ 3 4 5 6 7 8', mark: changed}, {k: head, v: '2'}, {k: tail, v: '0 (처음으로 돌아감)', mark: changed}]
+                  - label: ArrayList
+                    rows: [{k: 칸, v: '3 4 5 6 7 8', mark: changed}, {k: 당긴 원소, v: '7개'}]
+                verdict: '배열의 끝에 닿자 tail이 0번 칸으로 돌아갔어요. 앞쪽의 두 칸은 이미 꺼내서 비어 있어요.'
+              - log: 'offer 9 → 0번 칸에 넣어요'
+                duo:
+                  - label: ArrayDeque (배열 길이 8)
+                    rows: [{k: 칸, v: '9 _ 3 4 5 6 7 8', mark: changed}, {k: head, v: '2'}, {k: tail, v: '1', mark: changed}]
+                  - label: ArrayList
+                    rows: [{k: 칸, v: '3 4 5 6 7 8 9', mark: changed}, {k: 당긴 원소, v: '7개'}]
+                verdict: '배열의 끝과 처음이 이어진 것처럼 썼어요. 꺼내는 순서는 head부터 3, 4, 5, 6, 7, 8, 9예요. ArrayDeque는 원소를 한 번도 옮기지 않았어요.'
+      - p: '위젯의 칸은 실제 `ArrayDeque`의 안쪽 배열(`elements`)과 `head`, `tail`을 리플렉션으로 읽은 값과 같아요.'
+      - ci:
+          key: ring
+          label: 실제 배열과 번호 보기
+          source: StackAndQueueTest.ringBuffer
+          code: ringRun
+      - p: '`poll`은 `head` 칸의 값을 꺼내고 `head`를 한 칸 옮길 뿐이에요. 다른 원소는 그대로 있어요. 뒤에 넣다가 배열의 끝에 닿으면 **앞쪽의 빈 칸으로 돌아가** 이어 써요. 끝과 처음이 이어진 고리처럼 쓴다고 **원형 배열**이라고 해요. 그래서 앞에서 빼기와 뒤에 넣기가 모두 O(1)이에요. 앞에 넣는 `push`는 `head`를 한 칸 뒤로 옮겨서 넣어요. 이것도 O(1)이에요.'
+      - p: '빈 칸이 정말 하나도 없으면 `ArrayList`처럼 더 큰 배열을 만들어 옮겨요. 가끔이라 평균으로는 O(1)이에요(분할 상환).'
+      - h3: 10만 개를 꺼내 보면
+      - p: '원소 10만 개를 맨 앞에서 모두 꺼냈어요. `ArrayList`는 꺼낼 때마다 남은 원소를 당겨서 전체가 O(n²)이에요.'
+      - ci:
+          key: drain
+          label: 실제로 걸린 시간 보기
+          source: StackAndQueueTest.drainTiming
+          code: drainRun
+      - p: '`LinkedList`도 `Deque`를 구현해서 큐로 쓸 수 있고 양 끝이 O(1)이에요. 하지만 넣을 때마다 노드 객체를 만들어요. `ArrayDeque`의 API 문서는 큐로 쓸 때 `LinkedList`보다 빠를 것이라고 적어 둬요. 그래서 스택이든 큐든 **`ArrayDeque`가 기본**이에요.'
+      - quiz:
+          q: '원소 5개가 든 `ArrayDeque`에서 `poll()`을 한 번 하면, 남은 원소 가운데 배열에서 자리를 옮기는 것은 몇 개일까요?'
+          options:
+            - '0개'
+            - '4개'
+            - '5개'
+          answer: 1
+          explain: '`ArrayDeque`는 `head` 칸을 비우고 `head`만 한 칸 옮겨요. 남은 원소는 제자리에 있어요. 4개를 당기는 것은 `ArrayList.remove(0)`이에요.'
+    recall: '원형 배열이라서예요. `ArrayDeque`는 배열과 함께 맨 앞의 칸 번호 `head`와 맨 뒤 다음 칸 번호 `tail`을 가져요. `poll`은 원소를 당기지 않고 `head`만 한 칸 옮기고, 뒤에 넣다 배열 끝에 닿으면 앞의 빈 칸으로 돌아가 이어 써요. 그래서 양 끝이 O(1)이에요. `ArrayList.remove(0)`은 꺼낼 때마다 남은 원소를 모두 당겨서 O(n)이에요.'
 practice:
+  title: 서버 코드에서는 이렇게 만나요
   says:
     - '스레드 풀은 안에 작업 큐를 가진다. `Executors.newFixedThreadPool(4)`(코드 executor)는 스레드 4개와 크기 제한이 없는 큐를 만든다. 스레드가 모두 바쁘면 새 작업은 큐 뒤에 서고, 스레드가 일을 마치면 큐 앞에서 꺼낸다. 들어오는 속도가 처리 속도보다 빠르면 큐가 끝없이 길어져 메모리를 채운다. 큐의 크기를 정하는 법과 찼을 때 거절하는 법은 스레드 풀(C7)에서 다룬다 (자바 API 문서 근거)'
     - '흔한 실수: `Deque` 하나에 큐의 메서드와 스택의 메서드를 섞는다. 코드 mixed는 "뒤로 가기" 기록을 스택으로 쓰려 했지만 넣을 때 `offer`(뒤에 넣기)를 썼다. `pop`은 앞에서 빼므로 가장 오래된 "홈"이 나온다. 스택이 아니라 큐가 된 것이다. 질문 2의 표에서 본 대로 `push`와 `pop`이 앞쪽 짝이다. 고친 코드: 넣을 때 `push`를 쓴다. 그러면 "상품 상세"가 나온다. 두 출력을 테스트로 남긴다. 스택으로 쓸 `Deque`에는 `push`, `pop`, `peek`만, 큐로 쓸 것에는 `offer`, `poll`, `peek`만 쓴다'
     - '우선순위가 여럿이면 앞에 끼우는 대신 우선순위 큐를 쓴다. 힙과 우선순위 큐(K9)에서 다룬다'
+  body:
+    - p: '스프링 서버에서 큐를 직접 만들 일은 많지 않아요. 대신 큐를 쓰는 도구를 매일 써요. 가장 흔한 것이 스레드 풀이에요.'
+    - h3: 스레드 풀 안의 작업 큐
+    - code: executor
+      notes:
+        - mark: newFixedThreadPool(4)
+          as: code
+          text: '스레드 4개와 **크기 제한이 없는** 작업 큐를 만들어요. 스레드가 모두 바쁘면 새 작업은 큐 뒤에 서고, 일을 마친 스레드가 큐 앞에서 꺼내요.'
+    - p: '먼저 온 작업부터 처리하는 큐예요. 문제는 크기 제한이 없다는 것이에요. 메일 보내기처럼 느린 작업이 처리 속도보다 빨리 들어오면 큐가 끝없이 길어지고, 쌓인 작업이 메모리를 채워요. 큐의 크기를 정하고 찼을 때 거절하는 법은 스레드 풀 레슨에서 다뤄요. 크기 제한이 없는 큐라는 것은 [Executors API 문서](link:executors)에 적혀 있어요.'
+    - h3: '흔한 실수: 한 Deque에 push와 offer를 섞기'
+    - p: '"뒤로 가기" 기록을 스택으로 쓰려고 했어요. 무엇이 출력될지 예상해 보세요.'
+    - code: mixed
+      notes:
+        - mark: offer
+          as: code
+          text: '`offer`는 **뒤**에 넣어요. 그런데 `pop`은 **앞**에서 빼요. 질문 2의 표에서 본 대로 둘은 짝이 아니에요.'
+    - p: '가장 최근 화면인 "상품 상세"가 아니라 가장 오래된 "홈"이 나와요. 뒤에 넣고 앞에서 빼니 스택이 아니라 큐가 된 거예요. 넣을 때 `push`를 쓰면 앞에 넣고 앞에서 빼서 스택이 돼요.'
+    - code: mixedFixed
+      notes:
+        - mark: push
+          as: code
+          text: '`push`와 `pop`은 둘 다 앞쪽에서 일해요. 마지막에 넣은 "상품 상세"가 먼저 나와요.'
+    - ci:
+        key: mixed
+        label: 두 코드의 실제 출력 보기
+        source: StackAndQueueTest.mixedMethods
+    - p: '스택으로 쓸 `Deque`에는 `push`, `pop`, `peek`만, 큐로 쓸 것에는 `offer`, `poll`, `peek`만 써요. 큐라면 질문 2처럼 `Queue` 타입으로 받아 섞을 여지를 없애요.'
+    - muted: '주문마다 우선순위가 달라서 급한 것을 먼저 꺼내야 한다면, 큐의 앞에 끼워 넣는 대신 우선순위 큐를 써요. 힙과 우선순위 큐 레슨에서 다뤄요.'
+interview:
+  question: 스택과 큐의 차이는 무엇이고, 자바에서는 무엇으로 쓰나요?
+  model:
+    - label: 정의
+      text: 스택은 마지막에 넣은 것을 먼저 꺼내는 LIFO, 큐는 먼저 넣은 것을 먼저 꺼내는 FIFO입니다. 스택은 메서드 호출이나 되돌리기, 괄호 짝 맞추기에, 큐는 대기열이나 너비 우선 탐색에 씁니다.
+    - label: 원리
+      text: 자바에서는 둘 다 Deque 인터페이스로 쓰고 구현은 ArrayDeque를 씁니다. ArrayDeque는 원형 배열이라 head와 tail 번호만 옮겨서 양 끝의 넣고 빼기가 O(1)이고, 앞에서 빼도 원소를 당기지 않습니다.
+    - label: 주의할 점
+      text: Stack 클래스는 Vector를 상속해 중간 원소를 건드릴 수 있고 모든 메서드가 동기화되어 있어 쓰지 않습니다. 한 Deque에 push와 offer를 섞으면 순서가 꼬이고, ArrayList.remove(0)으로 큐를 만들면 꺼낼 때마다 O(n)입니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: Stack으로 쓰던 이력 저장을 ArrayDeque로 바꾸고, 큐로만 쓰는 곳은 Queue 타입으로 받게 고쳤습니다.'
+verified: 이 레슨의 출력은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. `ArrayDeque`의 안쪽 배열과 번호는 `--add-opens`를 준 JVM에서 리플렉션으로 읽었어요. 코드가 바뀔 때마다 테스트([StackAndQueueTest](link:test))가 다시 돌아요.
+footer: '근거: `Deque`의 메서드와 스택, 큐의 짝은 API 문서([링크](link:deque)), `Stack` 대신 `Deque`를 쓰라는 안내는 API 문서([링크](link:stack)), `ArrayDeque`가 null을 받지 않고 `LinkedList`보다 빠를 것이라는 설명은 API 문서([링크](link:arrayDeque)). 안쪽 배열의 모양은 OpenJDK 21의 구현이에요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict는 3과 1을 출력하고, 남은 것을 모두 꺼내면 스택은 2, 1, 큐는 2, 3 순서다'
     how: '실행해 출력을 본다'
+    test: StackAndQueueTest.lifoAndFifo
   - claim: '코드 brackets는 `"(())"`에 true, `"(()"`와 `"())"`에 false를 돌려준다'
     how: '세 입력으로 부른다'
+    test: StackAndQueueTest.brackets
   - claim: '빈 `ArrayDeque`에서 `poll`은 null, `pop`과 `remove`는 `NoSuchElementException`이다'
     how: '예외를 잡아 본다'
+    test: StackAndQueueTest.emptyAndNull
   - claim: '`ArrayDeque`에 null을 넣으면 `NullPointerException`이 난다'
     how: '`offer(null)`을 부른다'
-  - claim: '`ArrayDeque`에서 `poll`을 해도 다른 원소의 배열 칸은 바뀌지 않는다'
-    how: '`ChildJvm`에 `--add-opens java.base/java.util=ALL-UNNAMED`를 주고 `elements`, `head`를 리플렉션으로 읽어 poll 전후를 비교한다'
+    test: StackAndQueueTest.emptyAndNull
+  - claim: '`Stack`은 `Vector`를 상속해 `add(i, x)`가 되고, `pop`과 `Vector.add`는 synchronized다'
+    how: '`add(0, 99)`를 부르고 메서드의 수정자를 리플렉션으로 본다'
+    test: StackAndQueueTest.legacyStack
+  - claim: '`ArrayDeque`에서 `poll`을 해도 다른 원소의 배열 칸은 바뀌지 않는다. 길이 8의 배열에서 offer 1~5, poll 두 번, offer 6~9를 하면 칸은 `9 _ 3 4 5 6 7 8`, head 2, tail 1이다'
+    how: '`ChildJvm`에 `--add-opens java.base/java.util=ALL-UNNAMED`를 주고 `elements`, `head`, `tail`을 리플렉션으로 읽어 단계마다 비교한다. `new ArrayDeque<>(7)`이 길이 8의 배열을 만든다'
+    test: StackAndQueueTest.ringBuffer
   - claim: '원소 10만 개를 모두 꺼내는 데 `ArrayList.remove(0)`이 `ArrayDeque.poll`보다 훨씬 오래 걸린다'
     how: '걸린 시간을 `CiOutput`에 남긴다. 배수는 단정하지 않는다'
+    test: StackAndQueueTest.drainTiming
   - claim: '코드 mixed는 "홈"을 출력하고, `offer`를 `push`로 바꾸면 "상품 상세"를 출력한다'
     how: '두 코드를 실행해 출력을 본다'
+    test: StackAndQueueTest.mixedMethods
 sources:
   - '`Deque`의 메서드와 스택, 큐로 쓸 때의 짝: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html'
   - '`Stack` 대신 `Deque`를 쓰라는 안내: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Stack.html'

@@ -1,0 +1,215 @@
+# 스택과 큐 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/stack-and-queue.yaml의 says).
+# 동작에 관한 정답은 verification의 StackAndQueueTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: stack-and-queue
+  title: 스택과 큐
+  unit: 자료구조와 알고리즘
+  order: 57
+concepts:
+  - key: core
+    name: 스택과 큐
+coreQuestions:
+  - key: q1
+    text: "스택과 큐는 꺼내는 순서가 어떻게 다른가요?"
+  - key: q2
+    text: "자바에서는 스택과 큐를 무엇으로 쓰나요?"
+  - key: q3
+    text: "ArrayDeque는 맨 앞에서 빼도 왜 느려지지 않나요?"
+questions:
+  # ── 질문 1 ──
+  - key: sq-brackets
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 괄호의 짝이 맞는지 보는 메서드예요. balanced("(()")는 무엇을 돌려줄까요?
+    code: |-
+      boolean balanced(String s) {
+        Deque<Character> st = new ArrayDeque<>();
+        for (char c : s.toCharArray()) {
+          if (c == '(') st.push(c);
+          else if (c == ')') {
+            if (st.isEmpty()) return false;
+            st.pop();
+          }
+        }
+        return st.isEmpty();
+      }
+    choices:
+      - "true"
+      - "false"
+      - NoSuchElementException
+      - NullPointerException
+    answer: "2"
+    explanation: |-
+      **false예요.** 여는 괄호 둘을 쌓고 닫는 괄호 하나로 하나를 꺼내서, 끝났을 때 여는 괄호가 하나 남아요.
+
+      - 닫는 괄호는 가장 최근에 연 괄호와 짝이라 스택을 써요
+      - 꺼낼 게 없을 때는 isEmpty로 먼저 확인해서 예외가 나지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html
+  - key: sq-undo
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 문서 편집기에서 글자 A, B, C를 차례로 입력한 뒤 "되돌리기"를 두 번 눌렀어요. 남는 글자는 무엇이고, 되돌릴 기록을 담기에 맞는 것은 무엇일까요?
+    choices:
+      - A가 남는다. 스택
+      - C가 남는다. 큐
+      - A가 남는다. 큐
+      - C가 남는다. 스택
+    answer: "1"
+    explanation: |-
+      **A가 남고, 스택이 맞아요.** 되돌리기는 가장 최근에 한 일부터 취소해요.
+
+      - C, B 순서로 취소되어 A가 남아요
+      - 마지막에 넣은 것을 먼저 꺼내는(LIFO) 스택이에요
+      - 큐로 담으면 A부터 취소되어 C가 남아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html
+  # ── 질문 2 ──
+  - key: sq-empty-poll-pop
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 빈 ArrayDeque에서 두 메서드를 각각 불러요. 각각 어떻게 될까요?
+    code: |-
+      Deque<Integer> d = new ArrayDeque<>();
+      d.poll();
+      d.pop();
+    choices:
+      - 둘 다 null을 돌려준다
+      - poll은 null을 돌려주고, pop은 NoSuchElementException을 던진다
+      - 둘 다 NoSuchElementException을 던진다
+      - poll은 NoSuchElementException을 던지고, pop은 null을 돌려준다
+    answer: "2"
+    explanation: |-
+      **poll은 null, pop은 NoSuchElementException이에요.** Deque의 메서드는 실패를 값으로 알리는 쪽과 예외로 알리는 쪽으로 나뉘어요.
+
+      - 값으로 알리는 쪽: offer, poll, peek
+      - 예외를 던지는 쪽: add, remove, pop, element
+      - 비어 있을 수 있으면 poll을 쓰고 null을 확인해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html
+  - key: sq-legacy-stack
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 코드 리뷰에서 Stack<Integer> history = new Stack<>();을 봤어요. 무엇으로 바꾸라고 하고, 그 이유는 무엇일까요?
+    choices:
+      - Deque<Integer> history = new ArrayDeque<>(). Stack은 Vector를 상속해 중간 원소를 건드리는 메서드가 열려 있고 모든 메서드가 동기화되어 있다
+      - List<Integer> history = new ArrayList<>(). 스택은 리스트로 충분하다
+      - 바꾸지 않는다. Stack이 스택 전용이라 가장 빠르다
+      - Queue<Integer> history = new LinkedList<>(). 스택은 큐의 한 종류다
+    answer: "1"
+    explanation: |-
+      **Deque와 ArrayDeque로 바꿔요.** Stack의 API 문서도 Deque를 쓰라고 적어 둬요.
+
+      - Stack은 Vector를 상속해서 get(i), add(i, x)처럼 스택이 하면 안 될 일도 할 수 있어요
+      - 모든 메서드가 동기화되어 한 스레드만 쓰는 코드에서는 쓸데없는 비용이에요
+      - ArrayDeque는 push, pop, peek으로 스택이 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Stack.html
+  - key: sq-mixed-methods
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 화면의 "뒤로 가기" 기록을 Deque에 담았어요. 마지막 줄은 무엇을 출력할까요?
+    code: |-
+      Deque<String> history = new ArrayDeque<>();
+      history.offer("홈");
+      history.offer("상품 목록");
+      history.offer("상품 상세");
+      System.out.println(history.pop());
+    choices:
+      - 상품 상세
+      - 홈
+      - 상품 목록
+      - NoSuchElementException
+    answer: "2"
+    explanation: |-
+      **홈이에요.** offer는 뒤에 넣고 pop은 앞에서 빼서, 스택이 아니라 큐처럼 동작했어요.
+
+      - push와 pop이 둘 다 앞쪽에서 일하는 짝이에요
+      - 넣을 때 push를 쓰면 상품 상세가 나와요
+      - 한 Deque에는 스택 메서드나 큐 메서드 한쪽만 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Deque.html
+  # ── 질문 3 ──
+  - key: sq-poll-no-shift
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 원소 5개가 든 ArrayDeque에서 poll()을 한 번 해요. 남은 원소 가운데 안쪽 배열에서 자리를 옮기는 것은 몇 개일까요?
+    choices:
+      - 0개
+      - 1개
+      - 4개
+      - 5개
+    answer: "1"
+    explanation: |-
+      **0개예요.** ArrayDeque는 맨 앞 칸을 비우고 맨 앞을 가리키는 번호 head만 한 칸 옮겨요.
+
+      - 원소를 당기지 않아서 앞에서 빼기가 O(1)이에요
+      - 뒤에 넣다가 배열 끝에 닿으면 앞의 빈 칸으로 돌아가 이어 써요(원형 배열)
+      - 4개를 당기는 것은 ArrayList.remove(0)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayDeque.html
+  - key: sq-list-queue-drain
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 원소 n개가 든 ArrayList를 큐로 쓰며 아래처럼 모두 꺼내요. 전체 시간 복잡도는 무엇일까요?
+    code: |-
+      while (!q.isEmpty()) {
+        process(q.remove(0));
+      }
+    choices:
+      - O(n)
+      - O(n log n)
+      - O(n²)
+      - O(1)
+    answer: "3"
+    explanation: |-
+      **O(n²)이에요.** remove(0)은 꺼낼 때마다 남은 원소를 모두 한 칸씩 당겨요.
+
+      - 남은 원소가 n-1, n-2, ... 개라 모두 더하면 n²에 비례해요
+      - ArrayDeque.poll로 바꾸면 꺼낼 때마다 O(1)이라 전체가 O(n)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayDeque.html
+  # ── 세 질문을 하나로 ──
+  - key: sq-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스택과 큐의 차이는 무엇이고, 자바에서는 무엇으로 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **스택은 마지막에 넣은 것을, 큐는 먼저 넣은 것을 먼저 꺼내고, 자바에서는 둘 다 ArrayDeque로 써요.**
+
+      - **순서:** 스택은 LIFO(호출 스택, 되돌리기, 괄호), 큐는 FIFO(대기열, 너비 우선 탐색)
+      - **자바:** Deque 인터페이스와 ArrayDeque. 스택은 push와 pop, 큐는 offer와 poll
+      - **Stack을 쓰지 않는 이유:** Vector를 상속해 중간 원소를 건드릴 수 있고 모든 메서드가 동기화되어 있다
+      - **빠른 이유:** ArrayDeque는 원형 배열이라 head와 tail만 옮겨 양 끝이 O(1)
+    checklist:
+      - 스택은 LIFO, 큐는 FIFO라고 말했다
+      - 각각의 쓰임을 하나 이상 들었다
+      - 자바에서는 Deque와 ArrayDeque로 쓰고 Stack 클래스는 쓰지 않는다고 말했다
+      - ArrayDeque가 원형 배열이라 앞에서 빼도 원소를 당기지 않는다고 말했다
+      - ArrayList.remove(0)으로 만든 큐는 꺼낼 때마다 O(n)이라고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayDeque.html
