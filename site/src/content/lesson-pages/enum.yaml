@@ -184,4 +184,4 @@ sources:
   - 'switch 식이 모든 값을 다뤄야 하는 것: 자바 언어 명세 15.28.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.28.1'
   - '`@Enumerated`의 기본값 ORDINAL: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/enumerated'
   - '`AttributeConverter`: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/attributeconverter'
-  - '하이버네이트의 enum 매핑: 사용자 가이드 https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#basic-enums'
+  - '하이버네이트의 enum 매핑: 사용자 가이드 https://docs.hibernate.org/orm/6.6/userguide/html_single/#basic-enums'

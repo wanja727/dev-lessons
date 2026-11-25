@@ -1,0 +1,280 @@
+# 래퍼 클래스와 오토박싱 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/wrapper-autoboxing.yaml의 says).
+# 동작에 관한 정답은 verification의 WrapperAutoboxingTest로 확인했다 (자바 21, JVM 옵션 기본값, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: wrapper-autoboxing
+  title: 래퍼 클래스와 오토박싱
+  unit: 자바 언어
+  order: 39
+concepts:
+  - key: core
+    name: 래퍼 클래스와 오토박싱
+coreQuestions:
+  - key: q1
+    text: "int가 있는데 Integer는 왜 있나요?"
+  - key: q2
+    text: "int와 Integer는 언제 서로 바뀌나요?"
+  - key: q3
+    text: "Integer를 ==로 비교하면 왜 어떤 때는 true이고 어떤 때는 false인가요?"
+  - key: q4
+    text: "래퍼가 null이면 어떤 일이 생기나요?"
+questions:
+  # ── 질문 1 ──
+  - key: wrap-why-integer
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 회원 정보에 나이 필드를 두려고 해요. "나이를 아직 입력하지 않았다"와 "나이가 0이다"를 구별해서 담아야 해요. 어느 선언이 맞을까요?
+    choices:
+      - int age
+      - Integer age
+      - 둘 다 구별할 수 있다
+      - 둘 다 구별할 수 없다
+    answer: "2"
+    explanation: |-
+      **Integer age예요.** Integer는 참조형이라 null로 "값이 없음"을 나타낼 수 있어요.
+
+      - int는 null이 될 수 없고, 값을 넣지 않으면 0이에요
+      - 그래서 int로는 입력하지 않은 것과 0을 구별할 수 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.7
+  - key: wrap-generic-primitive
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 번호의 목록을 담으려고 해요. List<long> ids와 List<Long> ids 가운데 컴파일되는 것은 무엇일까요?
+    choices:
+      - List<long>만
+      - List<Long>만
+      - 둘 다
+      - 둘 다 안 된다
+    answer: "2"
+    explanation: |-
+      **List<Long>만 컴파일돼요.** 컬렉션의 꺾쇠 안에는 참조형만 올 수 있어요.
+
+      - 그래서 숫자를 컬렉션에 담을 때는 래퍼 클래스를 써요
+      - list.add(5L)처럼 쓰면 컴파일러가 Long으로 싸 줘요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-4.html#jls-4.5.1
+  # ── 질문 2 ──
+  - key: wrap-count-boxing
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 오토박싱과 언박싱은 각각 몇 번 일어날까요?
+    code: |-
+      List<Integer> list = new ArrayList<>();
+      list.add(3);
+      int x = list.get(0);
+    choices:
+      - 박싱 0번, 언박싱 0번
+      - 박싱 1번, 언박싱 1번
+      - 박싱 2번, 언박싱 0번
+      - 박싱 1번, 언박싱 0번
+    answer: "2"
+    explanation: |-
+      **박싱 1번, 언박싱 1번이에요.** 컴파일러가 보이지 않는 메서드 호출을 넣어요.
+
+      - add(3)에서 3이 Integer.valueOf(3)으로 싸여요
+      - get(0)이 돌려준 Integer를 int에 담으려고 intValue()로 꺼내요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.8
+  - key: wrap-arith
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드를 실행하면 sum은 무엇이 될까요?
+    code: |-
+      Integer a = 1000;
+      Integer b = 1000;
+      int sum = a + b;
+    choices:
+      - "2000"
+      - 컴파일 오류. Integer끼리는 더할 수 없다
+      - NullPointerException
+      - "1000"
+    answer: "1"
+    explanation: |-
+      **2000이에요.** +는 기본형에만 있는 연산이라 두 값을 언박싱해서 더해요.
+
+      - 산술과 크기 비교(<, >)는 래퍼에 쓰면 언박싱된 값으로 계산돼요
+      - 값이 범위 밖이어도 상관없어요. ==만 같은 객체인지를 봐요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.8
+  # ── 질문 3 ──
+  - key: wrap-equals-128
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: JVM 옵션은 기본값이에요. 아래 두 줄은 각각 무엇을 출력할까요?
+    code: |-
+      Long c = 128L;
+      Long d = 128L;
+      System.out.println(c == d);
+      System.out.println(c.equals(d));
+    choices:
+      - true, true
+      - false, true
+      - false, false
+      - true, false
+    answer: "2"
+    explanation: |-
+      **false, true예요.** 래퍼끼리의 ==는 같은 객체인지를 보고, 128은 박싱할 때마다 새 객체가 만들어져요.
+
+      - Long.valueOf는 -128부터 127까지만 미리 만든 객체를 돌려줘요
+      - equals는 안의 값을 비교해서 범위와 상관없이 맞아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Long.html#valueOf(long)
+  - key: wrap-mixed-compare
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드는 무엇을 출력할까요?
+    code: |-
+      Integer x = 1000;
+      int y = 1000;
+      System.out.println(x == y);
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+      - NullPointerException
+    answer: "1"
+    explanation: |-
+      **true예요.** 한쪽이 기본형이면 래퍼가 언박싱되어 값끼리 비교돼요.
+
+      - 1000 == 1000이 되니 범위와 상관없이 true예요
+      - 래퍼끼리 비교할 때만 같은 객체인지를 봐요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.21.1
+  - key: wrap-entity-id
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 엔티티 Member의 getId()는 Long을 돌려줘요. id가 300인 회원을 DB에서 두 번 따로 읽어 m1, m2에 담았어요. 두 Long은 각각 따로 박싱된 객체예요. 아래 두 줄은 무엇을 출력할까요?
+    code: |-
+      System.out.println(m1.getId() == m2.getId());
+      System.out.println(m1.getId().equals(m2.getId()));
+    choices:
+      - true, true
+      - false, true
+      - false, false
+      - true, false
+    answer: "2"
+    explanation: |-
+      **false, true예요.** 300은 미리 만든 범위 밖이라 두 Long이 다른 객체예요.
+
+      - id가 127 이하인 테스트 데이터에서는 ==가 우연히 true라서 테스트가 통과해요
+      - 엔티티의 id는 equals나 Objects.equals로 비교해요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.7
+  # ── 질문 4 ──
+  - key: wrap-null-compare
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드를 실행하면 어떻게 될까요?
+    code: |-
+      Integer count = null;
+      if (count == 0) {
+        System.out.println("없음");
+      }
+    choices:
+      - 없음을 출력한다
+      - 아무것도 출력하지 않는다. null은 0이 아니다
+      - NullPointerException이 난다
+      - 컴파일 오류
+    answer: "3"
+    explanation: |-
+      **NullPointerException이 나요.** 0과 비교하려고 count를 언박싱하는데, 그 일이 count.intValue() 호출이에요.
+
+      - 한쪽이 기본형이라 래퍼를 꺼내서 값으로 비교해요
+      - 코드에 점이 없어도 언박싱되는 자리라면 예외가 날 수 있어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.8
+  - key: wrap-map-get
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 재고 맵에 "A"만 들어 있어요. 아래 코드를 실행하면 어떻게 될까요?
+    code: |-
+      Map<String, Integer> stock =
+          new HashMap<>(Map.of("A", 3));
+      int n = stock.get("B");
+    choices:
+      - n은 0이다
+      - n은 3이다
+      - NullPointerException이 난다
+      - 컴파일 오류
+    answer: "3"
+    explanation: |-
+      **NullPointerException이 나요.** get("B")가 null을 돌려주고, int에 담으려고 언박싱하다 예외가 나요.
+
+      - 맵에서 없는 키를 꺼내 기본형에 담는 곳이 흔한 자리예요
+      - stock.getOrDefault("B", 0)으로 막아요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.8
+  - key: wrap-request-param
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 스프링 부트 3.5의 컨트롤러에 아래 메서드가 있어요. 클라이언트가 page 없이 GET /orders를 보내면 응답은 어떻게 될까요?
+    code: |-
+      @GetMapping("/orders")
+      String orders(@RequestParam(
+          required = false) int page) {
+        return "page=" + page;
+      }
+    choices:
+      - 200, page=0
+      - 200, page=null
+      - 500 오류
+      - 400 오류
+    answer: "3"
+    explanation: |-
+      **500 오류예요.** 값이 없으면 스프링은 null을 넣으려 하는데 int는 null을 담을 수 없어 예외를 던져요.
+
+      - 오류 메시지가 래퍼 타입으로 선언하라고 알려 줘요
+      - 기본값이 있으면 @RequestParam(defaultValue = "0") int page로, 없음을 구별해야 하면 Integer page로 받아요
+    source: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-controller/ann-methods/requestparam.html
+  # ── 네 질문을 하나로 ──
+  - key: wrap-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "Integer를 ==로 비교하면 안 되는 이유를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **Integer는 참조형이라 ==가 값이 아니라 같은 객체인지를 비교하기 때문이에요.**
+
+      - **래퍼:** int 값을 담은 객체다. 컬렉션과 null 표현에 쓴다
+      - **오토박싱:** 컴파일러가 Integer.valueOf와 intValue 호출을 넣어 바꿔 준다
+      - **== 함정:** valueOf는 -128부터 127까지만 미리 만든 객체를 돌려줘서 작은 값만 우연히 true다. equals나 Objects.equals로 비교한다
+      - **null:** null인 래퍼가 언박싱되면 NullPointerException이 난다
+    checklist:
+      - Integer는 참조형이라 ==가 같은 객체인지를 비교한다고 말했다
+      - 컴파일러가 valueOf와 intValue로 박싱과 언박싱을 넣어 준다고 말했다
+      - -128부터 127까지는 같은 객체가 나와서 작은 값만 true라고 말했다
+      - equals나 Objects.equals로 비교해야 한다고 말했다
+      - null인 래퍼를 언박싱하면 NullPointerException이 난다고 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html#jls-5.1.7
