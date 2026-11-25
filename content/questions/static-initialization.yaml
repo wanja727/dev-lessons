@@ -1,0 +1,240 @@
+# static과 초기화 순서 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/static-initialization.yaml의 says).
+# 동작에 관한 정답은 verification의 StaticInitializationTest로 확인했다 (자바 21, 스프링 프레임워크 6.2).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: static-initialization
+  title: static과 초기화 순서
+  unit: 자바 언어
+  order: 42
+concepts:
+  - key: core
+    name: static과 초기화 순서
+coreQuestions:
+  - key: q1
+    text: "static이 붙은 것은 붙지 않은 것과 무엇이 다른가요?"
+  - key: q2
+    text: "static 필드와 static 블록은 언제 실행되나요?"
+  - key: q3
+    text: "객체를 만들 때는 어떤 순서로 초기화되나요?"
+questions:
+  # ── 질문 1 ──
+  - key: sti-counter
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 Coupon으로 객체를 두 개 만들었어요. a.number, b.number, Coupon.issued는 각각 얼마일까요?
+    code: |-
+      class Coupon {
+        static int issued = 0;
+        int number;
+        Coupon() {
+          issued++;
+          number = issued;
+        }
+      }
+
+      Coupon a = new Coupon();
+      Coupon b = new Coupon();
+    choices:
+      - 1, 1, 1
+      - 1, 2, 2
+      - 2, 2, 2
+      - 1, 2, 1
+    answer: "2"
+    explanation: |-
+      **1, 2, 2예요.** number는 객체마다 따로 있고, issued는 클래스에 하나라 두 객체가 함께 올려요.
+
+      - a를 만들 때 issued가 1이 되고 a.number에 1이 들어가요
+      - b를 만들 때 같은 issued가 2가 되고 b.number에 2가 들어가요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.3.1.1
+  - key: sti-static-method
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 클래스를 컴파일하면 어떻게 될까요?
+    code: |-
+      class Cart {
+        int total;
+        static int tax() {
+          return total / 10;
+        }
+      }
+    choices:
+      - 컴파일되고 tax()는 언제나 0을 돌려준다
+      - 컴파일 오류. static 메서드에서 인스턴스 필드를 바로 쓸 수 없다
+      - 컴파일되지만 실행할 때 NullPointerException이 난다
+      - 컴파일되고 마지막에 만든 Cart의 total을 쓴다
+    answer: "2"
+    explanation: |-
+      **컴파일 오류예요.** static 메서드는 객체 없이 불려서 this가 없고, 어느 카트의 total인지 정할 수 없어요.
+
+      - 반대로 인스턴스 메서드는 static 필드를 쓸 수 있어요
+      - main이 static인 것도 시작할 때 객체가 없기 때문이에요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.3.2
+  # ── 질문 2 ──
+  - key: sti-forward
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드는 무엇을 출력할까요?
+    code: |-
+      class Config {
+        static Config INSTANCE = new Config();
+        static int timeout = 30;
+        int copied;
+        Config() { copied = timeout; }
+      }
+
+      System.out.println(Config.INSTANCE.copied);
+    choices:
+      - "30"
+      - "0"
+      - NullPointerException
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **0이에요.** static 필드는 위에서 아래로 실행되고, 첫 줄에서 생성자가 불릴 때 timeout은 아직 30이 대입되기 전이에요.
+
+      - 대입 전의 static 필드는 기본값 0이에요
+      - 두 줄의 순서를 바꾸면 30이 돼요. 오류나 경고는 없어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.2
+  - key: sti-constant-no-init
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 프로그램이 Rates에 대해 아래 한 줄만 실행했어요. "Rates 초기화"가 출력될까요?
+    code: |-
+      class Rates {
+        static final int MAX = 50;
+        static { System.out.println("Rates 초기화"); }
+      }
+
+      System.out.println(Rates.MAX);
+    choices:
+      - 출력된다. Rates를 처음 썼다
+      - 출력되지 않는다. MAX는 컴파일 시점 상수라 클래스 초기화가 일어나지 않는다
+      - 출력되지만 50보다 뒤에 나온다
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **출력되지 않아요.** 컴파일러가 Rates.MAX 자리에 50을 직접 넣어 둬서 실행할 때 Rates를 찾아가지 않아요.
+
+      - new, static 메서드 호출, 상수가 아닌 static 필드 접근은 초기화를 일으켜요
+      - 컴파일할 때 값이 정해지는 static final 상수를 읽는 것만 예외예요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.1
+  # ── 질문 3 ──
+  - key: sti-parent-only
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 두 클래스에서 new VipCoupon()을 이미 한 번 실행했어요. 그다음 new Coupon()을 실행하면 출력되는 번호는 무엇일까요?
+    code: |-
+      class Coupon {
+        static { print("1"); }
+        int rate = init("2");
+        Coupon() { print("3"); }
+      }
+      class VipCoupon extends Coupon {
+        static { print("4"); }
+        int bonus = init("5");
+        VipCoupon() { print("6"); }
+      }
+    choices:
+      - 1 2 3
+      - 2 3
+      - 2 3 5 6
+      - 1 4 2 3
+    answer: "2"
+    explanation: |-
+      **2 3이에요.** Coupon의 static은 첫 new VipCoupon()에서 이미 실행됐고, 부모 클래스만 만드니 자식 쪽은 실행되지 않아요.
+
+      - static은 클래스마다 한 번, 인스턴스 쪽은 객체마다 한 번이에요
+      - 한 클래스 안에서는 필드 초기화식이 생성자 본문보다 먼저예요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.5
+  - key: sti-field-before-ctor
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 'class Timer { long start = System.nanoTime(); long limit; Timer() { limit = start + 1000; } }에서 생성자 본문이 실행될 때 start에는 값이 들어 있을까요?'
+    choices:
+      - 들어 있다. 필드 초기화식이 생성자 본문보다 먼저 실행된다
+      - 0이다. 필드 초기화식은 생성자 본문 뒤에 실행된다
+      - 컴파일 오류. 생성자에서 다른 필드를 쓸 수 없다
+      - 실행할 때마다 다르다
+    answer: "1"
+    explanation: |-
+      **들어 있어요.** 객체를 만들 때 필드가 기본값으로 채워지고, 필드 초기화식이 실행된 다음에 생성자 본문이 실행돼요.
+
+      - 그래서 limit은 start에 1000을 더한 값이 돼요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.5
+  - key: sti-field-injection
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 스프링이 아래 빈을 만들 때 어떻게 될까요? OrderRepository 빈은 따로 등록되어 있어요.
+    code: |-
+      @Service
+      class OrderService {
+        @Autowired
+        private OrderRepository repo;
+        private final long countAtStart;
+
+        OrderService() {
+          countAtStart = repo.count();
+        }
+      }
+    choices:
+      - 정상으로 만들어진다. @Autowired가 먼저 채워진다
+      - NullPointerException으로 빈 생성이 실패한다
+      - countAtStart가 0이 된다
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **NullPointerException으로 빈 생성이 실패해요.** 스프링은 생성자를 불러 객체를 만든 뒤에야 @Autowired 필드를 채워요.
+
+      - 생성자가 도는 동안 repo는 기본값 null이에요
+      - 생성자의 인자로 받는 생성자 주입으로 바꾸면 생성자 본문에서 바로 쓸 수 있어요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  # ── 세 질문을 하나로 ──
+  - key: sti-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "클래스와 객체가 초기화되는 순서를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **static은 클래스가 처음 쓰일 때 한 번, 인스턴스 쪽은 객체마다 한 번이고, 어느 쪽이든 부모가 먼저예요.**
+
+      - **static:** 클래스에 딸려 하나뿐이다. static 메서드에는 this가 없다
+      - **클래스 초기화:** 처음 쓰일 때 static 필드와 static 블록이 위에서 아래로 한 번 실행된다. 컴파일 시점 상수를 읽는 것은 일으키지 않는다
+      - **객체 초기화:** 부모의 필드 초기화와 생성자, 자식의 필드 초기화와 생성자 순서다
+      - **스프링:** 생성자를 부른 뒤 필드를 주입하므로 생성자 주입을 쓴다. static 필드에는 주입하지 않는다
+    checklist:
+      - static은 객체가 아니라 클래스에 딸려 하나뿐이라고 말했다
+      - static 필드와 블록은 클래스가 처음 쓰일 때 한 번 위에서 아래로 실행된다고 말했다
+      - 객체는 부모의 필드와 생성자, 자식의 필드와 생성자 순서로 초기화된다고 말했다
+      - 스프링은 생성자 뒤에 필드를 주입하므로 생성자에서 필드 주입한 것을 쓰면 null이라고 말했다
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.5

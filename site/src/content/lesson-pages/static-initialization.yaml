@@ -1,8 +1,9 @@
-# static과 초기화 순서 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# static과 초기화 순서
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/static-initialization.yaml에 있다.
 title: static과 초기화 순서
+description: static이 붙은 것은 무엇에 딸려 있는지, static 필드와 static 블록은 언제 실행되는지, 객체를 만들 때 부모와 자식이 어떤 순서로 초기화되는지. 세 가지 질문에 스스로 답할 수 있게, 단계마다 출력을 넣은 쿠폰 클래스를 돌려 보며 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 18
 roadmap: J5
 type: 자바 실행
 prerequisites:
@@ -70,7 +71,7 @@ codes:
     new VipCoupon();
   counter: |-
     class Coupon {
-      static int issued = 0;
+      [[static int issued = 0]];
       int number;
 
       Coupon() {
@@ -78,19 +79,95 @@ codes:
         number = issued;
       }
     }
+
+    Coupon a = new Coupon();
+    Coupon b = new Coupon();
+    Coupon c = new Coupon();
+  staticMethod: |-
+    class Cart {
+      int total;
+      static int tax() {
+        return [[total]] / 10;
+      }
+    }
+  trigger: |-
+    class Rates {
+      static final int MAX = 50;
+      static { print("Rates 초기화"); }
+      static int max() { return MAX; }
+    }
+
+    print("상수 읽기: " + [[Rates.MAX]]);
+    Rates r = null;
+    print("변수 선언");
+    print("static 메서드: " + [[Rates.max()]]);
   forward: |-
     class Config {
-      static Config INSTANCE = new Config();
+      static Config INSTANCE = [[new Config()]];
       static int timeout = 30;
       int copied;
 
-      Config() { copied = timeout; }
+      Config() { copied = [[timeout]]; }
     }
 
     System.out.println(Config.INSTANCE.copied);
+  fieldInjection: |-
+    @Service
+    class OrderService {
+      [[@Autowired]]
+      private OrderRepository repo;
+      private final long countAtStart;
+
+      OrderService() {
+        countAtStart = [[repo.count()]];
+      }
+    }
+  constructorInjection: |-
+    @Service
+    class OrderService {
+      private final OrderRepository repo;
+      private final long countAtStart;
+
+      OrderService([[OrderRepository repo]]) {
+        this.repo = repo;
+        countAtStart = repo.count();
+      }
+    }
+  staticAutowired: |-
+    @Service
+    class OrderService {
+      @Autowired
+      private [[static]] OrderRepository repo;
+    }
+  constants: |-
+    private static final int MAX_RETRY = 3;
+
+    @Value("${pay.url}")
+    private String payUrl;  // static이 아니다
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/staticinit/StaticInitializationTest.java
+  jlsInitWhen: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.1
+  jlsInitProc: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.2
+  jlsNew: https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.5
+  springDi: https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html
+  autowired: https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html
 predict:
-  text: '코드 predict는 번호가 붙은 문장을 여섯 군데에서 출력해요. `new VipCoupon()`을 두 번 실행하면 출력되는 번호의 순서는 무엇일까요? 보기: 1 2 3 4 5 6 / 1 2 3 4 5 6, 1 4 2 3 5 6 / 2 3 5 6, 4 1 5 6 2 3 / 5 6 2 3, 1 4 2 3 5 6 / 1 4 2 3 5 6.'
-  answer: '1 4 2 3 5 6 다음에 2 3 5 6. static 블록은 부모, 자식 순서로 처음 한 번만 실행되고, 객체를 만들 때마다 부모의 필드와 생성자, 자식의 필드와 생성자 순서로 실행된다. 질문 3에서 밝힌다.'
+  title: 여섯 문장은 어떤 순서로 나올까요?
+  text: '번호가 붙은 문장을 여섯 군데에서 출력해요. `new VipCoupon()`을 두 번 실행하면 출력되는 번호의 순서는 무엇일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: a
+      label: '1 2 3 4 5 6 / 1 2 3 4 5 6'
+    - value: b
+      label: '1 4 2 3 5 6 / 2 3 5 6'
+    - value: c
+      label: '4 1 5 6 2 3 / 5 6 2 3'
+    - value: d
+      label: '1 4 2 3 5 6 / 1 4 2 3 5 6'
+  answer: b
+  storageKey: sti-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 'static이 붙은 것은 붙지 않은 것과 무엇이 다른가요?'
@@ -106,6 +183,47 @@ questions:
     asks:
       - '본문의 예시: 코드 counter로 `Coupon a = new Coupon(); Coupon b = new Coupon();`을 실행한 뒤 `a.number`, `b.number`, `Coupon.issued`는 각각 얼마인가 (1, 2, 2)'
       - '옮긴 상황: `class Cart { int total; static int tax() { return total / 10; } }`를 컴파일하면 어떻게 되나 (컴파일 오류. static 메서드에서 인스턴스 필드 `total`을 바로 쓸 수 없다)'
+    body:
+      - p: '필드와 메서드 앞에 `static`을 붙이면 그것은 **객체가 아니라 클래스에 딸린 것**이 돼요. 객체를 몇 개 만들든 하나뿐이에요. 붙이지 않은 것은 객체마다 따로 있어요.'
+      - p: '쿠폰을 세 장 발급하면서 발급 번호를 붙여요. `issued`는 static이고 `number`는 아니에요.'
+      - ci:
+          key: counter
+          label: 실제 출력 보기
+          source: StaticInitializationTest.counter
+          code: counter
+      - ul:
+          - '**`number`는 객체마다 따로 있어요.** 그래서 1, 2, 3이에요.'
+          - '**`issued`는 클래스에 하나예요.** 세 객체가 같은 `issued`를 올렸어요. 객체를 거치지 않고 `Coupon.issued`처럼 클래스 이름으로 읽어요.'
+      - h3: static 메서드에는 this가 없어요
+      - p: 'static 메서드는 객체 없이 `Cart.tax()`처럼 불려요. 그러니 "어느 객체의" 필드를 쓸지 알 수 없어요. 객체를 가리키는 `this`가 없어요.'
+      - code: staticMethod
+        notes:
+          - mark: total
+            as: code
+            text: '`total`은 객체마다 있는 필드예요. static 메서드 안에서는 어느 카트의 `total`인지 정할 수 없어요.'
+      - ci:
+          key: static-method
+          label: 컴파일 결과 보기
+          source: StaticInitializationTest.staticMethodCannotUseInstanceField
+      - p: '반대 방향은 괜찮아요. 인스턴스 메서드는 static 필드와 static 메서드를 쓸 수 있어요. 클래스에 딸린 것은 어느 객체에서도 하나니까요. `main`이 static인 이유도 이거예요. 프로그램을 시작할 때는 아직 객체가 하나도 없어요.'
+      - h3: 어디에 쓰나요
+      - table:
+          head: [쓰임, 예]
+          rows:
+            - [바뀌지 않는 값(상수), '`static final int MAX_RATE = 50;`']
+            - [객체의 상태를 쓰지 않는 계산, '`Math.max(a, b)`']
+            - [객체를 만들어 돌려주는 메서드, '`List.of(...)`, `Integer.valueOf(...)`']
+      - p: '**바뀌는 static 필드는 조심해요.** 프로그램 전체가 하나를 함께 써서, 누가 언제 바꿨는지 찾기 어려워요. 테스트 하나가 바꾼 값이 다음 테스트에 그대로 남기도 해요. 여러 스레드가 동시에 바꿀 때의 문제는 경쟁 상태와 동기화 레슨에서 다뤄요.'
+      - quiz:
+          q: '코드 counter로 `Coupon a = new Coupon(); Coupon b = new Coupon();`만 실행했어요. `a.number`, `b.number`, `Coupon.issued`는?'
+          options:
+            - 1, 1, 1
+            - 1, 2, 2
+            - 2, 2, 2
+          answer: 2
+          explain: '`number`는 객체마다 그때의 `issued`를 담아요. `issued`는 하나라서 두 번 올라 2예요.'
+      - next: 'static 필드는 클래스에 하나라고 했어요. 그러면 그 값은 언제 채워질까요?'
+    recall: 'static이 붙은 필드와 메서드는 객체가 아니라 클래스에 딸려 있어서 객체를 몇 개 만들든 하나뿐이고, 클래스 이름으로 써요. static 메서드는 객체 없이 불려서 `this`가 없고 인스턴스 필드를 바로 쓸 수 없어요. 상수, 상태 없는 계산, 객체를 만들어 주는 메서드에 쓰고, 바뀌는 static 상태는 조심해요.'
   - id: q2
     title: 'static 필드와 static 블록은 언제 실행되나요?'
     conclusion:
@@ -121,6 +239,45 @@ questions:
     asks:
       - '본문의 예시: 코드 forward의 출력은 무엇인가 (0. 생성자가 돌 때 `timeout`은 아직 30이 대입되기 전이다)'
       - '옮긴 상황: `class Rates { static final int MAX = 50; static { print("Rates 초기화"); } }`가 있다. 프로그램이 `Rates`에 대해 `System.out.println(Rates.MAX);` 한 줄만 실행했다. "Rates 초기화"는 출력되나 (출력되지 않는다. `MAX`는 컴파일 시점 상수라 클래스 초기화를 일으키지 않는다)'
+    body:
+      - p: 'static 필드의 대입문(`static int issued = 0;`)과 `static { ... }`로 쓴 static 블록은 **클래스가 처음 쓰이는 순간에 한 번** 실행돼요. 이것을 **클래스 초기화**라고 해요. 자바 프로그램이 실행되는 과정 레슨에서 클래스가 처음 쓰일 때 읽힌다고 했는데, 그 마지막 단계예요.'
+      - h3: 무엇이 "처음 쓰는 것"인가요
+      - p: '`Rates`의 static 블록이 출력을 남겨요. 세 줄 가운데 어느 줄에서 "Rates 초기화"가 나올지 예상해 보고 열어 보세요.'
+      - ci:
+          key: trigger
+          label: 실제 출력 보기
+          source: StaticInitializationTest.whatTriggersInitialization
+          code: trigger
+      - ul:
+          - '**`Rates.MAX`를 읽었는데 초기화되지 않았어요.** `static final int MAX = 50`처럼 컴파일할 때 값이 정해지는 상수는, 컴파일러가 쓰는 쪽 코드에 50을 직접 적어 둬요. 실행할 때 `Rates`를 찾아갈 일이 없어요.'
+          - '**`Rates` 타입의 변수를 선언만 해도 초기화되지 않아요.**'
+          - '**static 메서드를 부르자 초기화됐어요.** `new`로 객체를 만들 때, 상수가 아닌 static 필드를 읽거나 쓸 때도 그래요. 자식 클래스가 초기화되면 부모가 먼저 초기화돼요.'
+      - h3: 위에서 아래로, 한 번
+      - p: '클래스 초기화는 static 필드의 대입과 static 블록을 **적힌 순서대로 위에서 아래로** 실행해요. 그래서 순서가 결과를 바꾸기도 해요. 아래 코드의 출력을 예상해 보세요.'
+      - code: forward
+        notes:
+          - mark: new Config()
+            as: code
+            text: '첫 줄에서 바로 생성자를 불러요. 아직 다음 줄의 `timeout = 30`은 실행되지 않았어요.'
+          - mark: timeout
+            as: code
+            text: '대입 전이라 기본값 0이 보여요.'
+      - ci:
+          key: forward
+          label: 실제 출력 보기
+          source: StaticInitializationTest.forwardReference
+      - p: '`INSTANCE`가 위에 있으면 생성자가 돌 때 `timeout`은 아직 0이에요. 두 줄의 순서만 바꾸면 30이 돼요. 컴파일 오류도 경고도 없어요. static 필드끼리 서로를 쓴다면 선언 순서를 확인해요.'
+      - muted: 'JVM은 클래스 초기화를 한 번만, 그리고 여러 스레드가 동시에 와도 한 스레드만 하도록 보장해요. 이 성질을 쓰는 싱글톤 구현은 싱글톤 패턴 레슨에서 다뤄요.'
+      - quiz:
+          q: '`class Rates { static final int MAX = 50; static { print("Rates 초기화"); } }`에 대해 `System.out.println(Rates.MAX);` 한 줄만 실행했어요. "Rates 초기화"가 출력될까요?'
+          options:
+            - 출력된다. Rates를 처음 썼다
+            - 출력되지 않는다. MAX는 컴파일 시점 상수다
+            - 컴파일 오류
+          answer: 2
+          explain: '컴파일러가 `Rates.MAX` 자리에 50을 직접 넣어 둬서 실행할 때 `Rates`를 찾아가지 않아요. 클래스 초기화가 일어나지 않아요.'
+      - next: '클래스는 한 번 초기화돼요. 객체는 만들 때마다 초기화되죠. 부모와 자식이 있을 때 둘은 어떤 순서로 섞일까요?'
+    recall: '클래스가 처음 쓰이는 순간에 한 번, static 필드의 대입과 static 블록이 적힌 순서대로 위에서 아래로 실행돼요. `new`, static 메서드 호출, 상수가 아닌 static 필드 접근이 초기화를 일으키고, 컴파일 시점 상수를 읽거나 변수를 선언하는 것은 일으키지 않아요. 위의 static 필드가 아래의 static 필드를 쓰면 아직 기본값이 보여요.'
   - id: q3
     title: 객체를 만들 때는 어떤 순서로 초기화되나요?
     conclusion:
@@ -140,28 +297,137 @@ questions:
       - '본문의 예시: 코드 predict에서 `VipCoupon`을 이미 한 번 만든 뒤에 `new Coupon()`을 실행하면 출력되는 번호는 무엇인가 (2 3. `Coupon`의 static은 이미 실행됐고 자식 쪽은 실행되지 않는다)'
       - '옮긴 상황: `class Timer { long start = System.nanoTime(); long limit; Timer() { limit = start + 1000; } }`에서 생성자 본문이 실행될 때 `start`에는 값이 들어 있나 (들어 있다. 필드 초기화식이 생성자 본문보다 먼저 실행된다)'
       - '실무 구역: 스프링 빈 `OrderService`가 `@Autowired private OrderRepository repo;` 필드를 갖고, 생성자 본문에서 `repo.count()`를 부른다. 스프링이 이 빈을 만들 때 어떻게 되나 (`NullPointerException`으로 빈 생성이 실패한다. 생성자가 끝난 뒤에야 필드에 주입된다)'
+    body:
+      - p: '객체를 만들 때도 순서가 있어요. 한 클래스 안에서는 이래요.'
+      - ol:
+          - '모든 필드가 기본값(0, null)으로 채워져요.'
+          - '필드 초기화식(`int rate = ...;`)이 적힌 순서대로 실행돼요.'
+          - '생성자 본문이 실행돼요. 그래서 생성자 안에서는 필드 초기화식의 값이 이미 보여요.'
+      - p: '상속이 있으면 **부모부터**예요. 자식 생성자의 첫 줄에서 부모 생성자가 먼저 불려요. 코드에 `super()`를 쓰지 않아도 컴파일러가 넣어요. 부모의 필드와 생성자가 다 끝난 뒤에야 자식의 필드 초기화식이 실행돼요.'
+      - p: '처음 예측한 코드를 한 단계씩 실행해 보세요.'
+      - widget:
+          kind: steps
+          layout: [log, buttons, verdict]
+          initial: {}
+          scenarios:
+            default:
+              - log: '1 Coupon static   (첫 new: VipCoupon을 처음 씀 → 부모 클래스부터 초기화)'
+              - log: '4 Vip static'
+              - log: '2 Coupon 필드     (이제 객체 초기화: 부모 쪽부터)'
+              - log: '3 Coupon 생성자'
+              - log: '5 Vip 필드        (부모가 끝난 뒤 자식 쪽)'
+              - log: '6 Vip 생성자'
+              - log: {note: '둘째 new: 두 클래스는 이미 초기화됐으니 static은 건너뛰어요'}
+              - log: '2 Coupon 필드'
+              - log: '3 Coupon 생성자'
+              - log: '5 Vip 필드'
+              - log: '6 Vip 생성자'
+                verdict: 'static은 클래스마다 한 번, 인스턴스 쪽은 객체마다 한 번이에요. 어느 쪽이든 부모가 먼저예요.'
+      - p: '답은 **1 4 2 3 5 6 다음에 2 3 5 6**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: StaticInitializationTest.predict
+          code: predict
+      - p: '외우지 않아도 이유로 풀려요.'
+      - ul:
+          - '**static은 클래스에 딸린 것이라 클래스마다 한 번이에요.** 첫 `new`에서만 1과 4가 나와요.'
+          - '**인스턴스 쪽은 객체에 딸린 것이라 객체마다 한 번이에요.** 2, 3, 5, 6은 `new`마다 나와요.'
+          - '**어느 쪽이든 부모가 먼저예요.** 자식은 부모가 준비된 것을 믿고 쓰니까요.'
+      - muted: '부모 생성자가 도는 동안 자식의 필드는 아직 기본값이에요. 그래서 부모 생성자에서 자식이 오버라이딩한 메서드를 부르면 이상한 일이 생겨요. 상속과 다형성 레슨에서 다뤄요.'
+      - quiz:
+          q: '코드 predict에서 `VipCoupon`을 이미 한 번 만든 뒤에 `new Coupon()`을 실행하면 출력되는 번호는?'
+          options:
+            - 1 2 3
+            - 2 3
+            - 2 3 5 6
+          answer: 2
+          explain: '`Coupon`의 static은 이미 실행됐어요. 부모 클래스만 만드니 자식 쪽 5와 6은 나오지 않아요.'
+    recall: '부모부터예요. 클래스를 처음 쓰는 것이라면 부모의 static, 자식의 static이 한 번 실행되고, 그다음 객체마다 부모의 필드 초기화와 생성자, 자식의 필드 초기화와 생성자가 실행돼요. 한 클래스 안에서는 필드 초기화식이 생성자 본문보다 먼저예요. static은 클래스마다 한 번, 인스턴스 쪽은 객체마다 한 번이에요.'
 practice:
+  title: 스프링 빈에서는 이렇게 만나요
   says:
     - '스프링 빈도 자바 객체라서 질문 3의 순서를 그대로 따른다. 스프링은 생성자를 불러 객체를 만든 다음에 `@Autowired` 필드를 채운다. 순서: 필드 초기화식과 생성자, 필드 주입, 초기화 콜백(`@PostConstruct`). 뒤의 둘은 S3에서 자세히 다룬다'
-    - '흔한 실수 1: 필드 주입을 쓰면서 생성자나 필드 초기화식에서 그 필드를 쓴다. 예: `@Autowired private PayProperties props; private final String url = props.getUrl();`. 필드 초기화식이 돌 때 `props`는 null이다. 고친 코드: 생성자 주입. 생성자의 인자로 받으면 생성자 본문에서 이미 쓸 수 있다. 스프링이 생성자 주입을 권하는 이유 가운데 하나다 (작은 스프링 컨텍스트로 두 코드를 띄워 실패와 성공을 확인하는 테스트)'
-    - '흔한 실수 2: `@Autowired private static OrderRepository repo;` 또는 `@Value("${pay.url}") private static String url;`. 스프링은 빈이라는 객체에 주입한다. static 필드는 객체의 것이 아니어서 건너뛰고 null로 남는다. 고친 코드: `static`을 떼고 생성자로 받는다. static 유틸 메서드에서 빈이 필요해졌다면 그 유틸을 빈으로 만든다 (작은 스프링 컨텍스트로 확인하는 테스트. 스프링이 남기는 로그 문구는 확인한 것만 적는다)'
+    - '흔한 실수 1: 필드 주입을 쓰면서 생성자에서 그 필드를 쓴다. 생성자가 돌 때 필드는 null이다. 고친 코드: 생성자 주입. 생성자의 인자로 받으면 생성자 본문에서 이미 쓸 수 있다. 스프링이 생성자 주입을 권하는 이유 가운데 하나다 (작은 스프링 컨텍스트로 두 코드를 띄워 실패와 성공을 확인하는 테스트)'
+    - '흔한 실수 2: `@Autowired private static OrderRepository repo;`. 스프링은 빈이라는 객체에 주입한다. static 필드는 객체의 것이 아니어서 건너뛰고 null로 남는다. 고친 코드: `static`을 떼고 생성자로 받는다. static 유틸 메서드에서 빈이 필요해졌다면 그 유틸을 빈으로 만든다 (작은 스프링 컨텍스트로 확인하는 테스트. 스프링이 남기는 로그 문구는 확인한 것만 적는다)'
     - '상수는 `private static final`로 둔다. 예: `private static final int MAX_RETRY = 3;`. 설정 파일에서 읽어야 하는 값은 상수가 아니므로 static으로 두지 않고 주입받는다'
     - '싱글톤 빈의 필드는 static이 아니어도 사실상 하나뿐이다. 빈의 필드에 바뀌는 상태를 두는 문제는 S3에서 다룬다는 한 줄'
+  body:
+    - p: '스프링 빈도 자바 객체예요. 스프링이 아무리 많은 일을 해 줘도 질문 3의 순서를 바꾸지는 못해요. 스프링은 **생성자를 불러 객체를 만든 다음에** `@Autowired` 필드를 채워요. 두 실수 모두 작은 스프링 컨텍스트를 띄워 확인했어요.'
+    - h3: '흔한 실수 1: 생성자에서 필드 주입된 것을 씀'
+    - code: fieldInjection
+      notes:
+        - mark: '@Autowired'
+          as: anno
+          text: '이 필드는 생성자가 끝난 **뒤에** 채워져요.'
+        - mark: repo.count()
+          as: code
+          text: '생성자가 도는 지금 `repo`는 아직 기본값 null이에요.'
+    - ci:
+        key: field-injection
+        label: 두 코드를 스프링으로 띄운 실제 결과 보기
+        source: StaticInitializationTest.fieldInjectionIsAfterConstructor
+    - p: '필드 주입 쪽은 빈을 만들다 실패하고, 원인을 따라가면 `this.repo is null`이에요. 서버라면 켜지지 않아요. 고치는 방법은 **생성자 주입**이에요. 필요한 것을 생성자의 인자로 받으면, 스프링이 객체를 만들기 전에 넣어 줘서 생성자 본문에서 바로 쓸 수 있어요.'
+    - code: constructorInjection
+      notes:
+        - mark: OrderRepository repo
+          as: code
+          text: '스프링이 `OrderRepository` 빈을 먼저 찾아서 인자로 넘겨줘요. 필드에 `final`을 붙일 수 있는 것도 장점이에요.'
+    - muted: '스프링 문서도 필수 의존성에는 생성자 주입을 권해요. 근거: [스프링 문서의 의존성 주입](link:springDi). 필드 주입 뒤에 실행되는 초기화 콜백(`@PostConstruct`)은 빈의 생명주기와 스코프 레슨에서 다뤄요.'
+    - h3: '흔한 실수 2: static 필드에 주입'
+    - code: staticAutowired
+      notes:
+        - mark: static
+          as: code
+          text: 'static 필드는 클래스에 딸린 것이에요(질문 1). 스프링은 빈이라는 **객체**에 주입해요.'
+    - ci:
+        key: static-autowired
+        label: 실제 결과와 스프링의 로그 보기
+        source: StaticInitializationTest.staticFieldIsNotInjected
+    - p: '컨텍스트는 아무 오류 없이 떠요. 스프링은 static 필드를 건너뛰고 로그 한 줄만 남겨요. 필드는 null로 남아서, 나중에 그 필드를 쓰는 순간 `NullPointerException`이 나요. `static`을 떼고 생성자로 받아요. static 유틸 메서드 안에서 빈이 필요해졌다면 그 유틸을 빈으로 만들어 주입받아요.'
+    - muted: '근거: [스프링 문서의 @Autowired](link:autowired). 로그 문구는 스프링 프레임워크 6.2에서 테스트로 확인했어요.'
+    - h3: static은 상수에
+    - code: constants
+    - p: '바뀌지 않는 값은 `private static final`로 둬요. 설정 파일에서 읽는 값은 환경마다 달라서 상수가 아니에요. static으로 두지 않고 주입받아요.'
+    - p: '한 가지 더. 스프링의 빈은 기본으로 하나만 만들어져요(싱글톤). 그래서 빈의 필드는 static이 아니어도 사실상 모든 요청이 함께 쓰는 하나예요. 빈의 필드에 요청마다 바뀌는 값을 두면 생기는 문제는 빈의 생명주기와 스코프 레슨에서 다뤄요.'
+interview:
+  question: 클래스와 객체가 초기화되는 순서를 설명해 주세요
+  model:
+    - label: 정의
+      text: static이 붙은 필드와 메서드는 클래스에 딸려 하나뿐이고, 붙지 않은 것은 객체마다 있습니다. static 필드와 static 블록은 클래스가 처음 쓰일 때 한 번 위에서 아래로 실행되고, 이것을 클래스 초기화라고 합니다.
+    - label: 원리
+      text: new로 객체를 처음 만들면 부모의 static, 자식의 static이 한 번 실행되고, 그다음 객체마다 부모의 필드 초기화와 생성자, 자식의 필드 초기화와 생성자가 차례로 실행됩니다. 컴파일 시점 상수를 읽는 것은 클래스 초기화를 일으키지 않습니다.
+    - label: 주의할 점
+      text: 스프링은 생성자를 부른 뒤에 필드를 주입하므로 필드 주입한 것을 생성자에서 쓰면 null입니다. 그래서 생성자 주입을 씁니다. 스프링은 static 필드에 주입하지 않아 null로 남습니다. 바뀌는 static 상태는 모든 곳이 함께 써서 위험합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 생성자에서 @Autowired 필드를 써서 서버가 켜지지 않는 문제를 생성자 주입으로 바꿔 고쳤습니다.'
+verified: 이 레슨의 출력은 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 스프링 빈의 결과는 스프링 프레임워크 6.2의 컨텍스트를 띄워 확인했어요. 코드가 바뀔 때마다 테스트([StaticInitializationTest](link:test))가 다시 돌아요.
+footer: '근거: 클래스 초기화가 일어나는 때는 자바 언어 명세 12.4.1([링크](link:jlsInitWhen)), 초기화의 순서는 12.4.2([링크](link:jlsInitProc)), 객체를 만들 때의 순서는 12.5([링크](link:jlsNew)), 생성자 주입은 스프링 프레임워크 문서. 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '코드 predict의 출력 순서는 1 4 2 3 5 6, 2 3 5 6이다'
+  - claim: '코드 predict의 출력 순서는 1 4 2 3 5 6, 2 3 5 6이다. 그 뒤의 `new Coupon()`은 2 3이다'
     how: '출력 대신 리스트에 기록하게 한 같은 구조의 클래스를 돌려 순서를 본다'
-  - claim: '코드 counter로 객체를 둘 만들면 `number`는 1과 2, `issued`는 2다'
-    how: '그대로 돌린다. static 상태가 다른 테스트와 섞이지 않게 테스트 전용 클래스를 쓴다'
+    test: StaticInitializationTest.predict
+  - claim: '코드 counter로 객체를 셋 만들면 `number`는 1, 2, 3이고 `issued`는 3이다'
+    how: '그대로 돌린다. 테스트 전용 클래스를 쓴다'
+    test: StaticInitializationTest.counter
+  - claim: 'static 메서드에서 인스턴스 필드를 쓰면 컴파일되지 않는다'
+    how: '`JavaSource`로 소스를 컴파일해 오류 메시지를 본다'
+    test: StaticInitializationTest.staticMethodCannotUseInstanceField
   - claim: '컴파일 시점 상수인 static final 필드를 읽는 것과 변수 선언은 클래스 초기화를 일으키지 않고, static 메서드 호출은 일으킨다'
     how: 'static 블록이 기록을 남기는 클래스로 세 줄을 차례로 실행하며 기록을 본다'
+    test: StaticInitializationTest.whatTriggersInitialization
   - claim: '코드 forward의 출력은 0이고, 두 static 필드의 순서를 바꾸면 30이다'
     how: '순서만 다른 두 클래스를 돌린다'
+    test: StaticInitializationTest.forwardReference
   - claim: '필드 초기화식의 값은 같은 클래스의 생성자 본문에서 보인다'
     how: '생성자에서 필드 값을 기록한다'
+    test: StaticInitializationTest.fieldInitializerBeforeConstructor
   - claim: '필드 주입을 쓰는 빈이 생성자에서 그 필드를 쓰면 빈 생성이 실패하고 원인은 `NullPointerException`이다. 생성자 주입으로 바꾸면 성공한다'
     how: '`AnnotationConfigApplicationContext`에 각 클래스를 등록해 띄우고, 예외의 원인 사슬을 본다'
-  - claim: 'static 필드에 `@Autowired`를 붙이면 컨텍스트는 뜨고 그 필드는 null이다 (스프링 프레임워크 6.2)'
-    how: '컨텍스트를 띄운 뒤 static 필드를 읽는다'
+    test: StaticInitializationTest.fieldInjectionIsAfterConstructor
+  - claim: 'static 필드에 `@Autowired`를 붙이면 컨텍스트는 뜨고 그 필드는 null이다. 스프링은 "not supported on static fields" 로그를 남긴다 (스프링 프레임워크 6.2)'
+    how: '컨텍스트를 띄운 뒤 static 필드를 읽고 출력된 로그를 잡는다'
+    test: StaticInitializationTest.staticFieldIsNotInjected
 sources:
   - '클래스 초기화가 일어나는 때: 자바 언어 명세 12.4.1 https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.1'
   - '클래스 초기화의 순서와 한 번만 실행되는 것: 자바 언어 명세 12.4.2 https://docs.oracle.com/javase/specs/jls/se21/html/jls-12.html#jls-12.4.2'
