@@ -1,111 +1,232 @@
-# 결제 시스템 흐름 (승인, 매입, 취소, 정산) 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
+# 결제 시스템 흐름 문제
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/payment-flow.yaml의 says).
+# 동작에 관한 정답은 verification의 PaymentFlowTest로 확인했다 (스프링 부트 3.5, PostgreSQL 16, 가짜 PG).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 쓰면서 예전 문제를 지우고 새로 썼다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: payment-flow
-  title: 결제 시스템 흐름 (승인, 매입, 취소, 정산)
-  unit: Spring
-  order: 33
+  title: 결제 시스템 흐름
+  unit: 시스템 설계와 아키텍처
+  order: 920
 concepts:
   - key: core
-    name: 결제 시스템 흐름 (승인, 매입, 취소, 정산)
+    name: 결제 시스템 흐름
+coreQuestions:
+  - key: q1
+    text: "카드 결제는 어떤 단계를 거치나요?"
+  - key: q2
+    text: "승인 응답이 오지 않으면 어떻게 하나요?"
+  - key: q3
+    text: "부분 취소는 무엇을 지켜야 하나요?"
+  - key: q4
+    text: "대사는 무엇을 맞추나요?"
 questions:
-  - key: q-d5195429
+  # ── 질문 1 ──
+  - key: pf-approved-only
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 1
-    body: 카드 결제의 승인, 매입, 정산을 설명하고, 승인과 매입을 나누는 이유를 말해 보세요
-    explanation: "- 체크리스트 항목이 모범 답안의 요점이다"
-    checklist:
-      - "승인: 카드사가 한도를 확인하고 금액을 묶어 둔다"
-      - "매입: 가맹점이 승인 건을 실제 청구로 확정한다"
-      - "정산: PG가 매입액에서 수수료를 빼고 가맹점에 지급한다"
-      - "나누는 이유: 재고 확인·발송 뒤 매입하면 그 전 취소는 승인만 풀면 된다"
-      - 자동 매입(승인과 동시) 방식도 있다고 말했다
-    source: https://docs.tosspayments.com/resources/glossary/card-payment
-  - key: q-54880793
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: 승인 타임아웃 때 '망 취소'와 '거래 상태 조회 후 진행'을 비교해 보세요
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: PaymentFlowTest (netCancelOnTimeout)
-    checklist:
-      - 둘 다 타임아웃을 "모름(UNKNOWN)"으로 다룬다고 말했다
-      - "망 취소: 단순·안전, 대신 실제 승인도 취소돼 고객이 다시 결제"
-      - "조회 후 진행: 사용자 경험이 좋지만 조회도 타임아웃 가능, PG마다 API가 다름"
-      - 둘 다 주문 번호(멱등 키)로 재시도한다고 말했다
-      - 대사를 마지막 안전망으로 말했다
-    source: https://docs.tosspayments.com/resources/glossary/transaction
-  - key: q-c8cf442f
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: 아침 대사에서 "PG에만 승인이 있는 건"이 10건 나왔습니다. 원인을 추정하고 처리와 재발 방지를 말해 보세요
-    explanation: |-
-      - 체크리스트 항목이 모범 답안의 요점이다
-      - 검증: PaymentFlowTest (timeoutAsFailureLeavesOrphanApproval)
-    checklist:
-      - 승인 타임아웃을 실패로 처리했거나 망 취소가 실패했을 가능성을 말했다
-      - 고객 돈이 묶여 있으니 PG에서 취소하거나 우리 기록을 바로잡는다고 말했다
-      - 타임아웃을 UNKNOWN으로 두는 코드로 고친다고 말했다
-      - 망 취소 재시도(멱등)와 알림을 말했다
-      - 타임아웃 값과 PG 응답 시간을 점검한다고 말했다
-    source: https://docs.tosspayments.com/resources/glossary/settlement
-  - key: q-4a0fed45
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 승인 요청이 타임아웃 났을 때 "결제 실패"로 저장하면 고객 카드에는 아무 일도 없다
-    answer: X
-    explanation: |-
-      - PG에서는 승인돼 돈이 묶여 있을 수 있다
-      - 검증: PaymentFlowTest (timeoutAsFailureLeavesOrphanApproval)
-    source: https://docs.tosspayments.com/resources/glossary/card-payment
-  - key: q-d97931ad
-    concept: core
-    type: code_predict
-    status: reviewed
-    difficulty: 2
-    body: 결제 10,000원에 부분 취소 6,000원 두 건이 동시에 왔다. 조건부 UPDATE로 처리하면?
-    choices:
-      - 둘 다 성공
-      - 한 건만 성공
-      - 둘 다 실패
-    answer: "2"
-    explanation: |-
-      - WHERE canceled_amount + 6000 &lt;= amount. 누적 6,000
-      - 검증: PaymentFlowTest (concurrentPartialCancels)
-    source: https://docs.stripe.com/refunds
-  - key: q-09f6a6e8
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: 카드 결제에서 가맹점이 승인 건을 실제 청구로 확정하는 단계는?
+    body: 승인만 하고 아직 매입하지 않은 카드 결제가 있어요. 고객의 카드는 어떤 상태인가요?
     choices:
-      - 승인
-      - 매입
-      - 정산
-    answer: "2"
-    explanation: "정답: (2)"
-    source: https://docs.tosspayments.com/resources/glossary/card-payment
-  - key: q-e893ff40
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 승인 금액보다 큰 금액으로 매입할 수 있다
-    answer: X
+      - 이미 청구되어 돈이 나갔다
+      - 아무 일도 없다
+      - 한도가 잡혀 있지만 아직 청구되지는 않았다
+      - 가맹점 계좌에 입금됐다
+    answer: "3"
     explanation: |-
-      - 매입은 승인 금액 이하. 상태 전이 조건으로 막는다
-      - 검증: PaymentFlowTest (approveThenCapture)
+      **한도만 잡혀 있어요.** 승인은 한도를 잡아 두는 것이고, 실제 청구는 매입이에요.
+
+      - 입금은 정산 단계에서 일어나요
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  - key: pf-over-capture
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 10,000원이 승인된 결제를 12,000원으로 매입하려 해요. 어떻게 되나요?
+    choices:
+      - 거절된다. 매입은 승인 금액을 넘을 수 없다
+      - 12,000원이 청구된다
+      - 10,000원만 청구되고 2,000원은 다음 날 청구된다
+      - 승인이 자동으로 12,000원으로 바뀐다
+    answer: "1"
+    explanation: |-
+      **거절돼요.** 승인은 잡아 둔 한도라 그보다 많이 청구할 수 없어요.
+
+      - 테스트에서도 승인 금액을 넘는 매입은 거절됐어요
     source: https://docs.stripe.com/payments/place-a-hold-on-a-payment-method
+  # ── 질문 2 ──
+  - key: pf-timeout-fail
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: PG 승인이 500ms 걸리고 우리 타임아웃은 200ms예요. 아래 코드가 끝난 뒤 우리 DB와 PG의 결제 상태는?
+    code: |-
+      try {
+        pg.approve(orderId, 10_000);
+        markApproved(orderId);
+      } catch (Timeout e) {
+        markFailed(orderId);
+      }
+    choices:
+      - 우리 FAILED, PG 실패
+      - 우리 APPROVED, PG APPROVED
+      - 우리 FAILED, PG APPROVED
+      - 우리 FAILED, PG 기록 없음
+    answer: "3"
+    explanation: |-
+      **우리는 FAILED, PG는 APPROVED예요.** 타임아웃은 실패가 아니라 모름이에요.
+
+      - 고객에게는 실패를 안내했는데 카드 한도는 잡혀 있어요
+      - 테스트의 대사에서 이 어긋남이 나왔어요
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  - key: pf-net-cancel
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 승인 응답이 타임아웃이라 결과를 모르는 승인을 바로 취소하는 망 취소를 보냈고 성공했어요. 그날 대사에서 이 주문은 어떻게 나오나요?
+    choices:
+      - PG에만 승인이 있다
+      - 우리에게만 승인이 있다
+      - 금액이 다르다
+      - 어긋남이 없다. 양쪽 모두 취소다
+    answer: "4"
+    explanation: |-
+      **어긋남이 없어요.** 망 취소로 양쪽 모두 CANCELED가 됐어요.
+
+      - 테스트에서 READY → UNKNOWN → CANCELED, PG CANCELED, 어긋남 0건이었어요
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
+  # ── 질문 3 ──
+  - key: pf-partial-one-more
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 10,000원 결제에서 3,000원, 7,000원을 차례로 부분 취소했어요. 1원을 더 취소하면 어떻게 되나요?
+    choices:
+      - 거절된다. 누적 취소액이 결제 금액을 넘는다
+      - 1원이 취소된다
+      - 다음 결제에서 1원을 뺀다
+      - 처음 3,000원 취소가 되돌아간다
+    answer: "1"
+    explanation: |-
+      **거절돼요.** 누적 취소액은 결제 금액을 넘을 수 없어요.
+
+      - 테스트에서도 3,000 + 7,000은 되고 1원 더는 거절됐어요
+    source: https://docs.stripe.com/refunds
+  - key: pf-partial-concurrent
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 10,000원 결제에 6,000원 부분 취소 두 건이 동시에 왔어요. 각 요청이 아래 UPDATE를 보내고, 바뀐 행이 0이면 거절해요. 결과는?
+    code: |-
+      update payment
+      set canceled_amount =
+          canceled_amount + 6000
+      where order_id = :orderId
+        and canceled_amount + 6000 <= amount
+    choices:
+      - 둘 다 성공해 12,000원이 취소된다
+      - 둘 다 거절된다
+      - 하나만 성공하고 누적 취소액은 6,000원이다
+      - 하나는 6,000원, 하나는 4,000원이 취소된다
+    answer: "3"
+    explanation: |-
+      **하나만 성공해요.** 두 번째 UPDATE는 첫 번째가 바꾼 값으로 조건을 따져요.
+
+      - 애플리케이션에서 읽고 더하고 쓰면 둘 다 통과할 수 있어요
+      - 테스트에서도 성공 1건, 누적 6,000원이었어요
+    source: https://docs.stripe.com/refunds
+  - key: pf-double-money
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 결제 금액을 만 원 단위 double로 저장해 0.1을 열 번 더했어요. 이 방식의 문제는?
+    choices:
+      - 문제없다. 정확히 1.0이다
+      - 오차가 생겨 1.0이 아니고, 1원 차이가 대사에서 어긋남으로 나온다
+      - double은 음수를 담지 못한다
+      - 계산이 너무 느리다
+    answer: "2"
+    explanation: |-
+      **오차가 생겨요.** 0.1을 열 번 더하면 0.9999999999999999예요.
+
+      - 원화는 원 단위 long으로, 소수점이 필요하면 BigDecimal로 다뤄요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/math/BigDecimal.html
+  # ── 질문 4 ──
+  - key: pf-pg-only
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 대사에서 PG에는 APPROVED로 있는데 우리 기록에는 없는 주문이 나왔어요. 가장 흔한 원인은?
+    choices:
+      - 고객이 결제를 두 번 눌렀다
+      - PG가 잘못 승인했다
+      - 부분 취소가 한쪽에만 반영됐다
+      - 승인 타임아웃을 실패로 처리했거나, 승인 뒤 저장 전에 서버가 죽었다
+    answer: "4"
+    explanation: |-
+      **PG는 승인했는데 우리가 결과를 남기지 못한 경우예요.**
+
+      - 정해진 규칙이 있으면 PG의 승인을 취소해 맞춰요
+    source: https://docs.tosspayments.com/resources/glossary/settlement
+  - key: pf-amount-diff
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 대사에서 같은 주문의 금액이 PG 4,500원, 우리 5,000원으로 나왔어요. 먼저 의심할 것은?
+    choices:
+      - 주문 번호가 잘못됐다
+      - 부분 취소나 할인이 한쪽에만 반영됐다
+      - 대사 프로그램이 틀렸다
+      - 고객이 결제를 두 번 했다
+    answer: "2"
+    explanation: |-
+      **부분 취소나 할인이 한쪽에만 반영됐는지 봐요.** 금액 차이의 흔한 원인이에요.
+
+      - 취소 내역을 맞춰 한쪽을 고쳐요
+    source: https://docs.tosspayments.com/resources/glossary/settlement
+  # ── 네 질문을 하나로 ──
+  - key: pf-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "결제 시스템의 흐름과 주의할 점을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **준비, 승인, 매입, 정산을 상태로 관리하고, 타임아웃과 동시 취소와 어긋남을 다뤄요.**
+
+      - **흐름:** 승인은 한도를 잡고 매입이 청구한다. 상태는 정해진 순서로만 바뀐다
+      - **타임아웃:** 실패로 단정하지 않고 망 취소나 조회로 맞춘다. 재승인에는 멱등 키
+      - **부분 취소:** 누적 취소액 한도를 조건부 UPDATE로 지킨다
+      - **대사:** PG 내역과 주문 번호로 맞춰 어긋남을 찾는다. 금액은 long이나 BigDecimal
+    checklist:
+      - 승인과 매입의 차이를 말했다
+      - 승인 타임아웃을 실패로 단정하지 않는다고 말했다
+      - 망 취소나 결과 조회를 말했다
+      - 부분 취소의 한도와 동시성을 말했다
+      - 대사를 말했다
+    source: https://docs.tosspayments.com/resources/glossary/card-payment
