@@ -1,7 +1,9 @@
-# 전략 패턴 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 전략 패턴
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/strategy-pattern.yaml에 있다.
+# 설계서는 2026-11-25에 썼고, 사용자가 이번 작업의 설계서 승인을 미리 맡겼다. 설계 때 채운 칸(says, widget, asks, claims, sources)은 남겨 둔다.
 title: 전략 패턴
+description: 전략 패턴이 무엇이고, if로 나눈 코드보다 무엇이 나은지, 전략을 람다로 넘겨도 되는지, 상수마다 다른 동작을 가진 enum과 어떻게 고르는지. 네 가지 질문에 스스로 답할 수 있게 배송비 계산을 갈아 끼우며 배우는 대화형 레슨.
+minutes: 20
 unit: 객체지향 설계와 패턴
 roadmap: O7
 type: 설계
@@ -38,6 +40,10 @@ covers:
     where: '다루지 않음: 템플릿 메서드 패턴(O8)'
   - topic: '전략 객체를 만들어 주는 팩토리'
     where: '다루지 않음: 팩토리(O9)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/strategy/StrategyTest.java
+  comparator: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  autowiredMap: https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html
 codes:
   ifFee: |-
     class ShippingFeeCalculator {
@@ -109,9 +115,89 @@ codes:
 
       abstract int fee(int t, int b);
     }
+  # 여기부터는 본문 단계에서 더한 코드다
+  contextMark: |-
+    class Checkout {
+      private [[ShippingFeePolicy policy]];
+
+      Checkout(ShippingFeePolicy policy) {
+        this.policy = policy;
+      }
+
+      void change(ShippingFeePolicy p) {
+        this.policy = p;
+      }
+
+      int pay(int total, int boxes) {
+        return total
+            + [[policy.fee(total, boxes)]];
+      }
+    }
+  region: |-
+    class RegionFee
+        implements ShippingFeePolicy {
+      public int fee(int total, int boxes) {
+        return 5000;
+      }
+    }
+
+    // 조립하는 곳
+    new Checkout(new RegionFee());
+  springPolicies: |-
+    @Component("basic")
+    class BasicFee
+        implements ShippingFeePolicy {...}
+
+    @Component("free")
+    class FreeFee
+        implements ShippingFeePolicy {...}
+
+    @Component
+    class FeeSelector {
+      private final Map<String,⤶
+          ShippingFeePolicy> policies;
+
+      FeeSelector(Map<String,⤶
+          ShippingFeePolicy> policies) {
+        this.policies = policies;
+      }
+
+      int fee(String mode, int total,
+              int boxes) {
+        ShippingFeePolicy p =
+            policies.get(mode);
+        if (p == null) {
+          throw new IllegalArgumentException(
+              "없는 정책: " + mode);
+        }
+        return p.fee(total, boxes);
+      }
+    }
+  springBad: |-
+    int fee(String mode, int total,
+            int boxes) {
+      if (mode.equals("free")) {
+        return freeFee.fee(total, boxes);
+      } else if (mode.equals("bundle")) {
+        return bundleFee.fee(total, boxes);
+      }
+      return basicFee.fee(total, boxes);
+    }
 predict:
-  text: '코드 context의 `Checkout`을 기본 배송비 정책으로 만들고, 주문 3만 원(상자 2개)을 결제해요. 그다음 `change(new FreeFee())`로 정책을 바꾸고 같은 주문을 다시 결제해요. 두 결제 금액은? 보기: 33000과 33000, 33000과 30000, 30000과 30000.'
-  answer: '33000과 30000. `Checkout`은 들고 있는 정책 객체에게 계산을 맡기므로 정책을 바꾸면 결과가 바로 바뀐다. 질문 1에서 밝힌다.'
+  title: 정책을 바꾸면 결제 금액은?
+  text: '`Checkout`을 기본 배송비 정책(5만 원 이상 무료, 아니면 3000원)으로 만들고 주문 3만 원(상자 2개)을 결제해요. 그다음 `change(new FreeFee())`로 정책을 바꾸고 같은 주문을 다시 결제해요. 두 결제 금액은 얼마일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: context
+  label: 내 예측 (첫 결제, 둘째 결제)
+  options:
+    - value: same33
+      label: 33000과 33000
+    - value: swap
+      label: 33000과 30000
+    - value: same30
+      label: 30000과 30000
+  answer: swap
+  storageKey: strategy-predict
+  wrong: '"{label}"로 예측했어요. 틀린 예측이 더 오래 남으니 괜찮아요.'
 questions:
   - id: q1
     title: 전략 패턴은 무엇인가요?
@@ -126,6 +212,40 @@ questions:
     asks:
       - '본문의 예시: 코드 context를 `FreeFee`로 만들어 4만 원(상자 1개)을 결제하면 금액은 (40000)'
       - '옮긴 상황: 파일을 압축하는 `Archiver`가 `Compressor` 인터페이스(`zip`, `gzip` 구현)를 들고 있다. 이 구조에서 컨텍스트, 전략 인터페이스, 구체 전략은 각각 무엇인가 (`Archiver`, `Compressor`, zip과 gzip 구현)'
+    body:
+      - p: '배송비를 계산하는 방법이 셋 있어요. 기본(5만 원 이상 무료, 아니면 3000원), 무료 배송 이벤트(항상 0원), 묶음 배송(상자 하나에 3000원)이에요. **하는 일(배송비 계산)은 같고 방법만 달라요.** 이 방법들을 인터페이스 뒤로 빼요.'
+      - code: strategy
+      - p: '결제하는 `Checkout`은 그 인터페이스만 들고 있다가 계산을 맡겨요.'
+      - code: contextMark
+        notes:
+          - mark: ShippingFeePolicy policy
+            as: code
+            text: '어느 정책인지 모르고 인터페이스로만 들고 있어요. 생성자로 받아요.'
+          - mark: policy.fee(total, boxes)
+            as: code
+            text: '계산을 맡기기만 해요. 어떤 정책이 들어 있는지 묻지 않아요.'
+      - ci:
+          key: swap
+          label: 정책을 바꿔 가며 결제한 결과 보기
+          source: StrategyTest.swapStrategyAtRuntime
+      - p: '처음에 예측한 답은 **33000과 30000**이에요. `Checkout`은 들고 있는 정책 객체에게 계산을 맡기므로, 실행 중에 정책을 바꾸면 결과가 바로 바뀌어요. {{predict-result}}'
+      - p: '이것이 **전략 패턴**이에요. 역할이 셋이에요.'
+      - table:
+          head: [역할, 이 레슨의 코드]
+          rows:
+            - [전략 인터페이스, '`ShippingFeePolicy`']
+            - [구체 전략, '`BasicFee`, `FreeFee`, `BundleFee`']
+            - [컨텍스트(전략을 쓰는 객체), '`Checkout`']
+      - quiz:
+          q: '파일을 압축하는 `Archiver`가 `Compressor` 인터페이스를 들고 있고, zip과 gzip 구현이 있어요. 이 구조에서 컨텍스트는 무엇일까요?'
+          options:
+            - Archiver
+            - Compressor
+            - zip 구현
+          answer: 1
+          explain: '전략을 들고 쓰는 쪽이 컨텍스트예요. `Compressor`는 전략 인터페이스, zip과 gzip은 구체 전략이에요.'
+      - next: '같은 일을 `if`로 나눠도 되는데, 전략으로 빼면 무엇이 나을까요?'
+    recall: '같은 일을 하는 여러 방법을 인터페이스로 빼고, 쓰는 객체(컨텍스트)는 그 인터페이스만 들고 있다가 계산을 맡기는 패턴이에요. `Checkout`은 `ShippingFeePolicy`만 들고 `policy.fee()`를 부르므로, 기본 정책에서 `FreeFee`로 바꾸면 3만 원 결제가 33000에서 30000으로 바로 바뀌어요.'
   - id: q2
     title: if로 나눈 코드보다 무엇이 나아지나요?
     conclusion:
@@ -143,6 +263,72 @@ questions:
     asks:
       - '본문의 예시: 전략판에 지역별 배송비를 더할 때 새로 만드는 파일과 고치는 파일 (`RegionFee` 새로 만듦, 조립 코드 고침. `Checkout`과 기존 정책은 그대로)'
       - '옮긴 상황: 알림 발송 코드가 `switch (channel)`로 메일, 문자, 푸시를 나눈다. 전략 패턴으로 바꾼 뒤 슬랙 알림을 더하면 `switch`가 있던 클래스를 고쳐야 하나 (아니다. 새 구현을 더하고 고르는 곳만 고친다)'
+    body:
+      - p: '같은 계산을 `if`로 나눈 코드예요.'
+      - code: ifFee
+      - p: '여기에 "지역별 배송비"를 더해 볼게요. `if` 코드는 기본, 무료, 묶음 계산이 든 `fee` 메서드를 열어 `else if`를 더해요. 전략 코드는 새 클래스를 만들고 조립하는 곳에서 넘겨요.'
+      - code: region
+      - ci:
+          key: add-region
+          label: 두 코드에서 고친 파일 보기
+          source: StrategyTest.addingPolicy
+      - p: '전략 코드에서는 `Checkout`과 기존 정책 파일이 그대로예요. 새 기능을 더할 때 있던 계산 코드를 고치지 않는 것, [단일 책임과 개방 폐쇄 원칙](lesson:srp-ocp)에서 본 OCP예요. 정책마다 테스트도 따로 해요. `new FreeFee().fee(30000, 2)`만 불러 0인지 보면 돼요.'
+      - p: '아래에서 요구를 골라 보세요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 바뀐 요구
+            options:
+              - {value: region, label: 지역별 배송비 더하기}
+              - {value: remove, label: 무료 배송 이벤트 지우기}
+              - {value: basic, label: 기본 무료 기준 7만 원으로}
+          sides:
+            - label: if로 나눈 코드
+              items:
+                - {name: ShippingFeeCalculator, note: 세 계산과 모드 고르기}
+                - {name: Checkout, note: 계산기를 부른다}
+            - label: 전략으로 나눈 코드
+              items:
+                - {name: ShippingFeePolicy, note: 인터페이스}
+                - {name: BasicFee, note: 기본 계산}
+                - {name: FreeFee, note: 무료}
+                - {name: BundleFee, note: 묶음}
+                - {name: Checkout, note: 정책을 들고 맡긴다}
+                - {name: 조립 코드, note: 어느 정책을 넣을지}
+          scenes:
+            region:
+              sides:
+                - marks: [{name: ShippingFeeCalculator, tag: 고침, mark: bad}]
+                  result: [{k: 있던 계산 코드, v: 고침, mark: bad}]
+                - marks: [{name: 조립 코드, tag: 고침}]
+                  add: [{name: RegionFee, note: 지역별 계산, tag: 새로 만듦}]
+                  result: [{k: 있던 계산 코드, v: 그대로}]
+              verdict: 전략 코드는 새 클래스를 더하고 고르는 곳만 고쳐요.
+            remove:
+              sides:
+                - marks: [{name: ShippingFeeCalculator, tag: 고침, mark: bad}]
+                - marks: [{name: FreeFee, tag: 지움}, {name: 조립 코드, tag: 고침}]
+              verdict: 지울 때도 계산 메서드를 열지 않아요.
+            basic:
+              sides:
+                - marks: [{name: ShippingFeeCalculator, tag: 고침}]
+                  result: [{k: 고칠 파일, v: '1'}]
+                - marks: [{name: BasicFee, tag: 고침}]
+                  result: [{k: 고칠 파일, v: '1'}]
+              verdict: 한 방법의 숫자를 바꾸는 요구는 양쪽 모두 한 파일이에요. 전략은 방법이 늘고 바뀌는 쪽에서 이득이 있어요.
+      - h3: 고르는 코드는 사라지지 않아요
+      - p: '"이벤트 기간이면 무료 정책"을 정하는 코드는 어딘가에 있어야 해요. 전략 패턴은 그 판단을 계산 코드 안이 아니라 **조립하는 곳 한 곳**에 모아요.'
+      - callout: '**방법이 둘뿐이고 더 늘 일이 없으면 `if` 하나가 더 읽기 쉬워요.** 전략은 방법이 늘거나 바뀌는 방향일 때 써요.'
+      - quiz:
+          q: '알림 발송 코드가 `switch (channel)`로 메일, 문자, 푸시를 나눠요. 전략 패턴으로 바꾼 뒤 슬랙 알림을 더하면, `switch`가 있던 발송 클래스를 고쳐야 할까요?'
+          options:
+            - 고쳐야 한다
+            - 고치지 않는다. 새 구현을 더하고 고르는 곳만 고친다
+          answer: 2
+          explain: '발송 클래스는 전략 인터페이스만 알아요. 슬랙 구현을 더하고 어느 전략을 넣을지 정하는 곳만 바뀌어요.'
+      - next: '전략마다 클래스를 꼭 만들어야 할까요?'
+    recall: '새 방법을 더할 때 있던 계산 코드를 고치지 않고 새 클래스만 더해요. 지역별 배송비를 더하면 `if` 코드는 계산 메서드를 열어 `else if`를 더하지만, 전략 코드는 `RegionFee`를 만들고 조립하는 곳만 고쳐요. 어느 전략을 쓸지 고르는 코드는 남으니 조립하는 한 곳에 모아요. 방법이 둘뿐이고 늘 일이 없으면 `if`가 나아요.'
   - id: q3
     title: 전략을 꼭 클래스로 만들어야 하나요?
     conclusion:
@@ -156,6 +342,40 @@ questions:
     asks:
       - '본문의 예시: 코드 lambda의 `bundle`로 만든 `Checkout`에서 3만 원, 상자 3개를 결제하면 금액은 (39000)'
       - '옮긴 상황: 회원 목록을 이름 순으로 정렬하는 `members.sort(Comparator.comparing(Member::name))`에서 전략은 무엇이고, 나이 순으로 바꾸려면 무엇만 바꾸나 (`Comparator`. 넘기는 Comparator만 바꾼다)'
+    body:
+      - p: '`ShippingFeePolicy`는 메서드가 하나라서 **함수형 인터페이스**예요. 클래스 대신 람다로 전략을 만들 수 있어요([람다와 함수형 인터페이스](lesson:lambda)).'
+      - code: lambda
+      - ci:
+          key: lambda
+          label: 람다 전략으로 결제한 결과 보기
+          source: StrategyTest.lambdaStrategy
+      - p: '결과는 클래스로 만든 전략과 같아요. `Checkout`은 넘어온 것이 클래스의 객체인지 람다인지 몰라요.'
+      - h3: Comparator가 자바의 대표 전략이에요
+      - p: '`list.sort(comparator)`에서 **정렬하는 방법**은 리스트가 알고, **무엇을 앞에 둘지**만 `Comparator`가 정해요. 정렬이 컨텍스트, `Comparator`가 전략이에요([Comparator API 문서](link:comparator)).'
+      - code: comparator
+      - ci:
+          key: comparator
+          label: 주문을 정렬한 결과 보기
+          source: StrategyTest.comparatorIsStrategy
+      - p: '금액 큰 순으로 바꾸려면 넘기는 `Comparator`만 바꿔요(`.reversed()`). 정렬 코드는 그대로예요.'
+      - h3: 람다와 클래스를 고르는 기준
+      - table:
+          head: [람다가 맞을 때, 클래스가 맞을 때]
+          rows:
+            - [짧고 한 곳에서만 쓴다, 설정값(무료 기준 금액)을 필드로 가진다]
+            - [상태가 없다, '이름이 있어야 로그나 화면에 보인다']
+            - [메서드가 하나다, '메서드가 여럿이다(`fee`와 `description`)']
+            - [' ', 스프링 빈으로 만든다]
+      - quiz:
+          q: '회원 목록을 `members.sort(Comparator.comparing(Member::name))`로 이름 순 정렬해요. 나이 순으로 바꾸려면 무엇만 바꾸면 될까요?'
+          options:
+            - sort 메서드의 구현
+            - 넘기는 Comparator
+            - Member 클래스
+          answer: 2
+          explain: '정렬하는 방법은 그대로이고 무엇을 앞에 둘지만 바뀌어요. 전략인 `Comparator`만 `Comparator.comparing(Member::age)`로 바꿔요.'
+      - next: '전략 대신 enum 상수마다 다른 동작을 둘 수도 있어요. 둘은 어떻게 고를까요?'
+    recall: '아니요. 메서드가 하나인 전략은 람다나 메서드 참조로 넘겨도 돼요. 묶음 배송을 `(t, b) -> b * 3000`으로 넘겨도 3만 원, 상자 3개는 39000이에요. `list.sort(comparator)`의 `Comparator`가 자바의 대표 전략이에요. 상태가 있거나, 이름을 붙여 여러 곳에서 쓰거나, 메서드가 둘 이상이거나, 빈으로 만들 때는 클래스가 나아요.'
   - id: q4
     title: 상수마다 다른 동작을 가진 enum과 전략 패턴은 어떻게 고르나요?
     conclusion:
@@ -170,23 +390,78 @@ questions:
       - '본문의 예시: 코드 enumFee에 묶음 배송을 더할 때 고치는 파일은 (`FeeType` 파일)'
       - '옮긴 상황: 결제 대행사(토스, 나이스, KG이니시스)마다 다른 HTTP 클라이언트와 키를 주입받아야 하는 승인 로직이 있다. enum 상수별 메서드와 전략 인터페이스 가운데 무엇이 맞나 (전략 인터페이스. 구현마다 다른 객체를 주입받는다)'
       - '실무 구역: 정책 빈들을 `Map<String, ShippingFeePolicy>`로 주입받을 때 맵의 키는 무엇인가 (빈 이름)'
+    body:
+      - p: '[enum 레슨](lesson:enum)에서 본 상수마다 다른 동작도 전략의 한 모양이에요.'
+      - code: enumFee
+      - p: '`FeeType.FREE.fee(30000, 2)`는 0이에요. 방법이 몇 가지로 정해져 있다면 이것으로 충분해요. 그럼 전략 인터페이스와 어떻게 고를까요?'
+      - table:
+          head: [enum 상수마다 동작, 전략 인터페이스]
+          rows:
+            - [방법이 정해진 몇 가지다(닫힌 목록), 다른 모듈이나 팀이 방법을 더한다(열린 목록)]
+            - [DB에 이름으로 저장하거나 화면에서 고른다, 구현마다 다른 객체(리포지토리, 외부 API)를 주입받는다]
+            - [모든 방법이 한 파일에 보인다, 테스트에서 가짜로 바꾼다]
+            - [새 방법을 더하면 enum 파일을 고친다, 새 방법을 더하면 새 파일을 만든다]
+      - p: '둘을 함께 쓰기도 해요. 화면에서 고른 enum 값(또는 그 이름)을 키로 전략 객체를 꺼내는 모양이에요. 스프링에서 하는 방법은 바로 아래 "실무에서는"에서 봐요.'
+      - quiz:
+          q: '결제 대행사(토스, 나이스, KG이니시스)마다 다른 HTTP 클라이언트와 키를 주입받아야 하는 승인 로직이 있어요. enum 상수별 메서드와 전략 인터페이스 가운데 무엇이 맞을까요?'
+          options:
+            - enum 상수별 메서드
+            - 전략 인터페이스
+          answer: 2
+          explain: 'enum 상수는 스프링이 만들지 않아서 구현마다 다른 객체를 주입받기 어려워요. 전략 구현을 빈으로 만들면 각자 필요한 것을 생성자로 받아요.'
+    recall: '방법의 목록이 닫혀 있고 함께 바뀌면 enum, 밖에서 방법을 더하거나 구현마다 다른 객체를 주입받아야 하면 전략 인터페이스를 써요. enum에 새 방법을 더하려면 enum 파일을 고치고, 전략은 새 클래스를 더해요. enum 값을 키로 전략을 고르는 식으로 함께 쓰기도 해요.'
 practice:
+  title: 스프링 빈을 이름으로 골라 쓰기
   says:
     - '스프링에서는 각 정책을 `@Component("free")`처럼 이름을 붙인 빈으로 만들고, 고르는 쪽이 `Map<String, ShippingFeePolicy>`를 생성자로 받는다. 맵의 키는 빈 이름이다. `policies.get(mode)`로 고른다. 작은 `AnnotationConfigApplicationContext`로 키와 결과를 확인한다'
     - '흔한 실수: 전략을 빈으로 만들고도 서비스 안에서 `if (mode.equals("free")) freeFee.fee(...)`로 다시 고른다. 정책이 늘 때마다 서비스를 고친다. 고친 코드: 맵에서 꺼낸다. 없는 키는 `IllegalArgumentException`으로 막는다'
     - '`List<ShippingFeePolicy>`로 받으면 모든 구현이 들어온다. 각 정책이 `supports(mode)`를 가지면 목록을 돌며 고를 수 있다(단일 책임과 개방 폐쇄 원칙 레슨의 코드 C 모양)'
     - '더 알아보기: 전략 빈은 하나만 만들어져 모든 요청이 함께 쓴다. 필드에 요청마다 바뀌는 값을 두면 요청이 섞인다. 전략은 상태 없이 만든다. 자세한 것은 빈의 생명주기와 스코프(S3)'
+  body:
+    - p: '스프링에서는 각 정책을 이름을 붙인 빈으로 만들고, 고르는 쪽이 `Map<String, ShippingFeePolicy>`를 생성자로 받아요. 스프링은 그 타입의 빈을 모두 모아 **빈 이름을 키로** 맵에 넣어 줘요([스프링 문서](link:autowiredMap)).'
+    - code: springPolicies
+    - ci:
+        key: spring-map
+        label: 작은 스프링 컨텍스트로 돌린 결과 보기
+        source: StrategyTest.springMapInjection
+    - p: '새 정책은 `@Component("region")`을 붙인 클래스를 더하면 맵에 저절로 들어가요. `FeeSelector`는 그대로예요. 없는 키는 `IllegalArgumentException`으로 막아요.'
+    - h3: '흔한 실수: 빈으로 만들고도 if로 고른다'
+    - code: springBad
+    - p: '정책을 빈으로 만들었지만 고르는 코드가 다시 `if`예요. 정책이 늘 때마다 이 메서드를 고쳐야 해서, 질문 2에서 얻은 것을 잃어요. 고친 코드는 위의 `FeeSelector`처럼 맵에서 꺼내는 거예요.'
+    - muted: '`List<ShippingFeePolicy>`로 받으면 모든 구현이 들어와요. 각 정책이 `supports(mode)`를 가지면 목록을 돌며 고를 수 있어요. 단일 책임과 개방 폐쇄 원칙 레슨의 코드 C가 이 모양이에요.'
+    - more:
+        summary: 전략 빈에 필드로 상태를 두면 안 되나요?
+        body:
+          - p: '전략 빈은 하나만 만들어져 모든 요청이 함께 써요. 필드에 요청마다 바뀌는 값을 두면 동시에 온 요청끼리 값이 섞여요. 전략은 상태 없이 만들고, 요청의 값은 메서드 인자로 받아요. 싱글톤 빈의 상태는 빈의 생명주기와 스코프 레슨에서 다뤄요.'
+interview:
+  question: 전략 패턴이 무엇이고, 언제 쓰는지 설명해 주세요
+  model:
+    - label: 정의
+      text: 같은 일을 하는 여러 방법을 인터페이스로 빼고, 그것을 쓰는 객체는 인터페이스만 들고 있다가 계산을 맡기는 패턴입니다. 쓰는 객체를 고치지 않고 방법을 갈아 끼울 수 있습니다.
+    - label: 원리
+      text: 배송비 계산을 ShippingFeePolicy로 빼면 결제 객체는 policy.fee()만 부릅니다. 지역별 배송비를 더해도 새 구현 클래스를 만들고 조립하는 곳만 고치며, 실행 중에 다른 정책을 넣을 수도 있습니다. 메서드가 하나인 전략은 람다로 넘길 수 있고, 자바의 Comparator가 대표적인 전략입니다.
+    - label: 주의할 점
+      text: 고르는 코드는 사라지지 않으니 조립하는 한 곳에 모읍니다. 방법이 둘뿐이고 늘 일이 없으면 if가 더 읽기 쉽고, 방법이 닫힌 목록이면 enum 상수별 동작으로 충분합니다. 스프링에서는 정책을 빈으로 만들고 Map으로 받아 이름으로 고르며, 전략 빈에는 상태를 두지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 결제 대행사마다 다른 승인 로직을 전략 빈으로 나누고 Map으로 받아, 대행사를 더할 때 서비스 코드를 고치지 않게 했습니다.'
+verified: '이 레슨의 결제 금액, 고친 파일, 정렬 결과, 스프링이 넣은 맵의 키는 짐작이 아니라 자바 21과 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([StrategyTest](link:test))가 다시 돌아요.'
+footer: '근거: `Comparator`는 [API 문서](link:comparator), 맵으로 빈을 받으면 키가 빈 이름이라는 것은 [스프링 공식 문서](link:autowiredMap). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 context는 기본 정책으로 3만 원(상자 2개)에 33000, `FreeFee`로 바꾼 뒤 30000'
     how: '돌려서 확인한다'
+    test: StrategyTest.swapStrategyAtRuntime
   - claim: '전략판에 지역별 배송비를 더하면 새 파일과 조립 코드만 바뀌고, `if`판은 계산 클래스가 바뀐다'
     how: '바꾸기 전후 패키지를 비교한다'
+    test: StrategyTest.addingPolicy
   - claim: '람다 전략은 클래스 전략과 같은 결과를 낸다. bundle로 3만 원, 상자 3개는 39000'
     how: '돌려서 확인한다'
+    test: StrategyTest.lambdaStrategy
   - claim: '`Comparator.comparing(Order::total)`로 정렬하면 금액 순이 된다'
     how: '돌려서 확인한다'
+    test: StrategyTest.comparatorIsStrategy
   - claim: '`Map<String, ShippingFeePolicy>`로 주입받으면 키가 빈 이름이다'
     how: '`AnnotationConfigApplicationContext`로 맵의 키를 확인한다'
+    test: StrategyTest.springMapInjection
 sources:
   - '전략 패턴의 정의: GoF, Design Patterns(1994)의 Strategy. 용어 설명 https://refactoring.guru/design-patterns/strategy'
   - '컬렉션 주입(Map의 키는 빈 이름): 스프링 공식 문서 https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html'

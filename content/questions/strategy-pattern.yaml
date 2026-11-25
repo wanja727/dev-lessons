@@ -1,0 +1,211 @@
+# 전략 패턴 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/strategy-pattern.yaml의 says).
+# 동작에 관한 정답은 verification의 StrategyTest로 확인했다 (자바 21, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: strategy-pattern
+  title: 전략 패턴
+  unit: 객체지향 설계와 패턴
+  order: 307
+concepts:
+  - key: core
+    name: 전략 패턴
+coreQuestions:
+  - key: q1
+    text: "전략 패턴은 무엇인가요?"
+  - key: q2
+    text: "if로 나눈 코드보다 무엇이 나아지나요?"
+  - key: q3
+    text: "전략을 꼭 클래스로 만들어야 하나요?"
+  - key: q4
+    text: "상수마다 다른 동작을 가진 enum과 전략 패턴은 어떻게 고르나요?"
+questions:
+  # ── 질문 1 ──
+  - key: st-free-pay
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: Checkout은 ShippingFeePolicy를 들고 있다가 pay에서 total + policy.fee(total, boxes)를 돌려줘요. FreeFee는 항상 0을 돌려줘요. 아래 코드의 결과는?
+    code: |-
+      var checkout =
+          new Checkout(new FreeFee());
+      checkout.pay(40000, 1);
+    choices:
+      - "40000"
+      - "43000"
+      - "0"
+      - 컴파일 오류
+    answer: "1"
+    explanation: |-
+      **40000이에요.** Checkout은 들고 있는 정책에게 배송비 계산을 맡기고, FreeFee는 0을 돌려줘요.
+
+      - Checkout은 어떤 정책이 들어 있는지 묻지 않아요
+      - 정책을 바꿔 넣으면 Checkout을 고치지 않고 결과가 바뀌어요
+  - key: st-roles
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 파일을 압축하는 Archiver가 Compressor 인터페이스를 필드로 들고 있다가 compressor.compress(file)을 불러요. ZipCompressor와 GzipCompressor가 Compressor를 구현해요. 전략 패턴의 역할로 맞게 짝지은 것은?
+    choices:
+      - 컨텍스트 Compressor, 전략 인터페이스 Archiver
+      - 컨텍스트 Archiver, 전략 인터페이스 Compressor, 구체 전략 Zip과 Gzip
+      - 컨텍스트 ZipCompressor, 구체 전략 Archiver
+    answer: "2"
+    explanation: |-
+      **Archiver가 컨텍스트, Compressor가 전략 인터페이스, Zip과 Gzip이 구체 전략이에요.**
+
+      - 전략을 들고 쓰는 쪽이 컨텍스트예요
+      - 같은 일(압축)을 하는 여러 방법이 구체 전략이에요
+  # ── 질문 2 ──
+  - key: st-region
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 배송비를 ShippingFeePolicy 전략(BasicFee, FreeFee, BundleFee)으로 나눴고, Checkout은 정책을 생성자로 받아요. 조립하는 곳이 어느 정책을 넣을지 정해요. 지역별 배송비(RegionFee)를 더할 때 바뀌는 것은?
+    choices:
+      - Checkout과 BasicFee를 고친다
+      - RegionFee를 새로 만들고 조립하는 곳을 고친다
+      - ShippingFeePolicy에 메서드를 더한다
+      - 모든 정책 클래스를 고친다
+    answer: "2"
+    explanation: |-
+      **RegionFee를 새로 만들고 조립하는 곳만 고쳐요.** Checkout과 기존 정책은 그대로예요.
+
+      - if로 나눈 코드였다면 계산 메서드를 열어 else if를 더해야 했어요
+  - key: st-slack
+    concept: core
+    coreQuestion: q2
+    type: ox
+    status: draft
+    difficulty: 2
+    body: "\"알림 발송을 전략 패턴(Notifier 인터페이스와 메일, 문자, 푸시 구현)으로 바꿨다. 슬랙 알림을 더하려면 전략을 쓰는 발송 클래스를 고쳐야 한다\""
+    answer: X
+    explanation: |-
+      **고치지 않아요.** 발송 클래스는 Notifier만 알아요. 슬랙 구현을 더하고 어느 전략을 넣을지 정하는 곳만 바뀌어요.
+
+      - 고르는 코드는 사라지지 않고 조립하는 곳에 모여요
+  # ── 질문 3 ──
+  - key: st-lambda-bundle
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: ShippingFeePolicy는 int fee(int total, int boxes) 하나만 가진 인터페이스예요. Checkout.pay는 total + policy.fee(total, boxes)를 돌려줘요. 아래 코드의 결과는?
+    code: |-
+      ShippingFeePolicy bundle =
+          (t, b) -> b * 3000;
+      new Checkout(bundle).pay(30000, 3);
+    choices:
+      - "30000"
+      - "33000"
+      - "39000"
+      - 컴파일 오류. 람다는 전략이 될 수 없다
+    answer: "3"
+    explanation: |-
+      **39000이에요.** 메서드가 하나인 인터페이스라서 람다로 전략을 만들 수 있어요. 상자 3개면 배송비 9000원이에요.
+
+      - Checkout은 넘어온 것이 클래스의 객체인지 람다인지 몰라요
+  - key: st-comparator
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회원 목록을 members.sort(Comparator.comparing(Member::name))으로 이름 순 정렬해요. 나이 순으로 바꾸려면 무엇만 바꾸면 될까요?
+    choices:
+      - List.sort의 구현
+      - 넘기는 Comparator
+      - Member 클래스의 필드 순서
+      - 정렬 알고리즘
+    answer: "2"
+    explanation: |-
+      **넘기는 Comparator만 바꿔요.** 정렬하는 방법은 리스트가 알고, 무엇을 앞에 둘지만 Comparator가 정해요.
+
+      - Comparator가 자바의 대표적인 전략이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  # ── 질문 4 ──
+  - key: st-enum-add
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 배송비 계산을 enum FeeType의 상수마다(BASIC, FREE) 다른 fee 메서드로 구현했어요. 묶음 배송을 더할 때 고치는 파일은?
+    choices:
+      - FeeType 파일
+      - 새 파일만 만든다
+      - 고칠 파일이 없다
+    answer: "1"
+    explanation: |-
+      **FeeType 파일이에요.** enum의 상수는 enum 파일 안에 있어서 새 방법을 더하려면 그 파일을 고쳐요.
+
+      - 전략 인터페이스였다면 새 클래스 파일만 만들었어요
+      - 방법이 닫힌 목록이면 enum으로 충분해요
+  - key: st-pg
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 결제 대행사(토스, 나이스, KG이니시스)마다 다른 HTTP 클라이언트와 키를 주입받아 승인을 요청해야 해요. 대행사는 앞으로도 늘 수 있어요. 무엇으로 짜는 것이 맞을까요?
+    choices:
+      - enum 상수마다 다른 approve 메서드
+      - 전략 인터페이스와 대행사별 구현 빈
+      - 서비스 안의 switch 문
+    answer: "2"
+    explanation: |-
+      **전략 인터페이스와 구현 빈이에요.** 구현마다 다른 객체를 생성자로 주입받을 수 있고, 대행사가 늘면 새 빈을 더해요.
+
+      - enum 상수는 스프링이 만들지 않아 주입받기 어려워요
+  - key: st-map-key
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: '@Component("basic")과 @Component("free")를 붙인 ShippingFeePolicy 구현 둘이 있고, FeeSelector가 생성자로 Map<String, ShippingFeePolicy>를 받아요. 맵의 키는 무엇일까요?'
+    choices:
+      - 클래스 이름 BasicFee, FreeFee
+      - 빈 이름 basic, free
+      - 0, 1 같은 순서 번호
+      - 맵으로는 받을 수 없다
+    answer: "2"
+    explanation: |-
+      **빈 이름 basic과 free예요.** 스프링은 그 타입의 빈을 모두 모아 빈 이름을 키로 맵에 넣어 줘요.
+
+      - policies.get(mode)로 고르면 정책이 늘어도 고르는 코드는 그대로예요
+    source: https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html
+  # ── 네 질문을 하나로 ──
+  - key: st-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "전략 패턴이 무엇이고, 언제 쓰는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **같은 일을 하는 여러 방법을 인터페이스로 빼고 쓰는 쪽은 맡기기만 하는 패턴이고, 방법이 늘거나 바뀔 때 써요.**
+
+      - **구조:** 전략 인터페이스, 구체 전략, 전략을 들고 쓰는 컨텍스트
+      - **효과:** 새 방법은 새 클래스로 더하고 컨텍스트는 그대로. 실행 중에 바꿀 수 있다
+      - **람다:** 메서드 하나인 전략은 람다로. Comparator가 대표 예
+      - **고르기:** 닫힌 목록이면 enum, 주입이 필요하거나 열린 목록이면 전략. 스프링은 Map으로 받아 고른다
+    checklist:
+      - 바뀌는 방법을 인터페이스로 빼고 쓰는 쪽은 맡긴다고 말했다
+      - 새 방법을 더할 때 쓰는 쪽을 고치지 않는다고 말했다
+      - 고르는 코드는 조립하는 곳에 남는다고 말했다
+      - 람다나 Comparator를 전략의 예로 들었다
+      - enum이나 if가 나은 경우를 말했다
