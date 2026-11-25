@@ -1,8 +1,9 @@
-# 해시 테이블 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 해시 테이블
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/hash-table.yaml에 있다.
 title: 해시 테이블
+description: HashMap이 키로 값을 어떻게 한 번에 찾는지, 서로 다른 키가 같은 칸에 가면 어떻게 되는지, 원소가 늘면 언제 배열을 늘리는지, 돌면 왜 넣은 순서와 다르게 나오는지. 네 가지 질문에 스스로 답할 수 있게, HashMap의 안쪽 배열을 직접 열어 보며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 25
 roadmap: K4
 type: 자바 실행
 prerequisites:
@@ -60,37 +61,81 @@ codes:
     // 안쪽 배열의 길이는?
   index: |-
     int h = key.hashCode();
-    h = h ^ (h >>> 16);
-    int index = h & (table.length - 1);
+    h = [[h ^ (h >>> 16)]];
+    int index = [[h & (table.length - 1)]];
+  indexRun: |-
+    grade.put("kim@a.com", "BASIC");
+    grade.put("lee@a.com", "BASIC");
+    grade.put("park@a.com", "BASIC");
+    // 칸 번호를 계산하고, table에서 찾는다
+  collideRun: |-
+    Map<String, String> m =
+        new HashMap<>(8);  // 8칸
+    m.put("kim@a.com", "VIP");
+    m.put("lee@a.com", "BASIC");
+    m.put("choi@a.com", "BASIC");
   badKey: |-
     record Email(String value) {
       @Override
       public int hashCode() {
-        return 1;
+        [[return 1;]]
       }
     }
+  badKeyRun: |-
+    // 키 10,000개를 넣고
+    // 없는 키를 get해서 equals를 센다
+  treeRun: |-
+    // hashCode가 같은 키를 하나씩 넣으며
+    // 그 칸의 노드 클래스를 읽는다
   order: |-
     Map<String, Integer> m = new HashMap<>();
     m.put("banana", 1);
     m.put("apple", 2);
-    m.put("cherry", 3);
+    m.put("orange", 3);
     System.out.println(m.keySet());
   presize: |-
     Map<Long, Member> byId =
-        HashMap.newHashMap(members.size());
+        [[HashMap.newHashMap(members.size())]];
+  presizeRun: |-
+    // 키 10,000개를 넣으며
+    // 배열의 길이가 바뀐 횟수를 센다
   response: |-
     @GetMapping("/summary")
     Map<String, Object> summary() {
       Map<String, Object> body =
-          new HashMap<>();
+          new [[HashMap]]<>();
       body.put("total", 3);
       body.put("paid", 2);
       body.put("canceled", 1);
       return body;
     }
+  responseFixed: |-
+    record Summary(
+        int total, int paid, int canceled) {}
+
+    @GetMapping("/summary")
+    Summary summary() {
+      return new Summary(3, 2, 1);
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/hashtable/HashTableTest.java
+  hashMap: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  linkedHashMap: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/LinkedHashMap.html
+  hashSet: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashSet.html
+  jep180: https://openjdk.org/jeps/180
 predict:
-  text: '코드 predict는 빈 `HashMap`에 키 13개를 넣어요. `HashMap`의 안쪽 배열은 처음 넣을 때 길이 16으로 생겨요. 13개를 다 넣은 뒤 길이는 얼마일까요? 보기: 16, 24, 32, 64.'
-  answer: '32. 원소 수가 길이의 0.75배인 12를 넘는 13번째에서 배열을 두 배로 늘린다. 질문 3에서 밝힌다.'
+  title: 키 13개를 넣은 HashMap의 속은?
+  text: '코드 predict는 빈 `HashMap`에 키 13개를 넣어요. `HashMap`의 안쪽 배열은 처음 넣을 때 길이 16으로 생겨요. 13개를 다 넣은 뒤 길이는 얼마일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '16', label: '16'}
+    - {value: '24', label: '24'}
+    - {value: '32', label: '32'}
+    - {value: '64', label: '64'}
+  answer: '32'
+  storageKey: ht-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: HashMap은 키로 값을 어떻게 한 번에 찾나요?
@@ -108,6 +153,47 @@ questions:
     asks:
       - '본문의 예시: 배열 길이가 16일 때, 섞은 해시 값이 2진수로 `...0110_1011`인 키는 몇 번 칸에 들어가나 (11번. 아래 4비트 `1011`)'
       - '옮긴 상황: 회원 100만 명을 리스트에 담고 이메일로 찾는 것과, 이메일을 키로 한 `HashMap`에서 찾는 것의 평균 비교 횟수는 각각 어느 정도인가 (리스트는 수십만 번, `HashMap`은 칸 하나의 키 몇 개)'
+    body:
+      - p: '`HashMap`은 안에 **배열**을 하나 가져요. 이 배열의 칸 하나를 **버킷**이라고 해요. 하는 일은 두 가지뿐이에요.'
+      - ul:
+          - '**`put(key, value)`:** 키로 칸 번호를 계산하고, 그 칸에 키와 값을 둬요.'
+          - '**`get(key)`:** 같은 키로 **같은 계산**을 해서 그 칸만 봐요. 다른 칸은 보지 않아요.'
+      - p: '배열은 i번째 칸을 O(1)에 읽으니, 칸 번호만 계산 한 번으로 얻으면 찾는 것도 평균 O(1)이에요. 칸 번호를 구하는 계산은 이래요.'
+      - code: index
+        notes:
+          - mark: h ^ (h >>> 16)
+            as: code
+            text: '`hashCode`의 위쪽 16비트를 아래쪽 16비트에 섞어요(`^`는 비트마다 다르면 1).'
+          - mark: h & (table.length - 1)
+            as: code
+            text: '배열 길이에서 1을 뺀 값과 `&`를 해서 0부터 길이-1 사이의 칸 번호를 얻어요.'
+      - h3: '& (length - 1)은 아래 비트만 남겨요'
+      - p: '`&`는 두 수의 비트를 자리마다 견줘 **둘 다 1인 자리만 1**로 남기는 연산이에요. 배열 길이가 16이면 `length - 1`은 15, 2진수로 `1111`이에요. 그래서 `h & 1111`은 `h`의 **아래 4비트만** 남겨요. 섞은 해시 값이 `...0110_1011`이면 아래 4비트 `1011`, 곧 **11번 칸**이에요.'
+      - p: '나머지 연산 `h % 16`과 결과가 같지만 더 빨라요. 그래서 `HashMap`의 배열 길이는 늘 16, 32, 64처럼 **2의 거듭제곱**이에요.'
+      - p: '위쪽 비트를 먼저 섞는 이유도 여기서 나와요. 길이가 16이면 아래 4비트만 칸 번호에 쓰여요. 섞지 않으면 아래 비트가 비슷한 키들이 위쪽 비트가 달라도 같은 칸에 몰려요. 섞어 두면 위쪽 비트의 차이도 칸 번호에 반영돼요.'
+      - h3: 정말 그 칸에 들어가는지
+      - p: '이메일 키 셋의 칸 번호를 위 식으로 계산하고, 리플렉션으로 `HashMap`의 안쪽 배열(`table`)을 열어 실제로 어느 칸에 있는지 찾아봤어요.'
+      - ci:
+          key: index
+          label: 계산한 칸과 실제 칸 보기
+          source: HashTableTest.tableProbe
+          code: indexRun
+      - p: '계산한 칸에 정확히 들어 있어요. `get("lee@a.com")`은 14번 칸만 봐요. 회원이 100만 명이어도 리스트처럼 수십만 번 비교하지 않고, 칸 하나에 든 키 몇 개만 비교해요.'
+      - p: '`HashSet`도 같아요. 안에 `HashMap`을 하나 가지고, 원소를 **키**로, 정해진 빈 객체를 값으로 담아요. 그래서 `HashSet.contains`가 평균 O(1)이에요.'
+      - more:
+          summary: '더 알아보기: null 키'
+          body:
+            - p: '`HashMap`은 null 키를 하나 받아요. null의 해시 값은 0으로 보고 0번 칸에 둬요. 값으로 null도 받아요. 그래서 `get`이 null을 돌려주면 "키가 없다"인지 "값이 null이다"인지 구분이 안 돼서, 구분하려면 `containsKey`를 써요.'
+      - quiz:
+          q: '배열 길이가 16일 때, 섞은 해시 값이 2진수로 `...0110_1011`인 키는 몇 번 칸에 들어갈까요?'
+          options:
+            - '6번'
+            - '11번'
+            - '107번'
+          answer: 2
+          explain: '`& (16 - 1)`, 곧 `& 1111`은 아래 4비트만 남겨요. 아래 4비트 `1011`은 10진수로 11이에요.'
+      - next: '칸은 16개, 32개인데 키는 얼마든지 많을 수 있어요. 서로 다른 키가 같은 칸에 가면 어떻게 될까요?'
+    recall: '키의 해시 값으로 배열의 칸 번호를 계산해서, 찾을 때도 같은 계산으로 그 칸 하나만 봐요. `hashCode`의 위쪽 비트를 아래로 섞고 `& (length - 1)`로 아래 비트만 남겨 칸 번호를 얻어요. 배열 길이가 늘 2의 거듭제곱이라 이 계산이 나머지 연산과 같아요. 칸 번호를 한 번에 얻고 배열은 i번째 칸을 O(1)에 읽으니 평균 O(1)이에요. `HashSet`은 안의 `HashMap`에 원소를 키로 담아요.'
   - id: q2
     title: 서로 다른 키가 같은 칸에 가면 어떻게 되나요?
     conclusion:
@@ -125,6 +211,90 @@ questions:
     asks:
       - '본문의 예시: 코드 badKey의 키 1만 개를 넣은 `HashMap`에서 없는 키를 `get`하면 `equals`는 몇 번쯤 불리나 (1만 번쯤. 모두 한 칸에 있다)'
       - '옮긴 상황: 상품 클래스의 `hashCode`를 `category.hashCode()`로 만들었고 카테고리는 3가지뿐이다. 상품 9만 개를 `HashSet`에 넣으면 칸 하나에 몇 개쯤 몰리고, `contains`는 평균 O(1)인가 (3만 개쯤. 아니다. 한 칸을 길게 따라가야 한다)'
+    body:
+      - p: '`hashCode`는 `int`라 40억 가지가 넘는 값을 내지만, 칸은 16개나 32개뿐이에요. 서로 다른 키가 같은 칸에 가는 일(**충돌**)은 피할 수 없어요. 그래서 `HashMap`의 칸에는 키 하나가 아니라 **노드의 줄**이 들어가요. 노드는 키, 값, 해시 값, 다음 노드의 참조를 가져요. 배열과 연결 리스트 레슨의 연결 리스트예요.'
+      - p: '칸 8개짜리 `HashMap`에 이메일 키 셋을 넣고, 셋째 키를 찾아보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - label: 배열 (8칸)
+                rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: '_'}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: '_'}, {k: 칸 7, v: '_'}]
+              - {label: 방금 한 계산, state: dim, text: 키를 넣으면 보여요}
+          scenarios:
+            default:
+              - log: 'put("kim@a.com") → 칸 3이 비어 있어서 노드를 둬요'
+                duo:
+                  - label: 배열 (8칸)
+                    rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: 'kim', mark: changed}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: '_'}, {k: 칸 7, v: '_'}]
+                  - label: 방금 한 계산
+                    rows: [{k: 키, v: 'kim@a.com'}, {k: 섞은 해시의 아래 3비트, v: '011'}, {k: 칸 번호, v: '3', mark: changed}]
+              - log: 'put("lee@a.com") → 칸 6에 둬요'
+                duo:
+                  - label: 배열 (8칸)
+                    rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: 'kim'}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: 'lee', mark: changed}, {k: 칸 7, v: '_'}]
+                  - label: 방금 한 계산
+                    rows: [{k: 키, v: 'lee@a.com'}, {k: 섞은 해시의 아래 3비트, v: '110'}, {k: 칸 번호, v: '6', mark: changed}]
+              - log: 'put("choi@a.com") → 칸 3이에요. 이미 kim이 있어서 그 뒤에 이어요'
+                duo:
+                  - label: 배열 (8칸)
+                    rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: 'kim → choi', mark: bad}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: 'lee'}, {k: 칸 7, v: '_'}]
+                  - label: 방금 한 계산
+                    rows: [{k: 키, v: 'choi@a.com'}, {k: 섞은 해시의 아래 3비트, v: '011'}, {k: 칸 번호, v: '3 (충돌)', mark: bad}]
+                verdict: '해시 값은 다르지만 아래 3비트가 같아서 같은 칸에 갔어요. 이것이 충돌이에요.'
+              - log: 'get("choi@a.com") → 칸 3의 첫 노드 kim: 해시 값이 달라요. equals를 부르지 않고 넘어가요'
+                duo:
+                  - label: 배열 (8칸)
+                    rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: 'kim (넘어감) → choi'}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: 'lee'}, {k: 칸 7, v: '_'}]
+                  - label: 방금 한 계산
+                    rows: [{k: 찾는 칸, v: '3'}, {k: kim과 해시 비교, v: '다름'}, {k: equals, v: '부르지 않음'}]
+              - log: 'get("choi@a.com") → 다음 노드 choi: 해시 값이 같아요. equals로 확인하고 값을 돌려줘요'
+                duo:
+                  - label: 배열 (8칸)
+                    rows: [{k: '칸 0~2', v: '_'}, {k: 칸 3, v: 'kim → choi (찾음)', mark: changed}, {k: '칸 4, 5', v: '_'}, {k: 칸 6, v: 'lee'}, {k: 칸 7, v: '_'}]
+                  - label: 방금 한 계산
+                    rows: [{k: choi와 해시 비교, v: '같음'}, {k: equals, v: 'true', mark: changed}, {k: 결과, v: 'BASIC'}]
+                verdict: '칸 3의 줄만 따라갔어요. 해시 값이 같을 때만 equals를 불러요. equals와 hashCode 레슨에서 본 순서예요.'
+      - ci:
+          key: collide
+          label: 실제로 읽은 칸 보기
+          source: HashTableTest.tableProbe
+          code: collideRun
+      - p: '`get`은 그 칸의 줄을 따라가며 **해시 값이 같은지 먼저** 보고, 같을 때만 `equals`를 불러요. 칸에 키가 한두 개면 금방 끝나요. 그런데 한 칸에 많이 몰리면 그 줄을 길게 따라가야 해요.'
+      - h3: hashCode가 모두 같으면
+      - code: badKey
+        notes:
+          - mark: return 1;
+            as: code
+            text: '모든 키가 같은 해시 값을 내요. 규약은 어기지 않았지만(같은 키는 같은 값), 모든 키가 한 칸에 몰려요.'
+      - p: '이런 키 1만 개를 넣고 없는 키를 `get`했어요. 제대로 만든 `hashCode`의 키와 `equals` 횟수를 견줘 보세요.'
+      - ci:
+          key: badkey
+          label: equals가 불린 횟수 보기
+          source: HashTableTest.badHashCodeMakesItLinear
+          code: badKeyRun
+      - p: '제대로 만든 키는 칸 하나에서 해시 값이 맞는 키가 없어 `equals`를 한 번도 부르지 않았어요. `hashCode`가 늘 1인 키는 **1만 번 넘게** 불렀어요. 모두 한 칸에 있어서 하나씩 다 견줘야 했어요. `HashMap`이 리스트처럼 O(n)이 된 거예요. 그래서 `hashCode`는 다른 키에 되도록 다른 값을 주게 만들어요. 만드는 법은 [equals와 hashCode](lesson:equals-hashcode)에서 봤어요.'
+      - more:
+          summary: '더 알아보기: 한 칸이 너무 길어지면 트리로 바꿔요'
+          body:
+            - p: '자바 8부터 `HashMap`은 한 칸에 **8개 넘게** 몰리고 배열이 **64칸 이상**이면 그 칸의 줄을 트리로 바꿔요. 그 칸에서 찾는 비용이 O(n)에서 O(log n)으로 줄어요. 배열이 64칸보다 작으면 트리 대신 배열을 늘려요. 칸의 노드 클래스를 리플렉션으로 읽어 봤어요.'
+            - ci:
+                key: treeify
+                label: 노드 클래스 보기
+                source: HashTableTest.tableProbe
+                code: treeRun
+            - p: '키가 `Comparable`이면 트리 안에서 크기로 길을 고를 수 있어 더 잘 동작해요. 위의 1만 개 키는 `Comparable`이 아니라서, 트리가 되어도 해시 값이 모두 같으니 결국 다 견줬어요. 트리는 이진 탐색 트리 레슨에서 다뤄요. 기준은 [JEP 180](link:jep180)에 있어요.'
+      - quiz:
+          q: '상품 클래스의 `hashCode`를 `category.hashCode()`로 만들었고, 카테고리는 3가지뿐이에요. 상품 9만 개를 `HashSet`에 넣으면 `contains`는 어떻게 될까요?'
+          options:
+            - '평균 O(1)이다. 해시 테이블이니까'
+            - '한 칸에 3만 개쯤 몰려서, 그 줄을 길게 따라가야 한다'
+            - '컴파일 오류가 난다'
+          answer: 2
+          explain: '해시 값이 3가지뿐이라 상품이 칸 3개에 나뉘어 몰려요. 칸 하나에 3만 개쯤이라 찾을 때 그 줄을 따라가야 해요. 규약은 어기지 않았지만 해시 테이블의 장점을 잃어요.'
+      - next: '키가 늘수록 칸마다 든 키도 늘어요. 그러면 `HashMap`은 칸을 언제 늘릴까요?'
+    recall: '그 칸에 노드를 줄줄이 이어 두고, 찾을 때 그 줄을 따라가며 해시 값이 같은 노드에만 `equals`를 불러요. 칸 수가 해시 값의 가짓수보다 훨씬 적어서 충돌은 피할 수 없어요. 한 칸에 많이 몰리면 느려지고, 모든 키의 `hashCode`가 같으면 한 칸에 다 몰려 O(n)이 돼요. 자바 8부터는 한 칸에 8개가 넘고 배열이 64칸 이상이면 그 칸을 트리로 바꿔요.'
   - id: q3
     title: 원소가 늘면 HashMap은 언제 배열을 늘리나요?
     conclusion:
@@ -138,42 +308,142 @@ questions:
     asks:
       - '본문의 예시: 기본 설정의 빈 `HashMap`에 키를 25개 넣으면 안쪽 배열의 길이는 얼마인가 (64. 12를 넘을 때 32, 24를 넘을 때 64)'
       - '옮긴 상황: 부하율이 0.75이고 배열 길이가 64인 `HashMap`이 있다. 원소가 몇 개를 넘으면 배열이 128로 늘어나나 (48개)'
+    body:
+      - p: '칸이 16개로 고정이면, 키가 늘수록 칸마다 줄이 길어져서 질문 2처럼 느려져요. 그래서 `HashMap`은 키가 일정 수를 넘으면 배열을 늘려요. 그 기준이 **부하율**(load factor)이에요. 기본값은 0.75예요.'
+      - p: '길이 16의 배열이면 16 × 0.75 = **12**예요. 원소가 12개를 넘는 순간, 곧 13번째 키를 넣을 때 배열을 두 배인 32로 늘려요. 처음 예측의 답은 **32**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 넣을 때마다 읽은 배열 길이 보기
+          source: HashTableTest.tableProbe
+          code: predict
+      - p: '13번째에 32, 32 × 0.75 = 24를 넘는 25번째에 64가 됐어요.'
+      - h3: 늘리면 모든 키의 칸이 다시 정해져요
+      - p: '칸 번호는 `h & (length - 1)`이었어요. 길이가 16에서 32가 되면 남기는 비트가 4개에서 5개가 돼요. 그래서 모든 키를 새 배열로 옮기며 칸을 다시 정해요. 새로 보는 비트가 0이면 원래 칸 그대로, 1이면 "원래 칸 + 16"으로 가요. 위 예제의 kim@a.com은 길이 16에서 칸 3이었고, 길이 8에서도 칸 3이었어요. 다시 계산해도 새로 본 비트가 0이라 그대로였던 거예요.'
+      - p: '옮기는 순간은 모든 키를 건드리니 O(n)이에요. 하지만 늘릴 때마다 두 배가 되어 가끔만 일어나서, 넣는 비용을 평균하면 O(1)이에요. `ArrayList`가 배열을 늘리는 것과 같은 분할 상환이에요.'
+      - table:
+          head: [부하율을, 배열을 늘리는 때, 충돌, 메모리]
+          rows:
+            - ['낮추면 (예: 0.5)', '일찍', '줄어요', '더 써요']
+            - ['높이면 (예: 1.0)', '늦게', '늘어요', '덜 써요']
+      - p: '0.75는 둘 사이의 기본값이고 바꿀 일은 드물어요. 원소를 지워도 배열은 줄지 않아요.'
+      - quiz:
+          q: '부하율이 0.75이고 배열 길이가 64인 `HashMap`이 있어요. 원소가 몇 개를 넘으면 배열이 128로 늘어날까요?'
+          options:
+            - '48개'
+            - '64개'
+            - '96개'
+          answer: 1
+          explain: '64 × 0.75 = 48이에요. 원소가 48개를 넘는 49번째에 배열을 두 배인 128로 늘려요.'
+      - next: '배열을 늘리면 키의 칸이 바뀐다고 했어요. 그러면 `HashMap`을 돌 때 나오는 순서는 어떻게 될까요?'
+    recall: '원소 수가 배열 길이의 0.75배(부하율)를 넘으면 배열을 두 배로 늘려요. 처음 길이 16에서는 13번째 키를 넣을 때 32가 되고, 25번째에 64가 돼요. 늘리면 `length - 1`이 바뀌어 모든 키의 칸을 다시 정해요. 그 순간은 O(n)이지만 가끔이라 평균 O(1)이에요. 부하율을 낮추면 충돌이 줄고 메모리를 더 써요.'
   - id: q4
     title: HashMap을 돌면 왜 넣은 순서와 다르게 나오나요?
     conclusion:
       lead: '`HashMap`은 칸의 순서대로 돌고, 칸은 넣은 순서가 아니라 해시 값으로 정해지기 때문이에요.'
       sub: '순서를 약속하지 않고 배열이 커지면 바뀔 수도 있어요. 넣은 순서가 필요하면 `LinkedHashMap`을, 키의 크기 순서가 필요하면 `TreeMap`을 써요.'
     says:
-      - '코드 order를 돌린다. banana, apple, cherry로 넣었지만 출력 순서는 해시 값으로 정해진 칸 순서다. 실제 출력을 보인다'
+      - '코드 order를 돌린다. banana, apple, orange로 넣었지만 출력 순서는 해시 값으로 정해진 칸 순서다. 실제 출력을 보인다 (설계서의 cherry는 이 순서에서 넣은 순서와 같게 나와서 orange로 바꿨다)'
       - '`keySet`, `values`, `entrySet`은 배열을 0번 칸부터 차례로 돈다. 그래서 같은 키들이라도 배열 길이가 바뀌면 순서가 바뀔 수 있다. 키를 많이 넣어 배열이 커진 뒤 같은 키들의 순서를 다시 출력해 다른 것을 보인다'
       - '자바 API 문서는 `HashMap`의 순서를 약속하지 않는다. 지금 순서에 기대는 코드는 자바 버전이나 원소 수가 바뀌면 깨진다'
-      - '`LinkedHashMap`은 노드를 넣은 순서대로 한 줄로 더 잇는다. 같은 코드에서 `LinkedHashMap`으로 바꾸면 banana, apple, cherry 순서다. 찾는 비용은 `HashMap`과 같고 메모리를 조금 더 쓴다'
+      - '`LinkedHashMap`은 노드를 넣은 순서대로 한 줄로 더 잇는다. 같은 코드에서 `LinkedHashMap`으로 바꾸면 banana, apple, orange 순서다. 찾는 비용은 `HashMap`과 같고 메모리를 조금 더 쓴다'
       - '키의 크기 순서(사전 순)가 필요하면 `TreeMap`이다. 트리라서 찾는 비용이 O(log n)이다. K8에서 다룬다'
     asks:
-      - '본문의 예시: 코드 order의 `HashMap`을 `LinkedHashMap`으로 바꾸면 출력은 무엇인가 (`[banana, apple, cherry]`)'
+      - '본문의 예시: 코드 order의 `HashMap`을 `LinkedHashMap`으로 바꾸면 출력은 무엇인가 (`[banana, apple, orange]`)'
       - '옮긴 상황: `HashMap`에 넣은 회원을 `values()`로 꺼내 화면에 가입 순서대로 보여 주려 한다. 이 코드가 가입 순서를 지킨다고 할 수 있나 (없다. `HashMap`은 순서를 약속하지 않는다. `LinkedHashMap`을 쓰거나 가입일로 정렬한다)'
       - '실무 구역: 코드 response가 돌려주는 JSON의 키 순서는 total, paid, canceled로 정해지나 (정해지지 않는다. `HashMap`의 순서를 따른다)'
+    body:
+      - p: '과일 셋을 넣고 키를 출력해요. 무엇이 나올지 예상해 보세요.'
+      - code: order
+      - ci:
+          key: order
+          label: 실제 순서 보기
+          source: HashTableTest.iterationOrder
+      - p: '넣은 순서는 banana, apple, orange인데 `HashMap`은 `[banana, orange, apple]`을 출력했어요. `keySet`, `values`, `entrySet`은 배열을 **0번 칸부터 차례로** 돌아요. banana는 0번 칸, apple과 orange는 같은 1번 칸이고 그 칸에서는 줄의 순서예요. 넣은 순서가 아니라 **해시 값으로 정해진 칸 순서**예요.'
+      - p: '그리고 키 40개를 더 넣어 배열이 64칸이 된 뒤에는, 같은 세 키가 `[apple, banana, orange]` 순서로 나왔어요. 질문 3에서 본 대로 배열이 커지면 칸이 다시 정해지기 때문이에요.'
+      - callout: '**`HashMap`은 순서를 약속하지 않아요.** 자바 API 문서에 그렇게 적혀 있어요. 지금 보이는 순서에 기대는 코드는 원소 수나 자바 버전이 바뀌면 깨져요.'
+      - table:
+          head: [필요한 순서, 쓸 것, 찾는 비용]
+          rows:
+            - ['상관없음', '`HashMap`', '평균 O(1)']
+            - ['넣은 순서', '`LinkedHashMap`', '평균 O(1). 넣은 순서대로 노드를 한 줄 더 이어서 메모리를 조금 더 써요']
+            - ['키의 크기 순서', '`TreeMap`', 'O(log n). 이진 탐색 트리 레슨에서 다뤄요']
+      - quiz:
+          q: '`HashMap`에 넣은 회원을 `values()`로 꺼내 화면에 가입 순서대로 보여 주려 해요. 이 코드가 가입 순서를 지킨다고 할 수 있을까요?'
+          options:
+            - '있다. 넣은 순서대로 나온다'
+            - '없다. 칸 순서로 돌고 순서를 약속하지 않는다. LinkedHashMap을 쓰거나 가입일로 정렬한다'
+            - '있다. 회원이 16명 이하라면 늘 지킨다'
+          answer: 2
+          explain: '`HashMap`은 해시 값으로 정해진 칸의 순서로 돌아요. 원소가 적어도 넣은 순서와 다르게 나올 수 있어요.'
+    recall: '`HashMap`은 배열을 0번 칸부터 차례로 돌고, 키의 칸은 넣은 순서가 아니라 해시 값으로 정해지기 때문이에요. 배열이 커지면 칸이 다시 정해져 순서가 바뀔 수도 있고, API 문서도 순서를 약속하지 않아요. 넣은 순서가 필요하면 `LinkedHashMap`, 키의 크기 순서가 필요하면 `TreeMap`을 써요.'
 practice:
+  title: 서비스 코드에서는 이렇게 만나요
   says:
     - '크기를 알면 처음부터 넉넉하게 만든다. 회원 1만 명을 id로 찾는 맵을 만들 때 배열이 16, 32, ..., 16384로 열 번 늘어난다. 코드 presize처럼 자바 19부터 있는 `HashMap.newHashMap(n)`을 쓰면 n개를 넣어도 늘지 않는 길이로 만든다. 늘어난 횟수를 리플렉션으로 세어 비교한다'
     - '흔한 실수 하나: `new HashMap<>(10000)`을 "1만 개를 담는 맵"으로 안다. 이 숫자는 배열의 처음 길이(2의 거듭제곱으로 올림한 16384)이고, 0.75를 곱한 12288개를 넘으면 늘어난다. 1만 개에는 맞지만 1만 3천 개면 늘어난다. `newHashMap`은 부하율을 계산해 준다 (자바 API 문서 근거, 길이는 테스트로 확인)'
     - '흔한 실수 둘: 코드 response처럼 응답 본문을 `HashMap`으로 만들고 클라이언트가 키 순서에 기대게 둔다. 스프링 MVC는 잭슨으로 맵을 JSON으로 바꾸고, 잭슨은 맵을 도는 순서대로 쓴다. 고친 코드: `LinkedHashMap`을 쓰거나 응답을 record로 만든다. record는 구성 요소를 선언한 순서로 나간다. 두 경우의 JSON을 `ObjectMapper`로 만들어 테스트로 남긴다'
     - 'JSON 객체의 키 순서는 원래 뜻이 없다. 그래도 사람이 읽는 응답과 테스트의 비교 문자열은 순서가 정해져 있는 편이 낫다'
+  body:
+    - h3: 크기를 알면 처음부터 넉넉하게
+    - p: '회원 1만 명을 id로 찾는 맵을 만들면, 기본 `HashMap`은 넣는 동안 배열을 16에서 16384까지 **열 번** 늘려요. 크기를 이미 알면 자바 19부터 있는 `HashMap.newHashMap(n)`을 써요.'
+    - code: presize
+      notes:
+        - mark: HashMap.newHashMap(members.size())
+          as: code
+          text: 'n개를 넣어도 부하율 0.75를 넘지 않는 길이로 처음부터 만들어요.'
+    - ci:
+        key: presize
+        label: 배열이 늘어난 횟수 보기
+        source: HashTableTest.tableProbe
+        code: presizeRun
+    - p: '여기에 흔한 오해가 하나 있어요. `new HashMap<>(10000)`은 "1만 개를 담는 맵"이 아니에요. 이 숫자는 **배열의 처음 길이**예요. 2의 거듭제곱으로 올려 16384가 되고, 16384 × 0.75 = 12288개를 넘으면 늘어나요. 1만 개에는 우연히 맞지만 1만 3천 개면 한 번 늘어나요. `newHashMap`은 부하율까지 계산해 줘요. 둘 다 [HashMap API 문서](link:hashMap)에 적혀 있어요.'
+    - h3: '흔한 실수: HashMap으로 만든 응답의 키 순서'
+    - code: response
+      notes:
+        - mark: HashMap
+          as: code
+          text: '스프링 MVC는 잭슨으로 이 맵을 JSON으로 바꾸고, 잭슨은 맵을 도는 순서대로 써요. 질문 4의 칸 순서예요.'
+    - ci:
+        key: json
+        label: 세 방식의 실제 JSON 보기
+        source: HashTableTest.jsonKeyOrder
+    - p: '`HashMap`은 canceled를 맨 앞에 썼어요. JSON 객체의 키 순서는 원래 뜻이 없어서 받는 프로그램은 문제없이 읽어요. 하지만 사람이 읽는 응답이나, 응답 문자열을 그대로 비교하는 테스트는 순서가 정해져 있는 편이 나아요. 응답은 record로 만들면 구성 요소를 **선언한 순서**로 나가요. 맵이 꼭 필요하면 `LinkedHashMap`을 써요.'
+    - code: responseFixed
+interview:
+  question: HashMap은 어떻게 동작하나요?
+  model:
+    - label: 정의
+      text: 안에 배열을 두고, 키의 hashCode로 칸 번호를 계산해 그 칸에 키와 값을 두는 해시 테이블입니다. 찾을 때도 같은 계산으로 그 칸만 보니 평균 O(1)입니다.
+    - label: 원리
+      text: hashCode의 위쪽 비트를 섞은 뒤 배열 길이에서 1을 뺀 값과 &해서 칸 번호를 얻습니다. 같은 칸에 온 키들은 연결 리스트로 잇고, 해시 값이 같은 노드에만 equals를 부릅니다. 원소 수가 길이의 0.75배를 넘으면 배열을 두 배로 늘리고 모든 키의 칸을 다시 정합니다.
+    - label: 주의할 점
+      text: hashCode가 몰리면 한 칸이 길어져 O(n)이 됩니다. 자바 8부터는 한 칸이 8개를 넘고 배열이 64칸 이상이면 트리로 바꿔 O(log n)으로 막습니다. 순서를 약속하지 않아서 넣은 순서가 필요하면 LinkedHashMap을 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 크기를 아는 맵을 HashMap.newHashMap(n)으로 만들고, HashMap으로 만들던 응답을 record로 바꿔 키 순서를 고정했습니다.'
+verified: 이 레슨의 칸 번호와 배열 길이는 짐작이 아니라 자바 21에서 `HashMap`의 안쪽 배열을 리플렉션으로 읽은 값이에요(`--add-opens`를 준 JVM). 코드가 바뀔 때마다 테스트([HashTableTest](link:test))가 다시 돌아요.
+footer: '근거: 부하율 0.75, 기본 용량, 순서를 약속하지 않는다는 것, `newHashMap`은 `HashMap` API 문서([링크](link:hashMap)), 넣은 순서는 `LinkedHashMap` API 문서([링크](link:linkedHashMap)), `HashSet`이 `HashMap`을 쓴다는 것은 API 문서([링크](link:hashSet)), 트리로 바꾸는 기준은 JEP 180([링크](link:jep180)). 칸 번호 계산은 OpenJDK 21의 구현이에요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '키 몇 개의 칸 번호를 `(h ^ (h >>> 16)) & (length - 1)`로 계산한 값과 실제로 들어간 칸이 같다'
-    how: '`ChildJvm`에 `--add-opens java.base/java.util=ALL-UNNAMED`를 주고 `table`을 리플렉션으로 읽어 키가 있는 칸을 찾는다'
+    how: '`ChildJvm`에 `--add-opens java.base/java.util=ALL-UNNAMED`를 주고 `table`을 리플렉션으로 읽어 키가 있는 칸을 찾는다. 칸 8개에서 kim@a.com과 choi@a.com이 칸 3에 이어지는 것도 본다'
+    test: HashTableTest.tableProbe
   - claim: '빈 `HashMap`에 키를 넣으면 길이가 16에서 13번째에 32, 25번째에 64가 된다'
     how: '같은 방법으로 넣을 때마다 `table`의 길이를 읽는다'
+    test: HashTableTest.tableProbe
   - claim: '`hashCode`가 늘 1인 키 1만 개를 넣은 맵에서 없는 키를 찾으면 `equals`가 키 수에 가까운 횟수로 불린다'
-    how: '`equals`를 세는 키 클래스로 센다. 트리로 바뀐 경우를 피하려면 `Comparable`이 아닌 키를 쓰고 센 값을 남긴다. 횟수가 몇 번이 아니라 수천 번 이상인 것만 단정한다'
-  - claim: '한 칸에 9개째를 넣을 때 배열이 64칸 이상이면 그 칸의 노드가 `TreeNode`가 된다'
-    how: '같은 칸에 가는 키를 만들어 넣고 칸의 노드 클래스 이름을 읽는다'
+    how: '`equals`를 세는 키 클래스로 센다. 로컬에서 10,001번과 0번이었다. 5천 번 넘는 것과 5번 미만인 것만 단정한다'
+    test: HashTableTest.badHashCodeMakesItLinear
+  - claim: '한 칸에 9개째를 넣을 때 배열이 64칸 이상이면 그 칸의 노드가 `TreeNode`가 된다. 16칸이면 트리 대신 배열을 늘린다'
+    how: '`hashCode`가 같은 키를 넣고 칸의 노드 클래스 이름을 읽는다'
+    test: HashTableTest.tableProbe
   - claim: '같은 키들도 배열이 커진 뒤에는 `keySet` 순서가 달라질 수 있고, `LinkedHashMap`은 넣은 순서를 지킨다'
-    how: '코드 order의 출력과, 키를 더 넣은 뒤의 순서, `LinkedHashMap`의 순서를 남긴다. 순서가 바뀌는 키는 테스트에서 찾아 고정한다'
-  - claim: '`HashMap.newHashMap(10000)`에 1만 개를 넣으면 배열이 늘지 않고, `new HashMap<>()`은 열 번 늘어난다'
+    how: 'banana, apple, orange는 16칸에서 `[banana, orange, apple]`, 키 40개를 더 넣은 64칸에서 `[apple, banana, orange]`다. 설계서의 cherry는 16칸에서 넣은 순서와 같게 나와서 orange로 바꿨다'
+    test: HashTableTest.iterationOrder
+  - claim: '`HashMap.newHashMap(10000)`에 1만 개를 넣으면 배열이 늘지 않고, `new HashMap<>()`은 열 번 늘어난다. `new HashMap<>(10000)`은 길이 16384로 시작해 1만 3천 개에서 한 번 늘어난다'
     how: '리플렉션으로 길이가 바뀐 횟수를 센다'
+    test: HashTableTest.tableProbe
   - claim: '`LinkedHashMap`과 record로 만든 응답은 잭슨이 넣은 순서, 선언한 순서로 쓴다'
     how: '`ObjectMapper.writeValueAsString`의 결과를 본다'
+    test: HashTableTest.jsonKeyOrder
 sources:
   - '`HashMap`의 부하율 0.75, 기본 용량, 순서를 약속하지 않는다는 것, `newHashMap`: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html'
   - '`LinkedHashMap`이 넣은 순서를 지킨다는 것: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/LinkedHashMap.html'

@@ -1,0 +1,250 @@
+# 해시 테이블 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/hash-table.yaml의 says).
+# 동작에 관한 정답은 verification의 HashTableTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: hash-table
+  title: 해시 테이블
+  unit: 자료구조와 알고리즘
+  order: 58
+concepts:
+  - key: core
+    name: 해시 테이블
+coreQuestions:
+  - key: q1
+    text: "HashMap은 키로 값을 어떻게 한 번에 찾나요?"
+  - key: q2
+    text: "서로 다른 키가 같은 칸에 가면 어떻게 되나요?"
+  - key: q3
+    text: "원소가 늘면 HashMap은 언제 배열을 늘리나요?"
+  - key: q4
+    text: "HashMap을 돌면 왜 넣은 순서와 다르게 나오나요?"
+questions:
+  # ── 질문 1 ──
+  - key: ht-bucket-index
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: HashMap의 안쪽 배열 길이가 16이에요. 섞은 해시 값이 2진수로 ...0110_1011인 키는 몇 번 칸에 들어갈까요? (칸 번호는 섞은 해시 값 & (길이 - 1)이에요)
+    choices:
+      - 6번
+      - 11번
+      - 107번
+      - 16번
+    answer: "2"
+    explanation: |-
+      **11번이에요.** 길이 - 1은 15, 2진수로 1111이라 & 1111은 아래 4비트만 남겨요.
+
+      - 아래 4비트 1011은 10진수로 11이에요
+      - 길이가 늘 2의 거듭제곱이라 이 계산이 나머지 연산과 같아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  - key: ht-list-vs-map
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회원 100만 명을 이메일로 찾아요. ArrayList에 담고 contains로 찾는 것과, 이메일을 키로 한 HashMap에서 containsKey로 찾는 것의 평균 비교 횟수는 각각 어느 정도일까요? (hashCode는 String의 것을 그대로 써요)
+    choices:
+      - 리스트는 수십만 번, HashMap은 칸 하나에 든 키 몇 개
+      - 둘 다 수십만 번
+      - 리스트는 몇 번, HashMap은 수십만 번
+      - 둘 다 20번 남짓
+    answer: "1"
+    explanation: |-
+      **리스트는 수십만 번, HashMap은 몇 번이에요.** HashMap은 키로 칸 번호를 계산해서 그 칸 하나만 봐요.
+
+      - 리스트는 처음부터 하나씩 비교해서 평균 n/2번이에요
+      - HashMap은 칸 번호를 한 번에 계산하고 배열의 그 칸을 O(1)에 읽어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  # ── 질문 2 ──
+  - key: ht-bad-hashcode
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 키 1만 개를 HashMap에 넣고, 맵에 없는 키를 get했어요. equals는 몇 번쯤 불릴까요?
+    code: |-
+      record Email(String value) {
+        @Override
+        public int hashCode() {
+          return 1;
+        }
+      }
+    choices:
+      - 0번
+      - 1번
+      - 14번쯤
+      - 1만 번쯤
+    answer: "4"
+    explanation: |-
+      **1만 번쯤이에요.** 모든 키의 해시 값이 같아서 모두 한 칸에 몰렸고, 그 칸의 키와 하나씩 equals로 견줘야 해요.
+
+      - HashMap이 리스트처럼 O(n)이 됐어요
+      - hashCode를 제대로 만든 키는 같은 조건에서 equals를 한 번도 부르지 않았어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  - key: ht-category-hash
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 상품 클래스의 hashCode를 category.hashCode()로 만들었고, 카테고리는 3가지뿐이에요. 상품 9만 개를 HashSet에 넣으면 contains는 어떻게 될까요? (equals는 상품 id로 비교해요)
+    choices:
+      - 평균 O(1)이다. 해시 테이블이니까
+      - 칸 3개에 3만 개쯤씩 몰려서, 찾을 때 그 줄을 길게 따라가야 한다
+      - 같은 카테고리의 상품은 하나만 남는다
+      - 컴파일 오류가 난다
+    answer: "2"
+    explanation: |-
+      **칸 3개에 몰려서 느려져요.** 해시 값이 3가지뿐이라 상품이 칸 3개에 나뉘어 들어가요.
+
+      - 같은 칸에서는 해시 값이 같으니 equals로 하나씩 견줘요
+      - equals가 id로 비교하니 상품은 9만 개가 모두 담겨요
+      - 규약은 어기지 않았지만 해시 테이블의 장점을 잃어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  # ── 질문 3 ──
+  - key: ht-resize-25
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 기본 설정의 빈 HashMap에 키 25개를 넣었어요. 다 넣은 뒤 안쪽 배열의 길이는 얼마일까요? (처음 넣을 때 길이 16의 배열이 생겨요)
+    code: |-
+      Map<String, Integer> m = new HashMap<>();
+      for (int i = 1; i <= 25; i++) {
+        m.put("key" + i, i);
+      }
+    choices:
+      - "16"
+      - "32"
+      - "48"
+      - "64"
+    answer: "4"
+    explanation: |-
+      **64예요.** 원소 수가 길이의 0.75배(부하율)를 넘으면 배열을 두 배로 늘려요.
+
+      - 16 × 0.75 = 12를 넘는 13번째에 32가 돼요
+      - 32 × 0.75 = 24를 넘는 25번째에 64가 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  - key: ht-threshold-64
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 부하율이 0.75이고 안쪽 배열 길이가 64인 HashMap이 있어요. 원소가 몇 개를 넘으면 배열이 128로 늘어날까요?
+    choices:
+      - 32개
+      - 48개
+      - 64개
+      - 96개
+    answer: "2"
+    explanation: |-
+      **48개예요.** 64 × 0.75 = 48이라, 원소가 48개를 넘는 49번째에 두 배로 늘려요.
+
+      - 늘리면 모든 키의 칸을 다시 정해요
+      - 그 순간은 O(n)이지만 가끔이라 평균 O(1)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  # ── 질문 4 ──
+  - key: ht-linked-order
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드는 무엇을 출력할까요?
+    code: |-
+      Map<String, Integer> m = new LinkedHashMap<>();
+      m.put("banana", 1);
+      m.put("apple", 2);
+      m.put("orange", 3);
+      System.out.println(m.keySet());
+    choices:
+      - "[banana, apple, orange]"
+      - "[apple, banana, orange]"
+      - "[banana, orange, apple]"
+      - 실행할 때마다 다르다
+    answer: "1"
+    explanation: |-
+      **[banana, apple, orange]예요.** LinkedHashMap은 넣은 순서대로 노드를 한 줄 더 이어서 그 순서로 돌아요.
+
+      - HashMap이었다면 칸 순서인 [banana, orange, apple]이 나왔어요
+      - 키의 사전 순이 필요하면 TreeMap이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/LinkedHashMap.html
+  - key: ht-values-signup-order
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 가입한 순서대로 회원을 HashMap<Long, Member>에 넣었어요. values()로 꺼내 화면에 그리면 가입 순서대로 나온다고 할 수 있을까요?
+    choices:
+      - 있다. 넣은 순서대로 나온다
+      - 없다. HashMap은 칸 순서로 돌고 순서를 약속하지 않는다. LinkedHashMap을 쓰거나 가입일로 정렬한다
+      - 있다. 키가 Long이면 크기 순서로 나온다
+      - 회원이 12명 이하일 때만 있다
+    answer: "2"
+    explanation: |-
+      **순서를 약속하지 않아요.** HashMap은 배열을 0번 칸부터 차례로 돌고, 칸은 해시 값으로 정해져요.
+
+      - 배열이 커지면 칸이 다시 정해져 순서가 바뀔 수도 있어요
+      - 넣은 순서가 필요하면 LinkedHashMap을 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  - key: ht-response-order
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 스프링 MVC 컨트롤러가 아래 맵을 돌려줘요. 응답 JSON의 키 순서에 대해 맞는 것은 무엇일까요?
+    code: |-
+      Map<String, Object> body = new HashMap<>();
+      body.put("total", 3);
+      body.put("paid", 2);
+      body.put("canceled", 1);
+      return body;
+    choices:
+      - 늘 total, paid, canceled 순서다
+      - 늘 키의 사전 순서다
+      - 잭슨이 맵을 도는 순서로 써서 넣은 순서와 다를 수 있다. 순서가 필요하면 LinkedHashMap이나 record를 쓴다
+      - 스프링이 무작위로 섞는다
+    answer: "3"
+    explanation: |-
+      **HashMap의 칸 순서로 나와요.** 잭슨은 맵을 도는 순서대로 JSON을 써요.
+
+      - 테스트에서는 canceled가 맨 앞에 나왔어요
+      - LinkedHashMap은 넣은 순서, record는 구성 요소를 선언한 순서로 나가요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
+  # ── 네 질문을 하나로 ──
+  - key: ht-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "HashMap은 어떻게 동작하나요?"라는 질문을 받았어요. 충돌과 크기를 늘리는 것까지 1분 안에 답해 보세요.
+    explanation: |-
+      **키의 해시 값으로 배열의 칸을 계산해 그 칸만 보는 해시 테이블이라 평균 O(1)이에요.**
+
+      - **칸 번호:** hashCode의 위쪽 비트를 섞고 & (길이 - 1)로 아래 비트만 남긴다. 길이는 2의 거듭제곱
+      - **충돌:** 같은 칸의 키는 연결 리스트로 잇고, 해시 값이 같은 노드에만 equals를 부른다. 몰리면 O(n)이고, 8개를 넘고 64칸 이상이면 트리로 바꾼다
+      - **늘리기:** 원소 수가 길이의 0.75배를 넘으면 두 배로 늘리고 칸을 다시 정한다
+      - **순서:** 칸 순서로 돌아서 약속하지 않는다. LinkedHashMap은 넣은 순서
+    checklist:
+      - 키의 해시 값으로 배열의 칸을 계산해 그 칸만 본다고 말했다
+      - 같은 칸의 키는 줄로 잇고 equals로 비교한다고 말했다
+      - hashCode가 몰리면 느려진다고 말했다(트리로 바꾸는 것까지 말하면 더 좋다)
+      - 부하율 0.75를 넘으면 배열을 두 배로 늘리고 칸을 다시 정한다고 말했다
+      - 도는 순서를 약속하지 않아서 순서가 필요하면 LinkedHashMap을 쓴다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html
