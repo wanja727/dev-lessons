@@ -1,0 +1,216 @@
+# 자바 17과 21에서 달라진 것 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 자바 17과 21에서 달라진 것
+unit: 자바 언어
+roadmap: J18
+type: 자바 실행
+prerequisites:
+  - {slug: immutable-object, title: 불변 객체}
+  - {slug: inheritance-polymorphism, title: 상속과 다형성}
+assume: '자바 21. 미리 보기(preview) 기능은 켜지 않아요. record가 무엇을 만들어 주는지(불변 객체 레슨), `instanceof`와 오버라이딩(상속과 다형성 레슨), enum의 switch 식은 상수를 빠뜨리면 컴파일 오류가 난다는 것(enum 레슨).'
+example: '결제 요청의 결과 `PaymentResult`. 승인(`Approved`), 거절(`Declined`), 오류(`Failed`) 셋 가운데 하나이고, 종류마다 담는 데이터가 달라요. 결과를 받아 종류별로 처리하는 코드를 `instanceof` 사슬과 switch로 써서 견주고, 나중에 네 번째 종류를 추가해 봐요. 실무 구역에서는 서비스가 이 결과를 돌려주고 컨트롤러가 응답으로 바꿔요.'
+intro:
+  - '결제 결과에 "보류"라는 종류를 하나 추가했어요. 결과를 종류별로 처리하는 곳이 코드에 일곱 군데 있었는데 여섯 군데만 고쳤어요. 빠뜨린 한 곳은 `else`로 떨어져서 보류된 결제를 실패로 처리했고, 컴파일러는 아무 말도 하지 않았어요.'
+  - '스프링 부트 3은 자바 17 이상을 요구하고, 새 프로젝트는 대부분 21로 시작해요. 자바 8로 배운 사람에게 낯선 문법이 코드 리뷰와 면접에 나와요. record, sealed, switch 패턴 매칭이 그것이고, 셋을 함께 쓰면 "종류가 정해진 데이터"를 다루는 방식이 달라져요.'
+  - '이 레슨에서는 종류를 하나 추가했을 때 빠뜨린 곳을 컴파일러가 찾아 주는지 아닌지를 코드로 확인하면서 세 문법을 차례로 봐요.'
+covers:
+  - topic: '자바 8 뒤에 들어온 것과 버전: var(10), switch 식(14), 텍스트 블록(15), record와 instanceof 패턴(16), sealed(17), switch 패턴 매칭과 record 패턴(21)'
+    where: '머리의 전제와 실무에서는의 표'
+  - topic: 'sealed 클래스와 인터페이스: 상속할 수 있는 타입을 permits로 정해 둔다'
+    where: '질문 1'
+  - topic: 'sealed의 자식은 final, sealed, non-sealed 가운데 하나여야 한다. record는 final이다'
+    where: '질문 1'
+  - topic: 'sealed와 enum의 차이: enum은 값마다 객체 하나, sealed는 종류마다 다른 데이터를 가진 객체 여럿'
+    where: '질문 1'
+  - topic: 'switch 식: 값을 돌려준다, 화살표는 아래로 흘러내리지 않는다, yield'
+    where: '질문 2'
+  - topic: 'switch의 타입 패턴: 타입으로 가르면서 그 타입의 변수에 담는다. instanceof 패턴과의 관계'
+    where: '질문 2'
+  - topic: 'sealed 타입의 switch는 모든 자식을 다뤄야 컴파일된다. default가 없어도 된다'
+    where: '질문 2'
+  - topic: '가드(when), null을 받는 case null, 넓은 타입의 case를 먼저 쓰면 컴파일 오류'
+    where: '질문 2'
+  - topic: 'record 패턴: 타입을 확인하면서 구성 요소를 변수로 꺼낸다. 중첩해서 꺼내기'
+    where: '질문 3'
+  - topic: 'record의 기본(만들어 주는 것, 간결한 생성자)'
+    where: '질문 3에서 한 줄. 자세한 것은 불변 객체(J9)'
+  - topic: '셋을 함께 쓰기: 종류를 추가하면 다루지 않은 switch가 컴파일 오류로 드러난다'
+    where: '질문 4'
+  - topic: '오버라이딩(다형성)으로 푸는 것과 switch로 푸는 것의 차이: 종류를 추가하기 쉬운가, 동작을 추가하기 쉬운가'
+    where: '질문 4'
+  - topic: 'default를 넣으면 완전성 검사가 꺼진다'
+    where: '질문 4, 실무에서는'
+  - topic: '따로 컴파일된 코드에서 모르는 자식이 오면 MatchException'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링에서: 서비스의 결과 타입을 sealed와 record로, 컨트롤러에서 switch로 응답 만들기'
+    where: '실무에서는'
+  - topic: '그 밖에 자주 쓰는 것: var, 텍스트 블록, Stream.toList, 순서 있는 컬렉션의 getFirst와 getLast'
+    where: '실무에서는의 표'
+  - topic: '자바 8이나 11에서 17과 21로 올릴 때 만나는 것(javax에서 jakarta로, 미리 보기 기능은 쓰지 않는다)'
+    where: '실무에서는'
+  - topic: '가상 스레드(자바 21)'
+    where: '다루지 않음: 가상 스레드(C12)'
+  - topic: 'JPA 엔티티를 record나 sealed로 만들 수 없는 것'
+    where: '다루지 않음: 불변 객체(J9)'
+  - topic: '종류마다 다른 동작을 객체로 빼는 설계'
+    where: '다루지 않음: 전략 패턴(O7)'
+  - topic: '새 종류를 더할 때 기존 코드를 고치지 않는 설계 원칙'
+    where: '다루지 않음: 단일 책임과 개방 폐쇄 원칙(O3)'
+codes:
+  sealed: |-
+    sealed interface PaymentResult
+        permits Approved, Declined, Failed {}
+
+    record Approved(String txId, long amount)
+        implements PaymentResult {}
+    record Declined(String reason)
+        implements PaymentResult {}
+    record Failed(Exception cause)
+        implements PaymentResult {}
+  chain: |-
+    String message(PaymentResult r) {
+      if (r instanceof Approved a) {
+        return "승인 " + a.txId();
+      } else if (r instanceof Declined d) {
+        return "거절 " + d.reason();
+      } else {
+        return "오류";
+      }
+    }
+  switchType: |-
+    String message(PaymentResult r) {
+      return switch (r) {
+        case Approved a -> "승인 " + a.txId();
+        case Declined d -> "거절 " + d.reason();
+        case Failed f -> "오류";
+      };
+    }
+  recordPattern: |-
+    String message(PaymentResult r) {
+      return switch (r) {
+        case Approved(String txId, long amount)
+            when amount >= 1_000_000 ->
+            "고액 승인 " + txId;
+        case Approved(String txId, long amount) ->
+            "승인 " + txId;
+        case Declined(String reason) ->
+            "거절 " + reason;
+        case Failed(Exception cause) -> "오류";
+      };
+    }
+  added: |-
+    sealed interface PaymentResult
+        permits Approved, Declined, Failed,
+            [[Pending]] {}
+
+    record Pending(String txId)
+        implements PaymentResult {}
+predict:
+  text: '코드 sealed의 `PaymentResult`를 처리하는 메서드가 둘 있어요. 코드 chain은 `instanceof`와 `else`로, 코드 switchType은 `default` 없는 switch로 썼어요. 이제 코드 added처럼 네 번째 종류 `Pending`을 추가하고 두 메서드는 고치지 않은 채 컴파일했어요. 어떻게 될까요? 보기: 둘 다 컴파일된다 / 둘 다 컴파일 오류 / 코드 chain만 컴파일 오류 / 코드 switchType만 컴파일 오류.'
+  answer: '코드 switchType만 컴파일 오류. sealed 타입의 switch는 모든 종류를 다뤄야 하는데 `Pending`을 다루지 않았다. 코드 chain은 컴파일되고, 실행하면 `Pending`이 `else`로 떨어져 "오류"가 된다. 질문 2와 4에서 밝힌다.'
+questions:
+  - id: q1
+    title: 'sealed는 무엇을 정하나요?'
+    conclusion:
+      lead: '그 타입을 상속하거나 구현할 수 있는 타입을 `permits`에 적은 것으로 한정해요.'
+      sub: '자식이 무엇무엇인지를 컴파일러가 전부 알게 되고, 그 사실을 switch가 이용해요.'
+    says:
+      - '보통의 인터페이스는 누구나 구현할 수 있다. `PaymentResult`가 승인, 거절, 오류 셋뿐이라는 것은 개발자의 머릿속에만 있고 컴파일러는 모른다'
+      - '코드 sealed. `sealed interface PaymentResult permits Approved, Declined, Failed`는 셋만 구현할 수 있다고 선언한다. 다른 클래스가 `implements PaymentResult`를 쓰면 컴파일 오류다'
+      - '허용된 자식은 자기가 어디까지 열려 있는지를 밝혀야 한다. 더 상속하지 못하는 `final`, 다시 정해 둔 자식만 허용하는 `sealed`, 누구나 상속하게 푸는 `non-sealed` 가운데 하나다. record는 언제나 final이라 따로 쓰지 않는다'
+      - '같은 파일 안에 자식을 모두 선언하면 `permits`를 생략할 수 있다'
+      - 'enum과 견준다. enum도 "정해진 몇 가지"다. enum은 값마다 객체가 하나이고 모든 값이 같은 필드를 가진다(J8). sealed는 종류마다 다른 데이터를 가진 객체를 여러 개 만든다. 승인은 거래 번호와 금액을, 거절은 사유를 가진다. 종류마다 담을 것이 다르면 sealed, 이름만 구별하면 enum이다'
+      - '`final`과도 견준다. `final`은 아무도 상속하지 못하게 하고, sealed는 정해 둔 타입만 상속하게 한다'
+    asks:
+      - '본문의 예시: 코드 sealed가 있는 프로젝트에서 `record Refunded(long amount) implements PaymentResult {}`를 새로 선언하고 `permits`는 고치지 않았다. 컴파일하면 어떻게 되나 (컴파일 오류. `Refunded`는 허용된 자식이 아니다)'
+      - '옮긴 상황: `sealed class Shape permits Circle, Square {}`에서 `class Circle extends Shape {}`처럼 `final`, `sealed`, `non-sealed` 가운데 아무것도 쓰지 않으면 어떻게 되나 (컴파일 오류. 셋 가운데 하나를 밝혀야 한다)'
+  - id: q2
+    title: 'switch 패턴 매칭은 instanceof 사슬과 무엇이 다른가요?'
+    conclusion:
+      lead: '타입으로 가르면서 그 타입의 변수에 바로 담는 것은 같지만, switch는 모든 경우를 다뤘는지를 컴파일러가 검사해요.'
+      sub: 'sealed 타입을 `default` 없이 switch하면, 다루지 않은 자식이 있을 때 컴파일되지 않아요.'
+    says:
+      - '먼저 switch 식. `return switch (x) { case A -> 1; case B -> 2; };`는 값을 돌려준다. 화살표(`->`)를 쓴 case는 다음 case로 흘러내리지 않아서 `break`가 없다. 여러 줄이 필요하면 중괄호 안에서 `yield 값;`으로 돌려준다. 값을 돌려줘야 하므로 모든 경우를 다뤄야 한다. J8에서 enum으로 본 것이다'
+      - '코드 chain의 `r instanceof Approved a`는 타입을 확인하고 맞으면 `a`에 담는다. 형변환을 따로 쓰지 않는다(J7). 자바 16부터다'
+      - '코드 switchType은 같은 일을 switch로 쓴다. `case Approved a ->`가 타입 패턴이다. 자바 21부터다'
+      - '차이는 빠뜨렸을 때다. 코드 chain의 마지막 `else`는 "나머지 전부"다. `Failed`를 뜻하고 썼지만 컴파일러가 보기에는 무엇이든 받는다. 코드 switchType에는 그런 자리가 없다. sealed의 자식 셋을 모두 썼기 때문에 `default` 없이 컴파일된다'
+      - '코드 added로 `Pending`을 추가하면 코드 switchType은 "모든 경우를 다루지 않았다"는 컴파일 오류가 난다. 코드 chain은 컴파일되고 `Pending`을 "오류"로 처리한다. 예측의 답을 밝힌다'
+      - '가드. `case Approved a when a.amount() >= 1_000_000 ->`처럼 조건을 더한다. 위에서부터 맞는 첫 case가 실행되므로 조건이 있는 것을 먼저 쓴다'
+      - '순서. 넓은 타입의 case를 좁은 타입보다 먼저 쓰면 뒤의 case에 닿을 수 없어 컴파일 오류다. J10에서 `catch`의 순서와 같은 이유다'
+      - 'null. switch에 null이 들어오면 `NullPointerException`이다. 받으려면 `case null ->`을 쓴다'
+    asks:
+      - '본문의 예시: 코드 added를 적용한 뒤 코드 chain의 `message`에 `new Pending("T1")`을 넘기면 무엇이 반환되나 ("오류". `else`로 떨어진다)'
+      - '옮긴 상황: `Object o`에 대해 `switch (o) { case Object x -> "객체"; case String s -> "문자열"; }`을 쓰면 어떻게 되나 (컴파일 오류. `Object`의 case가 앞에서 모두 받아서 `String`의 case에 닿을 수 없다)'
+  - id: q3
+    title: record 패턴으로 무엇을 할 수 있나요?
+    conclusion:
+      lead: '타입을 확인하면서 record의 구성 요소를 변수로 바로 꺼낼 수 있어요.'
+      sub: '`case Approved(String txId, long amount)`는 `Approved`인지 확인하고 `txId`와 `amount`를 한 번에 꺼내요.'
+    says:
+      - 'record는 구성 요소로 이루어진 불변 데이터다(J9). 무엇으로 이루어졌는지가 선언에 드러나 있어서 컴파일러가 거꾸로 풀어 줄 수 있다'
+      - '코드 recordPattern. `case Approved a`로 받아 `a.txId()`를 부르던 것을 `case Approved(String txId, long amount)`로 쓰면 구성 요소가 변수에 담긴다. 자바 21부터다'
+      - '가드와 함께 쓴다. `when amount >= 1_000_000`에서 꺼낸 변수를 바로 쓴다'
+      - '`instanceof`에도 쓴다. `if (r instanceof Declined(String reason))`'
+      - '중첩. 구성 요소가 record면 안쪽까지 한 번에 꺼낸다. `record Order(Member member, Money total)`에 대해 `case Order(Member(String name), Money(long amount))`'
+      - '타입을 `var`로 줄일 수 있다. `case Approved(var txId, var amount)`'
+      - '쓰지 않는 구성 요소를 밑줄(`_`)로 비우는 문법은 자바 21에서는 미리 보기라서 쓰지 않는다. 자바 22부터 정식이다'
+    asks:
+      - '본문의 예시: 코드 recordPattern의 `message`에 `new Approved("T1", 2_000_000)`을 넘기면 무엇이 반환되나 ("고액 승인 T1")'
+      - '옮긴 상황: `record Point(int x, int y) {}`와 `Object o = new Point(3, 4);`에 대해 `if (o instanceof Point(int x, int y)) { print(x + y); }`를 실행하면 무엇이 출력되나 (7)'
+  - id: q4
+    title: 세 가지를 함께 쓰면 무엇이 달라지나요?
+    conclusion:
+      lead: '종류를 하나 추가했을 때 그 종류를 다루지 않은 모든 switch가 컴파일 오류로 드러나요.'
+      sub: 'sealed가 종류의 목록을 컴파일러에게 알려 주고, record가 종류마다의 데이터를 담고, switch가 빠뜨린 것이 없는지 검사하기 때문이에요.'
+    says:
+      - '도입부의 사고를 다시 본다. 처리하는 곳이 일곱 군데이고 모두 코드 chain의 모양이면, 종류를 추가했을 때 고칠 곳을 사람이 검색해서 찾아야 한다. 일곱 군데가 코드 switchType의 모양이면 컴파일러가 일곱 군데를 모두 짚어 준다'
+      - '단, `default`를 쓰면 이 검사가 꺼진다. `default`가 새 종류를 조용히 받아 준다. sealed 타입의 switch에는 `default`를 쓰지 않는다'
+      - '오버라이딩과 견준다(J7). `PaymentResult`에 `message()` 메서드를 두고 종류마다 구현해도 같은 결과가 나온다. 이때 종류를 추가하면 새 클래스가 메서드를 구현해야 해서 역시 빠뜨릴 수 없다'
+      - '둘의 차이는 무엇을 추가하기 쉬운가다. 오버라이딩은 동작을 종류 안에 둔다. 종류의 추가는 새 클래스 하나로 끝나고, 동작의 추가는 모든 종류를 고쳐야 한다. switch는 동작을 종류 밖에 둔다. 동작의 추가는 새 메서드 하나로 끝나고, 종류의 추가는 모든 switch를 고쳐야 한다. 대신 컴파일러가 고칠 곳을 알려 준다'
+      - '고르는 기준: 그 동작이 종류 자신의 일이면 메서드로 둔다. 응답 형식 만들기, 로그 남기기처럼 종류가 알 필요 없는 바깥의 일이면 switch로 쓴다. `PaymentResult`가 HTTP 상태 코드를 알 필요는 없다'
+      - '더 알아보기: switch를 컴파일한 뒤에 sealed 쪽만 고쳐 다시 컴파일하면, 실행 중에 모르는 종류가 들어와 `MatchException`이 난다. 함께 빌드하는 한 프로젝트 안에서는 생기지 않는다'
+    widget:
+      kind: compare
+      note: '두 칸에 "instanceof와 else로 쓴 코드"와 "default 없는 switch로 쓴 코드"를 둔다. 칸마다 `PaymentResult`를 처리하는 곳 셋(메시지 만들기, 응답 코드 정하기, 로그 남기기)을 항목으로 적는다. "Pending 종류 추가하기" 버튼을 누르면 왼쪽 칸은 세 곳 모두 "컴파일됨"인 채로 결과 줄에 "실행 중 잘못 처리되는 곳 3"을 문제로 표시하고, 오른쪽 칸은 세 곳에 "컴파일 오류" 꼬리표가 붙고 결과 줄에 "컴파일러가 알려 준 곳 3"을 보여 준다'
+    asks:
+      - '본문의 예시: 코드 switchType의 마지막 줄을 `default -> "오류";`로 바꾼 뒤 코드 added로 `Pending`을 추가했다. 컴파일은 되나, `new Pending("T1")`의 결과는 무엇인가 (컴파일되고 "오류"가 반환된다. `default`가 받았다)'
+      - '옮긴 상황: `sealed interface Shape permits Circle, Square`와 `default` 없이 둘을 다루는 switch 식이 다섯 군데 있다. `Triangle`을 `permits`에 추가하고 switch는 고치지 않았다. 컴파일 오류가 나는 switch는 몇 군데인가 (다섯 군데 모두)'
+      - '실무 구역: 컨트롤러가 `return switch (result) { case Approved a -> ResponseEntity.ok(a); case Declined d -> ResponseEntity.status(402).body(d); default -> ResponseEntity.status(500).build(); };`로 응답을 만든다. 서비스가 새 종류 `Pending`을 돌려주기 시작하면 클라이언트가 받는 상태 코드는 무엇인가 (500. `default`가 받는다. 컴파일 오류는 나지 않는다)'
+practice:
+  says:
+    - '서비스의 결과 타입. `PaymentService.pay()`가 코드 sealed의 `PaymentResult`를 돌려준다. 거절은 예외로 던질 일이 아니라 평범한 결과 가운데 하나라는 것을 타입이 말해 준다. 컨트롤러는 `return switch (result) { case Approved a -> ResponseEntity.ok(...); case Declined d -> ResponseEntity.status(402)...; case Failed f -> ResponseEntity.status(502)...; };`로 응답을 만든다. 결제 결과가 HTTP를 모르게 두는 것이 질문 4의 기준이다 (컨트롤러 하나를 띄워 세 결과의 상태 코드를 확인하는 테스트)'
+    - '흔한 실수: sealed 타입의 switch에 버릇처럼 `default`를 넣는다. 지금은 차이가 없지만 종류를 추가하는 날 컴파일러가 침묵하고, 새 종류가 `default`의 처리(500)로 나간다. 고친 코드: `default`를 지우고 종류를 모두 쓴다. `Pending`을 추가했을 때 고치기 전 코드는 컴파일되고 고친 코드는 컴파일되지 않는 것을 붙인다 (테스트 안에서 컴파일러를 돌려 확인한다)'
+    - '어디에 쓰고 어디에 쓰지 않나. DTO, 서비스의 결과, 이벤트처럼 데이터를 나르는 타입에 쓴다. JPA 엔티티는 record로도 sealed의 자식인 record로도 만들 수 없다(J9). 스프링 빈처럼 동작이 중심인 객체는 인터페이스와 구현으로 둔다(J7)'
+    - '그 밖에 자주 쓰는 것을 표로 정리한다. `var`(지역 변수의 타입 생략, 10), 텍스트 블록(여러 줄 문자열, 15, JPQL과 JSON 테스트 데이터에 쓴다), `Stream.toList()`(16), 무엇이 null이었는지 알려 주는 NPE 메시지(14), `list.getFirst()`와 `getLast()`(21). 표의 각 줄은 이미 다룬 레슨을 가리킨다 (순수 자바 테스트로 각 한 줄씩 돌린다)'
+    - '자바 8이나 11에서 올릴 때. 스프링 부트 3으로 함께 올리면 `javax.persistence`, `javax.servlet` 같은 패키지 이름이 `jakarta.`로 바뀐다. 자바가 아니라 자카르타 EE의 변화이지만 같은 날 만난다. Gradle의 toolchain을 21로 올리는 것은 J1에서 봤다 (스프링 부트 공식 문서 근거)'
+    - '미리 보기 기능은 쓰지 않는다. `--enable-preview`로만 켜지는 문법은 다음 버전에서 바뀌거나 빠질 수 있다. 자바 21 기준으로 문자열 템플릿과 밑줄 패턴이 그렇다 (JEP 문서 근거)'
+claims:
+  - claim: '`permits`에 없는 타입이 sealed 인터페이스를 구현하면 컴파일되지 않는다. 허용된 자식 클래스가 final, sealed, non-sealed 가운데 아무것도 쓰지 않아도 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 두 소스를 컴파일한다'
+  - claim: '코드 chain과 코드 switchType은 세 종류에 같은 문자열을 돌려준다'
+    how: '세 객체로 두 메서드를 불러 비교한다'
+  - claim: '`Pending`을 추가하면 코드 switchType은 컴파일되지 않고 코드 chain은 컴파일되며 `Pending`에 "오류"를 돌려준다'
+    how: '`Pending`이 있는 소스 묶음을 `javax.tools.JavaCompiler`로 컴파일해 switch 쪽에만 오류가 있는지 본다. `else` 쪽은 컴파일한 클래스를 읽어 실행한다'
+  - claim: '`default`가 있는 switch는 `Pending`을 추가해도 컴파일되고 `Pending`을 `default`로 처리한다'
+    how: '같은 방법으로 컴파일하고 실행한다'
+  - claim: '넓은 타입의 case를 좁은 타입보다 먼저 쓴 switch는 컴파일되지 않는다. null을 넘기면 `case null`이 없는 switch는 `NullPointerException`을 던진다'
+    how: '컴파일 오류는 컴파일러로, 예외는 실행해서 본다'
+  - claim: '코드 recordPattern은 금액이 100만 이상인 승인에 "고액 승인", 그 미만에 "승인"을 돌려준다. `instanceof Point(int x, int y)`는 구성 요소를 꺼낸다'
+    how: '두 금액과 `Point(3, 4)`로 돌린다'
+  - claim: '중첩된 record 패턴으로 안쪽 record의 구성 요소를 꺼낼 수 있다'
+    how: '`Order(Member(String name), Money(long amount))` 패턴으로 돌린다'
+  - claim: '컨트롤러의 switch가 세 결과에 200, 402, 502를 돌려준다'
+    how: '서비스를 가짜로 바꾼 컨트롤러 하나를 띄워 요청한다'
+  - claim: '밑줄 패턴은 자바 21에서 미리 보기 옵션 없이 컴파일되지 않는다'
+    how: '`javax.tools.JavaCompiler`로 `case Approved(var txId, _)`를 컴파일한다. 결과가 다르면 본문의 문장을 고친다'
+sources:
+  - 'sealed 클래스: JEP 409 https://openjdk.org/jeps/409 와 자바 언어 명세 8.1.1.2 https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.2'
+  - 'switch 식: JEP 361 https://openjdk.org/jeps/361'
+  - '`instanceof` 패턴: JEP 394 https://openjdk.org/jeps/394'
+  - 'switch 패턴 매칭, 가드, 순서, null, 완전성: JEP 441 https://openjdk.org/jeps/441 와 자바 언어 명세 14.11 https://docs.oracle.com/javase/specs/jls/se21/html/jls-14.html#jls-14.11'
+  - 'record 패턴: JEP 440 https://openjdk.org/jeps/440'
+  - 'record: JEP 395 https://openjdk.org/jeps/395'
+  - '밑줄 패턴은 21에서 미리 보기: JEP 443 https://openjdk.org/jeps/443'
+  - '순서 있는 컬렉션: JEP 431 https://openjdk.org/jeps/431'
+  - '스프링 부트 3으로 올릴 때의 jakarta 패키지: https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide'
