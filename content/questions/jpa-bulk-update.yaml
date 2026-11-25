@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/jpa-bulk-update.yaml의 says).
 # 동작에 관한 정답은 verification의 BulkUpdateTest로 확인했다 (Hibernate 6.6, PostgreSQL 16).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만들었다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 한 트랜잭션에서 상품 500개를 findAll로 조회해 가격을 하나씩 바꾸고 커밋했어요. 나가는 UPDATE는 몇 번일까요? 같은 일을 벌크 연산 update Product p set p.price = p.price * 11 / 10으로 하면 몇 번일까요?
     choices:
@@ -49,7 +49,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 데이터 리포지토리에 @Query("update Member m set m.grade = 'DORMANT' where m.lastLoginAt < :since")만 붙인 int 메서드를 만들고 @Modifying은 빠뜨렸어요. 이 메서드를 부르면 어떻게 될까요?
     choices:
@@ -67,7 +67,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 펜의 가격은 1000이고, raiseAll은 @Modifying만 붙은(clearAutomatically 없음) 벌크 연산으로 모든 가격을 10% 올려요. 한 트랜잭션에서 아래를 실행하면 마지막 줄의 값은 무엇일까요?
     code: |-
@@ -91,7 +91,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 한 트랜잭션에서 회원 kim(등급 SILVER)을 조회한 뒤, @Modifying만 붙은 벌크 연산으로 모든 회원의 등급을 GOLD로 바꾸고, kim.getGrade()를 응답에 담았어요. 응답의 등급은 무엇일까요?
     choices:
@@ -109,7 +109,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 펜(1000)을 조회한 뒤 @Modifying(clearAutomatically = true)인 raiseAll로 가격을 10% 올리고, 같은 트랜잭션에서 펜을 다시 findById했어요. 결과는 무엇일까요?
     choices:
@@ -126,7 +126,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 기본 설정(flush 모드 AUTO)에서 한 트랜잭션 안에 펜의 이름을 "새 펜"으로 바꾼 뒤, @Modifying(clearAutomatically = true)인 벌크 연산으로 가격을 올리고 커밋했어요. DB의 펜 이름은 어떻게 될까요?
     choices:
@@ -144,7 +144,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "@Version 값이 0인 상품을 벌크 연산 update Product p set p.price = p.price * 11 / 10으로 바꾸고 커밋했어요. DB의 version은 얼마일까요?"
     choices:
@@ -162,7 +162,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 회원 엔티티는 @PreUpdate로 updatedAt을 지금 시각으로 채워요. 벌크 연산으로 휴면 회원 3만 명의 등급을 바꿨어요. 그 회원들의 updated_at은 어떻게 될까요?
     choices:
@@ -179,7 +179,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: raiseAll은 @Modifying만 붙은(clearAutomatically 없음) 벌크 연산이에요. 모든 상품의 가격은 1000이었어요. 이 메서드가 돌려준 목록의 가격은 얼마일까요?
     code: |-
@@ -205,7 +205,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "JPA에서 벌크 연산을 쓸 때 무엇을 조심해야 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

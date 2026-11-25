@@ -5,7 +5,7 @@
 # (site/src/content/lesson-pages/id-generation.yaml의 says).
 # 동작에 관한 정답은 verification의 IdGenerationTest, IdGenerationBatchTest로 확인했다 (Hibernate 6.6, PostgreSQL 16).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
-# 2026-11-25에 만들었다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -32,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 한 트랜잭션 안에서 SEQUENCE 전략인 엔티티 셋을 em.persist했어요. flush 전까지 나가는 INSERT는 몇 번이고, 첫 엔티티의 getId()는 무엇일까요?
     choices:
@@ -49,7 +49,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: MySQL에서 AUTO_INCREMENT id(@GeneratedValue(strategy = IDENTITY))인 회원을 트랜잭션 안에서 em.persist한 직후 member.getId()를 읽었어요. 아직 flush도 커밋도 하지 않았어요. 값은 어떻게 될까요?
     choices:
@@ -67,7 +67,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 같은 120건을 SEQUENCE 전략으로 저장해요. allocationSize가 50일 때와 1일 때, 시퀀스를 부르는 횟수는 대략 어떻게 될까요?
     choices:
@@ -84,7 +84,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: allocationSize 50인 엔티티를 저장하던 앱이 id 1~10을 쓰고 배포로 다시 시작됐어요. 다시 뜬 앱이 처음 저장하는 엔티티의 id는 11일까요?
     choices:
@@ -102,7 +102,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: hibernate.jdbc.batch_size를 50으로 켜고 한 트랜잭션에서 엔티티 1,000건을 저장해요. SEQUENCE 전략일 때와 IDENTITY 전략일 때 INSERT는 어떻게 나갈까요?
     choices:
@@ -119,7 +119,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: PostgreSQL을 쓰는 서비스에서 정산 로그 10만 건 저장이 느려 batch_size를 100으로 켰는데 그대로예요. 엔티티의 id는 @GeneratedValue(strategy = IDENTITY)예요. 무엇을 바꿀까요?
     choices:
@@ -137,7 +137,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: IDENTITY 전략으로 저장한 로그가 id 7을 받은 뒤 트랜잭션이 롤백됐어요. 바로 다음 저장의 id는 7일까요?
     choices:
@@ -153,7 +153,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 오늘 들어온 주문 수를 "오늘 마지막 주문의 id - 오늘 첫 주문의 id + 1"로 계산하는 통계 코드가 있어요. 무엇이 문제일까요?
     choices:
@@ -171,7 +171,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "IDENTITY와 SEQUENCE 전략은 무엇이 다르고 어떻게 고르나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
