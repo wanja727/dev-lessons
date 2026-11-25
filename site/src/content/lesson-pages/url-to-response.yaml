@@ -33,7 +33,8 @@ covers:
   - {topic: '로드 밸런서가 요청을 서버들에 나눠 주는 것', where: '다루지 않음: 서버를 늘리는 방법(A3)'}
 codes:
   url: |-
-    https://shop.example.com/products/7?tab=review
+    https://shop.example.com⤷
+    /products/7?tab=review
   splitUrl: |-
     URI uri = URI.create(
         "https://shop.example.com"
