@@ -237,7 +237,9 @@ class AutoConfigTest {
     @ExtendWith(OutputCaptureExtension.class)
     @DisplayName("DB 주소 없이 DataSource 자동 설정을 켜면 뜨지 않고, 시작 로그에 'Failed to configure a DataSource'가 나온다")
     void dataSourceWithoutUrlFails(CapturedOutput output) {
-        assertThatThrownBy(() -> run(new Class<?>[] {DbApp.class}, "spring.main.web-application-type=none"))
+        // 테스트 클래스패스에 내장 DB(H2)가 생겨도 레슨의 상황(내장 DB 없음)과 같게 둔다
+        assertThatThrownBy(() -> run(new Class<?>[] {DbApp.class}, "spring.main.web-application-type=none",
+                "spring.datasource.embedded-database-connection=none"))
                 .satisfies(e -> {
                     Throwable t = e;
                     StringBuilder chain = new StringBuilder();
