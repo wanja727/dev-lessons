@@ -1,0 +1,193 @@
+# 도커와 컨테이너 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 도커와 컨테이너
+unit: 테스트와 운영
+roadmap: T5
+type: 개념 설명
+prerequisites:
+  - {slug: process-and-thread, title: 프로세스와 스레드}
+  - {slug: jvm-memory, title: JVM 메모리 구조}
+assume: '도커 엔진 27 이상, 자바 21. 운영체제가 프로세스마다 메모리를 따로 준다는 것(프로세스와 스레드 레슨), JVM의 힙과 `-Xmx`(JVM 메모리 구조 레슨). 리눅스 명령(`ps`, `uname`)은 처음 나올 때 한 문장으로 설명해요.'
+example: '스프링 부트로 만든 주문 서버 `order-api`를 도커 이미지로 만들어 띄워요. 같은 이미지로 컨테이너 둘을 띄워 보고, 메모리 한도를 주었을 때 JVM이 힙을 얼마로 잡는지 봐요.'
+intro:
+  - '"제 PC에서는 되는데요"라는 말을 없애려고 팀이 도커를 쓰기 시작했어요. 그런데 서버를 컨테이너로 옮긴 날, 메모리 512MB를 준 컨테이너가 아무 로그 없이 죽고 종료 코드 137만 남아요. 컨테이너를 가상 머신처럼 생각했다면 이유를 찾기 어려워요.'
+  - '백엔드 개발자는 자기 서버를 이미지로 만들어 배포하고, 개발할 때는 DB와 Redis를 컨테이너로 띄워요. Dockerfile을 쓰고, 컨테이너에 메모리와 포트를 정해 주고, 컨테이너가 사라질 때 데이터가 어디로 가는지 알아야 해요.'
+  - '이 레슨에서는 테스트 안에서 도커로 컨테이너를 띄우고 안을 들여다봐요. 컨테이너 안의 프로세스 목록과 커널 버전, 컨테이너를 지웠다 띄웠을 때 남는 파일, 메모리 한도에 따라 JVM이 잡는 힙 크기를 실제로 확인해요.'
+covers:
+  - topic: '컨테이너는 호스트 운영체제의 커널을 같이 쓰면서, 프로세스 목록, 파일 시스템, 네트워크를 따로 보게 격리한 프로세스다(리눅스의 네임스페이스)'
+    where: '질문 1'
+  - topic: '가상 머신은 하이퍼바이저 위에 운영체제 전체(커널 포함)를 따로 띄운다. 그래서 컨테이너가 더 가볍고 빨리 뜬다. 대신 격리는 가상 머신이 더 강하다'
+    where: '질문 1'
+  - topic: '컨테이너 안에서 앱은 PID 1이다. 그 프로세스가 끝나면 컨테이너도 끝난다'
+    where: '질문 1'
+  - topic: '맥과 윈도의 도커 데스크톱은 안에 리눅스 가상 머신을 하나 띄우고 그 위에서 컨테이너를 돌린다'
+    where: '질문 1의 더 알아보기'
+  - topic: '이미지는 실행에 필요한 파일과 설정을 담은 읽기 전용 틀이다. 컨테이너는 이미지 위에 쓰기 층을 얹어 실행한 것이다. 이미지 하나로 컨테이너를 여럿 띄운다'
+    where: '질문 2'
+  - topic: '컨테이너 안에서 바꾼 파일은 그 컨테이너의 쓰기 층에만 있다. 컨테이너를 지우면 사라진다. 남길 데이터는 볼륨에 둔다'
+    where: '질문 2'
+  - topic: '이미지는 레지스트리(도커 허브 등)에 올리고 내려받는다. 태그로 버전을 가린다'
+    where: '질문 2'
+  - topic: 'Dockerfile의 명령 하나가 층 하나를 만든다. 층은 캐시되어, 바뀐 층부터 아래만 다시 만든다'
+    where: '질문 3'
+  - topic: '자주 바뀌지 않는 것(의존성)을 먼저, 자주 바뀌는 것(소스)을 나중에 복사해야 캐시가 산다'
+    where: '질문 3'
+  - topic: '멀티 스테이지 빌드: 빌드에 쓴 JDK와 도구를 버리고 실행에 필요한 JRE와 jar만 최종 이미지에 남긴다'
+    where: '질문 3'
+  - topic: '컨테이너에 메모리 한도(cgroup)를 주면 넘을 때 커널이 프로세스를 죽인다. 종료 코드 137(SIGKILL)이고 `OOMKilled`가 true다'
+    where: '질문 4'
+  - topic: 'JVM은 컨테이너의 메모리 한도를 읽어 힙 최대 크기의 기본값을 정한다. 기본은 한도의 4분의 1이다. `-XX:MaxRAMPercentage`로 비율을 바꾼다'
+    where: '질문 4 (자바 언어 과정의 JVM 메모리 구조(J14)가 넘긴 항목)'
+  - topic: '힙 말고도 메타스페이스, 스레드 스택, 다이렉트 메모리가 있어서 `-Xmx`를 한도와 같게 주면 컨테이너가 죽는다'
+    where: '질문 4'
+  - topic: '포트 연결(`-p 8080:8080`), 환경 변수로 설정 넘기기(`-e SPRING_PROFILES_ACTIVE=prod`)'
+    where: '실무에서는'
+  - topic: '스프링 부트의 `bootBuildImage`와 층으로 나눈 jar'
+    where: '실무에서는'
+  - topic: '도커 컴포즈로 앱과 DB를 함께 띄우기'
+    where: '실무에서는'
+  - topic: '컨테이너 여러 대를 띄우고 관리하는 오케스트레이션(쿠버네티스)'
+    where: '다루지 않음: CI/CD와 무중단 배포(T6)에서 롤링 배포를 맡는 도구로만 이름을 든다. 사용법은 로드맵의 "다루지 않는 것"(특정 클라우드와 도구의 사용법)'
+  - topic: '테스트에서 컨테이너로 DB 띄우기'
+    where: '다루지 않음: 통합 테스트와 Testcontainers(T4)'
+codes:
+  predict: |-
+    $ docker run --rm -m 512m \
+        eclipse-temurin:21-jre \
+        java -XX:+PrintFlagsFinal -version \
+        | grep MaxHeapSize
+  ps: |-
+    $ docker run --rm alpine ps
+    PID   USER     TIME  COMMAND
+        1 root      0:00 ps
+  dockerfile: |-
+    FROM eclipse-temurin:21-jdk AS build
+    WORKDIR /app
+    COPY build.gradle settings.gradle ./
+    COPY gradle gradle
+    COPY gradlew .
+    RUN ./gradlew dependencies
+    COPY src src
+    RUN ./gradlew bootJar
+
+    FROM eclipse-temurin:21-jre
+    COPY --from=build /app/build/libs/*.jar ⤶
+    app.jar
+    ENTRYPOINT ["java", "-jar", "/app.jar"]
+  badDockerfile: |-
+    FROM eclipse-temurin:21-jdk
+    WORKDIR /app
+    COPY . .
+    RUN ./gradlew bootJar
+    ENTRYPOINT ["java", "-jar",
+        "build/libs/app.jar"]
+  run: |-
+    docker run -d -p 8080:8080 \
+      -m 1g \
+      -e SPRING_PROFILES_ACTIVE=prod \
+      -e JAVA_TOOL_OPTIONS=⤷
+    "-XX:MaxRAMPercentage=75" \
+      order-api:1.4.0
+  oom: |-
+    $ docker inspect --format \
+        '{{.State.ExitCode}} {{.State.OOMKilled}}'
+    137 true
+predict:
+  text: '코드 predict처럼 메모리 한도 512MB를 준 컨테이너에서 `-Xmx` 없이 자바를 띄워요. JVM이 정하는 힙 최대 크기(`MaxHeapSize`)는 얼마쯤일까요? 보기: 호스트 메모리(16GB)의 4분의 1인 4GB, 한도와 같은 512MB, 한도의 4분의 1인 128MB.'
+  answer: '128MB. JVM은 컨테이너 한도를 자기 메모리로 보고 그 4분의 1을 힙 기본값으로 잡는다. 질문 4에서 밝힌다.'
+questions:
+  - id: q1
+    title: 컨테이너는 가상 머신과 무엇이 다른가요?
+    conclusion:
+      lead: '컨테이너는 호스트의 커널을 같이 쓰는 프로세스예요. 다만 다른 프로세스와 파일을 못 보게 격리해 둔 거예요.'
+      sub: '가상 머신은 운영체제 전체를 따로 띄우지만 컨테이너는 프로세스 하나를 띄우는 것이라, 1초도 안 걸려 뜨고 메모리도 앱이 쓰는 만큼만 써요.'
+    says:
+      - '코드 ps. 컨테이너 안에서 `ps`(실행 중인 프로세스 목록)를 돌리면 프로세스가 하나뿐이고 PID가 1이다. 호스트에는 수백 개가 돌고 있다. 리눅스의 네임스페이스가 컨테이너에게 자기 프로세스만 보이게 한다. 파일 시스템과 네트워크도 같은 방식으로 따로 보인다. 실제 출력을 보인다'
+      - '컨테이너 안의 `uname -r`(커널 버전)은 도커가 도는 호스트의 커널 버전과 같다. 커널을 같이 쓰기 때문이다. 이미지가 우분투든 알파인이든 커널은 호스트의 것이다. 실제 출력을 보인다'
+      - '가상 머신은 하이퍼바이저 위에 커널까지 포함한 운영체제를 따로 띄운다. 부팅에 수십 초, 메모리 수백 MB가 운영체제 몫으로 든다. 컨테이너를 띄우는 데 걸린 시간을 실제 출력으로 보인다'
+      - '격리는 가상 머신이 더 강하다. 컨테이너는 커널을 같이 쓰니 커널의 취약점이 모든 컨테이너에 닿는다. 그래서 클라우드는 가상 머신 위에 컨테이너를 띄우곤 한다'
+      - '컨테이너의 PID 1이 끝나면 컨테이너도 끝난다. 그래서 컨테이너에는 보통 앱 프로세스 하나만 띄운다'
+      - '더 알아보기: 맥과 윈도에는 리눅스 커널이 없다. 도커 데스크톱은 리눅스 가상 머신을 하나 띄우고 그 안에서 컨테이너를 돌린다. 이 PC에서 `uname -r`이 그 가상 머신의 커널을 보이는 이유다'
+    widget:
+      kind: compare
+      note: '왼쪽은 가상 머신(하드웨어, 하이퍼바이저, 게스트 운영체제와 커널, 라이브러리, 앱), 오른쪽은 컨테이너(하드웨어, 호스트 운영체제와 커널, 컨테이너 런타임, 라이브러리, 앱). "앱 하나 더 띄우기", "커널 버전 확인", "커널 취약점"을 고르면 양쪽에서 새로 생기거나 걸리는 층을 강조한다'
+    asks:
+      - '본문의 예시: 우분투 22.04 호스트에서 `alpine` 이미지로 띄운 컨테이너의 `uname -r`은 무엇을 보이나 (호스트 우분투의 커널 버전. 커널을 같이 쓴다)'
+      - '옮긴 상황: 컨테이너 안의 앱 프로세스가 예외로 끝났다. 컨테이너는 어떻게 되나 (같이 끝난다. 그 프로세스가 PID 1이다)'
+  - id: q2
+    title: 이미지와 컨테이너는 무엇이 다른가요?
+    conclusion:
+      lead: '이미지는 실행에 필요한 파일을 담은 읽기 전용 틀이고, 컨테이너는 그 틀 위에 쓰기 층을 하나 얹어 실행한 것이에요.'
+      sub: '그래서 이미지 하나로 컨테이너를 여럿 띄울 수 있고, 컨테이너 안에서 바꾼 파일은 그 컨테이너를 지우면 함께 사라져요.'
+    says:
+      - '이미지는 운영체제의 파일(라이브러리, 셸), JRE, 앱 jar, 실행할 명령을 묶은 것이다. 바뀌지 않는다. 클래스와 객체의 관계에 한 번만 빗대고, 그다음은 이미지와 컨테이너로만 부른다'
+      - '같은 이미지로 컨테이너 둘을 띄우고 한쪽에서 `/tmp/order.log`를 만든다. 다른 쪽에는 없다. 각 컨테이너가 자기 쓰기 층을 갖기 때문이다. 실제 출력을 보인다'
+      - '파일을 만든 컨테이너를 지우고 같은 이미지로 다시 띄우면 파일이 없다. 이미지는 그대로이고 쓰기 층만 버려졌다'
+      - '그래서 DB처럼 남겨야 하는 데이터는 볼륨(컨테이너 밖에 두는 저장 공간)에 둔다. 볼륨을 붙여 같은 실험을 하면 파일이 남는다'
+      - '이미지는 레지스트리에 올리고 내려받는다. `eclipse-temurin:21-jre`에서 콜론 뒤가 태그다. 배포할 때는 `order-api:1.4.0`처럼 버전 태그를 붙인다'
+    widget:
+      kind: steps
+      note: '이미지 하나에서 컨테이너 A와 B를 띄우고, A에서 파일을 만들고, A를 지우고, 다시 A를 띄우는 단계를 차례로 보인다. 각 단계에서 이미지 층(그대로), A의 쓰기 층, B의 쓰기 층에 무엇이 있는지를 표시한다. 마지막에 볼륨을 붙인 경우를 고르면 파일이 남는다'
+    asks:
+      - '본문의 예시: 컨테이너 안에서 만든 파일은 그 컨테이너를 지우고 같은 이미지로 새 컨테이너를 띄우면 있나 (없다. 쓰기 층이 함께 버려진다)'
+      - '옮긴 상황: PostgreSQL을 볼륨 없이 컨테이너로 띄워 회원 데이터를 넣었다. 이미지를 새 버전으로 바꾸려고 컨테이너를 지우고 다시 띄우면 데이터는 (사라진다. 볼륨에 둬야 남는다)'
+  - id: q3
+    title: Dockerfile의 순서가 왜 빌드 시간을 바꾸나요?
+    conclusion:
+      lead: 'Dockerfile의 명령 하나가 이미지의 층 하나가 되고, 도커는 바뀌지 않은 층을 캐시에서 꺼내 써요. 한 층이 바뀌면 그 아래 층은 모두 다시 만들어요.'
+      sub: '그래서 잘 바뀌지 않는 의존성을 먼저 받고 자주 바뀌는 소스를 나중에 복사해야, 소스만 고쳤을 때 의존성을 다시 받지 않아요.'
+    says:
+      - '`FROM`, `COPY`, `RUN` 같은 명령마다 층이 생긴다. 이미지의 층 목록(`docker history`)을 실제 출력으로 보인다'
+      - '도커는 명령과 복사한 파일이 같으면 그 층을 다시 만들지 않고 캐시를 쓴다. 한 층이 달라지면 그 뒤의 층은 모두 다시 만든다'
+      - '코드 badDockerfile은 `COPY . .`로 소스까지 한 번에 복사한다. 소스 한 줄만 고쳐도 이 층이 바뀌고, 그 뒤의 빌드가 의존성 내려받기부터 다시 돈다'
+      - '코드 dockerfile은 빌드 파일만 먼저 복사해 의존성을 받고, 그다음 소스를 복사한다. 소스만 고치면 의존성 층은 캐시를 쓴다. 두 Dockerfile을 소스만 고쳐 다시 빌드했을 때 캐시를 쓴 층의 수를 실제 출력으로 보인다'
+      - '코드 dockerfile은 멀티 스테이지 빌드다. 앞 단계(JDK와 그레이들)에서 jar를 만들고, 뒤 단계에는 JRE와 jar만 복사한다. 최종 이미지에 빌드 도구가 없어 작다. 두 방식의 이미지 크기를 비교한다'
+    asks:
+      - '본문의 예시: 코드 dockerfile에서 `src`의 컨트롤러 한 줄만 고치고 다시 빌드하면 `RUN ./gradlew dependencies` 층은 다시 도나 (돌지 않는다. 그 위의 층이 바뀌지 않아 캐시를 쓴다)'
+      - '옮긴 상황: Node 서버의 Dockerfile이 `COPY . .` 다음 `RUN npm install`이다. 소스를 고칠 때마다 빌드가 3분 걸린다. 어떻게 고치나 (`package.json`만 먼저 복사해 `npm install`을 하고, 그다음 소스를 복사한다)'
+  - id: q4
+    title: 컨테이너에서 자바 앱의 메모리는 어떻게 정해지나요?
+    conclusion:
+      lead: 'JVM은 컨테이너에 준 메모리 한도를 자기 메모리로 보고, 그 4분의 1을 힙 최대 크기의 기본값으로 잡아요.'
+      sub: '프로세스 전체가 한도를 넘으면 커널이 그 자리에서 죽여요(종료 코드 137). 힙 밖의 메모리도 있으니 힙은 한도보다 넉넉히 작게 잡아요.'
+    says:
+      - '예측의 답을 밝힌다. 한도 512MB의 컨테이너에서 `MaxHeapSize`는 약 128MB, 한도 2GB면 약 512MB다. 한도가 없으면 호스트(또는 도커 데스크톱 가상 머신) 메모리의 4분의 1이다. 세 경우의 실제 출력을 보인다'
+      - '자바 10부터 JVM이 컨테이너의 한도(cgroup)를 읽는다. 그 전의 JVM은 호스트 메모리를 보고 힙을 크게 잡아 컨테이너가 죽곤 했다'
+      - '4분의 1은 컨테이너에 앱 하나만 띄우는 서버에는 작다. `-XX:MaxRAMPercentage=75`로 비율을 올린다. 같은 512MB에서 힙이 약 384MB가 되는 것을 보인다'
+      - '컨테이너의 메모리 한도는 커널의 cgroup이 지킨다. 프로세스가 한도를 넘으면 커널이 SIGKILL로 죽인다. 자바의 `OutOfMemoryError`와 달리 예외도 로그도 없다. 코드 oom처럼 종료 코드 137과 `OOMKilled: true`만 남는다. 한도 32MB 컨테이너에서 메모리를 계속 쓰는 프로세스로 실제로 보인다'
+      - 'JVM은 힙 말고도 메타스페이스, 스레드마다의 스택, 다이렉트 버퍼, JIT 코드 캐시를 쓴다(J14). 한도 512MB에 `-Xmx512m`을 주면 힙이 다 차기 전에 프로세스 전체가 한도를 넘어 죽는다. 힙은 한도의 75% 안팎으로 잡는다'
+    widget:
+      kind: toggle
+      note: '컨테이너 메모리 한도(없음, 512MB, 2GB)와 `MaxRAMPercentage`(기본 25, 75)를 골라 JVM이 잡은 `MaxHeapSize`의 실제 출력을 보인다. "한도 512MB에 -Xmx512m"을 고르면 힙과 힙 밖의 메모리를 더한 막대가 한도를 넘어 137로 죽는 장면을 보인다'
+    asks:
+      - '본문의 예시: 한도 2GB 컨테이너에서 JVM 옵션 없이 띄운 스프링 서버의 힙 최대 크기는 (약 512MB. 한도의 4분의 1)'
+      - '옮긴 상황: 한도 1GB 컨테이너가 로그 없이 재시작을 반복하고 `docker inspect`에 종료 코드 137, `OOMKilled: true`가 보인다. 자바 옵션은 `-Xmx1g`다. 원인은 (힙에 한도 전부를 줘서 힙 밖의 메모리를 더하면 한도를 넘는다. 커널이 죽였다)'
+      - '실무 구역: 코드 run처럼 한도 1GB에 `MaxRAMPercentage=75`를 주면 힙 최대 크기는 (약 768MB)'
+practice:
+  says:
+    - '코드 run: 실제로 띄우는 모양. `-p 8080:8080`은 호스트의 8080 포트를 컨테이너의 8080으로 잇는다. `-e`로 환경 변수를 넘기면 스프링 부트는 `SPRING_PROFILES_ACTIVE` 같은 환경 변수를 설정 값으로 읽는다(S5). `JAVA_TOOL_OPTIONS`는 JVM이 시작할 때 읽는 환경 변수다 (도커 문서와 스프링 부트 문서 근거)'
+    - '스프링 부트는 Dockerfile 없이 `./gradlew bootBuildImage`로 이미지를 만들 수 있다. jar를 의존성, 스프링 부트 로더, 앱 코드 층으로 나눠 앱 코드만 바뀐 배포에서 작은 층만 새로 올라간다 (스프링 부트 문서 근거)'
+    - '개발할 때 앱과 PostgreSQL, Redis를 함께 띄우는 `compose.yaml`을 보인다. 스프링 부트 3.1부터 `spring-boot-docker-compose`를 넣으면 앱을 띄울 때 컴포즈를 함께 띄운다 (문서 근거)'
+    - '흔한 실수 하나: 코드 badDockerfile. 캐시가 안 살고, JDK와 소스, 그레이들 캐시가 모두 이미지에 남아 이미지가 크다. 고친 코드: 코드 dockerfile. 질문 3의 실제 출력이 근거다'
+    - '흔한 실수 둘: 질문 4의 `-Xmx`를 한도와 같게 주기. 고친 코드: `-Xmx`를 빼고 `-XX:MaxRAMPercentage=75`를 준다'
+claims:
+  - claim: '컨테이너 안의 `ps`에는 프로세스가 하나뿐이고 PID가 1이다'
+    how: 'Testcontainers의 `GenericContainer("alpine:3.20")`로 `ps`를 돌린다'
+  - claim: '컨테이너 안의 `uname -r`은 도커 엔진이 보고하는 호스트 커널 버전과 같다'
+    how: '`DockerClientFactory.instance().client().infoCmd()`의 `kernelVersion`과 비교한다'
+  - claim: '같은 이미지의 두 컨테이너는 파일을 따로 갖고, 지웠다 다시 띄우면 파일이 없다. 볼륨을 붙이면 남는다'
+    how: '`GenericContainer` 둘과 `execInContainer`로 확인한다. 볼륨은 도커 볼륨을 만들어 두 컨테이너에 차례로 붙인다'
+  - claim: '소스만 바꿔 다시 빌드하면 의존성을 먼저 복사한 Dockerfile은 의존성 층에 캐시를 쓰고, `COPY . .` Dockerfile은 쓰지 않는다'
+    how: '작은 Dockerfile 둘(빌드 도구 대신 파일 복사와 `RUN` 한 줄로 흉내 낸다)을 docker-java의 빌드 명령으로 두 번 빌드하고, 빌드 출력의 "Using cache"를 센다. 엔진 설정 때문에 캐시 출력을 얻지 못하면 공식 문서를 근거로 바꾸고 레슨에 밝힌다'
+  - claim: '한도 512MB에서 `MaxHeapSize`는 약 128MB, 2GB에서 약 512MB, `MaxRAMPercentage=75`면 512MB에서 약 384MB다'
+    how: '`eclipse-temurin:21-jre`를 `withCreateContainerCmdModifier`로 메모리 한도를 주고 `java -XX:+PrintFlagsFinal -version`을 돌린다'
+  - claim: '한도를 넘는 프로세스는 종료 코드 137, `OOMKilled: true`로 죽는다'
+    how: '한도 32MB의 `alpine`에서 메모리를 계속 쓰는 명령을 돌리고 `inspectContainerCmd`로 상태를 읽는다'
+sources:
+  - '컨테이너와 이미지, 층, 쓰기 층: 도커 문서 https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/ , https://docs.docker.com/get-started/docker-concepts/building-images/understanding-image-layers/'
+  - '빌드 캐시와 명령 순서: https://docs.docker.com/build/cache/'
+  - '멀티 스테이지 빌드: https://docs.docker.com/build/building/multi-stage/'
+  - '메모리 한도와 OOM: https://docs.docker.com/engine/containers/resource_constraints/'
+  - 'JVM의 컨테이너 인식과 `MaxRAMPercentage`: JDK-8146115 https://bugs.openjdk.org/browse/JDK-8146115 , java 명령 문서 https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html'
+  - '`bootBuildImage`와 층으로 나눈 jar, 도커 컴포즈 지원: https://docs.spring.io/spring-boot/reference/packaging/container-images/index.html , https://docs.spring.io/spring-boot/reference/features/dev-services.html'

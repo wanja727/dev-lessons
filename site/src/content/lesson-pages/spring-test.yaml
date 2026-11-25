@@ -1,0 +1,192 @@
+# 스프링 테스트 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 스프링 테스트
+unit: 테스트와 운영
+roadmap: T3
+type: 동작 확인
+prerequisites:
+  - {slug: transactional-proxy, title: '@Transactional 동작 원리'}
+  - {slug: unit-test-double, title: 단위 테스트와 테스트 더블}
+assume: '스프링 부트 3.5, JUnit 5, Mockito. 스프링 컨테이너가 빈을 만들고 주입한다는 것(스프링 빈과 의존성 주입 레슨), `@Transactional`이 프록시로 트랜잭션을 열고 닫는다는 것(@Transactional 동작 원리 레슨), 목과 스텁(단위 테스트와 테스트 더블 레슨). 지연 로딩은 질문 3에서 한 문장으로 설명해요.'
+example: '회원 API: `MemberController`가 `MemberService`를 부르고, 서비스가 `MemberRepository`(JPA)로 회원과 팀을 저장해요. 같은 기능을 `@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`로 각각 테스트해요.'
+intro:
+  - '테스트 클래스에 `@SpringBootTest`를 붙였더니 테스트 하나가 8초 걸려요. 테스트가 200개가 되자 빌드가 10분을 넘어요. 다른 날에는 테스트는 다 통과했는데 운영에서 `LazyInitializationException`이 나요. 테스트가 운영과 다르게 돌고 있었던 거예요.'
+  - '스프링 개발자는 컨트롤러, 서비스, 리포지토리를 스프링이 띄운 채로 테스트해요. 무엇을 확인하느냐에 따라 전체를 띄울지(`@SpringBootTest`), 웹 계층만 띄울지(`@WebMvcTest`), JPA만 띄울지(`@DataJpaTest`) 골라야 해요. 테스트에 붙인 `@Transactional` 하나가 운영과 다른 결과를 만들기도 해요.'
+  - '이 레슨에서는 같은 회원 기능을 세 가지 방법으로 테스트해 빈이 몇 개 뜨는지 세고, 테스트의 트랜잭션 때문에 운영에서는 실패하는 코드가 통과하는 것을 직접 돌려서 확인해요.'
+covers:
+  - topic: '`@SpringBootTest`는 `@SpringBootApplication`을 찾아 애플리케이션 컨텍스트 전체(모든 빈과 자동 설정)를 띄운다. 기본은 웹 서버 없이 목 서블릿 환경이다'
+    where: '질문 1'
+  - topic: '`webEnvironment = RANDOM_PORT`면 진짜 내장 서버를 띄우고 `TestRestTemplate`이나 `RestClient`로 요청한다'
+    where: '질문 1의 더 알아보기'
+  - topic: '테스트 컨텍스트 캐시: 설정이 같은 테스트 클래스끼리 컨텍스트를 한 번만 만들어 다시 쓴다'
+    where: '질문 4'
+  - topic: '`@MockitoBean`, `@TestPropertySource`, 다른 프로파일처럼 설정이 다르면 컨텍스트를 새로 만든다. 그래서 테스트마다 다른 `@MockitoBean`을 두면 느려진다'
+    where: '질문 4'
+  - topic: '`@DirtiesContext`는 캐시된 컨텍스트를 버린다'
+    where: '질문 4'
+  - topic: '`@WebMvcTest`는 컨트롤러, `@ControllerAdvice`, 필터, 변환기 같은 웹 계층 빈만 띄운다. 서비스는 없어서 `@MockitoBean`으로 넣는다. `MockMvc`로 요청을 흉내 낸다'
+    where: '질문 2'
+  - topic: '`@DataJpaTest`는 엔티티, 리포지토리, `EntityManager`만 띄운다. 기본으로 내장 DB로 바꾸고, 테스트마다 트랜잭션을 열고 끝나면 롤백한다'
+    where: '질문 2'
+  - topic: '그 밖의 슬라이스(`@JsonTest`, `@RestClientTest`, `@JdbcTest`)'
+    where: '질문 2의 더 알아보기'
+  - topic: '테스트 메서드에 `@Transactional`을 붙이면 테스트가 끝날 때 롤백한다. 데이터를 지울 필요가 없다'
+    where: '질문 3'
+  - topic: '테스트의 트랜잭션이 서비스의 트랜잭션에 합류하므로, 운영에서는 트랜잭션이 끝나 실패할 지연 로딩이 테스트에서는 성공한다'
+    where: '질문 3'
+  - topic: '롤백되면 flush하지 않으므로 커밋 때 나는 제약 위반과 SQL 오류를 테스트가 못 본다. `flush()`를 불러 확인한다'
+    where: '질문 3'
+  - topic: '`REQUIRES_NEW`와 다른 스레드에서 한 일은 테스트의 트랜잭션 밖이라 롤백되지 않는다'
+    where: '질문 3의 더 알아보기. 전파는 트랜잭션 전파와 롤백 규칙(S11)'
+  - topic: '`@MockitoBean`은 스프링 부트 3.4부터 쓰는 이름이고, 그 전의 `@MockBean`은 지원 중단됐다'
+    where: '실무에서는'
+  - topic: '단위 테스트, 슬라이스 테스트, 전체 테스트를 섞는 비율'
+    where: '실무에서는'
+  - topic: '진짜 DB를 테스트에 붙이기, `@AutoConfigureTestDatabase(replace = NONE)`'
+    where: '다루지 않음: 통합 테스트와 Testcontainers(T4)'
+  - topic: '스프링 시큐리티가 걸린 컨트롤러 테스트(`@WithMockUser`)'
+    where: '다루지 않음: 인증과 인가(S12)'
+codes:
+  predict: |-
+    @SpringBootTest
+    @Transactional
+    class MemberServiceTest {
+      @Autowired MemberService service;
+
+      @Test
+      void 팀_이름을_읽는다() {
+        Long id = service.join("kim", "A팀");
+        Member m = service.find(id);
+        m.getTeam().getName(); // ?
+      }
+    }
+  service: |-
+    @Transactional(readOnly = true)
+    public Member find(Long id) {
+      return repo.findById(id)
+          .orElseThrow();
+    }
+  webMvc: |-
+    @WebMvcTest(MemberController.class)
+    class MemberControllerTest {
+      @Autowired MockMvc mvc;
+      @MockitoBean MemberService service;
+
+      @Test
+      void 없는_회원은_404() throws Exception {
+        given(service.find(9L))
+            .willThrow(new NoMember(9L));
+        mvc.perform(get("/members/9"))
+            .andExpect(status().isNotFound());
+      }
+    }
+  dataJpa: |-
+    @DataJpaTest
+    class MemberRepositoryTest {
+      @Autowired MemberRepository repo;
+      @Autowired TestEntityManager em;
+    }
+  flush: |-
+    repo.save(new Member("kim@a.com"));
+    repo.save(new Member("kim@a.com"));
+    em.flush();
+  mockitoBeanMix: |-
+    @SpringBootTest
+    class OrderTest {
+      @MockitoBean PaymentClient pay;
+    }
+
+    @SpringBootTest
+    class CouponTest {
+      @MockitoBean MailSender mail;
+    }
+predict:
+  text: '코드 predict는 회원과 팀을 저장한 뒤 `service.find`로 회원을 읽고, 팀은 지연 로딩이에요. 코드 service의 `find`는 트랜잭션이 끝난 뒤 회원을 돌려줘요. 운영에서 컨트롤러가 이렇게 부르면 `LazyInitializationException`이 나요. 이 테스트는 어떻게 될까요? 보기: 통과한다, `LazyInitializationException`으로 실패한다.'
+  answer: '통과한다. 테스트의 `@Transactional`이 연 트랜잭션에 서비스가 합류해, `find`가 끝나도 영속성 컨텍스트가 열려 있다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: '@SpringBootTest는 무엇을 띄우나요?'
+    conclusion:
+      lead: '애플리케이션을 실행할 때와 같은 컨텍스트 전체를 띄워요. 모든 빈, 자동 설정, 설정 파일이 다 올라와요.'
+      sub: '그래서 운영에 가장 가깝게 확인할 수 있지만, 한 번 띄우는 데 몇 초가 걸리고 확인하려는 것과 상관없는 빈까지 만들어요.'
+    says:
+      - '`@SpringBootTest`는 테스트 클래스의 패키지에서 위로 올라가며 `@SpringBootApplication`이 붙은 클래스를 찾고, 그 설정으로 컨텍스트를 띄운다. 빈의 수와 띄우는 데 걸린 시간을 실제 출력으로 보인다'
+      - '띄운 컨텍스트의 빈을 `@Autowired`로 받아 테스트한다. 서비스부터 리포지토리, DB까지 진짜로 돈다'
+      - '기본 `webEnvironment`는 `MOCK`이다. 내장 톰캣을 띄우지 않고 서블릿 환경을 흉내 낸다. 진짜 포트로 요청하려면 `RANDOM_PORT`를 쓴다'
+      - '빈 하나만 확인하고 싶어도 모든 빈을 만든다. 테스트가 느려지는 첫째 이유다. 다음 질문의 슬라이스로 잇는다'
+      - '더 알아보기: `RANDOM_PORT`로 띄우면 요청이 다른 스레드(톰캣의 스레드)에서 처리된다. 그래서 테스트의 `@Transactional`이 서버 쪽 처리에 걸리지 않는다'
+    asks:
+      - '본문의 예시: `@SpringBootTest`만 붙인 테스트에서 `MemberController`, `MemberService`, `MemberRepository` 가운데 뜨는 빈은 (모두 뜬다)'
+      - '옮긴 상황: 금액 계산 클래스 `PriceCalculator`는 다른 빈을 쓰지 않는다. 이 클래스를 `@SpringBootTest`로 테스트하면 무엇을 잃나 (속도. 상관없는 빈을 다 띄운다. 단위 테스트로 충분하다)'
+  - id: q2
+    title: 슬라이스 테스트는 무엇만 띄우나요?
+    conclusion:
+      lead: '`@WebMvcTest`는 웹 계층의 빈만, `@DataJpaTest`는 JPA의 빈만 띄워요. 나머지는 없어서 필요하면 목으로 넣어요.'
+      sub: '컨텍스트가 작아 빨리 뜨고, 그 계층의 일(요청을 받고 응답 만들기, 쿼리와 매핑)만 집중해서 확인해요.'
+    says:
+      - '코드 webMvc. `@WebMvcTest(MemberController.class)`는 그 컨트롤러와 `@ControllerAdvice`, 필터, JSON 변환기만 띄운다. `MemberService`는 뜨지 않아 `@MockitoBean`으로 목을 넣는다. `MockMvc`로 서버 없이 요청을 흉내 내고 상태 코드와 JSON을 본다'
+      - '`@WebMvcTest`의 컨텍스트에 서비스와 리포지토리 빈이 없는 것을 테스트로 보인다. 빈의 수도 `@SpringBootTest`와 비교한다'
+      - '이 테스트가 확인하는 것: URL과 메서드 연결, 요청 JSON을 객체로 바꾸기, 입력 검증, 예외를 상태 코드로 바꾸기. 비즈니스 로직은 목이 대신하므로 확인하지 않는다'
+      - '코드 dataJpa. `@DataJpaTest`는 엔티티와 리포지토리, `EntityManager`만 띄운다. 기본으로 설정의 DB를 내장 DB로 바꾸고, 테스트마다 트랜잭션을 열어 끝나면 롤백한다. 쿼리 메서드와 매핑, 실제로 나간 SQL을 확인한다. 이 저장소는 내장 DB 대신 PostgreSQL 컨테이너를 쓴다(T4)'
+      - '더 알아보기: `@JsonTest`(JSON 직렬화만), `@RestClientTest`(바깥 API를 부르는 클라이언트만), `@JdbcTest`(`JdbcTemplate`만)도 있다'
+    widget:
+      kind: classify
+      note: '확인하려는 것(없는 회원이면 404, `findByEmail`이 만드는 SQL, 가입부터 메일 발송까지 전체 흐름, 요청 JSON의 빈 이름에 400, 금액 계산)을 보고 단위 테스트, `@WebMvcTest`, `@DataJpaTest`, `@SpringBootTest` 가운데 맞는 것을 고른다'
+    asks:
+      - '본문의 예시: `@WebMvcTest(MemberController.class)`에서 `MemberService`를 `@Autowired`로 받으려 하면 어떻게 되나 (빈이 없어 컨텍스트가 뜨지 않는다. `@MockitoBean`으로 넣어야 한다)'
+      - '옮긴 상황: 주문 리포지토리의 `@Query`가 맞는 행을 고르는지 확인하고 싶다. 어느 테스트가 맞나 (`@DataJpaTest`)'
+  - id: q3
+    title: 테스트에 @Transactional을 붙이면 무엇이 달라지나요?
+    conclusion:
+      lead: '테스트가 끝나면 롤백돼서 데이터가 남지 않아요. 대신 테스트 전체가 트랜잭션 하나라서 운영과 다르게 동작할 수 있어요.'
+      sub: '서비스의 트랜잭션이 테스트의 트랜잭션에 합류해 지연 로딩이 성공하고, 커밋하지 않으니 flush 때 나는 오류를 못 봐요.'
+    says:
+      - '테스트 메서드에 `@Transactional`을 붙이면 스프링의 테스트 지원이 메서드 전에 트랜잭션을 열고 끝나면 롤백한다. 저장한 회원이 테스트가 끝난 뒤 DB에 없는 것을 보인다'
+      - '예측의 답을 밝힌다. 서비스의 `@Transactional`은 이미 열린 트랜잭션에 합류한다(S11의 기본 전파). `find`가 끝나도 트랜잭션은 테스트가 끝날 때까지 열려 있고, 영속성 컨텍스트도 열려 있다. 지연 로딩은 실제 값이 필요할 때 SELECT를 보내는 방식인데, 컨텍스트가 열려 있으니 성공한다. `@Transactional`을 뗀 같은 테스트는 `LazyInitializationException`으로 실패한다. 두 결과를 실제 출력으로 보인다'
+      - '코드 flush. 이메일에 유니크 제약이 있다. 같은 이메일로 두 번 `save`해도 IDENTITY가 아닌 전략이면 INSERT가 커밋 때까지 미뤄진다(P2의 쓰기 지연). 롤백으로 끝나면 INSERT가 나가지 않아 테스트가 통과한다. `em.flush()`를 부르면 제약 위반이 난다. 테스트로 둘을 보인다'
+      - '고치는 법: 지연 로딩과 커밋 시점이 중요한 테스트는 테스트에 `@Transactional`을 붙이지 않고 데이터를 직접 지운다. 붙인 테스트에서는 확인 전에 `flush()`와 `clear()`를 부른다'
+      - '더 알아보기: 서비스가 `REQUIRES_NEW`로 연 트랜잭션이나 다른 스레드(`@Async`, `RANDOM_PORT`의 서버 스레드)에서 한 일은 테스트의 트랜잭션 밖이라 롤백되지 않고 남는다'
+    widget:
+      kind: toggle
+      note: '같은 테스트에서 테스트의 `@Transactional`을 켜고 끄며 결과를 비교한다. 켜면 지연 로딩 성공, 중복 이메일 통과, 테스트 뒤 데이터 없음. 끄면 `LazyInitializationException`, 중복 이메일에서 제약 위반, 테스트 뒤 데이터 남음. 각 장면에 실제 출력을 둔다'
+    asks:
+      - '본문의 예시: 테스트의 `@Transactional`을 떼면 코드 predict는 어떻게 되나 (`LazyInitializationException`으로 실패한다. `find`가 끝날 때 트랜잭션과 영속성 컨텍스트가 닫힌다)'
+      - '옮긴 상황: `@Transactional`을 붙인 `@DataJpaTest`에서 `name` 열이 `nullable = false`인 상품을 이름 없이 `persist`만 하고 검증 없이 끝났다. 시퀀스 전략이다. 테스트는 통과하나 (통과한다. flush 전에 롤백되어 INSERT가 나가지 않는다)'
+  - id: q4
+    title: 스프링 테스트가 많아지면 왜 느려지나요?
+    conclusion:
+      lead: '스프링은 설정이 같은 테스트끼리 컨텍스트를 한 번만 만들어 다시 쓰는데, 설정이 조금이라도 다르면 컨텍스트를 새로 띄우기 때문이에요.'
+      sub: '테스트마다 다른 `@MockitoBean`이나 프로퍼티를 두면 그만큼 컨텍스트가 늘어요. 공통 설정을 모아 같은 컨텍스트를 쓰게 해요.'
+    says:
+      - '테스트 컨텍스트 캐시: 한 JVM 안에서 설정(설정 클래스, 프로파일, 프로퍼티, 목 빈 목록)이 같은 테스트 클래스는 이미 만든 컨텍스트를 다시 쓴다. 두 번째 클래스는 띄우는 시간이 0에 가깝다'
+      - '코드 mockitoBeanMix. 두 클래스의 `@MockitoBean`이 달라 설정이 다르다. 컨텍스트가 두 번 뜬다. 같은 테스트 클래스 셋을 돌려 컨텍스트가 만들어진 횟수를 센다: 같은 설정 둘과 다른 `@MockitoBean` 하나면 두 번이다. 실제 출력을 보인다'
+      - '`@DirtiesContext`는 그 테스트가 끝난 뒤 캐시된 컨텍스트를 버린다. 다음 테스트가 새로 띄운다. 꼭 필요한 곳(컨텍스트의 상태를 바꾸는 테스트)에만 쓴다'
+      - '줄이는 법: 자주 쓰는 목 빈을 한 부모 클래스나 설정에 모은다. 슬라이스와 단위 테스트로 내릴 수 있는 것은 내린다'
+    asks:
+      - '본문의 예시: 설정이 같은 `@SpringBootTest` 클래스 5개를 한 번에 돌리면 컨텍스트는 몇 번 뜨나 (한 번. 나머지는 캐시를 쓴다)'
+      - '옮긴 상황: 테스트 클래스 10개가 모두 `@SpringBootTest`인데, 각자 다른 빈 하나씩을 `@MockitoBean`으로 바꿨다. 컨텍스트는 몇 번 뜨나 (10번. 설정이 모두 달라 캐시를 쓰지 못한다)'
+practice:
+  says:
+    - '테스트 비율: 대부분은 단위 테스트(T2), 계층마다의 슬라이스 테스트, 가입부터 응답까지 이어 보는 `@SpringBootTest` 몇 개. 느린 테스트를 적게 둬야 고칠 때마다 다 돌릴 수 있다'
+    - '`@MockitoBean`은 스프링 프레임워크 6.2(부트 3.4)부터의 이름이다. 그 전의 `@MockBean`은 부트 3.4에서 지원 중단됐다. 새 코드는 `@MockitoBean`을 쓴다 (스프링 부트 문서 근거)'
+    - '흔한 실수 하나: 코드 predict처럼 테스트에 `@Transactional`을 붙이고 지연 로딩을 확인해 통과시킨다. 운영의 컨트롤러는 트랜잭션 밖에서 연관을 읽다가 실패한다. 고친 코드: 그 테스트에서 `@Transactional`을 떼고 `@AfterEach`에서 데이터를 지우거나, 서비스가 필요한 연관을 fetch join으로 읽게 고친다. 질문 3의 테스트가 근거다'
+    - '흔한 실수 둘: 테스트마다 다른 빈을 `@MockitoBean`으로 바꿔 컨텍스트가 수십 번 뜬다. 고친 코드: 목 빈을 공통 부모 클래스에 모은다. 질문 4의 테스트가 근거다'
+claims:
+  - claim: '`@SpringBootTest`의 컨텍스트에는 컨트롤러, 서비스, 리포지토리가 모두 있고, `@WebMvcTest(MemberController.class)`의 컨텍스트에는 서비스와 리포지토리가 없다'
+    how: '두 테스트에서 `ApplicationContext.getBeanDefinitionCount()`와 `containsBean`을 확인한다. `@SpringBootTest`는 이 레슨의 패키지에 둔 `@SpringBootConfiguration`으로 띄워 다른 레슨의 빈이 섞이지 않게 한다'
+  - claim: '`@WebMvcTest`에서 목 서비스가 던진 예외가 `@ControllerAdvice`를 거쳐 404가 된다'
+    how: '`MockMvc`로 요청하고 상태 코드와 본문을 남긴다'
+  - claim: '테스트에 `@Transactional`이 있으면 트랜잭션 밖에서 읽은 지연 로딩이 성공하고, 없으면 `LazyInitializationException`이 난다'
+    how: '같은 테스트를 두 클래스로 두거나 `TransactionTemplate`으로 테스트의 트랜잭션을 흉내 낸다. PostgreSQL 컨테이너를 쓴다'
+  - claim: '유니크 제약을 어기는 두 번째 저장이 flush 없이 롤백되면 테스트가 통과하고, `flush()`를 부르면 제약 위반이 난다'
+    how: '시퀀스 전략의 엔티티로 `@DataJpaTest`에서 확인한다'
+  - claim: '`@Transactional` 테스트에서 저장한 행은 테스트 뒤에 DB에 없다'
+    how: '다음 테스트에서 `JdbcTemplate`으로 센다. 순서는 `@TestMethodOrder`로 정한다'
+  - claim: '설정이 같은 테스트 클래스 둘은 컨텍스트를 한 번 만들고, `@MockitoBean`이 다른 클래스는 컨텍스트를 새로 만든다'
+    how: 'JUnit 플랫폼의 `EngineTestKit`으로 이 레슨의 안쪽 테스트 클래스 셋을 돌리고, 컨텍스트에 둔 빈의 생성자가 불린 횟수를 센다. 안쪽 클래스는 시스템 프로퍼티가 있을 때만 돌게 해서 평소 빌드에서는 건너뛴다'
+sources:
+  - '`@SpringBootTest`, 슬라이스 테스트, `@MockitoBean`: 스프링 부트 문서 Testing https://docs.spring.io/spring-boot/reference/testing/spring-boot-applications.html'
+  - '테스트 컨텍스트 캐시와 캐시 키: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/ctx-management/caching.html'
+  - '테스트의 트랜잭션은 기본으로 롤백된다: https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html'
+  - '`@MockBean`이 지원 중단되고 `@MockitoBean`을 쓴다: 스프링 부트 3.4 릴리스 노트 https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.4-Release-Notes'
