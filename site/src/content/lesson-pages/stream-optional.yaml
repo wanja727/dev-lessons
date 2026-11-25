@@ -1,8 +1,9 @@
-# 스트림과 Optional (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 스트림과 Optional
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/stream-optional.yaml에 있다.
 title: 스트림과 Optional
+description: 스트림이 어떻게 이루어지는지, 중간 연산은 언제 실행되는지, 결과를 어떻게 모으는지, Optional에서 값을 어떻게 꺼내는지, orElse와 orElseGet은 무엇이 다른지. 다섯 가지 질문에 스스로 답할 수 있게, 주문 목록과 회원 조회로 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 24
 roadmap: J13
 type: 자바 실행
 prerequisites:
@@ -67,11 +68,29 @@ codes:
           print("map " + s);
           return s.toLowerCase();
         });
+  withTerminal: |-
+    Stream.of("A", "B", "C")
+        .filter(s -> { print("filter " + s);
+                       return true; })
+        .map(s -> { print("map " + s);
+                    return s.toLowerCase(); })
+        [[.toList()]];
   pipeline: |-
-    List<Integer> prices = orders.stream()
-        .filter(o -> o.getStatus() == PAID)
-        .map(Order::getPrice)
-        .toList();
+    List<Integer> prices = [[orders.stream()]]
+        [[.filter(o -> o.getStatus() == PAID)]]
+        [[.map(Order::getPrice)]]
+        [[.toList()]];
+  forLoop: |-
+    List<Integer> prices = new ArrayList<>();
+    for (Order o : orders) {
+      if (o.getStatus() == PAID) {
+        prices.add(o.getPrice());
+      }
+    }
+  onceRun: |-
+    Stream<String> s = Stream.of("A", "B");
+    s.count();
+    s.count();
   first: |-
     Optional<String> first =
         Stream.of("A", "B", "C")
@@ -84,15 +103,105 @@ codes:
               return s.toLowerCase();
             })
             .findFirst();
+  widgetRun: |-
+    Stream.of("A", "B", "C", "D", "E")
+        .filter(s -> !s.equals("A"))
+        .map(String::toLowerCase)
+        .limit(2)
+        .toList();
+  collectRun: |-
+    // 회원 번호와 금액: (1, 10000),
+    // (1, 5000), (2, 20000)
+    orders.stream().collect(
+        groupingBy(Order::getMemberId));
+    orders.stream().collect(
+        toMap(Order::getMemberId,
+              Order::getPrice));
+    orders.stream()
+        .mapToInt(Order::getPrice).sum();
+  optionalRun: |-
+    Optional.empty().get();
+    Optional.empty().orElse("없음");
+    Optional.of(null);
+    Optional.ofNullable(null)
+        .map(Object::toString)
+        .orElse("기본");
+  find: |-
+    Optional<Member> member =
+        repository.findById(id);
+
+    // 없으면 예외
+    member.orElseThrow(
+        () -> new MemberNotFoundException(id));
+    // 없으면 다른 값
+    member.map(Member::getName)
+        .orElse("탈퇴한 회원");
+    // 있을 때만
+    member.ifPresent(m -> mailer.send(m));
+  getBad: |-
+    if (member.isPresent()) {
+      return member.get().getName();
+    }
+    return "탈퇴한 회원";
   orElse: |-
     Member m = repo.findByEmail(email)
         .orElse([[createMember(email)]]);
   orElseGet: |-
     Member m = repo.findByEmail(email)
         .orElseGet([[() -> createMember(email)]]);
+  orElseRun: |-
+    // createMember가 불린 횟수를 센다
+    // 회원을 찾은 경우와 못 찾은 경우
+  serviceFind: |-
+    Member member = memberRepository
+        .findById(id)
+        [[.orElseThrow(() ->]]
+            new MemberNotFoundException(id));
+  toDto: |-
+    List<OrderResponse> body = orders.stream()
+        .map([[OrderResponse::from]])
+        .toList();
+  saveBad: |-
+    Member member = memberRepository
+        .findByEmail(email)
+        .orElse([[memberRepository.save(]]
+            new Member(email)));
+  saveFixed: |-
+    Member member = memberRepository
+        .findByEmail(email)
+        .orElseGet([[() -> memberRepository.save(]]
+            new Member(email)));
+  saveRun: |-
+    // 이미 가입한 kim@a.com으로 세 번 요청
+  filterInMemory: |-
+    // 피하기: 다 읽어 와서 거르기
+    orderRepository.findAll().stream()
+        .filter(o -> o.getMemberId() == id)
+        .toList();
+    // 쿼리로 거르기
+    orderRepository.findByMemberId(id);
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/stream/StreamOptionalTest.java
+  streamPkg: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/package-summary.html
+  collectors: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Collectors.html
+  optional: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html
+  jlsArgs: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12.4
+  crudRepo: https://docs.spring.io/spring-data/commons/docs/current/api/org/springframework/data/repository/CrudRepository.html
 predict:
-  text: '코드 predict를 실행하면 무엇이 출력될까요? `filter`와 `map`의 람다는 실행될 때마다 한 줄을 출력해요. 보기: filter A, filter B, filter C, map A, map B, map C / filter A, map A, filter B, map B, filter C, map C / 아무것도 출력되지 않는다.'
-  answer: '아무것도 출력되지 않는다. `filter`와 `map`은 할 일을 등록만 하고, 결과를 만드는 최종 연산이 없어서 한 번도 실행되지 않았다. 질문 2에서 밝힌다.'
+  title: filter와 map은 무엇을 출력할까요?
+  text: '`filter`와 `map`의 람다는 실행될 때마다 한 줄을 출력해요. 아래 코드를 실행하면 무엇이 출력될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: byStage
+      label: filter A, B, C를 다 한 뒤 map A, B, C
+    - value: byElement
+      label: filter A, map A, filter B, map B, ...
+    - value: nothing
+      label: 아무것도 출력되지 않는다
+  answer: nothing
+  storageKey: str-opt-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 스트림은 어떻게 이루어지나요?
@@ -111,6 +220,57 @@ questions:
     asks:
       - '본문의 예시: 금액과 상태가 (10000, PAID), (5000, CREATED), (20000, PAID)인 주문 셋에 코드 pipeline을 실행한 뒤 `prices`와 `orders.size()`는 각각 무엇인가 ([10000, 20000]과 3)'
       - '옮긴 상황: `Stream<String> s = Stream.of("A", "B"); s.count(); s.count();`를 실행하면 어떻게 되나 (둘째 `count()`에서 `IllegalStateException`)'
+    body:
+      - p: '결제된 주문의 금액만 뽑아요. for 문으로 쓰면 이래요.'
+      - code: forLoop
+      - p: '같은 일을 스트림으로 쓰면 이래요.'
+      - code: pipeline
+        notes:
+          - mark: orders.stream()
+            as: code
+            text: '**원본.** 컬렉션에서 원소를 하나씩 흘려보내는 스트림을 만들어요.'
+          - mark: .filter(o -> o.getStatus() == PAID)
+            as: code
+            text: '**중간 연산.** 조건에 맞는 원소만 다음으로 넘겨요.'
+          - mark: .map(Order::getPrice)
+            as: code
+            text: '**중간 연산.** 원소를 다른 값으로 바꿔요. 주문이 금액이 돼요.'
+          - mark: .toList()
+            as: code
+            text: '**최종 연산.** 흘러온 원소를 모아 결과를 만들고 스트림을 끝내요.'
+      - p: 'for 문은 **어떻게**(빈 리스트를 만들고, 돌고, 조건을 보고, 넣고)를 쓰고, 스트림은 **무엇을**(결제된 것을 골라 금액으로 바꾼다)을 써요. 중간 연산은 모두 새 스트림을 돌려줘서 점을 찍어 이어 쓸 수 있어요.'
+      - table:
+          head: [갈래, 자주 쓰는 것]
+          rows:
+            - [중간 연산, '`filter`, `map`, `sorted`, `distinct`, `limit`']
+            - [최종 연산, '`toList`, `collect`, `count`, `findFirst`, `anyMatch`, `forEach`']
+      - ci:
+          key: pipeline
+          label: 실제 결과 보기
+          source: StreamOptionalTest.pipeline
+      - ul:
+          - '**원본은 바뀌지 않아요.** 스트림을 돌린 뒤에도 `orders`에는 주문 셋이 그대로 있어요. `sorted()`를 해도 원본의 순서는 그대로예요.'
+          - '**스트림은 한 번 쓰면 끝이에요.** 최종 연산을 부른 스트림에 다시 연산을 부르면 예외가 나요. 다시 필요하면 `orders.stream()`으로 새로 만들어요.'
+      - ci:
+          key: once
+          label: 한 스트림을 두 번 쓴 결과 보기
+          source: StreamOptionalTest.streamUsedOnce
+          code: onceRun
+      - p: '거르고 바꾸고 모으는 일은 스트림이 읽기 쉬워요. 중간에 멈추는 조건이 복잡하거나, 바깥 변수를 바꿔야 하거나, 체크 예외를 던지는 일은 for 문이 나아요(람다와 함수형 인터페이스 레슨).'
+      - more:
+          summary: '더 알아보기: flatMap'
+          body:
+            - p: '원소 하나가 여러 개로 바뀔 때는 `flatMap`을 써요. 주문마다 상품 목록이 있을 때 `orders.stream().flatMap(o -> o.getItems().stream())`은 모든 주문의 상품을 한 줄의 스트림으로 펴요.'
+      - quiz:
+          q: '`Stream<String> s = Stream.of("A", "B"); s.count(); s.count();`를 실행하면?'
+          options:
+            - 2와 2
+            - 2와 0
+            - 둘째 count()에서 IllegalStateException
+          answer: 3
+          explain: '스트림은 최종 연산을 한 번 부르면 끝나요. 다시 쓰려면 새로 만들어야 해요.'
+      - next: '중간 연산이 스트림을 돌려줄 뿐이라면, 그 안의 람다는 언제 실행될까요?'
+    recall: '원본에서 원소를 흘려보내고(`orders.stream()`), 중간 연산으로 거르고 바꾸고(`filter`, `map`), 최종 연산으로 결과를 만드는(`toList`) 세 부분이에요. 중간 연산은 새 스트림을 돌려줘 이어 쓸 수 있어요. 스트림은 원본을 바꾸지 않고, 최종 연산을 한 번 부르면 끝나서 다시 쓰면 `IllegalStateException`이에요.'
   - id: q2
     title: 중간 연산은 언제 실행되나요?
     conclusion:
@@ -130,6 +290,74 @@ questions:
     asks:
       - '본문의 예시: 코드 first를 실행하면 출력되는 줄은 무엇인가 (filter A, filter B, map B. C는 처리되지 않는다)'
       - '옮긴 상황: `orders.stream().map(o -> { emailSender.send(o); return o; });`를 실행했다. 조건: 뒤에 다른 연산이 없고 `orders`에 주문이 셋 있다. 메일은 몇 통 발송되나 (0통. 최종 연산이 없어 `map`의 람다가 실행되지 않는다)'
+    body:
+      - p: '처음 예측의 답은 **아무것도 출력되지 않는다**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: StreamOptionalTest.lazyEvaluation
+          code: predict
+      - p: '코드 predict에는 **최종 연산이 없어요.** `filter`와 `map`은 람다를 받아 "이 일을 하겠다"고 등록만 했어요. 람다와 함수형 인터페이스 레슨에서 본 대로 람다는 누군가 부를 때 실행되는데, 부를 쪽인 최종 연산이 없어요. 이것을 **지연 평가**라고 해요.'
+      - h3: 실행될 때는 원소 하나씩 끝까지
+      - p: '끝에 `.toList()`를 붙이면 출력이 나와요. 순서를 예상해 보세요. filter를 셋 다 한 뒤 map을 할까요?'
+      - ci:
+          key: with-terminal
+          label: 실제 출력 보기
+          source: StreamOptionalTest.lazyEvaluation
+          code: withTerminal
+      - p: 'A가 filter와 map을 다 지나간 다음에 B가 시작해요. 단계별로 모든 원소를 처리하는 것이 아니라 **원소 하나가 파이프라인 끝까지 간 뒤에** 다음 원소가 시작해요.'
+      - h3: 결과가 정해지면 멈춰요
+      - p: '이 방식 덕분에 필요한 만큼만 일해요. 다섯 원소에서 A가 아닌 것 둘을 소문자로 모으는 파이프라인을 한 단계씩 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [selector, log, buttons, verdict]
+          selector:
+            label: 끝에 붙인 것
+            options:
+              - {value: none, label: 최종 연산 없음}
+              - {value: toList, label: '.toList()를 붙임'}
+          initial: {}
+          scenarios:
+            none:
+              - log: {note: '실행된 것이 없어요. filter, map, limit은 할 일을 등록만 했어요.'}
+                verdict: '최종 연산이 없으면 람다가 한 번도 불리지 않아요.'
+            toList:
+              - log: 'filter A → 걸러짐'
+              - log: 'filter B → 통과'
+              - log: 'map B → b   (결과 1개)'
+              - log: 'filter C → 통과'
+              - log: 'map C → c   (결과 2개, limit 2에 닿음)'
+              - log: {note: 'D와 E는 filter에도 들어가지 않아요'}
+                verdict: '결과가 정해지자 남은 원소를 처리하지 않고 끝났어요.'
+      - ci:
+          key: widget
+          label: 같은 파이프라인을 실제로 돌린 기록 보기
+          source: StreamOptionalTest.widgetPipeline
+          code: widgetRun
+      - p: '`findFirst`도 같아요. 하나를 찾으면 끝내요.'
+      - ci:
+          key: first
+          label: 실제 출력 보기
+          source: StreamOptionalTest.shortCircuit
+          code: first
+      - p: 'C는 filter에도 들어가지 않았어요. 결과가 정해지면 멈추는 것을 **쇼트서킷**이라고 하고, `limit`, `findFirst`, `anyMatch`가 그래요. 주문 백만 건에서 조건에 맞는 첫 건을 찾을 때 백만 건을 다 거르지 않아요.'
+      - p: '거꾸로 조심할 점도 있어요. 스트림을 만들어 두기만 하면 아무 일도 일어나지 않아요. `map` 안에서 메일 발송 같은 일을 하고 최종 연산을 빠뜨리면 메일은 한 통도 나가지 않아요. 그래서 `map`과 `filter`의 람다에서는 값을 바꾸는 일만 하고, 바깥에 무언가 하는 일(저장, 발송)은 최종 연산 `forEach`나 for 문에서 해요.'
+      - more:
+          summary: '더 알아보기: sorted와 병렬 스트림'
+          body:
+            - ul:
+                - '`sorted()`는 모든 원소를 봐야 순서를 정할 수 있어서, 앞 단계를 모든 원소에 대해 끝낸 다음에야 뒤 단계로 넘겨요.'
+                - '`parallelStream()`은 여러 스레드로 나눠 처리해요. JVM 전체가 함께 쓰는 스레드 풀을 써서, 서버 코드에서 DB나 외부 API를 부르는 일에 쓰면 다른 요청까지 느려질 수 있어요. 스레드 풀 레슨에서 다뤄요.'
+      - quiz:
+          q: '`orders.stream().map(o -> { emailSender.send(o); return o; });`를 실행했어요. 뒤에 다른 연산이 없고 주문은 셋이에요. 메일은 몇 통 나갈까요?'
+          options:
+            - 0통
+            - 1통
+            - 3통
+          answer: 1
+          explain: '최종 연산이 없어서 `map`의 람다가 한 번도 실행되지 않아요.'
+      - next: '최종 연산이 결과를 만든다고 했어요. 리스트 말고 다른 모양으로는 어떻게 모을까요?'
+    recall: '최종 연산이 불릴 때 실행돼요. 그 전까지 중간 연산은 할 일을 등록만 해요(지연 평가). 실행될 때는 원소 하나가 파이프라인 끝까지 간 뒤에 다음 원소가 시작하고, `findFirst`나 `limit`처럼 결과가 정해지면 남은 원소는 처리하지 않아요. 그래서 최종 연산을 빠뜨리면 `map` 안의 일은 실행되지 않아요.'
   - id: q3
     title: 결과는 어떻게 모으나요?
     conclusion:
@@ -145,6 +373,36 @@ questions:
     asks:
       - '본문의 예시: 회원 번호와 금액이 (1, 10000), (1, 5000), (2, 20000)인 주문 셋에 `collect(Collectors.groupingBy(Order::getMemberId))`를 실행한 결과에서 키 1의 리스트 크기는 얼마인가 (2)'
       - '옮긴 상황: 같은 주문 셋에 `collect(Collectors.toMap(Order::getMemberId, Order::getPrice))`를 실행하면 어떻게 되나 (`IllegalStateException`. 회원 번호 1이 두 번 나온다)'
+    body:
+      - p: '결과의 모양은 최종 연산이 정해요. 회원 1의 주문 둘, 회원 2의 주문 하나로 세 가지를 모아 봤어요.'
+      - ci:
+          key: collect
+          label: 실제 결과 보기
+          source: StreamOptionalTest.collectors
+          code: collectRun
+      - table:
+          head: [최종 연산, 결과, 주의할 것]
+          rows:
+            - ['`toList()`', 리스트, 고칠 수 없는 리스트예요]
+            - ['`collect(groupingBy(키))`', '`Map<키, List<원소>>`', 한 키에 원소가 여럿일 때]
+            - ['`collect(toMap(키, 값))`', '`Map<키, 값>`', 키가 겹치면 예외예요]
+            - ['`count()`, `mapToInt(...).sum()`', 숫자, '`mapToInt`는 박싱하지 않아요']
+            - ['`collect(joining(","))`', 문자열, '반복문의 `+=` 대신(String 레슨)']
+      - ul:
+          - '**`toMap`은 키가 겹치면 `IllegalStateException`을 던져요.** 회원 번호를 키로 `toMap`하면 주문이 둘인 회원 1에서 터져요. 겹칠 수 있으면 `groupingBy`를 쓰거나, `toMap`의 셋째 인자로 값을 합치는 방법을 줘요.'
+          - '**`toList()`의 결과는 고칠 수 없어요.** 불변 객체 레슨의 `List.copyOf`처럼 `add`를 부르면 예외예요. 고쳐야 하면 `collect(Collectors.toCollection(ArrayList::new))`로 모아요.'
+          - '**`mapToInt`는 `IntStream`을 줘요.** 그 안에서는 `Integer`로 싸지 않고 `int`로 계산해요(래퍼 클래스와 오토박싱 레슨). `sum`, `max`, `average`가 여기에 있어요.'
+      - p: '결과는 최종 연산으로 모아요. 람다 안에서 바깥 리스트에 `add`해 모으지 않아요. 람다와 함수형 인터페이스 레슨에서 본 대로 바깥 상태를 바꾸는 람다는 병렬로 돌리면 틀리고, 읽는 사람이 결과가 어디에 모이는지 찾아야 해요.'
+      - quiz:
+          q: '회원 번호와 금액이 (1, 10000), (1, 5000), (2, 20000)인 주문 셋에 `toMap(Order::getMemberId, Order::getPrice)`를 실행하면?'
+          options:
+            - '{1=10000, 2=20000}'
+            - '{1=15000, 2=20000}'
+            - IllegalStateException
+          answer: 3
+          explain: '회원 번호 1이 두 번 나와서 키가 겹쳐요. `toMap`은 겹치면 예외를 던져요.'
+      - next: '`findFirst`는 결과를 `Optional`에 담아 돌려줬어요. 이 상자에서 값은 어떻게 꺼낼까요?'
+    recall: '최종 연산이 결과의 모양을 정해요. 리스트는 `toList()`(고칠 수 없음), 키마다 여럿이면 `groupingBy`, 키마다 하나면 `toMap`(키가 겹치면 `IllegalStateException`), 숫자는 `count`나 `mapToInt(...).sum()`, 문자열은 `joining`으로 모아요. 람다 안에서 바깥 리스트에 `add`해 모으지 않아요.'
   - id: q4
     title: 'Optional은 무엇이고 값을 어떻게 꺼내나요?'
     conclusion:
@@ -160,6 +418,46 @@ questions:
     asks:
       - '본문의 예시: `Optional<String> opt = Optional.empty();`에 `opt.get()`과 `opt.orElse("없음")`을 각각 부르면 어떻게 되나 (`NoSuchElementException`, "없음")'
       - '옮긴 상황: `Optional.ofNullable(null).map(Object::toString).orElse("기본")`과 `Optional.of(null)`을 각각 실행하면 어떻게 되나 ("기본", `NullPointerException`)'
+    body:
+      - p: '`Member findById(long id)`라는 메서드는 회원이 없으면 null을 돌려줄까요, 예외를 던질까요? 시그니처만 봐서는 몰라요. `Optional<Member> findById(long id)`라고 쓰면 **"없을 수 있으니 대비하라"가 반환 타입에 적혀요.** 스트림의 `findFirst()`가 `Optional`을 돌려준 이유도 같아요. 원소가 하나도 없을 수 있으니까요.'
+      - p: '`Optional`은 값을 하나 담거나 비어 있는 상자예요. 만드는 방법과 꺼내는 방법을 돌려 봤어요.'
+      - ci:
+          key: optional
+          label: 실제 결과 보기
+          source: StreamOptionalTest.optionalBasics
+          code: optionalRun
+      - ul:
+          - '**`Optional.of(null)`은 예외예요.** null일 수 있는 값은 `Optional.ofNullable`로 담아요. 비어 있는 상자는 `Optional.empty()`예요.'
+          - '**`get()`은 비어 있으면 `NoSuchElementException`이에요.** 확인 없이 `get()`을 부르면 null에 점을 찍던 때와 달라진 것이 없어요.'
+          - '**`map`은 비어 있으면 빈 채로 넘어가요.** 그래서 null 검사 없이 이어 쓸 수 있어요.'
+      - h3: 없을 때 무엇을 할지 함께 정해요
+      - code: find
+      - table:
+          head: [메서드, 비어 있을 때]
+          rows:
+            - ['`orElseThrow(() -> 예외)`', 그 예외를 던져요]
+            - ['`orElse(기본값)`', 기본값을 줘요]
+            - ['`orElseGet(() -> 만들기)`', 람다를 실행해 만든 값을 줘요. 다음 질문]
+            - ['`map(바꾸기)`', 빈 Optional을 줘요]
+            - ['`ifPresent(할 일)`', 아무것도 하지 않아요]
+      - p: '반대로 이 코드는 피해요. null 검사의 이름만 바꾼 것이에요.'
+      - code: getBad
+      - p: '`member.map(Member::getName).orElse("탈퇴한 회원")` 한 줄과 같은 일이에요.'
+      - h3: 쓰지 않는 곳
+      - ul:
+          - '**필드와 매개변수에는 쓰지 않아요.** `Optional`은 메서드가 "없을 수 있음"을 알리는 반환 타입을 위한 것이에요.'
+          - '**컬렉션은 `Optional`로 감싸지 않아요.** 주문이 없으면 `Optional<List<Order>>`가 아니라 빈 리스트를 돌려줘요.'
+          - '**`Optional` 변수에 null을 넣지 않아요.** 상자 자체가 null이면 다시 NPE예요.'
+      - quiz:
+          q: '`Optional.ofNullable(null).map(Object::toString).orElse("기본")`의 결과는?'
+          options:
+            - NullPointerException
+            - '"기본"'
+            - '"null"'
+          answer: 2
+          explain: '`ofNullable(null)`은 빈 Optional이에요. `map`은 빈 채로 넘어가고 `orElse`가 "기본"을 줘요.'
+      - next: '없을 때의 값을 주는 방법이 둘 있었어요. `orElse`와 `orElseGet`은 무엇이 다를까요?'
+    recall: '`Optional`은 "결과가 없을 수 있다"를 반환 타입으로 알리는 상자예요. 꺼낼 때는 `orElseThrow`, `orElse`, `map`, `ifPresent`처럼 없을 때 할 일을 함께 정하는 메서드를 쓰고, 확인 없이 `get()`을 부르지 않아요. null일 수 있으면 `ofNullable`로 만들어요. 필드, 매개변수, 컬렉션의 반환에는 쓰지 않아요.'
   - id: q5
     title: 'orElse와 orElseGet은 무엇이 다른가요?'
     conclusion:
@@ -175,32 +473,127 @@ questions:
       - '본문의 예시: `repo.findByEmail(email)`이 회원을 찾아 돌려줬다. 코드 orElse와 코드 orElseGet에서 `createMember`는 각각 몇 번 실행되나 (1번과 0번)'
       - '옮긴 상황: `String v = Optional.of("A").orElse(load());`에서 `load()`는 "load"를 출력하고 "B"를 돌려준다. 출력되는 것과 `v`의 값은 무엇인가 ("load"가 출력되고 `v`는 "A")'
       - '실무 구역: 서비스에 `memberRepository.findByEmail(email).orElse(memberRepository.save(new Member(email)))`가 있다. 이미 가입한 이메일로 이 줄을 세 번 실행하면 `save`는 몇 번 불리나 (세 번. `orElse`의 인자는 값이 있어도 실행된다)'
+    body:
+      - p: '두 코드는 겉으로 거의 같아요.'
+      - code: orElse
+        notes:
+          - mark: createMember(email)
+            as: code
+            text: '평범한 메서드 인자예요. 자바는 `orElse`를 부르기 **전에** 이 호출부터 실행해요.'
+      - code: orElseGet
+        notes:
+          - mark: () -> createMember(email)
+            as: code
+            text: '람다예요. `orElseGet`이 비어 있을 때만 `get()`을 불러 실행해요.'
+      - p: '`createMember`가 몇 번 불리는지 세어 봤어요. 회원을 찾았을 때 두 코드의 숫자를 예상해 보고 열어 보세요.'
+      - ci:
+          key: or-else
+          label: 실제 호출 횟수 보기
+          source: StreamOptionalTest.orElseVersusOrElseGet
+          code: orElseRun
+      - p: '회원을 **찾았는데도** `orElse` 쪽은 `createMember`를 불렀어요. 자바에서 메서드의 인자는 메서드를 부르기 전에 먼저 계산돼요. `orElse`도 예외가 아니에요. `orElse`는 찾은 회원을 돌려주고 만든 것은 버리니 결과만 보면 맞아요. 하지만 `createMember`가 한 일(저장, 외부 호출)은 이미 일어났어요. 도입부의 사고가 이거예요.'
+      - p: '`orElseGet`은 값이 아니라 **할 일**(`Supplier`)을 받아요. 람다와 함수형 인터페이스 레슨의 질문 2 그대로, 받은 쪽이 부를 때만 실행돼요. 비어 있을 때만 부르니 찾았으면 0번이에요.'
+      - table:
+          head: [인자가, 쓸 것]
+          rows:
+            - ['이미 있는 값이나 상수 (`"없음"`, `0`)', '`orElse`']
+            - [메서드 호출이나 객체 만들기, '`orElseGet`']
+            - [예외, '`orElseThrow(() -> new ...)`. 같은 이유로 람다로 받아요']
+      - quiz:
+          q: '`String v = Optional.of("A").orElse(load());`에서 `load()`는 "load"를 출력하고 "B"를 돌려줘요. 무엇이 출력되고 `v`는 무엇일까요?'
+          options:
+            - 출력 없음, v는 "A"
+            - '"load"가 출력되고 v는 "A"'
+            - '"load"가 출력되고 v는 "B"'
+          answer: 2
+          explain: '`orElse`의 인자는 먼저 계산돼서 `load()`가 실행돼요. 값이 있으니 `orElse`는 "A"를 돌려줘요.'
+    recall: '`orElse`의 인자는 평범한 메서드 인자라서 값이 있어도 `orElse`를 부르기 전에 먼저 계산되고, `orElseGet`의 람다는 값이 없을 때만 실행돼요. 그래서 `orElse(createMember())`는 회원을 찾았어도 `createMember`를 실행해요. 인자가 상수면 `orElse`, 메서드 호출이나 객체 만들기면 `orElseGet`을 써요.'
 practice:
+  title: 스프링 서비스에서는 이렇게 써요
   says:
     - '리포지토리와 `Optional`. 스프링 데이터의 `findById`는 `Optional<Member>`를 돌려준다. 서비스에서는 `memberRepository.findById(id).orElseThrow(() -> new MemberNotFoundException(id))`로 꺼낸다. 없을 때의 응답은 예외를 한곳에서 바꾸는 S8이 맡는다 (가짜 리포지토리로 돌리는 순수 자바 테스트. `findById`의 반환 타입은 스프링 데이터 공식 문서 근거)'
     - '엔티티 목록을 DTO 목록으로. `orders.stream().map(OrderResponse::from).toList()`. 컨트롤러가 엔티티를 그대로 내보내지 않고 응답 DTO로 바꾸는 자리에 쓴다 (순수 자바 테스트)'
     - '흔한 실수: `findByEmail(email).orElse(memberRepository.save(new Member(email)))`. 이미 있는 회원에게도 `save`가 실행된다. 이메일에 유니크 제약이 없으면 중복 회원이 쌓이고, 있으면 제약 위반 예외가 난다. 고친 코드: `orElseGet(() -> memberRepository.save(new Member(email)))`. `save` 호출 횟수를 세는 가짜 리포지토리로 고치기 전과 뒤를 돌려 붙인다 (순수 자바 테스트)'
     - '`toMap`의 중복 키. 주문 목록을 회원 번호로 `toMap`하는 코드는 회원마다 주문이 하나인 테스트 데이터에서는 통과하고 운영에서 `IllegalStateException`을 던진다. `groupingBy`로 바꾼다. 질문 3에서 본 것을 실무 코드로 한 번 더 짚는다'
     - '`findAll().stream().filter(...)`처럼 전부 읽어 와서 스트림으로 거르지 않는다. 조건은 쿼리에 둔다. 스트림 안에서 `order.getMember().getName()`처럼 연관을 건드리면 원소마다 쿼리가 나갈 수 있고 그것은 P5에서 다룬다는 한 줄'
+  body:
+    - p: '스프링 서비스 코드에서 스트림과 `Optional`이 가장 많이 나오는 자리는 둘이에요. 리포지토리가 돌려준 것을 꺼낼 때와, 엔티티를 응답으로 바꿀 때요. 회원 저장의 실수는 `save` 호출을 세는 가짜 리포지토리로 확인했어요.'
+    - h3: 리포지토리의 Optional
+    - code: serviceFind
+      notes:
+        - mark: '.orElseThrow(() ->'
+          as: code
+          text: '없으면 업무 예외를 던져요. 예외를 404 같은 응답으로 바꾸는 일은 한 군데(`@ControllerAdvice`)에서 해요. 예외 처리와 검증 레슨에서 다뤄요.'
+    - muted: '스프링 데이터의 `findById`는 `Optional<T>`를 돌려줘요. 근거: [CrudRepository API 문서](link:crudRepo).'
+    - h3: 엔티티 목록을 응답 DTO로
+    - code: toDto
+      notes:
+        - mark: OrderResponse::from
+          as: code
+          text: '엔티티 하나를 응답 DTO 하나로 바꾸는 static 메서드예요. 메서드 참조로 넘겨요.'
+    - p: '컨트롤러가 엔티티를 그대로 JSON으로 내보내지 않고, 이렇게 응답 DTO로 바꿔 내보내요.'
+    - h3: '흔한 실수: orElse에 save를 넣음'
+    - code: saveBad
+      notes:
+        - mark: memberRepository.save(
+          as: code
+          text: '`orElse`의 인자라서 회원을 찾았어도 먼저 실행돼요.'
+    - ci:
+        key: save
+        label: 고치기 전과 뒤의 실제 호출 횟수 보기
+        source: StreamOptionalTest.orElseSaveMistake
+        code: saveRun
+    - p: '이미 가입한 회원인데 요청마다 `save`가 불려요. 이메일에 유니크 제약이 없으면 중복 회원이 쌓이고, 있으면 제약 위반 예외로 가입 요청이 실패해요. 질문 5대로 `orElseGet`으로 고쳐요.'
+    - code: saveFixed
+    - h3: 'toMap은 운영 데이터에서 터져요'
+    - p: '질문 3의 `toMap` 예외는 테스트에서 놓치기 쉬워요. 테스트 데이터는 회원마다 주문이 하나라 키가 겹치지 않거든요. 운영에서 주문이 둘인 회원이 나오는 순간 `IllegalStateException`이에요. 한 키에 여럿이 올 수 있으면 처음부터 `groupingBy`를 써요.'
+    - h3: 거르는 일은 쿼리에서
+    - code: filterInMemory
+    - p: '테이블 전체를 읽어 와서 스트림으로 거르면 DB가 할 일을 서버의 메모리에서 하게 돼요. 조건은 쿼리에 두고, 스트림은 읽어 온 결과를 모양만 바꾸는 데 써요. 스트림 안에서 `order.getMember().getName()`처럼 연관을 건드리면 원소마다 쿼리가 하나씩 나갈 수도 있어요. JPA N+1 문제 레슨에서 다뤄요.'
+interview:
+  question: 스트림의 지연 평가와 Optional을 올바르게 쓰는 법을 설명해 주세요
+  model:
+    - label: 정의
+      text: 스트림은 원본, 중간 연산, 최종 연산으로 이루어지고, 중간 연산은 최종 연산이 불릴 때 실행됩니다. Optional은 결과가 없을 수 있다는 것을 반환 타입으로 알리는 상자입니다.
+    - label: 원리
+      text: 최종 연산이 불리면 원소 하나가 파이프라인 끝까지 간 뒤 다음 원소가 시작하고, findFirst나 limit처럼 결과가 정해지면 남은 원소는 처리하지 않습니다. Optional은 orElseThrow, map, ifPresent처럼 없을 때 할 일을 함께 정하는 메서드로 꺼냅니다.
+    - label: 주의할 점
+      text: 최종 연산을 빠뜨리면 map 안의 일은 실행되지 않습니다. toMap은 키가 겹치면 예외를 던지고 toList의 결과는 고칠 수 없습니다. orElse의 인자는 값이 있어도 먼저 계산되므로, 메서드 호출이나 저장이 들어가면 orElseGet을 씁니다. get을 확인 없이 쓰지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: findByEmail(...).orElse(save(...))로 이미 가입한 회원도 다시 저장되는 버그를 orElseGet으로 고쳤습니다.'
+verified: 이 레슨의 실행 순서와 호출 횟수는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([StreamOptionalTest](link:test))가 다시 돌아요.
+footer: '근거: 스트림의 연산과 지연 평가, 쇼트서킷은 java.util.stream 패키지 문서([링크](link:streamPkg)), toMap과 groupingBy는 Collectors API 문서([링크](link:collectors)), Optional은 API 문서([링크](link:optional)), 인자를 먼저 계산하는 것은 자바 언어 명세 15.12.4([링크](link:jlsArgs)). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict는 아무것도 출력하지 않고, `toList()`를 붙이면 filter A, map A, filter B, map B, filter C, map C 순서로 출력한다'
     how: '출력 대신 리스트에 기록해 두 경우를 돌린다'
+    test: StreamOptionalTest.lazyEvaluation
   - claim: '코드 first의 출력은 filter A, filter B, map B이고 결과는 "b"다'
     how: '기록과 결과를 본다'
+    test: StreamOptionalTest.shortCircuit
   - claim: '위젯의 파이프라인(다섯 원소, A 제외, 소문자, limit 2)에서 D와 E는 어느 연산에도 들어가지 않는다'
     how: '각 연산에서 기록을 남겨 로그 전체를 `CiOutput`에 남긴다. 위젯의 로그와 맞춘다'
-  - claim: '최종 연산을 부른 스트림에 다시 최종 연산을 부르면 `IllegalStateException`이 난다. 스트림 연산 뒤에 원본 리스트는 그대로다'
-    how: '두 경우를 돌린다'
+    test: StreamOptionalTest.widgetPipeline
+  - claim: '코드 pipeline의 결과는 [10000, 20000]이고 원본 리스트는 그대로다'
+    how: '주문 셋으로 돌린다'
+    test: StreamOptionalTest.pipeline
+  - claim: '최종 연산을 부른 스트림에 다시 최종 연산을 부르면 `IllegalStateException`이 난다'
+    how: '그대로 돌린다'
+    test: StreamOptionalTest.streamUsedOnce
   - claim: '`Stream.toList()`의 결과에 `add`를 부르면 `UnsupportedOperationException`이 난다'
     how: '그대로 돌린다'
+    test: StreamOptionalTest.toListUnmodifiable
   - claim: '`Collectors.toMap`은 키가 겹치면 `IllegalStateException`을 던지고, `groupingBy`는 같은 키의 원소를 리스트로 묶는다'
     how: '주문 셋으로 두 수집기를 돌린다'
+    test: StreamOptionalTest.collectors
   - claim: '빈 `Optional`의 `get()`은 `NoSuchElementException`, `Optional.of(null)`은 `NullPointerException`이다'
     how: '그대로 돌려 예외의 타입을 본다'
+    test: StreamOptionalTest.optionalBasics
   - claim: '값이 있을 때 `orElse(f())`는 `f`를 1번, `orElseGet(() -> f())`는 0번 실행한다. 값이 없을 때는 둘 다 1번이다'
     how: '호출 횟수를 세는 메서드로 네 경우를 돌려 표로 남긴다'
+    test: StreamOptionalTest.orElseVersusOrElseGet
   - claim: '이미 있는 회원에 대해 `orElse(repo.save(...))`를 세 번 실행하면 `save`가 세 번 불리고, `orElseGet`으로 바꾸면 0번이다'
     how: '`save` 호출을 세는 가짜 리포지토리로 돌린다'
+    test: StreamOptionalTest.orElseSaveMistake
 sources:
   - '스트림의 연산과 지연 평가, 쇼트서킷, 부수 효과: `java.util.stream` 패키지 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/package-summary.html'
   - '`Stream.toList()`가 고칠 수 없는 리스트를 준다: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Stream.html#toList()'

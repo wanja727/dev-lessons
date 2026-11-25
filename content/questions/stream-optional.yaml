@@ -1,0 +1,316 @@
+# 스트림과 Optional 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/stream-optional.yaml의 says).
+# 동작에 관한 정답은 verification의 StreamOptionalTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: stream-optional
+  title: 스트림과 Optional
+  unit: 자바 언어
+  order: 49
+concepts:
+  - key: core
+    name: 스트림과 Optional
+coreQuestions:
+  - key: q1
+    text: "스트림은 어떻게 이루어지나요?"
+  - key: q2
+    text: "중간 연산은 언제 실행되나요?"
+  - key: q3
+    text: "결과는 어떻게 모으나요?"
+  - key: q4
+    text: "Optional은 무엇이고 값을 어떻게 꺼내나요?"
+  - key: q5
+    text: "orElse와 orElseGet은 무엇이 다른가요?"
+questions:
+  # ── 질문 1 ──
+  - key: sop-pipeline
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 금액과 상태가 (10000, PAID), (5000, CREATED), (20000, PAID)인 주문 셋에 아래 코드를 실행했어요. prices와 orders.size()는 각각 무엇일까요?
+    code: |-
+      List<Integer> prices = orders.stream()
+          .filter(o -> o.getStatus() == PAID)
+          .map(Order::getPrice)
+          .toList();
+    choices:
+      - '[10000, 20000]과 2'
+      - '[10000, 20000]과 3'
+      - '[10000, 5000, 20000]과 3'
+      - '[10000, 20000]과 0'
+    answer: "2"
+    explanation: |-
+      **[10000, 20000]과 3이에요.** 스트림은 원본 컬렉션을 바꾸지 않아요.
+
+      - filter가 결제된 주문만 넘기고 map이 금액으로 바꿔요
+      - 걸러진 것은 결과에만 빠지고 orders에는 그대로 있어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/package-summary.html
+  - key: sop-reuse
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 코드를 실행하면 어떻게 될까요?
+    code: |-
+      Stream<String> s = Stream.of("A", "B");
+      s.count();
+      s.count();
+    choices:
+      - 2를 두 번 돌려준다
+      - 2와 0을 돌려준다
+      - 둘째 count()에서 IllegalStateException
+      - 컴파일 오류
+    answer: "3"
+    explanation: |-
+      **둘째 count()에서 IllegalStateException이 나요.** 스트림은 최종 연산을 한 번 부르면 끝나요.
+
+      - 다시 필요하면 원본에서 새 스트림을 만들어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Stream.html
+  # ── 질문 2 ──
+  - key: sop-first
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: filter와 map의 람다는 실행될 때마다 한 줄을 출력해요. 아래 코드를 실행하면 출력되는 줄은 무엇일까요?
+    code: |-
+      Stream.of("A", "B", "C")
+          .filter(s -> { print("filter " + s);
+                         return !s.equals("A"); })
+          .map(s -> { print("map " + s);
+                      return s.toLowerCase(); })
+          .findFirst();
+    choices:
+      - filter A, filter B, filter C, map B, map C
+      - filter A, filter B, map B
+      - filter A, map A, filter B, map B, filter C, map C
+      - 아무것도 출력되지 않는다
+    answer: "2"
+    explanation: |-
+      **filter A, filter B, map B예요.** 원소 하나가 끝까지 간 뒤 다음 원소가 시작하고, findFirst는 하나를 찾으면 멈춰요.
+
+      - A는 걸러지고, B가 통과해 map까지 가서 결과가 정해졌어요
+      - C는 filter에도 들어가지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/package-summary.html#StreamOps
+  - key: sop-no-terminal
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: orders에 주문이 셋 있어요. 아래 한 줄만 실행했어요. 뒤에 다른 연산은 없어요. 메일은 몇 통 발송될까요?
+    code: |-
+      orders.stream().map(o -> {
+        emailSender.send(o);
+        return o;
+      });
+    choices:
+      - 0통
+      - 1통
+      - 3통
+      - 컴파일 오류
+    answer: "1"
+    explanation: |-
+      **0통이에요.** 최종 연산이 없어서 map의 람다가 한 번도 실행되지 않아요.
+
+      - 중간 연산은 최종 연산이 불릴 때 실행돼요(지연 평가)
+      - 바깥에 무언가 하는 일은 map이 아니라 forEach나 for 문에서 해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/package-summary.html#StreamOps
+  # ── 질문 3 ──
+  - key: sop-grouping
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 회원 번호와 금액이 (1, 10000), (1, 5000), (2, 20000)인 주문 셋에 아래 코드를 실행했어요. 결과 맵에서 키 1의 리스트 크기는 얼마일까요?
+    code: |-
+      Map<Long, List<Order>> byMember = orders.stream()
+          .collect(Collectors.groupingBy(
+              Order::getMemberId));
+    choices:
+      - "1"
+      - "2"
+      - "3"
+      - IllegalStateException
+    answer: "2"
+    explanation: |-
+      **2예요.** groupingBy는 같은 키의 원소를 리스트로 묶어요.
+
+      - 회원 1의 주문 둘이 한 리스트에 들어가요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Collectors.html#groupingBy(java.util.function.Function)
+  - key: sop-to-map
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 같은 주문 셋에 아래 코드를 실행하면 어떻게 될까요?
+    code: |-
+      orders.stream().collect(
+          Collectors.toMap(Order::getMemberId,
+                           Order::getPrice));
+    choices:
+      - '{1=10000, 2=20000}'
+      - '{1=15000, 2=20000}'
+      - '{1=5000, 2=20000}'
+      - IllegalStateException
+    answer: "4"
+    explanation: |-
+      **IllegalStateException이 나요.** toMap은 두 원소의 키가 같으면 예외를 던져요.
+
+      - 회원 번호 1이 두 번 나와요
+      - 겹칠 수 있으면 groupingBy를 쓰거나 셋째 인자로 합치는 방법을 줘요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Collectors.html#toMap(java.util.function.Function,java.util.function.Function)
+  # ── 질문 4 ──
+  - key: sop-get-empty
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 두 줄은 각각 어떻게 될까요?
+    code: |-
+      Optional<String> opt = Optional.empty();
+      opt.get();
+      opt.orElse("없음");
+    choices:
+      - null과 "없음"
+      - NoSuchElementException과 "없음"
+      - '"없음"과 "없음"'
+      - 컴파일 오류
+    answer: "2"
+    explanation: |-
+      **get()은 NoSuchElementException, orElse는 "없음"이에요.** 확인 없이 get()을 부르면 비어 있을 때 예외가 나요.
+
+      - 없을 때 할 일을 함께 정하는 orElse, orElseThrow, map을 써요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html#get()
+  - key: sop-of-nullable
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 두 줄은 각각 어떻게 될까요?
+    code: |-
+      Optional.ofNullable(null)
+          .map(Object::toString)
+          .orElse("기본");
+
+      Optional.of(null);
+    choices:
+      - '"기본"과 NullPointerException'
+      - NullPointerException과 NullPointerException
+      - '"기본"과 빈 Optional'
+      - '"null"과 NullPointerException'
+    answer: "1"
+    explanation: |-
+      **"기본"과 NullPointerException이에요.** ofNullable(null)은 빈 Optional이고, of(null)은 예외예요.
+
+      - map은 비어 있으면 빈 채로 넘어가서 orElse가 "기본"을 줘요
+      - null일 수 있는 값은 ofNullable로 담아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html#of(T)
+  # ── 질문 5 ──
+  - key: sop-or-else-count
+    concept: core
+    coreQuestion: q5
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: repo.findByEmail(email)이 회원을 찾아 돌려줬어요. 아래 두 코드에서 createMember는 각각 몇 번 실행될까요?
+    code: |-
+      // 1
+      repo.findByEmail(email)
+          .orElse(createMember(email));
+      // 2
+      repo.findByEmail(email)
+          .orElseGet(() -> createMember(email));
+    choices:
+      - 0번과 0번
+      - 1번과 0번
+      - 1번과 1번
+      - 0번과 1번
+    answer: "2"
+    explanation: |-
+      **1번과 0번이에요.** orElse의 인자는 평범한 메서드 인자라 orElse를 부르기 전에 먼저 실행돼요.
+
+      - orElseGet의 람다는 비어 있을 때만 실행돼요
+      - 찾았을 때 orElse는 만든 것을 버리지만, createMember가 한 일은 이미 일어났어요
+    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.12.4
+  - key: sop-or-else-load
+    concept: core
+    coreQuestion: q5
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: load()는 "load"를 출력하고 "B"를 돌려줘요. 아래 코드를 실행하면 무엇이 출력되고, v는 무엇일까요?
+    code: |-
+      String v = Optional.of("A").orElse(load());
+    choices:
+      - 출력 없음, v는 "A"
+      - '"load"가 출력되고 v는 "A"'
+      - '"load"가 출력되고 v는 "B"'
+      - 출력 없음, v는 "B"
+    answer: "2"
+    explanation: |-
+      **"load"가 출력되고 v는 "A"예요.** orElse의 인자가 먼저 계산되어 load()가 실행되고, 값이 있으니 "A"를 돌려줘요.
+
+      - orElseGet(() -> load())로 쓰면 load()가 실행되지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html#orElseGet(java.util.function.Supplier)
+  - key: sop-or-else-save
+    concept: core
+    coreQuestion: q5
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 서비스에 아래 줄이 있어요. 이미 가입한 이메일로 이 줄을 세 번 실행하면 save는 몇 번 불릴까요?
+    code: |-
+      Member member = memberRepository
+          .findByEmail(email)
+          .orElse(memberRepository.save(
+              new Member(email)));
+    choices:
+      - 0번
+      - 1번
+      - 3번
+      - 컴파일 오류
+    answer: "3"
+    explanation: |-
+      **3번이에요.** orElse의 인자는 회원을 찾았어도 먼저 실행돼요.
+
+      - 유니크 제약이 없으면 중복 회원이 쌓이고, 있으면 제약 위반 예외로 실패해요
+      - orElseGet(() -> memberRepository.save(...))로 고쳐요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html#orElse(T)
+  # ── 다섯 질문을 하나로 ──
+  - key: sop-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스트림의 지연 평가와 Optional을 올바르게 쓰는 법을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **중간 연산은 최종 연산이 불릴 때 원소 하나씩 실행되고, Optional은 없을 때 할 일을 함께 정하는 메서드로 꺼내요.**
+
+      - **구조:** 원본, 중간 연산, 최종 연산. 원본은 바뀌지 않고 스트림은 한 번만 쓴다
+      - **지연 평가:** 최종 연산이 없으면 아무것도 실행되지 않는다. findFirst와 limit은 필요한 만큼만 처리한다
+      - **모으기:** toMap은 키가 겹치면 예외, toList는 고칠 수 없다
+      - **Optional:** get 대신 orElseThrow, map. orElse의 인자는 먼저 계산되니 메서드 호출은 orElseGet으로
+    checklist:
+      - 스트림이 원본, 중간 연산, 최종 연산으로 이루어진다고 말했다
+      - 중간 연산은 최종 연산이 불릴 때 실행된다(지연 평가)고 말했다
+      - Optional은 없을 수 있음을 반환 타입으로 알리는 것이라고 말했다
+      - get 대신 orElseThrow나 map 같은 메서드로 꺼낸다고 말했다
+      - orElse와 orElseGet의 차이를 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Optional.html
