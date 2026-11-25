@@ -1,0 +1,173 @@
+# 키와 제약 조건 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 키와 제약 조건
+unit: DB
+roadmap: D1
+type: 동작 확인
+prerequisites: []
+assume: 'PostgreSQL 16. SQL의 CREATE TABLE, INSERT, SELECT를 한 번 써 본 것. 자바의 예외(try-catch). 트랜잭션은 몰라도 돼요.'
+example: '쇼핑몰의 회원(`member`)과 주문(`orders`) 두 테이블. 회원은 이메일로 가입하고, 주문은 회원 id를 가져요. 제약 조건을 하나씩 걸고 빼며 잘못된 데이터가 들어가는지 봐요.'
+intro:
+  - '회원 가입 버튼을 빠르게 두 번 누른 사용자가 같은 이메일로 회원이 둘 생겼어요. 코드에는 분명히 "이미 있는 이메일인지 확인" 이 있었는데도요. 다른 날에는 탈퇴한 회원의 주문이 남아서, 주문 목록 화면이 회원 이름을 못 찾고 오류를 냈어요.'
+  - '자바 코드의 검사는 요청 하나 안에서만 맞아요. 요청 둘이 동시에 오거나 누군가 SQL로 직접 고치면 코드를 거치지 않아요. 테이블에 건 제약 조건은 어느 길로 들어오든 DB가 막아요. 스프링 개발자는 엔티티를 만들 때 어떤 키와 제약을 둘지 정하고, 위반이 났을 때 어떤 예외가 오는지 알아야 해요.'
+  - '이 레슨에서는 PostgreSQL에 두 테이블을 만들고, 제약이 없을 때 들어가는 잘못된 데이터와 제약이 있을 때 나는 오류를 실제로 확인해요. 동시에 가입하는 두 요청도 돌려 봐요.'
+covers:
+  - topic: '기본 키는 행 하나를 가리키는 값이다. NULL이 될 수 없고 겹칠 수 없다(NOT NULL과 UNIQUE를 합친 것). 테이블에 하나만 둔다'
+    where: '질문 1'
+  - topic: '자연 키(이메일, 주민번호)와 대리 키(의미 없는 일련번호). 바뀔 수 있는 값을 기본 키로 두면 그 값을 가리키는 모든 곳을 고쳐야 한다. 그래서 대개 대리 키를 쓰고 자연 키에는 UNIQUE를 건다'
+    where: '질문 1'
+  - topic: '일련번호를 만드는 방법: GENERATED ALWAYS AS IDENTITY(시퀀스). 롤백해도 번호는 돌아오지 않아 빈 번호가 생긴다'
+    where: '질문 1의 더 알아보기. 식별자 전략은 식별자 생성 전략(P9)'
+  - topic: '외래 키는 다른 테이블의 키를 가리키는 열이다. 없는 부모를 가리키는 행을 넣을 수 없다'
+    where: '질문 2'
+  - topic: '자식이 있는 부모를 지울 때: 기본은 막는다(NO ACTION). ON DELETE CASCADE는 자식까지 지우고 SET NULL은 끊는다'
+    where: '질문 2'
+  - topic: 'PostgreSQL은 외래 키 열에 인덱스를 만들어 주지 않는다. 부모를 지우거나 자식을 조인할 때 느려질 수 있다'
+    where: '질문 2의 더 알아보기. 인덱스는 인덱스와 실행계획(D7)'
+  - topic: 'NOT NULL은 값이 반드시 있어야 하는 열, CHECK는 값의 범위(잔액 0 이상, 수량 1 이상)를 지킨다'
+    where: '질문 3'
+  - topic: 'UNIQUE는 겹치면 안 되는 열을 지킨다. NULL은 서로 같지 않다고 보아 여러 개 들어간다(PostgreSQL 15부터 NULLS NOT DISTINCT로 바꿀 수 있다)'
+    where: '질문 3'
+  - topic: '여러 열을 합쳐서 겹치지 않게 하는 복합 UNIQUE(회원 한 명이 같은 상품에 리뷰 하나)'
+    where: '질문 3'
+  - topic: '앱에서 "있는지 조회한 뒤 없으면 INSERT"는 동시에 오는 두 요청이 둘 다 통과한다. 중복을 끝까지 막는 것은 UNIQUE 제약이다'
+    where: '질문 4'
+  - topic: '제약 위반은 SQLState로 구분한다: 23505(유니크), 23503(외래 키), 23502(NOT NULL), 23514(CHECK)'
+    where: '질문 4'
+  - topic: '스프링은 제약 위반을 DataIntegrityViolationException(유니크는 DuplicateKeyException)으로 바꿔 준다. 잡아서 409 같은 응답으로 바꾼다'
+    where: '실무에서는'
+  - topic: 'JPA의 @Column(unique = true, nullable = false)는 테이블을 만들 때(DDL)만 쓰이고, 저장할 때 검사하지 않는다'
+    where: '실무에서는'
+  - topic: '같은 요청이 두 번 와도 한 번만 처리하는 멱등 키'
+    where: '다루지 않음: 멱등성과 중복 요청 방지(A6)'
+  - topic: '제약 조건을 운영 중인 큰 테이블에 더하는 방법(NOT VALID, 잠금)'
+    where: '다루지 않음: 스키마 변경과 마이그레이션(D16)'
+codes:
+  predict: |-
+    -- member.email에 UNIQUE 없음
+    -- 두 요청이 동시에 실행해요
+
+    select count(*) from member
+     where email = 'kim@a.com';
+    -- 0이면
+    insert into member(email)
+    values ('kim@a.com');
+  tables: |-
+    create table member (
+      id bigint generated always
+         as identity primary key,
+      email text not null unique,
+      name text not null
+    );
+
+    create table orders (
+      id bigint generated always
+         as identity primary key,
+      member_id bigint not null
+         references member(id),
+      amount int not null
+         check (amount > 0)
+    );
+  orphan: |-
+    insert into orders(member_id, amount)
+    values (999, 10000);
+  catchDup: |-
+    try {
+      memberRepository.save(member);
+    } catch (
+        DataIntegrityViolationException e) {
+      throw new EmailTakenException();
+    }
+predict:
+  text: '코드 predict는 회원 가입의 "이메일이 있는지 세어 보고, 0이면 넣기"예요. `email`에 UNIQUE가 없을 때 같은 이메일로 두 요청이 동시에 이 코드를 돌리면, 회원은 몇 명 생길까요? 보기: 1명, 2명, 둘 다 실패해서 0명.'
+  answer: '2명. 두 요청 모두 아직 아무도 넣지 않은 때 세어서 0을 보고 둘 다 넣는다. 질문 4에서 밝힌다.'
+questions:
+  - id: q1
+    title: 기본 키는 무엇이고, 왜 의미 없는 번호를 쓰나요?
+    conclusion:
+      lead: '기본 키는 테이블에서 행 하나를 가리키는 값이고, NULL일 수 없고 겹칠 수 없어요.'
+      sub: '이메일처럼 바뀔 수 있는 값을 키로 두면 그 키를 가리키는 모든 곳을 고쳐야 해서, 대개 의미 없는 일련번호를 키로 두고 이메일에는 UNIQUE를 걸어요.'
+    says:
+      - '기본 키(PRIMARY KEY)는 행을 하나로 가리키는 값이다. 같은 값이 두 행에 있을 수 없고, 비어 있을 수 없다. PostgreSQL은 기본 키에 UNIQUE와 NOT NULL을 함께 걸고 인덱스를 만든다'
+      - '코드 tables의 `member`에 같은 id를 두 번 넣으면 23505 오류, id 없이 넣을 수는 없다. 실제 오류 메시지를 보인다'
+      - '자연 키는 업무에 이미 있는 값(이메일, 사업자번호), 대리 키는 행을 가리키려고만 만든 번호다. 이메일을 기본 키로 두면 이메일을 바꿀 때 주문의 외래 키까지 다 바꿔야 한다. 그래서 대리 키를 기본 키로 두고 자연 키에 UNIQUE를 건다'
+      - '`generated always as identity`는 DB가 번호를 매겨 준다. 직접 id를 넣으려 하면 막는다'
+      - '더 알아보기: 번호는 시퀀스에서 받는다. 넣다가 롤백해도 받은 번호는 돌아오지 않아 1, 2, 4처럼 빈 번호가 생긴다. 번호가 이어진다고 기대하면 안 된다. 실제로 롤백한 뒤 넣은 id를 보인다'
+    asks:
+      - '본문의 예시: `member`의 기본 키 id에 이미 있는 값 1로 또 넣으면 어떻게 되나 (23505 오류로 실패한다)'
+      - '옮긴 상황: 상품 테이블의 기본 키를 상품 코드(`SKU-001`)로 두었는데 상품 코드 체계가 바뀌었다. 무엇을 고쳐야 하나 (그 상품을 가리키는 주문 항목, 장바구니 같은 모든 외래 키 값. 대리 키였으면 상품 행 하나만)'
+  - id: q2
+    title: 외래 키는 무엇을 막나요?
+    conclusion:
+      lead: '외래 키는 없는 부모를 가리키는 자식 행을 막아요.'
+      sub: '없는 회원의 주문은 넣을 수 없고, 주문이 남은 회원은 기본 설정으로는 지울 수 없어요. 지울 때 자식을 함께 지울지(CASCADE) 끊을지(SET NULL)는 정할 수 있어요.'
+    says:
+      - '외래 키(REFERENCES)는 이 열의 값이 다른 테이블의 키에 꼭 있어야 한다는 약속이다. 코드 orphan처럼 없는 회원 999의 주문을 넣으면 23503 오류다. 외래 키를 뺀 테이블에서는 그대로 들어가서, 주인 없는 주문이 생긴다. 두 경우를 나란히 보인다'
+      - '부모를 지울 때: 기본(NO ACTION)은 자식이 있으면 지우지 못한다. `on delete cascade`는 자식도 지운다. `on delete set null`은 자식의 외래 키를 NULL로 바꾼다(열이 NULL을 받아야 한다). 셋을 같은 데이터로 돌려 남은 주문 수를 보인다'
+      - 'CASCADE는 편하지만 회원 한 명을 지우면 주문, 결제, 리뷰가 줄줄이 사라질 수 있다. 주문처럼 지우면 안 되는 기록에는 쓰지 않는다. 실무에서는 회원을 지우지 않고 탈퇴 표시를 하는 일이 많다'
+      - '더 알아보기: PostgreSQL은 외래 키 열에 인덱스를 만들어 주지 않는다. 부모를 지울 때 자식 테이블에서 그 부모를 찾느라 전체를 읽을 수 있다. 외래 키 열에는 대개 인덱스를 직접 만든다. 인덱스는 D7에서 다룬다'
+    widget:
+      kind: toggle
+      note: '부모를 지울 때의 규칙(NO ACTION, CASCADE, SET NULL)을 고르면 회원 kim을 지운 뒤의 두 테이블을 나란히 보인다. NO ACTION은 오류와 함께 그대로, CASCADE는 주문까지 사라짐, SET NULL은 주문의 member_id가 비어 있음'
+    asks:
+      - '본문의 예시: 외래 키가 있는 `orders`에 없는 회원 999의 주문을 넣으면 어떻게 되나 (23503 오류로 실패한다)'
+      - '옮긴 상황: 게시글과 댓글 테이블에서 댓글의 `post_id`가 `on delete cascade`다. 댓글 30개가 달린 글 하나를 지우면 댓글은 몇 개 남나 (0개)'
+      - '실무 구역의 상황: 주문이 있는 회원을 기본 설정의 외래 키에서 지우면 (23503 오류. 스프링에서는 `DataIntegrityViolationException`)'
+  - id: q3
+    title: NOT NULL, UNIQUE, CHECK는 각각 무엇을 지키나요?
+    conclusion:
+      lead: 'NOT NULL은 값이 꼭 있게, UNIQUE는 값이 겹치지 않게, CHECK는 값이 정한 범위에 있게 지켜요.'
+      sub: '셋 다 규칙을 테이블에 적어 두는 것이라, 어느 코드가 넣든 DB가 같은 규칙으로 막아요. 다만 UNIQUE는 NULL끼리를 같다고 보지 않아요.'
+    says:
+      - 'NOT NULL: 이름이 없는 회원을 넣으면 23502 오류'
+      - 'CHECK: 코드 tables의 `check (amount > 0)`에 0원 주문을 넣으면 23514 오류. 잔액 0 이상, 수량 1 이상, 상태값이 정한 몇 가지 중 하나 같은 규칙에 쓴다'
+      - 'UNIQUE: 같은 이메일로 두 번 넣으면 23505 오류. PostgreSQL은 UNIQUE에 인덱스를 만들어 그 인덱스로 겹치는지 본다'
+      - 'UNIQUE에 NULL을 여러 번 넣으면 모두 들어간다. SQL에서 NULL은 "모르는 값"이라 서로 같다고 보지 않기 때문이다. 실제로 넣어 센 수를 보인다. 막으려면 NOT NULL을 같이 걸거나, PostgreSQL 15부터 `unique nulls not distinct`를 쓴다'
+      - '복합 UNIQUE: `unique (member_id, product_id)`는 두 열의 조합이 겹치지 않게 한다. 회원 한 명이 상품 하나에 리뷰를 하나만 쓰게 하는 규칙이다. 같은 회원이 다른 상품에, 다른 회원이 같은 상품에 쓰는 것은 된다'
+    asks:
+      - '본문의 예시: `email text unique`(NOT NULL 없음)인 열에 이메일 없이 회원을 세 번 넣으면 몇 명이 들어가나 (3명. NULL끼리는 겹친다고 보지 않는다)'
+      - '옮긴 상황: 좋아요 테이블에 `unique (member_id, post_id)`가 있다. (1, 10), (1, 11), (2, 10), (1, 10)을 차례로 넣으면 몇 번째가 실패하나 (네 번째)'
+  - id: q4
+    title: 앱에서 미리 확인하는데도 왜 DB 제약이 필요한가요?
+    conclusion:
+      lead: '앱의 "확인하고 넣기"는 동시에 오는 두 요청이 둘 다 통과할 수 있어서, 중복을 끝까지 막는 것은 DB의 제약이에요.'
+      sub: '확인과 넣기 사이에 다른 요청이 끼어들 틈이 있어요. UNIQUE 제약은 넣는 순간 DB가 검사하므로, 둘 중 하나는 23505 오류로 실패해요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 predict를 UNIQUE 없는 테이블에서 두 스레드로 동시에 돌린다. 두 스레드가 모두 0을 센 뒤에 넣도록 맞춰 시작한다. 같은 이메일 회원이 2명 생긴다. 실제 출력을 보인다'
+      - '왜 그런가. 세는 것과 넣는 것은 따로 실행되는 두 문장이다. 첫 요청이 넣기 전에 둘째 요청이 세면 둘 다 0을 본다. 트랜잭션으로 묶어도 기본 격리 수준에서는 아직 커밋되지 않은 남의 INSERT를 보지 못하니 마찬가지다(격리 수준은 D9)'
+      - '같은 코드를 UNIQUE가 있는 테이블에서 돌리면 하나는 들어가고 하나는 23505 오류로 실패한다. 회원은 1명이다'
+      - '그래도 앱의 확인을 지우지는 않는다. 평소에는 앱이 먼저 확인해서 "이미 가입한 이메일이에요"처럼 알맞은 메시지를 준다. 제약은 동시 요청과 실수를 막는 마지막 방어다. 둘을 함께 둔다'
+      - '제약 위반의 종류는 SQLState 다섯 자리로 구분한다. 23505 유니크, 23503 외래 키, 23502 NOT NULL, 23514 CHECK. 앞의 23은 "무결성 위반"의 묶음이다'
+    widget:
+      kind: steps
+      note: '요청 A와 B가 번갈아 한 문장씩 실행한다. selector로 "UNIQUE 없음"과 "UNIQUE 있음"을 고른다. 없음은 A 세기 0, B 세기 0, A 넣기, B 넣기로 2명. 있음은 마지막 단계에서 B가 23505로 실패하고 1명'
+    asks:
+      - '본문의 예시: UNIQUE가 있는 `email`에 두 요청이 동시에 "세고 0이면 넣기"를 하면 결과는 (1명이 들어가고 한 요청은 23505 오류)'
+      - '옮긴 상황: 쿠폰 발급 코드가 "이 회원이 이 쿠폰을 받았는지 조회 → 없으면 발급 행 INSERT"다. 제약 없이 같은 회원의 요청 두 개가 동시에 오면 (두 장이 발급될 수 있다. `unique (member_id, coupon_id)`로 막는다)'
+practice:
+  says:
+    - '스프링의 `JdbcTemplate`이나 JPA로 저장할 때 제약을 어기면 스프링은 드라이버의 `SQLException`을 `DataIntegrityViolationException`으로 바꿔 던진다. 유니크 위반은 그 하위 클래스 `DuplicateKeyException`이다. 테스트로 예외 클래스와 SQLState를 남긴다'
+    - '코드 catchDup처럼 저장에서 이 예외를 잡아 "이미 가입한 이메일" 오류(HTTP 409)로 바꾼다. 앱의 사전 확인과 함께 둔다'
+    - '흔한 실수: JPA 엔티티에 `@Column(unique = true)`만 달고 DB에 제약이 있다고 믿는다. 이 설정은 하이버네이트가 테이블을 만들 때(`ddl-auto`)만 쓰고, 운영 DB를 마이그레이션 도구로 만들면 무시된다. 저장할 때 따로 검사하지도 않는다. 고친 것: 제약을 마이그레이션 SQL에 적는다(하이버네이트 문서 근거)'
+    - '흔한 실수 둘: `DataIntegrityViolationException`을 모두 "이메일 중복"으로 바꾼다. 외래 키나 NOT NULL 위반도 같은 예외라 다른 버그를 숨긴다. `DuplicateKeyException`만 잡거나 제약 이름을 본다'
+claims:
+  - claim: '기본 키에 같은 값을 넣으면 23505, 외래 키가 없는 부모를 가리키면 23503, NOT NULL에 NULL을 넣으면 23502, CHECK를 어기면 23514'
+    how: 'PostgreSQL 컨테이너에서 각 문장을 실행하고 `SQLException.getSQLState()`를 본다'
+  - claim: '외래 키가 없는 테이블에는 없는 회원의 주문이 들어간다'
+    how: '외래 키를 뺀 테이블에 넣고 센다'
+  - claim: 'NO ACTION은 자식 있는 부모 삭제를 막고, CASCADE는 자식까지 지우고, SET NULL은 자식의 외래 키를 NULL로 바꾼다'
+    how: '세 테이블을 만들어 같은 회원을 지우고 남은 주문과 member_id를 본다'
+  - claim: 'UNIQUE 열에 NULL은 여러 개 들어가고, NULLS NOT DISTINCT면 두 번째가 실패한다'
+    how: 'NULL을 세 번 넣고 센다'
+  - claim: '롤백한 INSERT가 받은 identity 번호는 돌아오지 않는다'
+    how: '트랜잭션에서 넣고 롤백한 뒤 다시 넣은 id를 본다'
+  - claim: 'UNIQUE 없이 두 스레드가 "세고 넣기"를 동시에 하면 2명이 생기고, UNIQUE가 있으면 1명이고 한 쪽이 23505로 실패한다'
+    how: '두 스레드를 `CountDownLatch`로 맞춰 둘 다 센 뒤에 넣게 한다'
+  - claim: '스프링 `JdbcTemplate`은 유니크 위반을 `DuplicateKeyException`, 외래 키 위반을 `DataIntegrityViolationException`으로 던진다'
+    how: '`JdbcTemplate.update`로 위반하고 예외 클래스를 본다'
+sources:
+  - '기본 키, 외래 키, UNIQUE, CHECK, NOT NULL과 NULL을 다루는 방식: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/ddl-constraints.html'
+  - 'SQLState 코드: https://www.postgresql.org/docs/16/errcodes-appendix.html'
+  - '스프링의 예외 변환: https://docs.spring.io/spring-framework/reference/data-access/dao.html'
+  - '@Column(unique)가 스키마 생성에만 쓰인다는 것: Jakarta Persistence 3.1 명세 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'

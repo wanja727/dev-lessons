@@ -1,0 +1,196 @@
+# 격리 수준과 이상 현상 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+# 예전 레슨 site/src/pages/lessons/isolation-level.astro와 isolation/IsolationLevelTest.java를 재료로 다시 쓴다.
+stage: design
+title: 격리 수준과 이상 현상
+unit: DB
+roadmap: D9
+type: 동작 확인
+prerequisites:
+  - {slug: tx-basics, title: 트랜잭션 기초}
+assume: 'PostgreSQL 16. 커밋과 롤백, 커밋 전 변경은 다른 연결에 보이지 않는다는 것, ACID의 I(트랜잭션 기초 레슨).'
+example: '계좌 테이블 `account(owner, balance)`와 쿠폰 테이블. 트랜잭션 A와 B를 연결 두 개로 열고, 한 문장씩 번갈아 실행해 A가 무엇을 보는지 확인해요.'
+intro:
+  - '정산 작업이 같은 트랜잭션 안에서 잔액을 두 번 읽었는데 값이 달라서, 합계가 맞지 않는 보고서가 나왔어요. 다른 날에는 두 요청이 같은 잔액을 동시에 고쳐서 하나의 수정이 사라졌어요. 둘 다 트랜잭션 안에서 일어났어요.'
+  - '트랜잭션 기초에서 "커밋 전 변경은 남에게 보이지 않는다"를 봤어요. 그러면 커밋된 변경은 언제부터 보일까요? 그 답이 격리 수준이고, DB마다 기본값이 달라요. 스프링의 `@Transactional(isolation = ...)`으로 바꿀 수 있지만, 바꾸면 무엇을 얻고 무엇을 내주는지 알아야 해요.'
+  - '이 레슨에서는 PostgreSQL에 연결 두 개를 열고 문장 순서를 맞춰 실행해, 격리 수준마다 어떤 이상 현상이 보이고 막히는지 실제로 확인해요.'
+covers:
+  - topic: '격리 수준은 동시에 도는 트랜잭션이 서로의 변경을 얼마나 보는지 정한다. 높을수록 덜 보고, 대신 실패하거나 기다리는 일이 는다'
+    where: '질문 1'
+  - topic: '이상 현상 셋: Dirty Read(커밋 전 값을 읽음), Non-Repeatable Read(같은 행을 다시 읽으면 값이 다름), Phantom Read(같은 조건으로 다시 세면 행이 늘거나 줆)'
+    where: '질문 1'
+  - topic: 'SQL 표준의 네 격리 수준(READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE)과 각각 허용하는 이상 현상'
+    where: '질문 2'
+  - topic: 'PostgreSQL은 READ UNCOMMITTED를 READ COMMITTED로 다룬다(Dirty Read가 없다). REPEATABLE READ에서 Phantom Read도 막는다. 표준과 다르다'
+    where: '질문 2'
+  - topic: 'PostgreSQL의 기본은 READ COMMITTED다. 문장마다 그 순간 커밋된 값을 본다. MySQL InnoDB의 기본은 REPEATABLE READ다'
+    where: '질문 3'
+  - topic: 'REPEATABLE READ는 트랜잭션의 첫 문장 때의 스냅샷을 끝까지 본다'
+    where: '질문 4. 스냅샷을 만드는 원리는 MVCC(D13)'
+  - topic: 'REPEATABLE READ에서 다른 트랜잭션이 먼저 고친 행을 고치려 하면 직렬화 오류(40001)로 실패한다. 앱이 트랜잭션을 다시 시도해야 한다'
+    where: '질문 4'
+  - topic: '갱신 손실(읽고 계산해서 쓰기)은 READ COMMITTED에서 막히지 않는다'
+    where: '질문 5. 락으로 막는 법은 낙관적 락과 비관적 락(D10)'
+  - topic: '원자적 UPDATE(balance = balance + n)는 READ COMMITTED에서도 정확하다. 뒤 트랜잭션은 앞 트랜잭션의 커밋을 기다렸다가 최신 값에 더한다'
+    where: '질문 5'
+  - topic: 'SERIALIZABLE은 한 줄로 차례로 실행한 것과 같은 결과만 허용하고, 아니면 40001로 실패시킨다'
+    where: '질문 2의 더 알아보기'
+  - topic: '쓰기 치우침(write skew): 서로 다른 행을 읽고 고쳐 규칙이 깨지는 것. REPEATABLE READ로 막히지 않고 SERIALIZABLE로 막힌다'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링 @Transactional(isolation = ...)과 읽기 전용 트랜잭션, 직렬화 오류를 다시 시도하는 코드'
+    where: '실무에서는'
+  - topic: '복제 DB에서 읽을 때 늦게 보이는 것'
+    where: '다루지 않음: DB 복제와 샤딩(A15)'
+codes:
+  predict: |-
+    -- 둘 다 READ COMMITTED
+    -- kim의 잔액은 100
+
+    A: begin;
+    A: select balance from account
+        where owner = 'kim'; -- 100
+    B: begin;
+    B: update account
+          set balance = 50
+        where owner = 'kim';
+    B: commit;
+    A: select balance from account
+        where owner = 'kim'; -- ?
+  rr: |-
+    A: [[begin isolation level]]
+       [[repeatable read;]]
+    A: select balance ...; -- 100
+    B: update ... set balance = 50;
+    B: commit;
+    A: select balance ...; -- 100
+  lostUpdate: |-
+    A: select balance ...; -- 100
+    B: select balance ...; -- 100
+    A: update ... set balance = 150;
+    A: commit;
+    B: update ... set balance = 130;
+    B: commit;  -- 결과 130
+  atomic: |-
+    update account
+       set balance = [[balance + 50]]
+     where owner = 'kim';
+  spring: |-
+    @Transactional(isolation =
+        Isolation.REPEATABLE_READ)
+    public Report monthlyReport() {
+      long total = repo.sumBalance();
+      List<Account> rows = repo.findAll();
+      return new Report(total, rows);
+    }
+predict:
+  text: '코드 predict에서 A가 잔액을 읽은 뒤 B가 50으로 바꾸고 커밋해요. A는 아직 같은 트랜잭션 안이에요. A가 두 번째로 읽은 값은 얼마일까요? 보기: 100, 50, 오류가 난다.'
+  answer: '50. READ COMMITTED는 문장마다 그때까지 커밋된 값을 본다. 같은 트랜잭션에서 같은 행의 값이 바뀌어 보이는 Non-Repeatable Read다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: 동시에 도는 트랜잭션은 서로 무엇을 볼 수 있나요?
+    conclusion:
+      lead: '격리가 약하면 남의 트랜잭션이 바꾼 값이 내 트랜잭션 중간에 보이고, 그것이 세 가지 이상 현상으로 나타나요.'
+      sub: '커밋 전 값을 읽는 Dirty Read, 같은 행을 다시 읽으면 값이 다른 Non-Repeatable Read, 같은 조건으로 다시 세면 행 수가 다른 Phantom Read예요.'
+    says:
+      - '트랜잭션 기초의 ACID에서 I(격리)는 "동시에 돌아도 서로 끼어들지 않는 것"이었다. 완전히 막으면 차례로 줄 서야 해서 느리다. 그래서 DB는 얼마나 막을지 고르게 하고, 그 단계가 격리 수준이다'
+      - 'Dirty Read: B가 커밋하지 않은 값을 A가 읽는다. B가 롤백하면 A는 있지도 않은 값으로 일한 것이다'
+      - 'Non-Repeatable Read: A가 같은 행을 두 번 읽는 사이에 B가 고치고 커밋해서 두 값이 다르다'
+      - 'Phantom Read: A가 `where amount > 1000`으로 두 번 세는 사이에 B가 조건에 맞는 행을 넣고 커밋해서 두 수가 다르다. 행 하나의 값이 아니라 조건에 맞는 행의 집합이 바뀐다'
+      - '세 현상을 시간 순서 그림 하나씩으로 보인다. A와 B의 줄을 나란히 놓고 문장을 번갈아 둔다'
+    widget:
+      kind: steps
+      note: 'selector로 세 이상 현상 가운데 하나를 고르고, A와 B의 문장을 한 단계씩 실행한다. 단계마다 A가 본 값과 DB에 커밋된 값을 duo로 보인다. 마지막 단계에서 A의 두 번 읽은 값이 다르면 산호색'
+    asks:
+      - '본문의 예시: A가 `count(*) where amount > 1000`을 두 번 하는 사이에 B가 조건에 맞는 주문을 넣고 커밋해 수가 달라졌다. 어떤 이상 현상인가 (Phantom Read)'
+      - '옮긴 상황: 재고 화면이 B가 아직 커밋하지 않은 "재고 0"을 읽어 품절로 보였는데 B는 롤백했다. 어떤 이상 현상인가 (Dirty Read)'
+  - id: q2
+    title: 격리 수준 네 가지는 각각 무엇을 막나요?
+    conclusion:
+      lead: 'SQL 표준은 READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE 순으로 이상 현상을 하나씩 더 막아요.'
+      sub: '하지만 실제 DB는 표준보다 더 막기도 해요. PostgreSQL은 Dirty Read를 어느 수준에서도 허용하지 않고, REPEATABLE READ에서 Phantom Read까지 막아요.'
+    says:
+      - '표준의 표: READ UNCOMMITTED는 셋 다 허용, READ COMMITTED는 Dirty만 막음, REPEATABLE READ는 Phantom만 허용, SERIALIZABLE은 셋 다 막음'
+      - 'PostgreSQL의 표를 옆에 둔다. READ UNCOMMITTED로 열어도 READ COMMITTED처럼 동작한다. B의 커밋 전 값을 A가 읽지 못하는 것을 실제로 보인다'
+      - 'PostgreSQL의 REPEATABLE READ에서 B가 조건에 맞는 행을 넣고 커밋해도 A의 `count(*)`는 그대로다. 표준은 허용하지만 PostgreSQL은 막는다. 실제로 보인다'
+      - '그래서 "격리 수준 X는 Y를 막는다"는 DB와 버전을 붙여서 말한다'
+      - '더 알아보기: SERIALIZABLE은 트랜잭션들을 한 줄로 차례로 돌린 것과 같은 결과만 남기고, 그렇게 설명할 수 없으면 한쪽을 40001로 실패시킨다. 가장 안전하고 다시 시도가 가장 잦다'
+    widget:
+      kind: classify
+      note: '상황(이상 현상) 여러 개를 "PostgreSQL READ COMMITTED에서 생긴다"와 "생기지 않는다"로 나눈다. 예: 커밋 전 값 읽기, 같은 행 다시 읽기, 같은 조건 다시 세기, 원자적 UPDATE 두 개의 결과'
+    asks:
+      - '본문의 예시: PostgreSQL에서 `begin isolation level read uncommitted`로 연 A는 B의 커밋 전 값을 읽을 수 있나 (없다. READ COMMITTED처럼 동작한다)'
+      - '옮긴 상황: SQL 표준의 REPEATABLE READ에서 허용되는 이상 현상은 무엇인가 (Phantom Read)'
+  - id: q3
+    title: 기본값인 READ COMMITTED에서는 무엇이 보이나요?
+    conclusion:
+      lead: 'READ COMMITTED는 문장을 실행하는 순간까지 커밋된 값을 봐요. 그래서 같은 트랜잭션 안에서도 문장마다 다른 값을 볼 수 있어요.'
+      sub: 'PostgreSQL과 오라클의 기본값이에요. 커밋 전 값은 안 보이지만, Non-Repeatable Read와 Phantom Read는 생겨요.'
+    says:
+      - 'PostgreSQL의 기본 격리 수준을 `show transaction_isolation`으로 보인다'
+      - '예측의 답을 밝힌다. 코드 predict에서 A의 두 번째 읽기는 50이다. A의 각 문장은 그 문장이 시작할 때의 스냅샷을 본다. 실제 출력을 보인다'
+      - '같은 순서로 B가 행을 넣고 커밋하면 A의 두 번째 `count(*)`가 하나 늘어난다. Phantom Read다'
+      - '대부분의 요청은 이것으로 충분하다. 문장 하나 안에서는 일관된 값을 보고, 커밋된 최신 값을 읽는다. 문제는 한 트랜잭션에서 여러 번 읽고 그 값들이 서로 맞아야 할 때다(정산, 보고서)'
+      - 'MySQL InnoDB의 기본은 REPEATABLE READ다. 같은 스프링 코드를 다른 DB에서 돌리면 보이는 값이 다를 수 있다(MySQL 문서 근거)'
+    asks:
+      - '본문의 예시: READ COMMITTED에서 A가 쿠폰 수를 센 뒤 B가 쿠폰을 넣고 커밋했다. A가 같은 트랜잭션에서 다시 세면 (하나 늘어난 수. Phantom Read)'
+      - '옮긴 상황: 월말 보고서가 한 트랜잭션에서 "전체 잔액 합계"를 구한 뒤 "계좌별 잔액 목록"을 읽는다. READ COMMITTED에서 그 사이 이체가 커밋되면 생길 수 있는 일은 (목록의 합이 먼저 구한 합계와 다르다)'
+  - id: q4
+    title: REPEATABLE READ는 무엇을 막고, 대신 무엇이 생기나요?
+    conclusion:
+      lead: 'REPEATABLE READ는 트랜잭션의 첫 문장 때 만든 스냅샷을 끝까지 봐서, 다른 트랜잭션이 그 뒤에 커밋한 변경이 보이지 않아요.'
+      sub: '대신 남이 먼저 고치고 커밋한 행을 내가 고치려 하면 PostgreSQL은 직렬화 오류(40001)로 실패시켜요. 앱은 트랜잭션을 처음부터 다시 시도해야 해요.'
+    says:
+      - '코드 rr은 코드 predict를 REPEATABLE READ로 연 것이다. A의 두 번째 읽기도 100이다. 실제 출력을 보인다'
+      - '스냅샷은 "그 순간까지 커밋된 것만 보이는 사진"이다. 트랜잭션 시작 때가 아니라 첫 문장을 실행할 때 찍는다. 스냅샷을 어떻게 만드는지는 MVCC(D13)'
+      - 'A가 스냅샷의 100을 보고 kim의 행을 고치려 하는데, B가 그 행을 이미 고쳐 커밋했다. A가 고치면 B의 수정을 모르고 덮어쓴다. PostgreSQL은 이것을 막으려고 A의 UPDATE를 `could not serialize access due to concurrent update`(40001)로 실패시킨다. 실제 오류를 보인다'
+      - '그래서 REPEATABLE READ 이상을 쓰면 40001을 받았을 때 트랜잭션 전체를 다시 시도하는 코드가 함께 있어야 한다(실무에서는)'
+      - '더 알아보기: 쓰기 치우침. 당직 의사 둘이 "당직이 2명 이상이면 나는 빠진다"를 동시에 실행해 둘 다 빠진다. 서로 다른 행을 고쳐서 REPEATABLE READ로는 막히지 않는다. SERIALIZABLE로 돌리면 한쪽이 40001로 실패한다. 실제로 보인다'
+    asks:
+      - '본문의 예시: REPEATABLE READ의 A가 kim의 잔액 100을 읽은 뒤 B가 kim의 잔액을 고치고 커밋했다. A가 kim의 행을 UPDATE하면 (40001 직렬화 오류로 실패한다)'
+      - '옮긴 상황: 보고서 트랜잭션을 REPEATABLE READ로 바꿨다. 이 트랜잭션은 읽기만 한다. 직렬화 오류를 걱정해야 하나 (읽기만 하면 40001이 나지 않는다. 다른 행을 고치는 트랜잭션이 따로 실패할 일도 없다)'
+  - id: q5
+    title: 갱신 손실은 격리 수준으로 막히나요?
+    conclusion:
+      lead: 'READ COMMITTED에서 "읽고, 앱에서 계산하고, 쓰기"를 하면 두 수정 가운데 하나가 사라져요. 격리 수준의 기본값은 이것을 막지 않아요.'
+      sub: '`balance = balance + 50`처럼 계산을 UPDATE 안에서 하면 READ COMMITTED에서도 맞아요. 앱에서 계산해야 하면 락(D10)을 써요.'
+    says:
+      - '코드 lostUpdate: A와 B가 둘 다 100을 읽고, A는 +50으로 150을, B는 +30으로 130을 쓴다. 결과는 180이 아니라 130이다. A의 수정이 사라졌다. 실제 출력을 보인다'
+      - '코드 atomic처럼 계산을 UPDATE 안에서 하면 B의 UPDATE는 A가 잡은 행 락 때문에 A의 커밋을 기다린다. A가 커밋하면 B는 그 행을 다시 읽어 최신 값에 더한다. 결과 180이다. 실제 출력을 보인다'
+      - '같은 원자적 UPDATE도 REPEATABLE READ에서는 A가 커밋한 뒤 B가 40001로 실패한다. 다시 시도해야 한다. 실제 오류를 보인다'
+      - '앱에서 계산해야 하는 경우(할인 규칙, 외부 API 결과)에는 원자적 UPDATE로 바꿀 수 없다. 이때 쓰는 것이 낙관적 락과 비관적 락이다(D10)'
+    asks:
+      - '본문의 예시: READ COMMITTED에서 A와 B가 동시에 `update account set balance = balance + 50`을 실행하고 각자 커밋한다. 처음 잔액이 100이면 결과는 (200)'
+      - '옮긴 상황: 조회수를 `select views` → 자바에서 +1 → `update ... set views = ?`로 올린다. 동시에 요청 10개가 오면 (10보다 적게 오를 수 있다. 갱신 손실. `set views = views + 1`로 고친다)'
+practice:
+  says:
+    - '스프링에서는 코드 spring처럼 `@Transactional(isolation = Isolation.REPEATABLE_READ)`로 트랜잭션마다 격리 수준을 정한다. 기본값 `Isolation.DEFAULT`는 DB의 기본값을 쓴다. 테스트로 그 트랜잭션 안에서 `show transaction_isolation`을 읽어 보인다'
+    - '보고서처럼 읽기만 하는 트랜잭션에 `readOnly = true`를 함께 쓰면 PostgreSQL에 읽기 전용으로 열려 실수로 쓰는 것을 막는다(스프링 문서 근거)'
+    - '흔한 실수: 격리 수준을 REPEATABLE READ로 올리고 다시 시도 코드를 두지 않는다. 동시 수정이 있으면 사용자가 오류를 받는다. 스프링은 40001을 `CannotAcquireLockException`(또는 `ConcurrencyFailureException`의 하위 예외)로 바꾼다. 테스트로 예외 클래스를 확인하고, 다시 시도하는 고친 코드를 보인다'
+    - '격리 수준은 연결마다 정해진다. 커넥션 풀에서 꺼낸 연결에 스프링이 격리 수준을 바꿨다가 돌려줄 때 되돌린다(D6의 풀)'
+claims:
+  - claim: 'PostgreSQL의 기본 격리 수준은 READ COMMITTED'
+    how: '`show transaction_isolation`'
+    test: 'IsolationLevelTest'
+  - claim: 'READ UNCOMMITTED로 열어도 커밋 전 값은 보이지 않는다'
+    how: '연결 두 개로 순서를 맞춰 실행한다'
+    test: 'IsolationLevelTest'
+  - claim: 'READ COMMITTED는 Non-Repeatable Read와 Phantom Read가 생긴다'
+    how: '같은 방법'
+    test: 'IsolationLevelTest'
+  - claim: 'REPEATABLE READ는 첫 스냅샷을 계속 보고 Phantom Read도 막는다'
+    how: '같은 방법'
+    test: 'IsolationLevelTest'
+  - claim: '읽고 계산해서 쓰면 READ COMMITTED에서 갱신 손실이 생기고, 원자적 UPDATE는 정확하다'
+    how: '같은 방법'
+    test: 'IsolationLevelTest'
+  - claim: 'REPEATABLE READ에서 먼저 커밋된 행을 UPDATE하면 40001로 실패한다'
+    how: 'SQLState를 본다'
+    test: 'IsolationLevelTest'
+  - claim: '쓰기 치우침은 REPEATABLE READ에서 생기고 SERIALIZABLE에서 40001로 막힌다'
+    how: '당직 예제를 두 연결로 실행한다. 새로 더한다'
+  - claim: '스프링의 `@Transactional(isolation)`이 연결의 격리 수준을 바꾸고, 40001은 스프링 예외로 바뀐다'
+    how: '`TransactionTemplate`에 격리 수준을 주고 `show transaction_isolation`과 예외 클래스를 본다. 새로 더한다'
+sources:
+  - '격리 수준과 이상 현상, PostgreSQL의 차이: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/transaction-iso.html'
+  - 'MySQL InnoDB의 기본 격리 수준: https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html'
+  - '스프링의 격리 수준과 readOnly: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html'

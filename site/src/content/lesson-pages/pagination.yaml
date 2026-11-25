@@ -1,0 +1,167 @@
+# 페이지네이션 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+# 예전 레슨 rest-api의 페이지네이션 부분과 rest/RestApiTest.java의 페이지네이션 테스트를 재료로 쓴다.
+stage: design
+title: 페이지네이션
+unit: DB
+roadmap: D8
+type: 동작 확인
+prerequisites:
+  - {slug: index-explain, title: 인덱스와 실행계획}
+assume: 'PostgreSQL 16. 인덱스로 정렬된 값을 찾는 것, 복합 인덱스의 열 순서, `EXPLAIN ANALYZE` 읽는 법(인덱스와 실행계획 레슨).'
+example: '게시글 100만 건의 `post(id, title, created_at)`과 인덱스 (`created_at`, `id`). 최신 글부터 한 페이지에 20개씩 보여 줘요. 1페이지, 5만 페이지를 읽고, 읽는 사이에 새 글이 올라오게 해요.'
+intro:
+  - '게시판의 첫 페이지는 바로 뜨는데 마지막 페이지 근처를 누르면 몇 초가 걸려요. 무한 스크롤 피드에서는 스크롤을 내리다 방금 본 글이 또 나와요. 둘 다 흔한 페이지네이션 방식인 OFFSET에서 생기는 일이에요.'
+  - '목록을 돌려주는 API는 거의 모두 페이지를 나눠요. 다 돌려주면 서버 메모리와 응답 크기가 데이터 수만큼 커지기 때문이에요. 스프링 데이터의 `Pageable`은 기본이 OFFSET 방식이라, 언제 그대로 쓰고 언제 커서 방식으로 바꿀지 개발자가 정해야 해요.'
+  - '이 레슨에서는 게시글 100만 건으로 앞 페이지와 뒤 페이지의 실행계획과 시간을 비교하고, 페이지 사이에 글이 추가될 때 두 방식이 돌려주는 목록을 실제로 확인해요.'
+covers:
+  - topic: '페이지네이션은 전체를 한 번에 읽지 않고 정해진 수만큼 나눠 읽는 것이다. 전체를 읽으면 메모리와 응답이 데이터 수만큼 커진다'
+    where: '질문 1. 메모리가 넘치는 원리는 JVM 메모리 구조(J14)'
+  - topic: 'OFFSET 방식: ORDER BY ... LIMIT 20 OFFSET 40. 페이지 번호로 바로 간다'
+    where: '질문 1'
+  - topic: 'ORDER BY 없이 LIMIT을 쓰면 순서가 약속되지 않는다. 정렬 기준 값이 겹치면(같은 created_at) 페이지마다 순서가 흔들릴 수 있어서 마지막에 겹치지 않는 열(id)을 붙인다'
+    where: '질문 1. 정렬의 안정성은 정렬(K6)'
+  - topic: 'OFFSET은 건너뛸 행을 실제로 읽고 버린다. 뒤 페이지일수록 읽는 행이 늘어 느려진다'
+    where: '질문 2'
+  - topic: 'OFFSET은 페이지 사이에 행이 추가되거나 지워지면 같은 글이 또 나오거나 빠진다'
+    where: '질문 3'
+  - topic: '커서(키셋) 방식: 마지막으로 본 행의 값보다 뒤인 행을 WHERE로 찾는다. 인덱스로 그 자리부터 바로 읽어 페이지 위치와 상관없이 빠르다'
+    where: '질문 4'
+  - topic: '정렬 열이 둘 이상일 때의 커서 조건: (created_at, id) < (?, ?) 행 비교'
+    where: '질문 4'
+  - topic: '커서 방식의 대가: 특정 페이지 번호로 바로 갈 수 없다. 정렬 기준을 바꾸면 커서도 바뀐다'
+    where: '질문 4'
+  - topic: '전체 개수(count) 쿼리의 비용. 스프링 데이터의 Page는 count를 함께 보내고 Slice는 보내지 않는다'
+    where: '실무에서는'
+  - topic: '스프링 데이터의 Pageable, Sort, Page, Slice, Window(키셋 스크롤)'
+    where: '실무에서는'
+  - topic: '응답에 다음 페이지 정보 담기(next 커서, 링크)'
+    where: '실무에서는에 한 줄. API 응답 설계는 REST API 설계(N5)'
+  - topic: 'JPA의 fetch join과 페이징을 함께 쓸 때 메모리에서 자르는 문제'
+    where: '다루지 않음: JPA N+1 문제(P5)'
+  - topic: '대량의 행을 처리할 때 나눠 읽기(배치, 스트리밍 조회)'
+    where: '다루지 않음: 대량 DML 안전하게 하기(D15), 스프링 배치(S15)'
+codes:
+  predict: |-
+    -- 게시글 100만 건, 최신순
+    -- 인덱스 (created_at, id)
+
+    select * from post
+     order by created_at desc, id desc
+     limit 20 offset 0;      -- 1페이지
+
+    select * from post
+     order by created_at desc, id desc
+     limit 20 offset 999980; -- 끝 페이지
+  offset: |-
+    select id, title from post
+     order by created_at desc,
+              id desc
+     limit 20 [[offset 40]];
+  cursor: |-
+    select id, title, created_at
+      from post
+     where [[(created_at, id) < (?, ?)]]
+     order by created_at desc,
+              id desc
+     limit 20;
+  pageable: |-
+    Page<Post> page = postRepository
+        .findAll(PageRequest.of(
+            2, 20,
+            Sort.by("createdAt").descending()
+                .and(Sort.by("id")
+                    .descending())));
+  slice: |-
+    Slice<Post> findByBoardId(
+        Long boardId, Pageable p);
+  findAll: |-
+    List<Post> all =
+        postRepository.findAll();
+predict:
+  text: '코드 predict는 같은 인덱스로 1페이지와 끝 페이지를 읽어요. 두 쿼리 모두 20행을 돌려줘요. 끝 페이지는 1페이지보다 얼마나 오래 걸릴까요? 보기: 비슷하다, 몇 배, 수백 배 이상.'
+  answer: '수백 배 이상. 끝 페이지는 앞의 99만 9980행을 인덱스로 차례로 읽고 버린 뒤 20행을 돌려준다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: OFFSET 페이지네이션은 어떻게 동작하나요?
+    conclusion:
+      lead: '정렬한 결과에서 앞의 OFFSET개를 건너뛰고 LIMIT개를 돌려줘요. 3페이지는 `limit 20 offset 40`이에요.'
+      sub: '정렬 순서가 페이지마다 같아야 하니 ORDER BY는 꼭 쓰고, 정렬 기준이 겹칠 수 있으면 마지막에 id처럼 겹치지 않는 열을 붙여요.'
+    says:
+      - '목록을 다 돌려주지 않는 이유를 먼저 적는다. 100만 건을 한 번에 읽으면 그 행이 모두 서버 메모리에 올라오고 응답도 그만큼 커진다(J14가 넘긴 주제). 페이지마다 정해진 수만 읽는다'
+      - '코드 offset은 3페이지다. 페이지 번호 p(0부터)와 크기 n이면 `limit n offset p × n`. 페이지 번호로 어디든 바로 갈 수 있어 게시판의 번호 목록에 맞는다'
+      - 'ORDER BY 없이 LIMIT만 쓰면 DB는 순서를 약속하지 않는다. 페이지마다 다른 순서로 읽힐 수 있다'
+      - '정렬 기준이 겹치는 경우: 같은 초에 쓴 글이 여러 개면 `order by created_at`만으로는 그 글들의 순서가 정해지지 않는다. 페이지 경계에서 같은 글이 두 번 나오거나 빠질 수 있다. `order by created_at desc, id desc`처럼 겹치지 않는 열을 끝에 붙인다(정렬 K6이 넘긴 주제)'
+    asks:
+      - '본문의 예시: 페이지 크기가 20이고 페이지 번호가 0부터일 때 5번 페이지의 OFFSET은 (100)'
+      - '옮긴 상황: 상품 목록을 `order by price limit 30 offset ?`로 나눈다. 같은 가격의 상품이 많다. 페이지를 넘길 때 생길 수 있는 일과 고치는 법은 (같은 상품이 두 페이지에 나오거나 빠진다. `order by price, id`)'
+  - id: q2
+    title: 뒤 페이지는 왜 느려지나요?
+    conclusion:
+      lead: 'OFFSET은 건너뛸 행을 그냥 지나치지 못하고, 실제로 하나씩 읽은 뒤 버려요.'
+      sub: '그래서 OFFSET이 클수록 읽는 행이 늘어서, 같은 20행을 돌려줘도 뒤 페이지는 앞 페이지보다 훨씬 오래 걸려요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 predict의 두 쿼리를 `EXPLAIN ANALYZE`로 돌린다. 1페이지는 Index Scan이 20행을 읽고 멈춘다. 끝 페이지는 Index Scan이 100만 행을 읽고 Limit이 앞의 99만 9980행을 버린다. 실제 실행계획과 시간을 보인다'
+      - 'DB는 "999980번째 행"이 인덱스의 어디에 있는지 모른다. 인덱스는 값으로 찾는 구조이지 순번으로 찾는 구조가 아니다. 처음부터 세어 가야 한다'
+      - '페이지 번호와 걸린 시간을 몇 점 재서 표로 보인다(1, 1000, 1만, 5만 페이지). 페이지 번호에 비례해 는다'
+      - '사용자는 대개 앞 페이지만 본다. 그래서 OFFSET으로 충분한 화면이 많다. 느려지는 것은 크롤러나 "끝으로" 버튼, 그리고 전체를 페이지로 나눠 도는 배치 작업이다'
+    widget:
+      kind: toggle
+      note: '페이지 번호(1, 1000, 5만)와 방식(OFFSET, 커서)을 고르면 읽은 행 수, 버린 행 수, 실제 시간(테스트의 값)을 보인다. 질문 4에서 커서 쪽을 함께 쓴다'
+    asks:
+      - '본문의 예시: `limit 20 offset 100000`은 몇 행을 읽나 (10만 20행을 읽고 앞의 10만 행을 버린다)'
+      - '옮긴 상황: 회원 전체에게 메일을 보내는 배치가 `limit 1000 offset ?`로 회원 1000만 명을 돈다. 뒤로 갈수록 느려지는 이유는 (OFFSET이 커질수록 건너뛸 행을 다 읽는다. 마지막 묶음은 1000만 행 가까이 읽는다)'
+  - id: q3
+    title: 페이지를 넘기는 사이에 글이 추가되면 어떻게 되나요?
+    conclusion:
+      lead: 'OFFSET은 "앞에서 몇 번째"로 자르기 때문에, 앞쪽에 행이 끼어들면 이미 본 글이 다음 페이지에 또 나와요.'
+      sub: '반대로 앞쪽 행이 지워지면 다음 페이지의 첫 글이 앞 페이지로 밀려 올라가 빠져요.'
+    says:
+      - '최신순 목록에서 1페이지(글 100~81)를 본 뒤 새 글 3개가 올라온다. 2페이지(`offset 20`)는 새 글 때문에 3칸씩 밀린 자리라서 1페이지 끝의 글 83, 82, 81이 또 나온다. 실제 목록을 보인다(예전 rest-api 레슨의 테스트)'
+      - '지워질 때: 1페이지를 본 뒤 그 안의 글 하나가 지워지면 2페이지는 한 칸 당겨진 자리라서 원래 2페이지의 첫 글이 아무 페이지에도 나오지 않는다'
+      - '무한 스크롤 피드처럼 새 글이 계속 올라오는 목록에서 특히 눈에 띈다'
+    widget:
+      kind: steps
+      note: '글 번호 칸을 늘어놓고 1페이지 창(20칸)을 보인다. 다음 단계에서 맨 앞에 새 글 3개가 끼어들어 모두 밀린다. 다음 단계에서 OFFSET 20의 창이 이미 본 글 3개를 덮는 것을 산호색으로 보인다. 마지막 단계는 같은 상황의 커서 창(81보다 작은 id부터)이다'
+    asks:
+      - '본문의 예시: 1페이지를 본 뒤 새 글 3개가 올라왔다. OFFSET 방식의 2페이지에서 겹치는 글은 몇 개인가 (3개)'
+      - '옮긴 상황: 관리자가 오래된 순으로 신고 목록 1페이지를 처리하며 처리한 신고를 목록에서 지운다. 그다음 2페이지(`offset 20`)를 열면 (처리하지 않은 신고 20개를 건너뛴다. 지운 만큼 당겨졌다)'
+  - id: q4
+    title: 커서 페이지네이션은 무엇을 바꾸나요?
+    conclusion:
+      lead: '"몇 개를 건너뛸까" 대신 "마지막으로 본 행보다 뒤"를 WHERE 조건으로 찾아서, 인덱스로 그 자리부터 바로 읽어요.'
+      sub: '어느 페이지든 20행만 읽고, 앞에 행이 끼어들어도 겹치지 않아요. 대신 페이지 번호로 바로 갈 수는 없어요.'
+    says:
+      - '코드 cursor는 앞 페이지의 마지막 글의 (`created_at`, `id`)를 받아 그보다 작은 행을 찾는다. 인덱스 (`created_at`, `id`)가 그 순서로 정렬되어 있어 그 자리를 O(log n)에 찾고 20행만 읽는다. 끝 페이지에서도 실행계획의 읽은 행이 20이다. 실제 실행계획과 시간을 보인다'
+      - '`(created_at, id) < (?, ?)`는 행 비교다. created_at이 작거나, 같으면 id가 작은 행이다. created_at만으로 비교하면 같은 시각의 글이 빠지거나 겹친다'
+      - '질문 3의 상황을 커서로 다시 돌린다. 새 글 3개가 올라와도 2페이지는 1페이지 마지막 글의 바로 뒤부터라 겹치지 않는다. 실제 목록을 보인다'
+      - '대가: 7페이지로 바로 가는 번호 목록을 만들 수 없다. 앞 페이지의 마지막 값을 알아야 다음을 읽는다. "더 보기"와 무한 스크롤에 맞고, 번호 목록이 필요한 게시판에는 OFFSET을 쓰기도 한다'
+      - '고르는 기준을 표로 정리한다. 데이터 양, 새 행이 자주 끼는지, 페이지 번호가 필요한지'
+    asks:
+      - '본문의 예시: 커서 방식으로 5만 번째 페이지를 읽을 때 DB가 읽는 행은 대략 몇 개인가 (20개 남짓)'
+      - '옮긴 상황: 정렬이 `order by score desc, id desc`인 랭킹 목록을 커서로 나누려 한다. 다음 페이지의 WHERE 조건과 필요한 인덱스는 (`(score, id) < (마지막 score, 마지막 id)`, 인덱스 `(score, id)`)'
+practice:
+  says:
+    - '스프링 데이터의 `Pageable`은 OFFSET 방식이다. 코드 pageable의 `PageRequest.of(2, 20, sort)`는 `limit 20 offset 40`이 된다. 정렬에 id를 함께 넣는다(질문 1). 스프링 데이터 문서를 근거로 보이고, 테스트는 같은 SQL을 PostgreSQL에서 돌린다'
+    - '`Page`를 돌려주는 메서드는 전체 개수를 위한 `count` 쿼리를 한 번 더 보낸다. 100만 건이면 count도 테이블을 훑는다. 다음 페이지가 있는지만 알면 되는 화면은 코드 slice처럼 `Slice`를 쓴다. 스프링 데이터는 `limit`을 하나 더 읽어 다음이 있는지 안다. count 쿼리의 시간을 테스트로 남긴다'
+    - '스프링 데이터 3.1부터 `Window`와 `ScrollPosition.keyset()`으로 키셋 스크롤을 지원한다. 직접 쓴 `@Query`로 코드 cursor를 써도 된다(스프링 데이터 문서 근거)'
+    - '응답에 다음 커서를 담는다. 마지막 글의 `created_at`과 `id`를 문자열 하나로 만들어 `nextCursor`로 주고 다음 요청이 그대로 돌려보낸다. 응답 모양은 REST API 설계(N5)에서 다룬다'
+    - '흔한 실수: 관리자 화면에서 코드 findAll처럼 전체를 읽어 자바에서 `subList`로 자른다. 데이터가 늘면 메모리가 부족해진다(J14). 고친 코드: DB에서 나눠 읽는다'
+claims:
+  - claim: '1페이지는 20행을 읽고 끝 페이지는 앞의 행을 모두 읽고 버린다. 끝 페이지가 수백 배 이상 느리다'
+    how: 'PostgreSQL 16 컨테이너에 100만 건을 넣고 두 쿼리의 `EXPLAIN ANALYZE`에서 Index Scan의 실제 행 수와 시간을 남긴다. 시간은 배수의 크기만 단정한다'
+  - claim: '페이지 사이에 새 글이 추가되면 OFFSET은 겹치고 커서는 겹치지 않는다'
+    how: '1페이지를 읽고 3행을 넣은 뒤 두 방식의 2페이지를 비교한다'
+    test: 'RestApiTest의 페이지네이션 테스트를 이 레슨의 테스트로 옮긴다'
+  - claim: '페이지 사이에 앞쪽 행이 지워지면 OFFSET은 한 행을 빠뜨린다'
+    how: '1페이지를 읽고 그 안의 한 행을 지운 뒤 2페이지를 비교한다'
+  - claim: '정렬 기준이 겹치고 id를 붙이지 않으면 페이지 사이에 같은 행이 다시 나오거나 빠질 수 있다'
+    how: '같은 created_at을 가진 행을 많이 넣고, 두 페이지를 이어 읽은 결과의 중복이나 누락을 찾는다. 재현이 안 되면 "약속이 없다"는 문서 근거로만 쓰고 단정하지 않는다'
+  - claim: '커서 방식은 끝 근처에서도 Index Scan이 20행만 읽는다'
+    how: 'EXPLAIN ANALYZE'
+  - claim: '`count(*)`는 100만 건을 훑는 시간이 든다'
+    how: '`EXPLAIN ANALYZE select count(*)`의 시간을 남긴다'
+sources:
+  - 'LIMIT과 OFFSET, ORDER BY 없이 순서가 약속되지 않는다는 것: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/queries-limit.html'
+  - '행 비교: https://www.postgresql.org/docs/16/functions-comparisons.html#ROW-WISE-COMPARISON'
+  - '스프링 데이터의 Page, Slice, 스크롤: https://docs.spring.io/spring-data/jpa/reference/repositories/query-methods-details.html'

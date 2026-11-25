@@ -1,0 +1,166 @@
+# 집계와 서브쿼리 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: 집계와 서브쿼리
+unit: DB
+roadmap: D3
+type: 동작 확인
+prerequisites:
+  - {slug: sql-join, title: 조인}
+assume: 'PostgreSQL 16. INNER JOIN과 LEFT JOIN이 돌려주는 행, 1:N 조인으로 행이 늘어나는 것(조인 레슨).'
+example: '조인 레슨의 회원과 주문 데이터에 금액과 상태(PAID, CANCELED)를 더한 것. "회원별 결제 금액 합계", "10만 원 넘게 산 회원", "한 번도 취소하지 않은 회원"을 차례로 구해요.'
+intro:
+  - '관리자 화면에 "회원별 이번 달 결제 합계"를 넣어 달래요. 주문을 다 읽어 자바에서 더해도 되지만 주문이 100만 건이면 100만 행을 서버로 옮겨야 해요. DB에서 합치면 회원 수만큼의 행만 받아요.'
+  - '집계와 서브쿼리는 통계 화면, 대시보드, "조건에 맞는 회원 찾기"에 늘 나와요. 스프링 개발자는 리포지토리의 `@Query`나 `JdbcTemplate`에 이 SQL을 직접 적어요. 그런데 `NOT IN`에 NULL 하나가 섞이면 결과가 통째로 비는 것처럼, 오류 없이 틀린 답을 내는 함정이 몇 가지 있어요.'
+  - '이 레슨에서는 작은 주문 데이터로 GROUP BY, HAVING, 서브쿼리를 돌려 결과 행을 손으로 맞춰 보고, 함정이 생기는 경우를 실제로 재현해요.'
+covers:
+  - topic: '집계 함수(COUNT, SUM, AVG, MIN, MAX)는 여러 행을 값 하나로 줄인다. GROUP BY는 같은 값끼리 묶어 묶음마다 하나씩 줄인다'
+    where: '질문 1'
+  - topic: 'GROUP BY를 쓰면 SELECT에는 묶은 열과 집계만 쓸 수 있다. 다른 열을 쓰면 오류다(묶음마다 어느 값을 보일지 정해지지 않는다)'
+    where: '질문 1'
+  - topic: 'COUNT(*)는 행을 세고 COUNT(열)은 NULL이 아닌 값만 센다. SUM과 AVG도 NULL을 건너뛴다. 행이 없으면 SUM은 0이 아니라 NULL이다'
+    where: '질문 1'
+  - topic: 'WHERE는 묶기 전에 행을 거르고 HAVING은 묶은 뒤 묶음을 거른다. 집계 결과로 거르려면 HAVING'
+    where: '질문 2'
+  - topic: 'SQL이 실행되는 논리적 순서: FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY, LIMIT. SELECT의 별칭을 WHERE에서 못 쓰는 이유'
+    where: '질문 2'
+  - topic: '서브쿼리는 쿼리 안의 쿼리다. 값 하나를 돌려주는 스칼라 서브쿼리, 목록을 돌려주는 IN, 있는지만 보는 EXISTS. 바깥 행을 참조하는 상관 서브쿼리'
+    where: '질문 3'
+  - topic: 'NOT IN의 목록에 NULL이 하나라도 있으면 결과가 0행이 된다. NOT EXISTS는 그렇지 않다'
+    where: '질문 3'
+  - topic: '조인과 서브쿼리 가운데 고르기. "있는지"만 볼 때는 EXISTS가 행을 늘리지 않는다. 다른 테이블의 열을 보여야 하면 조인. 1:N을 조인한 뒤 DISTINCT로 줄이는 것은 신호다'
+    where: '질문 4'
+  - topic: 'PostgreSQL의 플래너는 IN과 EXISTS 서브쿼리를 조인처럼 바꿔 실행하기도 한다. 쓰는 모양보다 실행계획을 본다'
+    where: '질문 4의 더 알아보기. 실행계획은 인덱스와 실행계획(D7)'
+  - topic: '윈도 함수(ROW_NUMBER, SUM OVER): 행을 줄이지 않고 묶음 안의 순위와 누계를 붙인다'
+    where: '질문 1의 더 알아보기'
+  - topic: '자바에서 다 읽어 스트림으로 더하는 것과 DB에서 집계하는 것. 옮기는 행 수'
+    where: '실무에서는'
+  - topic: '스프링 데이터 JPA에서 집계 결과를 인터페이스 프로젝션이나 record로 받기'
+    where: '실무에서는'
+  - topic: '느린 집계 쿼리를 실행계획으로 고치기'
+    where: '다루지 않음: 느린 쿼리 고치기(D14)'
+codes:
+  predict: |-
+    -- 취소한 적 없는 회원 찾기
+    -- canceled의 member_id 중
+    -- 하나가 NULL이에요
+
+    select name from member
+     where id not in (
+       select member_id from orders
+        where status = 'CANCELED');
+  groupBy: |-
+    select member_id,
+           count(*), sum(amount)
+      from orders
+     where status = 'PAID'
+     group by member_id;
+  having: |-
+    select member_id, sum(amount)
+      from orders
+     where status = 'PAID'
+     group by member_id
+    [[having sum(amount) > 100000]];
+  notExists: |-
+    select name from member m
+     where [[not exists]] (
+       select 1 from orders o
+        where o.member_id = m.id
+          and o.status = 'CANCELED');
+  projection: |-
+    public record MemberTotal(
+        Long memberId, Long total) {}
+
+    @Query("""
+        select new com.shop.MemberTotal(
+          o.memberId, sum(o.amount))
+        from Order o
+        where o.status = 'PAID'
+        group by o.memberId
+        """)
+    List<MemberTotal> totals();
+predict:
+  text: '코드 predict는 취소한 주문이 없는 회원을 찾아요. 회원은 4명이고 그중 kim만 취소한 적이 있어요. 그런데 회원이 지워져 `member_id`가 NULL인 취소 주문이 하나 있어요. 결과는 몇 명일까요? 보기: 0명, 1명, 3명, 4명.'
+  answer: '0명. NOT IN의 목록에 NULL이 있으면 어떤 값도 "목록에 없다"가 참이 되지 않는다. 질문 3에서 밝힌다.'
+questions:
+  - id: q1
+    title: GROUP BY는 행을 어떻게 묶고 무엇을 돌려주나요?
+    conclusion:
+      lead: 'GROUP BY는 지정한 열의 값이 같은 행끼리 묶고, 묶음마다 집계 함수로 줄인 한 행을 돌려줘요.'
+      sub: '그래서 SELECT에는 묶은 열과 집계만 쓸 수 있어요. 집계는 NULL을 건너뛰고, 행이 하나도 없으면 SUM은 0이 아니라 NULL이에요.'
+    says:
+      - '코드 groupBy는 결제 완료 주문을 회원별로 묶어 회원마다 한 행을 낸다. 주문 행이 아니라 회원 수만큼 나온다. 실제 결과를 보인다'
+      - '`select member_id, amount ... group by member_id`는 오류다. kim의 주문이 셋이면 어느 `amount`를 보여야 할지 정할 수 없다. 오류 메시지를 보인다'
+      - '`count(*)`는 행을 세고 `count(coupon_id)`는 NULL이 아닌 값만 센다. 쿠폰 없이 산 주문은 빠진다. 같은 데이터로 둘을 나란히 보인다'
+      - '`sum`과 `avg`도 NULL을 건너뛴다. 조건에 맞는 행이 하나도 없으면 `sum`은 NULL이다. 자바에서 `Long`으로 받으면 null이 오고, `long`으로 받으면 0이 된다. 0이 필요하면 `coalesce(sum(amount), 0)`'
+      - '더 알아보기: 윈도 함수. `sum(amount) over (partition by member_id)`는 행을 줄이지 않고 행마다 그 회원의 합계를 붙인다. `row_number() over (partition by member_id order by created_at desc)`로 회원마다 최근 주문 하나를 고른다'
+    asks:
+      - '본문의 예시: 주문 10건 가운데 3건이 `coupon_id`가 NULL이다. `count(*)`와 `count(coupon_id)`는 (10과 7)'
+      - '옮긴 상황: 상품 리뷰를 상품별로 묶어 `select product_id, avg(score), writer from review group by product_id`를 실행하면 (오류. `writer`는 묶은 열도 집계도 아니다)'
+  - id: q2
+    title: WHERE와 HAVING은 무엇이 다른가요?
+    conclusion:
+      lead: 'WHERE는 묶기 전에 행을 거르고, HAVING은 묶은 뒤에 묶음을 걸러요.'
+      sub: 'SQL은 FROM, WHERE, GROUP BY, HAVING, SELECT, ORDER BY 순서로 실행된다고 보면 돼요. 그래서 집계 결과로 거르는 조건은 WHERE에 쓸 수 없고 HAVING에 써요.'
+    says:
+      - '코드 having은 결제 합계가 10만 원 넘는 회원만 남긴다. `where sum(amount) > 100000`은 오류다. WHERE를 처리할 때는 아직 묶지 않아서 합계가 없다'
+      - '논리적 실행 순서를 그림으로 보인다: FROM(조인) → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT'
+      - '같은 순서 때문에 SELECT에서 붙인 별칭(`as total`)은 WHERE와 HAVING에서 쓸 수 없고(PostgreSQL), ORDER BY에서는 쓸 수 있다'
+      - '행으로 거를 수 있는 조건(`status = ''PAID''`)은 WHERE에 둔다. HAVING에 둬도 답은 같을 수 있지만, 묶기 전에 행을 줄이는 편이 일이 적다'
+    widget:
+      kind: steps
+      note: '주문 8행이 FROM, WHERE, GROUP BY, HAVING, SELECT를 차례로 지나는 모습. 단계마다 남은 행과 묶음을 보이고, WHERE에서 CANCELED 행이 빠지고 HAVING에서 합계가 작은 묶음이 빠진다'
+    asks:
+      - '본문의 예시: 결제 합계가 10만 원 넘는 회원을 구하려고 `where sum(amount) > 100000`을 쓰면 (오류. HAVING에 쓴다)'
+      - '옮긴 상황: 리뷰가 5개 이상인 상품만 평균 점수와 함께 보이려 한다. 조건 `count(*) >= 5`는 어디에 두나 (HAVING)'
+  - id: q3
+    title: 서브쿼리는 어디에 쓰고, NOT IN은 왜 위험한가요?
+    conclusion:
+      lead: '서브쿼리는 쿼리 안에서 값 하나, 목록 하나, 또는 "있는지"를 구해 바깥 쿼리의 조건이나 열로 써요.'
+      sub: '그런데 NOT IN의 목록에 NULL이 하나라도 있으면 결과가 0행이 돼요. "없는지"를 볼 때는 NOT EXISTS를 써요.'
+    says:
+      - '스칼라 서브쿼리: 값 하나를 돌려준다. `select name, (select count(*) from orders o where o.member_id = m.id) from member m`. 바깥 행 `m`을 참조하므로 상관 서브쿼리다'
+      - 'IN 서브쿼리: 목록을 돌려준다. `where id in (select member_id from orders where amount > 50000)`. EXISTS: 행이 있는지만 본다'
+      - '예측의 답을 밝힌다. 코드 predict는 0행이다. `id not in (1, NULL)`은 `id <> 1 and id <> NULL`이고, `id <> NULL`은 참도 거짓도 아닌 NULL이라 어떤 행도 통과하지 못한다. 실제 결과를 보인다'
+      - '코드 notExists는 같은 질문에 3명을 돌려준다. EXISTS는 행이 있는지만 보므로 NULL이 끼어들 틈이 없다. 서브쿼리의 열이 NULL을 받을 수 있으면 NOT IN 대신 NOT EXISTS를 쓴다'
+      - 'NULL과 비교한 결과는 NULL(모름)이라는 규칙(키와 제약 조건 레슨의 UNIQUE와 NULL)이 여기서도 쓰인다'
+    asks:
+      - '본문의 예시: 코드 predict에서 NULL인 취소 주문을 지우면 결과는 몇 명인가 (3명)'
+      - '옮긴 상황: 차단 목록 테이블 `block(user_id)`에 NULL이 한 행 섞여 있다. `select * from post where writer_id not in (select user_id from block)`의 결과는 (0행)'
+  - id: q4
+    title: 서브쿼리와 조인 가운데 무엇을 고르나요?
+    conclusion:
+      lead: '다른 테이블의 열을 결과에 보여야 하면 조인을, 조건에 맞는 행이 "있는지"만 보면 EXISTS 서브쿼리를 써요.'
+      sub: '"있는지"를 1:N 조인으로 구하면 행이 늘어나서 DISTINCT로 다시 줄여야 해요. 그 DISTINCT가 잘못 고른 신호예요.'
+    says:
+      - '"5만 원 넘게 주문한 적 있는 회원"을 조인으로 구하면 그런 주문이 둘인 회원은 두 번 나온다(조인 레슨 질문 3). `distinct`를 붙여야 한다. EXISTS로 쓰면 회원마다 한 번이다. 두 결과를 나란히 보인다'
+      - '회원 이름과 함께 주문 금액을 보여야 하면 조인이다. 서브쿼리로는 바깥 결과에 안쪽 열을 꺼낼 수 없다(스칼라 서브쿼리로 하나씩 꺼내면 행마다 다시 계산한다)'
+      - '조인 뒤 합계가 부풀던 문제(조인 레슨 질문 3)는 "먼저 묶고 붙이기"로 고친다. FROM 안의 서브쿼리(파생 테이블)나 `with` 절에서 주문별 결제 합계를 먼저 구하고 붙인다. 고친 쿼리로 맞는 합계를 보인다'
+      - '더 알아보기: PostgreSQL의 플래너는 `in`과 `exists` 서브쿼리를 세미 조인으로 바꿔 실행하기도 한다. 쓰는 모양이 달라도 실행계획이 같을 수 있다. 빠르기는 실행계획으로 확인한다(D7)'
+    asks:
+      - '본문의 예시: kim이 5만 원 넘는 주문을 2건 했다. "5만 원 넘게 주문한 적 있는 회원 이름"을 `member join orders`로 구하면 kim은 몇 번 나오나 (2번)'
+      - '옮긴 상황: 상품 목록에 "리뷰가 하나라도 있는 상품"만 보이려 한다. 리뷰 내용은 보이지 않는다. 조인과 EXISTS 가운데 무엇이 맞나 (EXISTS. 행이 늘지 않는다)'
+practice:
+  says:
+    - '흔한 실수: 주문을 `findAll()`로 다 읽어 자바 스트림의 `groupingBy`와 `summingLong`으로 회원별 합계를 만든다. 주문이 늘수록 DB에서 앱으로 옮기는 행이 늘어난다. 고친 코드: 코드 groupBy를 쿼리로 보내 회원 수만큼만 받는다. 두 방법이 옮긴 행 수와 결과가 같은지 테스트로 보인다'
+    - '스프링 데이터 JPA에서는 코드 projection처럼 집계 결과를 record로 받는다(JPQL의 생성자 표현식). 엔티티로 받지 않는다. 이 코드는 JPA 과정 전이라 스프링 데이터 JPA 문서를 근거로 보이고, 테스트는 같은 SQL을 `JdbcTemplate`으로 돌린다'
+    - '`sum`의 결과를 `long`으로 받으면 행이 없을 때 NULL이 0으로 바뀐다. 0과 "주문 없음"을 구분해야 하면 `Long`으로 받는다'
+claims:
+  - claim: '`group by member_id`의 결과는 회원 수만큼이고, 묶지 않은 열을 SELECT에 쓰면 42803 오류다'
+    how: 'PostgreSQL 컨테이너에서 실행하고 결과와 SQLState를 본다'
+  - claim: '`count(*)`와 `count(coupon_id)`가 다르고, 조건에 맞는 행이 없으면 `sum`이 NULL이다'
+    how: '같은 데이터에서 두 값을 남긴다'
+  - claim: 'WHERE에 집계 함수를 쓰면 오류이고 HAVING은 된다'
+    how: '두 쿼리를 실행해 본다'
+  - claim: 'NOT IN의 서브쿼리 결과에 NULL이 있으면 0행, NOT EXISTS는 3행이다'
+    how: '코드 predict와 notExists의 결과를 비교한다'
+  - claim: '"있는지"를 조인으로 구하면 중복이 생기고 EXISTS는 회원마다 한 번이다'
+    how: '두 쿼리의 행 수를 비교한다'
+  - claim: '자바에서 다 읽어 합친 결과와 GROUP BY 결과가 같고, 옮긴 행 수는 주문 수 대 회원 수다'
+    how: '`JdbcTemplate`으로 두 방법을 돌려 비교한다'
+sources:
+  - '집계 함수와 NULL: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/functions-aggregate.html'
+  - 'GROUP BY와 HAVING: https://www.postgresql.org/docs/16/queries-table-expressions.html'
+  - 'NOT IN과 NULL, EXISTS: https://www.postgresql.org/docs/16/functions-subquery.html'
+  - 'JPQL 생성자 표현식과 프로젝션: https://docs.spring.io/spring-data/jpa/reference/repositories/projections.html'

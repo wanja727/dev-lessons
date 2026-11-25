@@ -1,0 +1,171 @@
+# DB 데드락 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+stage: design
+title: DB 데드락
+unit: DB
+roadmap: D11
+type: 동작 확인
+prerequisites:
+  - {slug: locking, title: 낙관적 락과 비관적 락}
+assume: 'PostgreSQL 16. UPDATE와 `SELECT ... FOR UPDATE`가 행을 잠그고, 같은 행을 잠그려는 다른 트랜잭션은 커밋까지 기다린다는 것(낙관적 락과 비관적 락 레슨).'
+example: '계좌 이체. kim이 lee에게, lee가 kim에게 동시에 돈을 보내요. 이체 하나는 보내는 계좌와 받는 계좌, 두 행을 차례로 고쳐요.'
+intro:
+  - '평소에는 멀쩡하던 이체 API가 가끔 `deadlock detected` 오류를 내요. 다시 누르면 성공해요. 로그를 보니 같은 두 계좌 사이에 서로 돈을 보내는 요청이 거의 같은 순간에 들어왔어요.'
+  - 'DB 데드락은 락을 쓰는 순간 생길 수 있어요. UPDATE 하나도 행을 잠그니, 락을 따로 쓰지 않았다고 생각한 코드에서도 나요. 스프링 개발자는 이 오류를 없앨 수는 없어도 드물게 만들 수 있고, 났을 때 어떻게 받아 다시 시도할지 정해야 해요.'
+  - '이 레슨에서는 PostgreSQL에 연결 두 개를 열고 순서를 맞춰 데드락을 일부러 만들어요. DB가 어떻게 알아채고 누구를 실패시키는지, 잠그는 순서를 맞추면 어떻게 사라지는지 실제로 확인해요.'
+covers:
+  - topic: 'DB 데드락은 두 트랜잭션이 각자 행 하나를 잠근 채 상대가 잠근 행을 기다려서, 둘 다 영원히 진행하지 못하는 것이다'
+    where: '질문 1. 데드락의 네 조건은 데드락(C5)'
+  - topic: 'UPDATE와 DELETE도 행 락을 잡는다. FOR UPDATE를 쓰지 않아도 데드락이 생긴다'
+    where: '질문 1'
+  - topic: '락 대기와 데드락의 차이: 대기는 상대가 끝나면 풀리고, 데드락은 저절로 풀리지 않는다'
+    where: '질문 1'
+  - topic: 'PostgreSQL은 기다림이 deadlock_timeout(기본 1초)을 넘으면 서로 기다리는 고리가 있는지 검사하고, 있으면 한 트랜잭션을 40P01 오류로 끝낸다. 나머지는 진행한다'
+    where: '질문 2'
+  - topic: '실패한 트랜잭션은 전부 롤백된다. 앱이 처음부터 다시 시도해야 한다'
+    where: '질문 2'
+  - topic: '서버 로그에 데드락이 기록되고, 어느 문장이 어느 락을 기다렸는지 남는다'
+    where: '질문 2의 더 알아보기'
+  - topic: '줄이는 방법 1: 여러 행을 잠글 때 늘 같은 순서(id 오름차순)로 잠근다. 고리가 생기지 않는다'
+    where: '질문 3'
+  - topic: '줄이는 방법 2: 트랜잭션을 짧게 한다. 락을 쥔 시간이 짧으면 겹칠 일이 준다. 필요한 행을 한 문장으로 한꺼번에 잠근다(ORDER BY id FOR UPDATE)'
+    where: '질문 3'
+  - topic: '인덱스가 없어 UPDATE가 많은 행을 훑으면 잠그는 행이 많아지는가: PostgreSQL은 조건에 맞는 행만 잠근다(MySQL InnoDB의 넥스트 키 락과 다르다)'
+    where: '질문 3의 더 알아보기에 한 줄'
+  - topic: '외래 키가 있는 자식을 넣을 때 부모 행에 공유 락(FOR KEY SHARE)이 걸린다. 부모를 고치는 트랜잭션과 엮일 수 있다'
+    where: '질문 3의 더 알아보기'
+  - topic: '데드락을 받으면 트랜잭션 전체를 다시 시도한다. 몇 번까지, 어디서'
+    where: '질문 4'
+  - topic: '스프링이 40P01을 바꾸는 예외(CannotAcquireLockException 계열)와 다시 시도 코드'
+    where: '실무에서는'
+  - topic: 'lock_timeout으로 오래 기다리지 않게 하기'
+    where: '질문 4'
+  - topic: '자바 스레드의 데드락과 스레드 덤프'
+    where: '다루지 않음: 데드락(C5), 스레드 덤프와 힙 덤프(T10)'
+codes:
+  predict: |-
+    -- A: kim → lee 100원
+    -- B: lee → kim 100원
+
+    A: update account set balance =
+         balance - 100 where id = 1;
+    B: update account set balance =
+         balance - 100 where id = 2;
+    A: update account set balance =
+         balance + 100 where id = 2;
+    B: update account set balance =
+         balance + 100 where id = 1;
+  ordered: |-
+    -- 작은 id부터 잠근다
+    select id from account
+     where id in (?, ?)
+     [[order by id for update]];
+  java: |-
+    @Transactional
+    public void transfer(
+        long from, long to, int n) {
+      long first = Math.min(from, to);
+      long second = Math.max(from, to);
+      repo.lock(first);
+      repo.lock(second);
+      repo.add(from, -n);
+      repo.add(to, n);
+    }
+  retry: |-
+    for (int i = 1; ; i++) {
+      try {
+        txTemplate.executeWithoutResult(
+            s -> transfer(from, to, n));
+        return;
+      } catch (PessimisticLocking⤷
+          FailureException e) {
+        if (i == 3) throw e;
+      }
+    }
+predict:
+  text: '코드 predict는 이체 두 개가 각자 보내는 계좌를 먼저 고친 뒤 받는 계좌를 고쳐요. 문장은 A, B, A, B 순서로 실행돼요. 네 번째 문장에서 무슨 일이 생길까요? 보기: 둘 다 성공한다, B가 A의 커밋을 기다린다, 1초쯤 뒤 둘 가운데 하나가 오류로 실패한다.'
+  answer: '1초쯤 뒤 하나가 오류로 실패한다. A는 2번 행을, B는 1번 행을 기다려 서로를 기다린다. PostgreSQL이 이를 알아채고 한쪽을 40P01로 끝낸다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: DB 데드락은 어떻게 생기나요?
+    conclusion:
+      lead: '두 트랜잭션이 각자 행 하나씩 잠근 채, 상대가 잠근 행을 잠그려고 기다리면 둘 다 영원히 진행하지 못해요.'
+      sub: 'UPDATE도 고친 행을 커밋까지 잠그니, `FOR UPDATE`를 쓰지 않은 평범한 이체 코드에서도 생겨요.'
+    says:
+      - '코드 predict의 첫 두 문장으로 A는 1번 행, B는 2번 행을 잠근다. UPDATE는 고친 행을 트랜잭션이 끝날 때까지 잠근다(D10)'
+      - '셋째 문장에서 A는 2번 행을 고치려 하지만 B가 쥐고 있어 기다린다. 넷째 문장에서 B는 1번 행을 고치려 하지만 A가 쥐고 있어 기다린다. A는 B를, B는 A를 기다리는 고리가 생긴다'
+      - '그냥 기다리는 것과 다르다. 락 대기는 상대가 커밋하면 풀린다. 데드락은 상대도 나를 기다리니 누구도 커밋하지 못한다. 누군가 끊지 않으면 끝나지 않는다'
+      - '자바 스레드의 데드락과 같은 원리다. 서로 쥔 것을 놓지 않고 상대의 것을 기다린다. 데드락이 생기는 네 조건은 데드락(C5)에서 다룬다'
+    widget:
+      kind: timeline
+      note: 'A와 B 두 줄. 코드 predict의 네 문장을 하나씩 쌓는다. 셋째 단계에서 A가 기다림, 넷째 단계에서 B가 기다리며 서로를 가리키는 고리 표시. 마지막 단계에서 DB가 B를 끝내고 A가 진행한다'
+    asks:
+      - '본문의 예시: 코드 predict에서 셋째 문장까지만 실행했을 때 A의 상태는 (B가 2번 행을 쥐고 있어 기다린다. 아직 데드락은 아니다)'
+      - '옮긴 상황: 주문 A는 상품 7의 재고를 빼고 상품 3의 재고를 빼고, 주문 B는 상품 3을 빼고 상품 7을 뺀다. 둘이 동시에 첫 UPDATE를 끝냈다면 (서로 상대가 잠근 행을 기다려 데드락이 생긴다)'
+  - id: q2
+    title: DB는 데드락을 어떻게 푸나요?
+    conclusion:
+      lead: 'PostgreSQL은 기다림이 1초를 넘으면 서로 기다리는 고리가 있는지 검사하고, 있으면 그 가운데 한 트랜잭션을 오류로 끝내요.'
+      sub: '끝난 트랜잭션은 전부 롤백되고 락을 놓아서, 남은 쪽이 진행해요. 오류 코드는 40P01, 메시지는 `deadlock detected`예요.'
+    says:
+      - '예측의 답을 밝힌다. 코드 predict를 실제로 돌리면 1초쯤 뒤 한쪽이 `ERROR: deadlock detected`(40P01)를 받는다. 다른 쪽은 기다리던 UPDATE가 끝나 커밋할 수 있다. 실제 오류와 걸린 시간을 보인다'
+      - '검사를 1초 뒤에 하는 이유: 고리를 찾는 일은 비싸서 모든 기다림마다 하지 않는다. 대부분의 기다림은 데드락이 아니라 금방 풀린다. 이 시간은 `deadlock_timeout` 설정이다'
+      - '어느 쪽이 실패할지는 앱이 정할 수 없다. 대개 기다림이 1초를 먼저 넘어 검사를 시작한 쪽이 끝난다. 둘 다 언제든 실패할 수 있다고 보고 코드를 쓴다'
+      - '실패한 트랜잭션은 앞에서 성공한 문장까지 모두 롤백된다. 코드 predict에서 B가 실패하면 B가 먼저 뺀 lee의 100원도 되돌아온다. 돈은 사라지지 않는다. 실패 뒤의 잔액을 보인다'
+      - '더 알아보기: 서버 로그에 `Process 123 waits for ShareLock on transaction 456; blocked by process 789`처럼 누가 누구를 기다렸는지와 두 문장이 남는다. 운영에서 데드락의 원인을 찾을 때 이 로그를 본다'
+    asks:
+      - '본문의 예시: 코드 predict에서 B가 40P01로 실패했다. B의 첫 문장(lee에서 100 빼기)은 반영되어 있나 (아니다. B 전체가 롤백된다)'
+      - '옮긴 상황: `deadlock_timeout`을 1초로 둔 DB에서 데드락이 생겼다. 데드락에 걸린 요청은 오류를 받기까지 대략 얼마나 기다리나 (1초쯤)'
+  - id: q3
+    title: 데드락을 줄이려면 어떻게 하나요?
+    conclusion:
+      lead: '여러 행을 잠글 때 모든 코드가 같은 순서로 잠그면 서로 기다리는 고리가 생기지 않아요.'
+      sub: '이체라면 보내는 쪽, 받는 쪽이 아니라 id가 작은 계좌부터 잠가요. 트랜잭션을 짧게 해서 락을 쥔 시간도 줄여요.'
+    says:
+      - '고리는 A가 1 다음 2를, B가 2 다음 1을 잠그기 때문에 생긴다. 둘 다 1 다음 2를 잠그면 B는 1에서 기다리고, A가 끝난 뒤 진행한다. 기다림은 있어도 데드락은 없다'
+      - '코드 ordered는 두 계좌를 한 문장으로 `order by id for update`로 잠근다. 그다음 잔액을 고친다. 코드 predict와 같은 동시 이체를 100번 돌려 데드락 수를 센다. 순서를 맞추기 전과 후를 비교한다'
+      - '트랜잭션을 짧게: 락은 커밋까지 쥔다. 락을 잡은 뒤 외부 API를 부르거나 오래 계산하면 겹칠 시간이 길어진다. 락이 필요한 문장은 트랜잭션 끝 쪽에 모으고 빨리 커밋한다'
+      - '여러 테이블을 고칠 때도 같다. 주문, 재고, 포인트를 고치는 코드가 여럿이면 테이블 순서와 행 순서를 정해 두고 지킨다'
+      - '더 알아보기: 외래 키가 있는 자식 행을 넣으면 PostgreSQL은 부모 행에 `FOR KEY SHARE` 락을 건다. 부모를 지우거나 키를 바꾸는 트랜잭션과 엮여 기다리거나 데드락이 될 수 있다. 부모의 키가 아닌 열을 고치는 것과는 엮이지 않는다'
+    asks:
+      - '본문의 예시: kim(id 1)과 lee(id 2)가 서로 이체한다. 두 이체 모두 id가 작은 계좌부터 잠그면 동시에 실행될 때 생기는 일은 (한쪽이 잠깐 기다린 뒤 차례로 성공한다. 데드락은 없다)'
+      - '옮긴 상황: 장바구니 주문이 담긴 상품들의 재고를 담은 순서대로 뺀다. 데드락을 줄이도록 고치면 (상품 id 순으로 정렬해 빼거나 `order by id for update`로 한꺼번에 잠근다)'
+  - id: q4
+    title: 데드락이 나면 앱은 어떻게 하나요?
+    conclusion:
+      lead: '데드락으로 실패한 트랜잭션은 이미 다 롤백됐으니, 트랜잭션을 처음부터 다시 실행해요.'
+      sub: '대개 다시 하면 성공해요. 다만 횟수를 정해 두고, 순서 맞추기로 자주 나지 않게 하는 것이 먼저예요.'
+    says:
+      - '데드락은 동시성이 있으면 완전히 없앨 수 없다. 드물게 나는 오류로 보고 다시 시도로 받는다'
+      - '다시 시도하는 단위는 문장이 아니라 트랜잭션 전체다. 실패한 문장만 다시 보내면 앞 문장이 롤백된 것을 놓친다'
+      - '코드 predict에서 실패한 B를 다시 실행하면 A가 끝난 뒤라 바로 성공한다. 두 이체 모두 반영된 잔액을 보인다'
+      - '다시 시도는 3번쯤으로 정하고, 그래도 실패하면 오류를 돌려준다. 자주 나면 다시 시도가 아니라 잠그는 순서를 고칠 신호다'
+      - '`lock_timeout`을 두면 데드락이 아닌 긴 기다림도 정한 시간에 끊는다(55P03). 요청 하나가 오래 쥐고 있을 때 다른 요청이 끝없이 쌓이지 않게 한다'
+    asks:
+      - '본문의 예시: 데드락으로 실패한 이체를 다시 시도할 때 처음부터 다시 실행해야 하는 이유는 (실패한 트랜잭션의 앞 문장까지 모두 롤백됐다)'
+      - '옮긴 상황: 다시 시도를 넣었더니 오류는 사라졌지만 로그에 데드락이 하루 수천 번 찍힌다. 다음에 할 일은 (데드락 로그로 두 문장을 찾아 잠그는 순서를 맞춘다)'
+practice:
+  says:
+    - '스프링은 40P01을 `PessimisticLockingFailureException`의 하위 예외(`CannotAcquireLockException`)로 바꾼다. 정확한 클래스는 테스트로 확인해 적는다'
+    - '코드 java는 스프링 서비스에서 id가 작은 계좌부터 잠그는 이체다. 보내는 쪽과 받는 쪽을 `Math.min`, `Math.max`로 정렬해 잠근다. 동시 이체를 돌려 데드락이 나지 않는 것을 테스트로 보인다'
+    - '코드 retry처럼 다시 시도는 트랜잭션 바깥에서 한다. `@Transactional` 메서드 안에서 잡아 다시 하면 이미 롤백 표시가 된 트랜잭션이라 소용이 없다(낙관적 락 레슨의 실무 구역과 같은 이유)'
+    - '흔한 실수: 데드락 오류를 잡아 로그만 남기고 성공처럼 응답한다. 트랜잭션은 롤백됐으니 이체는 일어나지 않았다. 고친 코드: 다시 시도하거나 실패를 돌려준다'
+claims:
+  - claim: '서로 반대 순서로 두 행을 UPDATE하면 1초쯤 뒤 한쪽이 40P01로 실패하고 다른 쪽은 커밋한다'
+    how: 'PostgreSQL 16 컨테이너에 연결 두 개를 열고 `CountDownLatch`로 문장 순서를 맞춘다. 걸린 시간과 SQLState를 남긴다'
+  - claim: '실패한 쪽의 앞 문장도 롤백되어 잔액 합이 그대로다'
+    how: '끝난 뒤 두 계좌의 잔액과 합을 본다'
+  - claim: '`deadlock_timeout`을 바꾸면 오류까지 걸리는 시간이 바뀐다'
+    how: '세션에 `set deadlock_timeout = ''200ms''`를 주고 시간을 비교한다. 크기만 단정한다'
+  - claim: 'id 순으로 잠그면 같은 동시 이체를 여러 번 돌려도 데드락이 없다'
+    how: '스레드 두 개로 반대 방향 이체를 여러 번 돌려 40P01의 수를 센다. 순서 없는 쪽은 1번 이상, 순서 맞춘 쪽은 0번'
+  - claim: '스프링은 40P01을 `PessimisticLockingFailureException` 계열 예외로 바꾼다'
+    how: '`JdbcTemplate`과 `TransactionTemplate`으로 데드락을 만들고 예외 클래스를 본다'
+  - claim: '실패한 이체를 다시 실행하면 두 이체 모두 반영된다'
+    how: '다시 시도 코드로 돌린 뒤 잔액을 본다'
+  - claim: '외래 키가 있는 자식을 넣은 트랜잭션이 끝나기 전에 부모를 지우려 하면 기다린다'
+    how: '자식 INSERT 뒤 다른 연결에서 부모 DELETE에 걸린 시간을 본다'
+sources:
+  - '데드락과 deadlock_timeout: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/explicit-locking.html#LOCKING-DEADLOCKS, https://www.postgresql.org/docs/16/runtime-config-locks.html'
+  - '행 락의 종류(FOR KEY SHARE): https://www.postgresql.org/docs/16/explicit-locking.html#LOCKING-ROWS'
+  - '스프링의 예외 변환: https://docs.spring.io/spring-framework/reference/data-access/dao.html'

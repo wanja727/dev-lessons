@@ -1,0 +1,181 @@
+# 인덱스와 실행계획 (설계서)
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
+# 예전 레슨 site/src/pages/lessons/index-explain.astro와 그 검증 테스트 index/IndexPlanTest.java를 재료로 다시 쓴다.
+stage: design
+title: 인덱스와 실행계획
+unit: DB
+roadmap: D7
+type: 동작 확인
+prerequisites:
+  - {slug: sql-join, title: 조인}
+  - {slug: binary-search-tree, title: 이진 탐색 트리}
+assume: 'PostgreSQL 16. 정렬된 데이터에서는 절반씩 줄여 O(log n)에 찾는다는 것(이진 탐색, 이진 탐색 트리 레슨). WHERE와 ORDER BY, 조인.'
+example: '주문 20만 건의 `orders(id, member_id, status, created_at, email)`. `member_id`는 회원 2만 명에 고르게, `status`는 99%가 PAID이고 1%가 CANCELED예요. 인덱스를 하나씩 만들고 지우며 같은 쿼리의 실행계획을 비교해요.'
+intro:
+  - '개발 서버에서는 0.01초 걸리던 주문 조회가 운영에서는 2초가 걸려요. 개발 DB에는 주문이 100건, 운영에는 2000만 건이라서예요. "인덱스를 걸면 된다"고 해서 걸었는데, 어떤 쿼리는 그대로 느려요.'
+  - '인덱스는 쿼리를 바꾸지 않고 조회를 빠르게 하는 거의 유일한 방법이라, 백엔드 개발자가 가장 자주 만나는 성능 도구예요. 어떤 열에 어떤 순서로 만들지, 내가 쓴 조건이 그 인덱스를 쓸 수 있는지는 개발자가 정해요. 확인하는 방법은 DB가 보여 주는 실행계획이에요.'
+  - '이 레슨에서는 PostgreSQL에 주문 20만 건을 넣고 `EXPLAIN`으로 같은 쿼리의 실행계획이 인덱스에 따라 어떻게 바뀌는지 봐요. 인덱스가 있어도 쓰이지 않는 경우를 하나씩 재현해요.'
+covers:
+  - topic: '인덱스가 없으면 조건에 맞는 행을 찾으려고 테이블 전체를 읽는다(Seq Scan). 행 수에 비례하는 O(n)이다'
+    where: '질문 1'
+  - topic: '인덱스는 열의 값을 정렬해 둔 B-트리와, 값마다 행의 위치를 가리키는 포인터다. 정렬되어 있어서 O(log n)에 찾는다'
+    where: '질문 1. 디스크에 맞춘 B-트리의 모양은 B-트리(K13)'
+  - topic: 'EXPLAIN은 DB가 고른 실행계획을 보여 주고 EXPLAIN ANALYZE는 실제로 실행해 걸린 시간과 행 수를 보여 준다. Seq Scan, Index Scan, Bitmap Heap Scan, Index Only Scan을 읽는 법'
+    where: '질문 1'
+  - topic: 'DB의 플래너는 통계(ANALYZE)로 비용을 어림해 실행계획을 고른다. 인덱스가 있어도 쓰지 않을 수 있다'
+    where: '질문 2'
+  - topic: '열에 함수나 연산을 씌우면 그 열의 인덱스를 못 쓴다. 같은 식으로 만든 함수 인덱스는 쓴다'
+    where: '질문 2'
+  - topic: 'LIKE ''접두어%''는 패턴용 인덱스로 찾지만 LIKE ''%접미어''는 못 찾는다. 정렬 규칙이 C가 아니면 보통 인덱스로는 접두어 LIKE도 못 쓴다'
+    where: '질문 2'
+  - topic: '선택도: 조건에 맞는 행이 많으면(99%) 인덱스를 오가는 것보다 전체를 읽는 것이 싸서 플래너가 Seq Scan을 고른다'
+    where: '질문 2'
+  - topic: '복합 인덱스는 첫 열로 정렬하고 같으면 다음 열로 정렬한다. 첫 열(선두 열) 조건 없이 뒤 열만으로는 찾기 어렵다. 같음 조건 열을 앞에, 범위 조건 열을 뒤에 둔다'
+    where: '질문 3'
+  - topic: '인덱스의 정렬 순서를 ORDER BY가 그대로 쓰면 정렬을 따로 하지 않는다(LIMIT과 함께 빨라진다)'
+    where: '질문 3'
+  - topic: '쿼리에 필요한 열이 모두 인덱스에 있으면 테이블을 읽지 않는다(Index Only Scan, 커버링 인덱스)'
+    where: '질문 3의 더 알아보기'
+  - topic: '인덱스는 공짜가 아니다. INSERT, UPDATE, DELETE마다 인덱스도 고치고 공간을 쓴다. 쓰지 않는 인덱스는 지운다'
+    where: '질문 4'
+  - topic: '어느 열에 만드나: WHERE, JOIN, ORDER BY에 자주 쓰고 값의 종류가 많은 열. 외래 키 열'
+    where: '질문 4'
+  - topic: 'DB에서 걸러야 할 조건을 전부 읽어 와 자바 스트림으로 거르면 인덱스를 쓸 기회를 버린다'
+    where: '실무에서는'
+  - topic: 'JPA 엔티티의 @Index와 마이그레이션 SQL, 스프링에서 실제로 나간 SQL을 EXPLAIN하는 방법'
+    where: '실무에서는'
+  - topic: '해시 인덱스, GIN(전문 검색, JSON), 부분 인덱스'
+    where: '질문 4의 더 알아보기에 한 줄'
+  - topic: '실행계획으로 느린 쿼리의 원인을 찾고 고친 뒤 다시 재는 과정'
+    where: '다루지 않음: 느린 쿼리 고치기(D14)'
+  - topic: '페이지를 넘길수록 느려지는 OFFSET'
+    where: '다루지 않음: 페이지네이션(D8)'
+codes:
+  predict: |-
+    create index idx_status
+        on orders (status);
+
+    -- 99%가 PAID, 1%가 CANCELED
+    explain select * from orders
+     where status = 'PAID';
+  noIndex: |-
+    explain select * from orders
+     where member_id = 123;
+  fn: |-
+    create index idx_email
+        on orders (email);
+
+    explain select * from orders
+     where [[lower(email)]] =
+           'user77@example.com';
+  composite: |-
+    create index idx_status_created
+        on orders (status, created_at);
+  stream: |-
+    List<Order> canceled =
+        orderRepository.findAll()
+            .stream()
+            .filter(o -> o.isCanceled())
+            .toList();
+  query: |-
+    List<Order> findByStatus(
+        OrderStatus status);
+predict:
+  text: '코드 predict는 `status`에 인덱스를 만든 뒤 99%의 행이 맞는 `status = ''PAID''`를 조회해요. PostgreSQL은 이 인덱스를 쓸까요? 보기: 쓴다(Index Scan), 쓰지 않고 테이블 전체를 읽는다(Seq Scan).'
+  answer: '쓰지 않는다. 거의 모든 행을 읽어야 해서 인덱스를 오가는 것보다 전체를 차례로 읽는 편이 싸다. 질문 2에서 밝힌다.'
+questions:
+  - id: q1
+    title: 인덱스는 조회를 어떻게 빠르게 하나요?
+    conclusion:
+      lead: '인덱스는 열의 값을 정렬해 둔 트리라서, 테이블 전체를 읽지 않고 O(log n)에 조건에 맞는 행을 찾아요.'
+      sub: '인덱스가 없으면 DB는 모든 행을 읽어요(Seq Scan). 어느 쪽으로 찾았는지는 `EXPLAIN`이 보여 주는 실행계획으로 확인해요.'
+    says:
+      - '코드 noIndex를 인덱스 없이 실행계획으로 본다. `Seq Scan on orders`와 걸러 낸 행 수가 나온다. 20만 행을 다 읽고 10행을 남긴다. 실제 실행계획을 보인다'
+      - '`member_id`에 인덱스를 만들고 다시 본다. `Index Scan using idx_member` 또는 `Bitmap Heap Scan`이 나오고 Seq Scan이 사라진다. `EXPLAIN ANALYZE`로 두 경우의 실제 시간을 비교한다'
+      - '인덱스는 값과 그 값이 있는 행의 위치를 값의 순서로 정렬해 둔 B-트리다. 정렬되어 있으니 이진 탐색 트리처럼 절반씩 줄여 찾는다(K8). 디스크를 덜 읽게 한 노드에 키를 수백 개 담는다(K13)'
+      - '실행계획 읽는 법: 맨 아래 줄부터 실행된다. `cost=시작..끝`은 플래너가 어림한 비용, `rows`는 어림한 행 수, ANALYZE의 `actual time`과 `rows`는 실제 값이다'
+      - '실행계획의 노드 넷을 한 줄씩 설명한다. Seq Scan(전체), Index Scan(인덱스로 찾고 행마다 테이블을 읽음), Bitmap Heap Scan(인덱스로 위치를 모아 테이블을 한꺼번에 읽음), Index Only Scan(테이블을 읽지 않음, 질문 3)'
+    asks:
+      - '본문의 예시: 인덱스가 없는 `member_id` 조건 조회의 실행계획 첫 노드는 (Seq Scan)'
+      - '옮긴 상황: 회원 500만 명의 `member`에서 `where phone = ?`로 찾는 API가 느리다. 실행계획에 `Seq Scan on member`가 나온다. 무엇을 하나 (`phone`에 인덱스를 만들고 실행계획에서 Index Scan으로 바뀌었는지 본다)'
+  - id: q2
+    title: 인덱스가 있는데 왜 쓰이지 않을까요?
+    conclusion:
+      lead: '조건이 인덱스에 정렬된 값과 같은 모양이 아니거나, 맞는 행이 너무 많으면 인덱스를 쓰지 않아요.'
+      sub: '열에 함수를 씌우거나 앞에 `%`를 붙이면 정렬된 값으로 찾을 수 없고, 맞는 행이 대부분이면 플래너가 전체를 읽는 편이 싸다고 판단해요.'
+    says:
+      - '플래너는 테이블의 통계(`ANALYZE`가 모은 값의 분포)로 실행계획마다 비용을 어림하고 가장 싼 것을 고른다. 인덱스는 후보일 뿐이다'
+      - '함수: 코드 fn은 `email`에 인덱스가 있어도 `lower(email)`로 찾으면 Seq Scan이다. 인덱스에는 `email` 값이 정렬되어 있지 `lower(email)` 값이 정렬되어 있지 않다. `create index on orders (lower(email))`로 같은 식의 함수 인덱스를 만들면 쓴다. `where created_at + interval ''1 day'' > ?`처럼 열에 연산을 붙여도 같다. 연산을 값 쪽으로 옮긴다'
+      - 'LIKE: `like ''user12345@%''`는 앞부분이 정해져 정렬된 범위로 찾을 수 있다. `like ''%345@example.com''`은 앞이 무엇이든 되니 범위가 없다. Seq Scan이다. 단 DB의 정렬 규칙(collation)이 C가 아니면 일반 인덱스로는 접두어 LIKE도 못 쓰고, `text_pattern_ops`로 만든 인덱스가 필요하다. 테스트 DB의 정렬 규칙과 함께 보인다'
+      - '선택도: 예측의 답을 밝힌다. `status = ''CANCELED''`(1%)는 인덱스를 쓰고 `status = ''PAID''`(99%)는 Seq Scan이다. 인덱스로 찾으면 행마다 테이블의 다른 자리를 오가야 해서, 거의 다 읽을 거면 차례로 읽는 편이 싸다'
+      - '자바에서 넘긴 값의 타입이 열과 다를 때도 인덱스를 못 쓰는 DB가 있다. PostgreSQL은 대개 값 쪽을 바꿔서 쓴다. 이 레슨에서는 함수와 LIKE와 선택도만 확인한다'
+    widget:
+      kind: classify
+      note: '조건 여러 개를 "인덱스를 쓴다"와 "못 쓴다"로 나눈다. 인덱스는 `email`과 `created_at`에 있다고 정한다. 예: `email = ?`, `lower(email) = ?`, `email like ''kim%''`(text_pattern_ops), `email like ''%@a.com''`, `created_at >= ?`, `date(created_at) = ?`. 설명에 이유를 한 줄씩'
+    asks:
+      - '본문의 예시: 코드 predict를 `status = ''CANCELED''`로 바꾸면 실행계획은 (인덱스를 쓴다. 1%만 맞는다)'
+      - '옮긴 상황: `created_at`에 인덱스가 있는 테이블에서 `where date(created_at) = ''2026-11-25''`로 하루치를 찾는다. 인덱스를 쓰게 고치면 (`created_at >= ''2026-11-25'' and created_at < ''2026-11-26''`)'
+  - id: q3
+    title: 복합 인덱스는 왜 열의 순서가 중요한가요?
+    conclusion:
+      lead: '복합 인덱스는 첫 열로 정렬하고 첫 열이 같은 것끼리 다음 열로 정렬해서, 첫 열 조건 없이 뒤 열만으로는 범위를 좁히지 못해요.'
+      sub: '그래서 같음(`=`)으로 거는 열을 앞에, 범위로 거는 열을 뒤에 둬요. 정렬 순서가 ORDER BY와 맞으면 따로 정렬하지도 않아요.'
+    says:
+      - '코드 composite의 (`status`, `created_at`)는 전화번호부처럼 성으로 정렬하고 성이 같으면 이름으로 정렬한 것이다. `status = ''CANCELED'' and created_at > ''2026-03-01''`은 CANCELED 구간 안에서 날짜 범위를 바로 찾는다. 인덱스를 쓴다'
+      - '`created_at > ''2026-03-01''`만 주면 날짜는 status마다 따로 정렬되어 있어 한 범위로 모여 있지 않다. 넓은 범위면 Seq Scan이다. 두 실행계획을 보인다'
+      - '순서를 (`created_at`, `status`)로 바꾸면 같은 쿼리가 날짜 범위를 먼저 훑고 그 안에서 status를 걸러야 해서 더 많이 읽는다. 같음 조건 열을 앞에 둔다'
+      - '`where status = ''CANCELED'' order by created_at desc limit 20`은 인덱스가 이미 그 순서라서 실행계획에 Sort가 없다. 인덱스가 (`status`)뿐이면 Sort가 생긴다. 두 실행계획을 보인다'
+      - '더 알아보기: 쿼리가 쓰는 열이 모두 인덱스에 있으면 테이블을 읽지 않는 Index Only Scan이 된다. `select member_id from orders where member_id between 100 and 110`. PostgreSQL에서는 VACUUM으로 "모두 보이는 페이지" 표시가 되어 있어야 한다'
+    asks:
+      - '본문의 예시: 인덱스 (`status`, `created_at`)가 있을 때 `where created_at > ?`만으로 넓은 범위를 찾으면 (선두 열 조건이 없어 Seq Scan이 나온다)'
+      - '옮긴 상황: `where member_id = ? order by created_at desc limit 10`이 자주 불린다. 어떤 인덱스를 만드나 (`(member_id, created_at)`. 같음 조건 열을 앞에, 정렬 열을 뒤에)'
+  - id: q4
+    title: 인덱스를 많이 만들면 무엇을 잃나요?
+    conclusion:
+      lead: '쓸 때마다 모든 인덱스도 함께 고쳐야 해서 INSERT, UPDATE, DELETE가 느려지고 공간을 더 써요.'
+      sub: '그래서 자주 거는 조건과 조인, 정렬에 쓰고 값의 종류가 많은 열에만 만들고, 쓰이지 않는 인덱스는 지워요.'
+    says:
+      - '같은 20만 건을 인덱스 없이, 인덱스 다섯 개와 함께 넣을 때 걸린 시간을 비교한다. 크기만 비교한다(실행마다 다르다). 인덱스 크기를 `pg_relation_size`로 보인다'
+      - '만들 열의 기준: WHERE, JOIN의 ON, ORDER BY에 자주 오고, 걸렀을 때 남는 행이 적은 열. 외래 키 열(키와 제약 조건 레슨의 더 알아보기). 성별처럼 값이 두세 가지인 열은 혼자서는 쓸모가 적다(질문 2의 선택도)'
+      - '쓰이지 않는 인덱스는 `pg_stat_user_indexes`의 `idx_scan`으로 찾는다'
+      - '더 알아보기: B-트리 말고도 해시 인덱스(같음만), GIN(배열, JSON, 전문 검색), 부분 인덱스(`where status = ''CANCELED''`인 행만)가 있다'
+    asks:
+      - '본문의 예시: 테이블에 인덱스를 다섯 개 만들었다. 행 하나를 INSERT할 때 함께 고쳐야 하는 것은 (테이블과 인덱스 다섯 개 모두)'
+      - '옮긴 상황: 하루 수백만 건이 쌓이고 거의 조회하지 않는 로그 테이블의 열 여덟 개에 모두 인덱스를 만들자는 의견이 있다. 문제는 (쓰기마다 인덱스 여덟 개를 고쳐 쌓는 속도가 느려지고 공간을 쓴다. 조회하는 조건에만 만든다)'
+practice:
+  says:
+    - '흔한 실수: 코드 stream처럼 주문을 모두 읽어 자바에서 거른다. 테이블을 다 읽고 다 옮긴다. `status`에 인덱스가 있어도 쓸 기회가 없다. 고친 코드: 코드 query처럼 리포지토리 메서드로 조건을 SQL의 WHERE에 둔다. 테스트에서는 같은 조건을 `JdbcTemplate`으로 보내 실행계획과 옮긴 행 수를 비교한다(스트림 레슨 J13이 넘긴 주제)'
+    - '스프링에서 실제로 나간 SQL을 보려면 `spring.jpa.show-sql`이나 `logging.level.org.hibernate.SQL=debug`를 켜고, 그 SQL을 DB 콘솔에서 `EXPLAIN ANALYZE`로 돌린다. 바인딩 값은 실제 값으로 채운다(스프링 부트 문서 근거)'
+    - '인덱스는 운영 DB에서는 마이그레이션 SQL로 만든다. JPA의 `@Table(indexes = @Index(columnList = "status, createdAt"))`는 스키마를 생성할 때만 쓰인다. 큰 테이블에는 `create index concurrently`로 쓰기를 막지 않고 만든다(PostgreSQL 문서 근거, 자세한 것은 D16)'
+claims:
+  - claim: '인덱스가 없으면 `member_id` 조건도 Seq Scan이고, 만들면 인덱스를 쓴다'
+    how: 'PostgreSQL 16 컨테이너에 20만 건을 넣고 `EXPLAIN`을 본다'
+    test: 'IndexPlanTest.noIndexSeqScan, indexUsed'
+  - claim: '`lower(email)`은 `email` 인덱스를 못 쓰고 함수 인덱스는 쓴다'
+    how: 'EXPLAIN'
+    test: 'IndexPlanTest.functionOnColumn'
+  - claim: '`text_pattern_ops` 인덱스로 접두어 LIKE는 쓰고 접미어 LIKE는 못 쓴다. 정렬 규칙이 C가 아니면 일반 인덱스로 접두어 LIKE도 못 쓴다'
+    how: 'EXPLAIN과 `datcollate`'
+    test: 'IndexPlanTest.likePrefixVsSuffix, plainIndexCannotLikeUnderNonCCollation'
+  - claim: '1%인 CANCELED는 인덱스를 쓰고 99%인 PAID는 Seq Scan이다'
+    how: 'EXPLAIN'
+    test: 'IndexPlanTest.selectivity'
+  - claim: '복합 인덱스에서 선두 열 조건이 있으면 쓰고, 뒤 열의 넓은 범위만 주면 Seq Scan이다'
+    how: 'EXPLAIN'
+    test: 'IndexPlanTest.compositeIndex'
+  - claim: '인덱스 순서와 같은 ORDER BY ... LIMIT은 Sort 노드가 없다'
+    how: 'EXPLAIN에 Sort가 있는지 본다. 새로 더한다'
+  - claim: 'VACUUM 뒤 인덱스에 있는 열만 고르면 Index Only Scan'
+    how: 'EXPLAIN'
+    test: 'IndexPlanTest.indexOnlyScan'
+  - claim: '인덱스가 많을수록 같은 행을 넣는 시간이 길어진다'
+    how: '인덱스 없이와 다섯 개로 넣은 시간을 남긴다. 크기만 비교한다. 새로 더한다'
+  - claim: '자바에서 거르면 20만 행을 옮기고 WHERE로 거르면 맞는 행만 옮긴다'
+    how: '`JdbcTemplate`으로 두 방법이 받은 행 수를 센다. 새로 더한다'
+sources:
+  - 'EXPLAIN 읽는 법: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/using-explain.html'
+  - '복합 인덱스: https://www.postgresql.org/docs/16/indexes-multicolumn.html'
+  - '함수 인덱스: https://www.postgresql.org/docs/16/indexes-expressional.html'
+  - 'text_pattern_ops와 LIKE: https://www.postgresql.org/docs/16/indexes-opclass.html'
+  - 'Index Only Scan: https://www.postgresql.org/docs/16/indexes-index-only-scans.html'
+  - 'ORDER BY와 인덱스: https://www.postgresql.org/docs/16/indexes-ordering.html'
