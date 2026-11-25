@@ -1,14 +1,15 @@
-# 리플렉션과 어노테이션 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 리플렉션과 어노테이션
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/reflection-annotation.yaml에 있다.
 title: 리플렉션과 어노테이션
+description: 리플렉션이 무엇인지, 리플렉션으로 무엇을 할 수 있고 무엇을 치르는지, 어노테이션을 실행 중에 읽으려면 무엇이 필요한지, 스프링은 어노테이션을 어떻게 읽어서 일하는지. 네 가지 질문에 스스로 답할 수 있게, 의존성 주입을 흉내 낸 작은 컨테이너를 직접 만들며 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 22
 roadmap: J17
 type: 자바 실행
 prerequisites:
   - {slug: inheritance-polymorphism, title: 상속과 다형성}
 assume: '자바 21. JVM이 클래스를 읽어 온다는 것(자바 프로그램이 실행되는 과정 레슨). `private` 필드는 클래스 밖에서 쓸 수 없다는 것. 스프링에서 `@Service`나 `@Autowired`를 붙여 본 적이 있으면 좋지만 없어도 돼요.'
-example: '주문 서비스 `OrderService`와 그것이 쓰는 `OrderRepository`. 두 클래스에 직접 만든 어노테이션 `@Bean`과 `@Inject`를 붙이고, 그것을 읽어 객체를 만들고 이어 주는 작은 컨테이너를 30줄쯤으로 만들어요. 실무 구역에서는 스프링의 인터셉터가 읽는 `@LoginRequired`로 옮겨요.'
+example: '주문 서비스 `OrderService`와 그것이 쓰는 `OrderRepository`. 두 클래스에 직접 만든 어노테이션 `@Inject`를 붙이고, 그것을 읽어 객체를 만들고 이어 주는 작은 컨테이너를 10줄쯤으로 만들어요. 실무 구역에서는 스프링의 인터셉터가 읽는 `@LoginRequired`로 옮겨요.'
 intro:
   - '로그인한 사용자만 부를 수 있게 하려고 `@LoginRequired`라는 어노테이션을 만들어 컨트롤러 메서드에 붙였어요. 인터셉터도 만들었어요. 그런데 로그인하지 않은 요청이 그대로 통과해요. 인터셉터가 메서드를 보면 어노테이션이 붙어 있지 않다고 나와요.'
   - '스프링 개발자가 쓰는 코드의 절반은 어노테이션이에요. `@Service`, `@Autowired`, `@Transactional`, `@Entity`가 그래요. 이 표시들은 스스로 아무 일도 하지 않아요. 스프링이 실행 중에 내 클래스를 들여다보고 표시를 읽어서 일해요. 그 들여다보는 방법이 리플렉션이에요. 이것을 알면 스프링이 마법이 아니라 읽을 수 있는 코드가 돼요.'
@@ -60,13 +61,21 @@ codes:
 
     class OrderController {
       @LoginRequired
-      public String myOrders() { return "..."; }
+      public String myOrders() {
+        return "...";
+      }
     }
 
     Method m = OrderController.class
         .getMethod("myOrders");
     System.out.println(
-        m.isAnnotationPresent(LoginRequired.class));
+        m.isAnnotationPresent(
+            LoginRequired.class));
+  getClass: |-
+    OrderService.class
+    service.getClass()
+    Class.forName(
+        "lab.devlessons.OrderService")
   inspect: |-
     Class<?> c = OrderService.class;
 
@@ -74,6 +83,11 @@ codes:
       print(f.getType().getSimpleName()
           + " " + f.getName());
     }
+  classRun: |-
+    // 세 방법으로 얻은 Class를 비교하고
+    // 필드의 수를 센다
+    c.getDeclaredFields().length;
+    c.getFields().length;
   setField: |-
     class OrderService {
       private OrderRepository repo;
@@ -84,26 +98,136 @@ codes:
         .getDeclaredField("repo");
     [[f.setAccessible(true)]];
     f.set(service, new OrderRepository());
+  setFieldRun: |-
+    // 1. setAccessible 없이 f.set(...)
+    // 2. setAccessible(true) 뒤 f.set(...)
+  typo: |-
+    OrderService.class
+        .getDeclaredField([["repoo"]]);
   retention: |-
-    @Retention(RetentionPolicy.RUNTIME)
+    [[@Retention(RetentionPolicy.RUNTIME)]]
     @Target(ElementType.METHOD)
-    @interface LoginRequired {}
+    @interface LoginRequired {
+      String role() default "USER";
+    }
+  retentionRun: |-
+    // 남는 기간만 다른 어노테이션 셋을
+    // 메서드에 붙이고 실행 중에 묻는다
+    m.isAnnotationPresent(...);
+    m.getAnnotation(LoginRequired.class)
+        .role();
   container: |-
-    Object create(Class<?> type) throws Exception {
+    Object create(Class<?> type)
+        throws Exception {
       Object bean = type
-          .getDeclaredConstructor().newInstance();
+          .getDeclaredConstructor()
+          .newInstance();
 
       for (Field f : type.getDeclaredFields()) {
-        if (f.isAnnotationPresent(Inject.class)) {
+        if (f.[[isAnnotationPresent]](
+            Inject.class)) {
           f.setAccessible(true);
-          f.set(bean, create(f.getType()));
+          f.set(bean, [[create(f.getType())]]);
         }
       }
       return bean;
     }
+  containerTarget: |-
+    class OrderService {
+      @Inject
+      private OrderRepository repo;
+
+      String order() {
+        return repo.save();
+      }
+    }
+  containerRun: |-
+    OrderService s = (OrderService)
+        create(OrderService.class);
+    s.order();
+  service: |-
+    @Target(ElementType.TYPE)
+    @Retention(RetentionPolicy.RUNTIME)
+    @Documented
+    [[@Component]]
+    public @interface Service { ... }
+  metaRun: |-
+    @Service
+    class PayService { }
+
+    PayService.class.isAnnotationPresent(
+        Component.class);
+    AnnotatedElementUtils.hasAnnotation(
+        PayService.class, Component.class);
+  interceptor: |-
+    class LoginInterceptor
+        implements HandlerInterceptor {
+      public boolean preHandle(
+          HttpServletRequest req,
+          HttpServletResponse res,
+          Object handler) {
+        if (handler instanceof
+            HandlerMethod m
+            && m.[[getMethodAnnotation(]]
+                LoginRequired.class) != null
+            && !loggedIn(req)) {
+          res.setStatus(401);
+          return false;
+        }
+        return true;
+      }
+    }
+  controller: |-
+    @GetMapping("/orders/mine")
+    @LoginRequired
+    String myOrders() {
+      return "내 주문 목록";
+    }
+  interceptorRun: |-
+    // 로그인하지 않고
+    GET /orders/mine
+    // @LoginRequired를 두 가지로 선언해
+    // 각각 띄운다
+  composed: |-
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @GetMapping
+    @LoginRequired
+    @interface MemberGet {
+      @AliasFor(annotation = GetMapping.class)
+      String[] value() default {};
+    }
+  typeRef: |-
+    TypeReference<List<OrderDto>> ref =
+        new TypeReference<>() [[{}]];
+
+    ref.getClass().getGenericSuperclass();
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/reflection/ReflectionAnnotationTest.java
+  classApi: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html
+  accessible: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AccessibleObject.html
+  jlsAnno: https://docs.oracle.com/javase/specs/jls/se21/html/jls-9.html#jls-9.6
+  retention: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/annotation/Retention.html
+  annotatedElement: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AnnotatedElement.html
+  springMeta: https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html
+  handlerMethod: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/method/HandlerMethod.html
+  jpaSpec: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html#a18
+  bootParameters: https://docs.spring.io/spring-boot/gradle-plugin/reacting.html
 predict:
-  text: '코드 predict는 어노테이션 `@LoginRequired`를 만들어 메서드에 붙이고, 그 메서드에 어노테이션이 붙어 있는지 실행 중에 물어봐요. 무엇이 출력될까요? 보기: true, false, 컴파일 오류.'
-  answer: 'false. 어노테이션을 선언할 때 얼마나 오래 남길지를 적지 않으면 클래스 파일까지만 남고, 실행 중에는 읽을 수 없다. 질문 3에서 밝힌다.'
+  title: 붙인 어노테이션이 보일까요?
+  text: '어노테이션 `@LoginRequired`를 만들어 메서드에 붙이고, 그 메서드에 어노테이션이 붙어 있는지 실행 중에 물어봐요. 무엇이 출력될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: 'true'
+      label: 'true'
+    - value: 'false'
+      label: 'false'
+    - value: compile
+      label: 컴파일 오류
+  answer: 'false'
+  storageKey: reflection-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 리플렉션은 무엇인가요?
@@ -120,6 +244,45 @@ questions:
     asks:
       - '본문의 예시: `OrderService`에 `private OrderRepository repo;` 필드 하나가 있다. `OrderService.class.getDeclaredFields().length`와 `OrderService.class.getFields().length`는 각각 얼마인가 (1과 0. `getFields`는 public만 준다)'
       - '옮긴 상황: `Object o = "주문";`일 때 `o.getClass() == String.class`의 결과는 무엇인가 (true. 실제 객체의 클래스를 준다)'
+    body:
+      - p: '보통의 코드는 `service.order()`처럼 컴파일할 때 이미 아는 클래스와 메서드를 불러요. **리플렉션**은 "이 클래스에 어떤 필드가 있지? 어떤 어노테이션이 붙었지?"를 **실행 중에** 물어보는 기능이에요.'
+      - p: '출발점은 `Class` 객체예요. JVM은 읽어 온 클래스마다 그 클래스의 정보를 담은 `Class` 객체를 **하나씩** 둬요. 얻는 방법은 셋이에요.'
+      - code: getClass
+      - ul:
+          - '`OrderService.class`는 클래스 이름으로 얻어요.'
+          - '`service.getClass()`는 객체에서 얻어요. 변수의 타입이 아니라 **실제 객체의 클래스**를 줘요. 상속과 다형성 레슨에서 `Notifier n = new SmsNotifier();`의 `n.getClass()`가 `SmsNotifier`였던 것과 같아요.'
+          - '`Class.forName("...")`은 문자열로 얻어요. 컴파일할 때 그 클래스를 몰라도 돼요. 질문 2에서 이것이 왜 중요한지 봐요.'
+      - p: '이 `Class` 객체에서 필드를 꺼내 봤어요. `OrderService`에는 `private OrderRepository repo;` 하나가 있어요.'
+      - code: inspect
+      - ci:
+          key: inspect
+          label: 실제 출력 보기
+          source: ReflectionAnnotationTest.classObject
+          code: inspect
+      - ci:
+          key: class-object
+          label: 세 방법 비교와 필드의 수 보기
+          source: ReflectionAnnotationTest.classObject
+          code: classRun
+      - table:
+          head: [메서드, 주는 것]
+          rows:
+            - ['`getDeclaredFields()`', '그 클래스에 선언된 필드 전부. `private`도 줘요. 물려받은 것은 주지 않아요']
+            - ['`getFields()`', '`public`인 필드만. 대신 부모에게 물려받은 것까지 줘요']
+            - ['`getDeclaredMethods()`, `getDeclaredConstructors()`', '메서드와 생성자. 같은 식이에요']
+            - ['`getSuperclass()`, `getInterfaces()`', '부모 클래스와 구현한 인터페이스']
+            - ['`getAnnotations()`', '붙은 어노테이션(질문 3)']
+      - p: '`repo`는 `private`이라 `getFields()`에는 나오지 않았어요. 세 방법으로 얻은 `Class` 객체는 `==`로 같아요. 클래스마다 하나뿐이니까요.'
+      - quiz:
+          q: '`Object o = "주문";`일 때 `o.getClass() == String.class`는 무엇일까요?'
+          options:
+            - 'true'
+            - 'false. 변수의 타입은 Object다'
+            - 컴파일 오류
+          answer: 1
+          explain: '`getClass()`는 변수의 타입이 아니라 실제 객체의 클래스를 줘요.'
+      - next: '필드를 볼 수 있다면, `private` 필드에 값을 넣을 수도 있을까요?'
+    recall: '리플렉션은 실행 중인 프로그램이 클래스의 필드, 메서드, 생성자, 어노테이션을 들여다보는 기능이에요. JVM은 클래스마다 `Class` 객체를 하나 두고, `OrderService.class`, `getClass()`, `Class.forName`으로 얻어요. `getDeclaredFields`는 private까지 그 클래스의 필드를 모두 주고, `getFields`는 public만 물려받은 것까지 줘요.'
   - id: q2
     title: 리플렉션으로 무엇을 할 수 있고, 무엇을 치르나요?
     conclusion:
@@ -137,6 +300,58 @@ questions:
     asks:
       - '본문의 예시: 코드 setField에서 `f.setAccessible(true)` 줄을 지우고 실행하면 어떻게 되나. 조건: 이 코드는 `OrderService`가 아닌 다른 클래스에 있다 (`f.set`에서 `IllegalAccessException`)'
       - '옮긴 상황: `OrderService.class.getDeclaredField("repoo")`처럼 없는 이름을 넘겼다. 이 실수는 컴파일할 때 드러나나, 실행할 때 드러나나 (실행할 때 `NoSuchFieldException`으로 드러난다)'
+    body:
+      - p: '리플렉션으로는 `new`와 점(`.`)으로 하던 일을 **이름으로** 할 수 있어요.'
+      - table:
+          head: [하던 일, 리플렉션으로]
+          rows:
+            - ['`new OrderService()`', '`type.getDeclaredConstructor().newInstance()`']
+            - ['`service.order()`', '`method.invoke(service)`']
+            - ['`service.repo = ...`', '`field.set(service, ...)`. `private`이면 `setAccessible(true)` 뒤에']
+      - p: '`repo`는 `private`이라 다른 클래스에서 `service.repo = ...`라고 쓰면 컴파일 오류예요. 리플렉션으로 넣어 봤어요.'
+      - code: setField
+        notes:
+          - mark: f.setAccessible(true)
+            as: code
+            text: '"이 필드의 접근 검사를 건너뛴다"는 뜻이에요. 이것 없이는 `private`에 넣을 수 없어요.'
+      - ci:
+          key: set-field
+          label: 두 경우의 실제 결과 보기
+          source: ReflectionAnnotationTest.setPrivateField
+          code: setFieldRun
+      - p: '`setAccessible` 없이는 `IllegalAccessException`이 났고, 부른 뒤에는 setter도 생성자 인자도 없는 `private` 필드에 저장소가 들어갔어요. **스프링이 `@Autowired private` 필드에 객체를 넣는 방법이 이거예요.**'
+      - h3: 프레임워크가 쓰는 이유
+      - p: '스프링, JPA, Jackson, JUnit은 내가 만들 클래스를 **미리 알 수 없어요.** 프레임워크를 만들 때는 `OrderService`가 없었으니까요. 그래서 실행 중에 내 클래스를 받아 리플렉션으로 만들고, 부르고, 값을 넣어요.'
+      - h3: 치르는 값
+      - ul:
+          - '**오류가 실행 중으로 밀려요.** 필드 이름이 문자열이라 오타가 있어도 컴파일은 돼요. 이름을 바꾸는 리팩터링도 문자열은 따라오지 않아요.'
+          - '**느려요.** 직접 부르는 것보다 여러 단계를 거쳐요. 그래서 프레임워크는 읽은 정보를 시작할 때 한 번 모아 두고 다시 써요.'
+          - '**캡슐화를 넘어요.** `private`으로 지키려던 상태가 바깥에서 바뀔 수 있어요.'
+      - code: typo
+        notes:
+          - mark: '"repoo"'
+            as: str
+            text: '`repo`의 오타예요. 컴파일러는 문자열 안을 검사하지 않아요.'
+      - ci:
+          key: typo
+          label: 실제 결과 보기
+          source: ReflectionAnnotationTest.typoFailsAtRuntime
+          code: typo
+      - p: '그래서 애플리케이션 코드에서는 리플렉션을 직접 쓸 일이 드물어요. 프레임워크에 맡기고, 꼭 써야 하면 문자열 대신 어노테이션이나 인터페이스로 찾아요.'
+      - more:
+          summary: '더 알아보기: JDK 내부에는 setAccessible이 실패해요'
+          body:
+            - p: '자바 9의 모듈부터 JDK 내부 클래스의 `private`에 `setAccessible(true)`를 부르면 `InaccessibleObjectException`이 나요. 모듈이 열어 두지 않은 곳이기 때문이에요([AccessibleObject](link:accessible)). 내 애플리케이션의 클래스에는 그대로 돼요.'
+      - quiz:
+          q: '`OrderService.class.getDeclaredField("repoo")`처럼 없는 필드 이름을 넘겼어요. 이 실수는 언제 드러날까요?'
+          options:
+            - 컴파일할 때 오류로
+            - 실행할 때 NoSuchFieldException으로
+            - 드러나지 않고 null을 준다
+          answer: 2
+          explain: '이름이 문자열이라 컴파일러가 검사하지 못해요. 실행 중에야 예외로 드러나요.'
+      - next: '스프링은 어느 필드에 객체를 넣을지 어떻게 알까요? 모든 `private` 필드에 넣지는 않아요. 표시가 필요해요.'
+    recall: '리플렉션으로 이름만으로 객체를 만들고(`newInstance`), 메서드를 부르고(`invoke`), `setAccessible(true)` 뒤에는 `private` 필드에도 값을 넣어요. 컴파일할 때 몰랐던 클래스를 다룰 수 있어서 스프링, JPA, Jackson이 써요. 대신 오타가 실행 중에야 `NoSuchFieldException`으로 드러나고, 느리고, 캡슐화를 넘어요.'
   - id: q3
     title: 어노테이션은 무엇이고, 실행 중에 읽으려면 무엇이 필요한가요?
     conclusion:
@@ -154,6 +369,54 @@ questions:
       - '본문의 예시: 코드 predict의 어노테이션 선언을 코드 retention으로 바꾼 뒤 다시 실행하면 무엇이 출력되나 (true)'
       - '옮긴 상황: `@Retention(RetentionPolicy.SOURCE) @interface Todo {}`를 클래스에 붙이고 실행 중에 `Foo.class.isAnnotationPresent(Todo.class)`를 부르면 결과는 무엇인가 (false. 컴파일하면 사라진다)'
       - '실무 구역: 인터셉터가 `handlerMethod.getMethodAnnotation(LoginRequired.class) != null`일 때만 로그인을 확인한다. `@LoginRequired`에 `@Retention`을 적지 않았다. 이 어노테이션이 붙은 메서드로 온 로그인하지 않은 요청은 어떻게 되나 (통과한다. 실행 중에는 어노테이션이 보이지 않아 null이 나온다)'
+    body:
+      - p: '어노테이션은 클래스, 메서드, 필드에 붙이는 **표시**예요. 붙였다고 동작이 바뀌지 않아요. **누군가 그 표시를 읽고 행동해야** 해요. 읽는 쪽은 컴파일러(`@Override`), 빌드 도구, 실행 중의 프레임워크예요.'
+      - p: '처음 예측의 답은 **false**예요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: ReflectionAnnotationTest.retention
+          code: predict
+      - p: '오류도 경고도 없이 false가 나왔어요. 어노테이션을 선언할 때 **얼마나 오래 남길지**를 적지 않았기 때문이에요.'
+      - h3: '@Retention이 남는 기간을 정해요'
+      - table:
+          head: ['@Retention', 남는 곳, 읽는 쪽]
+          rows:
+            - ['`SOURCE`', '소스에만. 컴파일하면 사라져요', '컴파일러, 롬복 같은 어노테이션 프로세서']
+            - ['`CLASS` (적지 않으면 이것)', '클래스 파일에는 남지만 JVM이 실행 중에 알려 주지 않아요', '클래스 파일을 직접 읽는 도구']
+            - ['`RUNTIME`', '실행 중에도 남아요', '리플렉션. 스프링, JPA, JUnit']
+      - p: '**기본값이 `CLASS`**라서, 적지 않으면 실행 중에는 없는 것과 같아요. 도입부의 인터셉터가 로그인하지 않은 요청을 통과시킨 이유가 이거예요. 실행 중에 읽을 어노테이션은 `RUNTIME`으로 선언해요.'
+      - code: retention
+        notes:
+          - mark: '@Retention(RetentionPolicy.RUNTIME)'
+            as: anno
+            text: '실행 중에 리플렉션으로 읽히게 남겨요.'
+      - p: '남는 기간만 다른 어노테이션 셋을 메서드에 붙이고 실행 중에 물어봤어요.'
+      - ci:
+          key: retention
+          label: 실제 결과 보기
+          source: ReflectionAnnotationTest.retention
+          code: retentionRun
+      - h3: 어노테이션을 만드는 법
+      - ul:
+          - '**선언.** `@interface 이름 { }`으로 만들어요.'
+          - '**요소.** 값을 받으려면 `String role() default "USER";`처럼 요소를 둬요. 쓸 때는 `@LoginRequired(role = "ADMIN")`이에요. 요소의 이름이 `value`면 `@Get("/orders")`처럼 이름을 생략할 수 있어요.'
+          - '**`@Target`.** 붙일 수 있는 곳(클래스, 메서드, 필드)을 정해요. 다른 곳에 붙이면 컴파일 오류예요.'
+          - '**읽기.** `m.getAnnotation(LoginRequired.class).role()`로 붙은 어노테이션과 요소의 값을 읽어요. 위 결과의 `ADMIN`이 그것이에요.'
+      - more:
+          summary: '더 알아보기: 컴파일할 때 읽는 어노테이션'
+          body:
+            - p: '`SOURCE`인 어노테이션은 컴파일할 때 읽혀요. 롬복의 `@Getter`는 컴파일 중에 getter 메서드를 만들어 클래스에 넣고 자기는 사라져요. 그래서 실행 중에는 롬복이 없어도 돼요. 이런 도구를 어노테이션 프로세서라고 해요.'
+      - quiz:
+          q: '`@Retention(RetentionPolicy.SOURCE) @interface Todo {}`를 클래스 `Foo`에 붙였어요. 실행 중에 `Foo.class.isAnnotationPresent(Todo.class)`는 무엇일까요?'
+          options:
+            - 'true'
+            - 'false. 컴파일하면 사라진다'
+            - 컴파일 오류
+          answer: 2
+          explain: '`SOURCE`는 소스에만 남아요. 실행 중에 읽으려면 `RUNTIME`이어야 해요.'
+      - next: '이제 리플렉션(질문 2)과 실행 중에 읽히는 어노테이션(질문 3)이 둘 다 있어요. 이어 붙이면 무엇을 만들 수 있을까요?'
+    recall: '어노테이션은 코드에 붙이는 표시일 뿐이고, 읽는 코드가 있어야 의미가 생겨요. `@Retention`이 남는 기간을 정하는데, 적지 않으면 기본값 `CLASS`라서 실행 중에는 보이지 않아요. 리플렉션으로 읽으려면 `RUNTIME`으로 선언해요. `@Target`은 붙일 곳을, 요소와 `default`는 받을 값을 정해요.'
   - id: q4
     title: 스프링은 어노테이션을 어떻게 읽어서 일하나요?
     conclusion:
@@ -172,31 +435,188 @@ questions:
     asks:
       - '본문의 예시: `OrderService`의 `repo` 필드에서 `@Inject`를 지우고 `create(OrderService.class)`를 부르면 반환된 객체의 `repo`는 무엇인가 (null. 표시가 없는 필드는 건너뛴다)'
       - '옮긴 상황: `@Service`만 붙은 클래스 `PayService`에 대해 `PayService.class.isAnnotationPresent(Component.class)`의 결과는 무엇인가. 조건: 스프링의 `@Service` 선언에는 `@Component`가 붙어 있다 (false. 자바의 이 메서드는 직접 붙은 어노테이션만 본다)'
+    body:
+      - p: '리플렉션과 `RUNTIME` 어노테이션을 이어 붙여, 스프링의 의존성 주입을 흉내 낸 작은 컨테이너를 만들어요. 표시로 쓸 `@Inject`도 직접 만들었어요(`RUNTIME`, 필드에 붙임).'
+      - code: containerTarget
+      - code: container
+        notes:
+          - mark: isAnnotationPresent
+            as: code
+            text: '표시가 붙은 필드만 골라요. 질문 3에서 `RUNTIME`으로 선언한 덕분에 보여요.'
+          - mark: create(f.getType())
+            as: code
+            text: '필드의 타입(`OrderRepository`)으로 자기 자신을 다시 불러 넣을 객체를 만들어요.'
+      - p: '`create(OrderService.class)`가 하는 일을 한 단계씩 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 읽은 클래스 정보, state: dim, text: 아직 읽지 않음}
+              - {label: 만들어진 객체, state: dim, text: 없음}
+          scenarios:
+            default:
+              - log: 'OrderService.class.getDeclaredConstructor().newInstance()'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: OrderService, v: 인자 없는 생성자}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo = null', mark: changed}]
+              - log: 'getDeclaredFields() → repo 하나. isAnnotationPresent(Inject.class) → true'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: OrderService, v: 인자 없는 생성자}, {k: 'repo 필드', v: '@Inject, 타입 OrderRepository', mark: changed}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo = null'}]
+              - log: 'f.getType() → OrderRepository. create(OrderRepository.class)를 다시 부름'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: 'repo 필드', v: '@Inject, 타입 OrderRepository'}, {k: OrderRepository, v: 인자 없는 생성자, mark: changed}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo = null'}]
+              - log: 'OrderRepository.class.getDeclaredConstructor().newInstance()'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: OrderRepository, v: '필드 없음. 더 넣을 것 없음'}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo = null'}, {k: OrderRepository, v: 새로 만듦, mark: changed}]
+              - log: 'f.setAccessible(true); f.set(service, repository)'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: 'repo 필드', v: 'private. 접근 검사를 건너뜀'}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo → OrderRepository', mark: changed}]
+              - log: 'return service'
+                duo:
+                  - label: 읽은 클래스 정보
+                    rows: [{k: OrderService, v: 다 읽음}]
+                  - label: 만들어진 객체
+                    rows: [{k: OrderService, v: 'repo → OrderRepository'}]
+                verdict: '어디에서도 new OrderRepository()를 쓰지 않았는데 private 필드에 저장소가 들어 있어요. 표시를 읽고 리플렉션으로 넣었어요.'
+      - ci:
+          key: container
+          label: 실제로 돌린 결과 보기
+          source: ReflectionAnnotationTest.tinyContainer
+          code: containerRun
+      - p: '`@Inject`를 지우면 `repo`는 null이에요. **표시가 없는 필드는 건너뛰어요.** 이것이 의존성 주입의 뼈대예요. 스프링은 여기에 더해 패키지를 훑어 `@Component`가 붙은 클래스를 찾고(컴포넌트 스캔), 만든 객체를 하나만 두고 다시 쓰고, 생성자의 인자로도 넣어요. 자세한 것은 스프링 빈과 의존성 주입 레슨에서 다뤄요.'
+      - h3: 같은 방식으로 일하는 것들
+      - ul:
+          - '**스프링 MVC.** `@GetMapping`이 붙은 메서드를 시작할 때 찾아 두고, 요청이 오면 `invoke`로 불러요.'
+          - '**JPA.** `@Entity` 클래스를 **인자 없는 생성자**로 만들고 필드에 열의 값을 넣어요. 엔티티에 인자 없는 생성자가 필요한 이유예요([명세](link:jpaSpec)). Jackson도 같은 이유로 기본 생성자나 생성자 정보를 찾아요.'
+          - '**JUnit.** `@Test`가 붙은 메서드를 찾아 불러요.'
+      - h3: 어노테이션에 붙은 어노테이션
+      - p: '스프링의 `@Service`를 열어 보면 그 선언에 `@Component`가 붙어 있어요. 어노테이션에 붙은 어노테이션을 **메타 어노테이션**이라고 해요.'
+      - code: service
+        notes:
+          - mark: '@Component'
+            as: anno
+            text: '`@Service`를 붙이면 스프링은 이것까지 따라가 `@Component`로 알아봐요.'
+      - p: '그런데 자바의 `isAnnotationPresent`는 **직접 붙은 것만** 봐요([AnnotatedElement](link:annotatedElement)). 스프링은 자기 도구로 어노테이션의 어노테이션까지 찾아요.'
+      - ci:
+          key: meta
+          label: 실제 결과 보기
+          source: ReflectionAnnotationTest.metaAnnotation
+          code: metaRun
+      - p: '그래서 `@Service`만 붙은 클래스도 빈이 되고, 여러 어노테이션을 하나로 묶은 어노테이션을 만들 수 있어요([스프링 문서](link:springMeta)). `@RestController`가 `@Controller`와 `@ResponseBody`를 묶은 것이에요.'
+      - quiz:
+          q: '`@Service`만 붙은 `PayService`에 `PayService.class.isAnnotationPresent(Component.class)`를 부르면 무엇이 나올까요? `@Service`의 선언에는 `@Component`가 붙어 있어요.'
+          options:
+            - 'true. 스프링은 PayService를 빈으로 만든다'
+            - 'false. 자바의 이 메서드는 직접 붙은 것만 본다'
+            - 컴파일 오류
+          answer: 2
+          explain: '메타 어노테이션까지 따라가는 것은 스프링의 `AnnotatedElementUtils`예요. 자바의 `isAnnotationPresent`는 한 단계만 봐요.'
+    recall: '스프링은 시작할 때 클래스를 훑어 `@Component`(와 그것이 붙은 `@Service` 같은 어노테이션)가 붙은 것을 찾고, 리플렉션으로 객체를 만들고, 표시가 붙은 필드와 생성자에 다른 객체를 넣어요. 리플렉션과 `RUNTIME` 어노테이션을 이은 것이라 직접 만들 수도 있어요. 자바의 `isAnnotationPresent`는 직접 붙은 것만 보고, 스프링은 메타 어노테이션까지 따라가요.'
 practice:
+  title: 스프링 서버에서는 이렇게 만나요
   says:
-    - '직접 만든 어노테이션을 스프링에서 읽기. 코드 retention의 `@LoginRequired`를 컨트롤러 메서드에 붙인다. `HandlerInterceptor`의 `preHandle`에서 `handler`가 `HandlerMethod`면 `getMethodAnnotation(LoginRequired.class)`로 읽어, 있으면 세션을 확인하고 없으면 401로 답한다. 인터셉터를 등록하는 법과 실행 위치는 S7에 넘긴다 (컨트롤러와 인터셉터 하나를 띄워 요청하는 테스트. 본보기는 `SpringSessionPracticeTest`)'
+    - '직접 만든 어노테이션을 스프링에서 읽기. 코드 retention의 `@LoginRequired`를 컨트롤러 메서드에 붙인다. `HandlerInterceptor`의 `preHandle`에서 `handler`가 `HandlerMethod`면 `getMethodAnnotation(LoginRequired.class)`로 읽어, 있으면 세션을 확인하고 없으면 401로 답한다. 인터셉터를 등록하는 법과 실행 위치는 S7에 넘긴다 (컨트롤러와 인터셉터 하나를 `MiniWeb`에 띄워 요청하는 테스트)'
     - '흔한 실수: 어노테이션을 만들며 `@Retention(RetentionPolicy.RUNTIME)`을 빠뜨린다. 컴파일도 되고 붙이는 것도 되지만 인터셉터에는 보이지 않아 검사가 통째로 꺼진다. 예외가 나지 않아서 로그인 없이 통과하는 요청을 보고서야 안다. 고친 코드: 코드 retention. 고치기 전과 뒤의 상태 코드를 붙인다 (위 테스트를 어노테이션 둘로 돌린다)'
-    - '어노테이션 묶기. `@Target(METHOD) @Retention(RUNTIME) @GetMapping @LoginRequired @interface MyGet`처럼 자주 함께 쓰는 것을 하나로 묶을 수 있다. 스프링이 메타 어노테이션을 따라가기 때문이다. `AnnotatedElementUtils.hasAnnotation(PayService.class, Component.class)`가 true인 것으로 확인한다 (스프링 코어만 쓰는 순수 자바 테스트)'
+    - '어노테이션 묶기. `@Target(METHOD) @Retention(RUNTIME) @GetMapping @LoginRequired @interface MemberGet`처럼 자주 함께 쓰는 것을 하나로 묶을 수 있다. 스프링이 메타 어노테이션을 따라가기 때문이다. `AnnotatedElementUtils.hasAnnotation(PayService.class, Component.class)`가 true인 것으로 확인한다 (스프링 코어만 쓰는 순수 자바 테스트)'
     - 'J11에서 미뤄 둔 것. `new TypeReference<List<OrderDto>>() {}`는 익명 클래스를 만든다. 클래스의 선언에 적힌 부모의 타입 인자는 지워지지 않고 클래스 파일에 남는다. `getClass().getGenericSuperclass()`로 `TypeReference<List<OrderDto>>`를 읽을 수 있고, Jackson이 여기서 `List<OrderDto>`를 꺼낸다. 지워지는 것은 객체가 가진 타입 인자이고, 선언에 적힌 것은 남는다 (순수 자바 테스트로 읽은 타입을 출력한다)'
     - '애플리케이션 코드에서 리플렉션을 직접 쓸 일은 드물다. 쓰게 되면 필드 이름 문자열에 기대지 말고 어노테이션이나 인터페이스로 찾는다. 테스트에서 `private` 필드를 바꾸려고 쓰고 싶어지면 생성자 주입으로 바꾼다'
     - '더 알아보기: 메서드의 매개변수 이름은 `-parameters` 옵션으로 컴파일해야 클래스 파일에 남는다. `@RequestParam String name`에서 이름을 생략할 수 있는 것이 이 덕분이고, 스프링 부트의 Gradle 플러그인이 이 옵션을 켜 준다 (스프링 부트 공식 문서 근거)'
+  body:
+    - p: '질문 넷은 스프링에서 직접 만든 어노테이션을 읽을 때 한꺼번에 만나요. 인터셉터와 메타 어노테이션은 스프링을 띄운 테스트로 확인했어요.'
+    - h3: '직접 만든 어노테이션을 인터셉터로 읽어요'
+    - p: '도입부의 `@LoginRequired`를 컨트롤러 메서드에 붙이고, 인터셉터가 요청을 처리할 메서드에 그 표시가 있는지 봐요.'
+    - code: controller
+    - code: interceptor
+      notes:
+        - mark: getMethodAnnotation(
+          as: code
+          text: '요청을 처리할 메서드에서 어노테이션을 꺼내요. 실행 중에 보이지 않으면 null이에요. 근거: [HandlerMethod](link:handlerMethod).'
+    - muted: '인터셉터를 등록하는 법과 실행 위치는 필터와 인터셉터 레슨에서 다뤄요.'
+    - h3: '흔한 실수: @Retention을 빠뜨린다'
+    - p: '같은 컨트롤러와 인터셉터를, `@LoginRequired`를 두 가지로 선언해 띄우고 로그인하지 않은 요청을 보냈어요.'
+    - ci:
+        key: interceptor
+        label: 두 경우의 실제 응답 보기
+        source: ReflectionAnnotationTest.interceptorReadsAnnotation
+        code: interceptorRun
+    - p: '`@Retention`이 없으면 **200으로 통과**했어요. 컴파일도 되고 메서드에 붙이는 것도 되는데, 실행 중에는 보이지 않아서 `getMethodAnnotation`이 null을 줬어요. 검사가 통째로 꺼진 거예요. 예외도 나지 않아서 로그인 없이 통과하는 요청을 보고서야 알아요. 고친 코드는 질문 3의 `RUNTIME` 선언이고, 그러면 401로 막혀요.'
+    - p: '그래서 실행 중에 읽을 어노테이션을 만들면 **`@Retention(RUNTIME)`과 `@Target`을 먼저 적고**, 막혀야 할 요청이 막히는지 테스트로 확인해요.'
+    - h3: 자주 함께 쓰는 어노테이션을 묶어요
+    - p: '스프링이 메타 어노테이션을 따라가기 때문에(질문 4), `@GetMapping`과 `@LoginRequired`를 하나로 묶은 어노테이션을 만들 수 있어요.'
+    - code: composed
+    - muted: '`@AliasFor`는 묶은 어노테이션의 요소를 안쪽 어노테이션의 요소로 넘겨줘요. 묶은 어노테이션까지 인터셉터가 찾으려면 `AnnotatedElementUtils`처럼 메타 어노테이션을 따라가는 도구로 읽어야 해요.'
+    - h3: 'TypeReference는 왜 {}를 붙이나요'
+    - p: '제네릭 레슨에서 `new TypeReference<List<OrderDto>>() {}`에 `{}`를 붙이는 이유를 미뤄 뒀어요. `{}`는 `TypeReference`를 상속한 **익명 클래스**를 만들어요. 객체가 가진 타입 인자는 지워지지만, **클래스의 선언에 적힌 부모의 타입 인자는 클래스 파일에 남아요.** 리플렉션으로 그것을 읽어요.'
+    - code: typeRef
+      notes:
+        - mark: '{}'
+          as: code
+          text: '`TypeReference<List<OrderDto>>`를 부모로 하는 익명 클래스예요. 이 선언이 클래스 파일에 남아요.'
+    - ci:
+        key: type-reference
+        label: 실제로 읽은 타입 보기
+        source: ReflectionAnnotationTest.typeReference
+        code: typeRef
+    - p: 'Jackson은 여기서 `List<OrderDto>`를 꺼내 원소를 `OrderDto`로 만들어요. 그냥 만든 `ArrayList<OrderDto>` 객체에는 타입 인자가 없는 것과 견줘 보세요.'
+    - h3: 직접 쓸 일은 드물어요
+    - p: '애플리케이션 코드에서 리플렉션을 직접 쓸 일은 드물어요. 쓰게 되면 필드 이름 문자열에 기대지 말고 어노테이션이나 인터페이스로 찾아요. 테스트에서 `private` 필드를 바꾸려고 리플렉션을 쓰고 싶어지면, 그 클래스를 생성자 주입으로 바꾸는 신호예요.'
+    - more:
+        summary: '더 알아보기: 매개변수 이름은 옵션이 있어야 남아요'
+        body:
+          - p: '메서드의 매개변수 이름은 `-parameters` 옵션으로 컴파일해야 클래스 파일에 남아요. `@RequestParam String name`에서 이름을 생략할 수 있는 것이 이 덕분이고, 스프링 부트의 Gradle 플러그인이 이 옵션을 켜 줘요([스프링 부트 Gradle 플러그인](link:bootParameters)).'
+interview:
+  question: 리플렉션과 어노테이션이 무엇이고, 스프링은 둘을 어떻게 쓰는지 설명해 주세요
+  model:
+    - label: 정의
+      text: 리플렉션은 실행 중에 Class 객체에서 클래스의 필드, 메서드, 생성자, 어노테이션을 들여다보고 다루는 기능입니다. 어노테이션은 코드에 붙이는 표시일 뿐이고, 읽는 코드가 있어야 의미가 생깁니다.
+    - label: 원리
+      text: 스프링은 시작할 때 클래스를 훑어 @Component가 붙은 것을 찾고, 리플렉션으로 객체를 만들고, 표시가 붙은 필드나 생성자에 다른 빈을 넣습니다. setAccessible로 private 필드에도 넣을 수 있고, @Service처럼 @Component가 붙은 메타 어노테이션까지 따라갑니다.
+    - label: 주의할 점
+      text: 실행 중에 읽을 어노테이션은 @Retention(RUNTIME)이어야 합니다. 기본값 CLASS면 오류 없이 보이지 않습니다. 리플렉션은 오타가 실행 중에야 드러나고 느리고 캡슐화를 넘어서, 애플리케이션 코드에서는 꼭 필요할 때만 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: @LoginRequired를 만들어 인터셉터에서 읽었는데 @Retention을 빠뜨려 검사가 꺼져 있었고, RUNTIME으로 고친 뒤 401을 확인하는 테스트를 넣었습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 자바 21에서 코드를 돌려 받은 값이에요. 작은 컨테이너는 실제로 돌렸고, 인터셉터와 메타 어노테이션은 스프링 부트 3.5를 띄워 확인했어요. 코드가 바뀔 때마다 테스트([ReflectionAnnotationTest](link:test))가 다시 돌아요.
+footer: '근거: Class와 리플렉션은 API 문서([링크](link:classApi)), setAccessible은 AccessibleObject 문서, 어노테이션 선언은 자바 언어 명세 9.6([링크](link:jlsAnno)), @Retention의 기본값은 Retention 문서([링크](link:retention)), 메타 어노테이션은 스프링 프레임워크 문서. 결과는 OpenJDK 21과 스프링 부트 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '세 방법으로 얻은 `Class` 객체는 `==`로 같다. `getDeclaredFields`는 private 필드를 포함하고 `getFields`는 포함하지 않는다'
     how: '`OrderService`로 세 방법을 비교하고 두 메서드의 길이를 본다'
+    test: ReflectionAnnotationTest.classObject
   - claim: '`setAccessible(true)` 뒤에는 다른 클래스의 private 필드에 값을 넣을 수 있고, 부르지 않으면 `IllegalAccessException`이 난다'
-    how: '코드 setField를 두 가지로 돌린다'
+    how: '코드 setField를 두 가지로 돌린다. `OrderService`는 테스트 클래스와 다른 최상위 클래스로 둔다(중첩 클래스면 같은 nest라 setAccessible 없이도 닿는다)'
+    test: ReflectionAnnotationTest.setPrivateField
   - claim: '없는 필드 이름은 `NoSuchFieldException`을 던진다'
     how: '그대로 돌린다'
+    test: ReflectionAnnotationTest.typoFailsAtRuntime
   - claim: '`@Retention`을 적지 않은 어노테이션과 `SOURCE`인 어노테이션은 `isAnnotationPresent`가 false이고, `RUNTIME`이면 true이며 요소의 값을 읽을 수 있다'
     how: '어노테이션 셋을 만들어 메서드에 붙이고 읽는다'
+    test: ReflectionAnnotationTest.retention
   - claim: '코드 container로 `create(OrderService.class)`를 부르면 `repo`가 채워진 객체가 나오고, `@Inject`를 지우면 null이다'
     how: '두 클래스 모양으로 돌린다'
+    test: ReflectionAnnotationTest.tinyContainer
   - claim: '`@Service`만 붙은 클래스에 `isAnnotationPresent(Component.class)`는 false이고 `AnnotatedElementUtils.hasAnnotation(..., Component.class)`는 true다 (스프링 프레임워크 6.2)'
     how: '그대로 돌린다'
+    test: ReflectionAnnotationTest.metaAnnotation
   - claim: '`RUNTIME`인 `@LoginRequired`가 붙은 메서드로 온 로그인하지 않은 요청은 401을 받고, `@Retention`을 적지 않은 어노테이션이면 200을 받는다'
-    how: '컨트롤러 하나와 인터셉터 하나만 띄운 작은 스프링 부트 앱에 요청한다'
+    how: '컨트롤러 하나와 인터셉터 하나만 `MiniWeb`에 띄워 요청한다'
+    test: ReflectionAnnotationTest.interceptorReadsAnnotation
   - claim: '`TypeReference`의 익명 자식 클래스에서 `getGenericSuperclass()`로 `List<OrderDto>`를 읽을 수 있다'
     how: '`ParameterizedType`의 실제 타입 인자를 출력한다'
+    test: ReflectionAnnotationTest.typeReference
 sources:
   - '`Class`와 리플렉션: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html'
   - '`setAccessible`과 모듈의 제한: `AccessibleObject` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AccessibleObject.html'
@@ -206,3 +626,4 @@ sources:
   - '스프링의 메타 어노테이션과 묶은 어노테이션: 스프링 프레임워크 문서 https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html'
   - '`HandlerMethod.getMethodAnnotation`: 스프링 프레임워크 API 문서 https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/method/HandlerMethod.html'
   - '엔티티의 인자 없는 생성자: 자카르타 퍼시스턴스 명세 2.1 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html#a18'
+  - '`-parameters`를 켜는 스프링 부트 Gradle 플러그인: https://docs.spring.io/spring-boot/gradle-plugin/reacting.html'

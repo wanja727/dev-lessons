@@ -1,0 +1,264 @@
+# 리플렉션과 어노테이션 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/reflection-annotation.yaml의 says).
+# 동작에 관한 정답은 verification의 ReflectionAnnotationTest로 확인했다 (자바 21, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: reflection-annotation
+  title: 리플렉션과 어노테이션
+  unit: 자바 언어
+  order: 53
+concepts:
+  - key: core
+    name: 리플렉션과 어노테이션
+coreQuestions:
+  - key: q1
+    text: "리플렉션은 무엇인가요?"
+  - key: q2
+    text: "리플렉션으로 무엇을 할 수 있고, 무엇을 치르나요?"
+  - key: q3
+    text: "어노테이션은 무엇이고, 실행 중에 읽으려면 무엇이 필요한가요?"
+  - key: q4
+    text: "스프링은 어노테이션을 어떻게 읽어서 일하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: refl-declared-fields
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 OrderService에 대해 두 줄을 출력하면 각각 얼마일까요?
+    code: |-
+      class OrderService {
+        private OrderRepository repo;
+      }
+
+      OrderService.class
+          .getDeclaredFields().length;
+      OrderService.class
+          .getFields().length;
+    choices:
+      - 1과 1
+      - 1과 0
+      - 0과 1
+      - 0과 0
+    answer: "2"
+    explanation: |-
+      **1과 0이에요.** getDeclaredFields는 그 클래스에 선언된 필드를 private까지 모두 주고, getFields는 public인 것만 줘요.
+
+      - getFields는 대신 부모에게 물려받은 public 필드까지 줘요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html
+  - key: refl-get-class
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: Object o = "주문";일 때 o.getClass() == String.class의 결과는 무엇일까요?
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+      - ClassCastException
+    answer: "1"
+    explanation: |-
+      **true예요.** getClass()는 변수의 타입이 아니라 실제 객체의 클래스를 줘요.
+
+      - 클래스마다 Class 객체는 하나라서 ==로 비교할 수 있어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html
+  # ── 질문 2 ──
+  - key: refl-set-accessible
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드는 OrderService가 아닌 다른 클래스에 있어요. setAccessible(true)를 부르지 않고 실행하면 어떻게 될까요?
+    code: |-
+      class OrderService {
+        private OrderRepository repo;
+      }
+
+      OrderService service = new OrderService();
+      Field f = OrderService.class
+          .getDeclaredField("repo");
+      f.set(service, new OrderRepository());
+    choices:
+      - 값이 들어간다
+      - f.set에서 IllegalAccessException이 난다
+      - 컴파일 오류
+      - getDeclaredField에서 NoSuchFieldException이 난다
+    answer: "2"
+    explanation: |-
+      **f.set에서 IllegalAccessException이 나요.** private 필드는 setAccessible(true)로 접근 검사를 건너뛴 뒤에야 넣을 수 있어요.
+
+      - 스프링이 @Autowired private 필드에 객체를 넣는 방법이 이거예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AccessibleObject.html
+  - key: refl-typo
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: OrderService.class.getDeclaredField("repoo")처럼 없는 필드 이름을 넘겼어요. 이 실수는 언제, 어떻게 드러날까요?
+    choices:
+      - 컴파일할 때 컴파일 오류로
+      - 실행할 때 NoSuchFieldException으로
+      - 드러나지 않고 null을 준다
+      - IDE만 경고하고 실행은 된다
+    answer: "2"
+    explanation: |-
+      **실행할 때 NoSuchFieldException으로 드러나요.** 이름이 문자열이라 컴파일러가 검사하지 못해요.
+
+      - 리플렉션이 치르는 값 가운데 하나예요. 이름을 바꾸는 리팩터링도 문자열은 따라오지 않아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html
+  # ── 질문 3 ──
+  - key: refl-retention-runtime
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: myOrders()에 아래 @LoginRequired를 붙이고 m.isAnnotationPresent(LoginRequired.class)를 출력하면 무엇이 나올까요?
+    code: |-
+      @Retention(RetentionPolicy.RUNTIME)
+      @Target(ElementType.METHOD)
+      @interface LoginRequired {
+        String role() default "USER";
+      }
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+      - "null"
+    answer: "1"
+    explanation: |-
+      **true예요.** RUNTIME으로 선언한 어노테이션은 실행 중에 리플렉션으로 읽혀요.
+
+      - @Retention을 적지 않으면 기본값 CLASS라서 false가 나와요
+      - getAnnotation(LoginRequired.class).role()로 요소의 값도 읽어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/annotation/Retention.html
+  - key: refl-retention-source
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "@Retention(RetentionPolicy.SOURCE) @interface Todo {}를 클래스 Foo에 붙였어요. 실행 중에 Foo.class.isAnnotationPresent(Todo.class)를 부르면 무엇이 나올까요?"
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+      - ClassNotFoundException
+    answer: "2"
+    explanation: |-
+      **false예요.** SOURCE는 소스에만 남고 컴파일하면 사라져요.
+
+      - SOURCE는 컴파일러나 롬복 같은 어노테이션 프로세서가 읽어요
+      - 실행 중에 읽으려면 RUNTIME이어야 해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/annotation/Retention.html
+  - key: refl-interceptor-retention
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 인터셉터가 getMethodAnnotation(LoginRequired.class) != null일 때만 로그인을 확인해요. @LoginRequired를 아래처럼 선언해 컨트롤러 메서드에 붙였어요. 로그인하지 않은 요청은 어떻게 될까요?
+    code: |-
+      @Target(ElementType.METHOD)
+      @interface LoginRequired {}
+    choices:
+      - 401로 막힌다
+      - 200으로 통과한다
+      - 서버가 시작되지 않는다
+      - 500이 난다
+    answer: "2"
+    explanation: |-
+      **200으로 통과해요.** @Retention을 적지 않아 기본값 CLASS라서 실행 중에는 어노테이션이 보이지 않고, getMethodAnnotation이 null을 줘요.
+
+      - 오류도 경고도 없어서 검사가 꺼진 것을 알아채기 어려워요
+      - @Retention(RetentionPolicy.RUNTIME)을 붙이면 401로 막혀요
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/web/method/HandlerMethod.html
+  # ── 질문 4 ──
+  - key: refl-container-no-inject
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 create는 @Inject가 붙은 필드에만 객체를 넣어요. OrderService의 repo 필드에서 @Inject를 지우고 create(OrderService.class)를 부르면, 반환된 객체의 repo는 무엇일까요?
+    code: |-
+      Object create(Class<?> type)
+          throws Exception {
+        Object bean = type
+            .getDeclaredConstructor()
+            .newInstance();
+        for (Field f : type.getDeclaredFields()) {
+          if (f.isAnnotationPresent(
+              Inject.class)) {
+            f.setAccessible(true);
+            f.set(bean, create(f.getType()));
+          }
+        }
+        return bean;
+      }
+    choices:
+      - OrderRepository 객체
+      - "null"
+      - IllegalAccessException이 난다
+      - NoSuchFieldException이 난다
+    answer: "2"
+    explanation: |-
+      **null이에요.** 표시가 없는 필드는 건너뛰어요.
+
+      - 표시를 읽고 리플렉션으로 넣는 것이 의존성 주입의 뼈대예요
+      - 스프링은 여기에 컴포넌트 스캔, 하나만 두고 다시 쓰기, 생성자 주입을 더해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AnnotatedElement.html
+  - key: refl-meta-annotation
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "@Service만 붙은 클래스 PayService가 있어요. 스프링의 @Service 선언에는 @Component가 붙어 있어요. PayService.class.isAnnotationPresent(Component.class)의 결과는 무엇일까요?"
+    choices:
+      - "true"
+      - "false"
+      - 컴파일 오류
+      - 스프링이 떠 있을 때만 true
+    answer: "2"
+    explanation: |-
+      **false예요.** 자바의 isAnnotationPresent는 직접 붙은 어노테이션만 봐요.
+
+      - 스프링은 AnnotatedElementUtils로 어노테이션에 붙은 어노테이션(메타 어노테이션)까지 따라가요
+      - 그래서 @Service만 붙여도 빈이 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/reflect/AnnotatedElement.html
+  # ── 면접 ──
+  - key: refl-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "리플렉션과 어노테이션이 무엇이고, 스프링은 둘을 어떻게 쓰는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **리플렉션은 실행 중에 클래스를 들여다보는 기능이고, 스프링은 RUNTIME 어노테이션을 리플렉션으로 읽어 객체를 만들고 주입해요.**
+
+      - **리플렉션:** Class 객체에서 필드, 메서드, 생성자를 보고, 이름으로 만들고 부르고, setAccessible로 private에도 넣는다
+      - **치르는 값:** 오타가 실행 중에 드러나고, 느리고, 캡슐화를 넘는다
+      - **어노테이션:** 표시일 뿐이다. 실행 중에 읽으려면 @Retention(RUNTIME). 기본값 CLASS면 보이지 않는다
+      - **스프링:** @Component를 찾아 객체를 만들고, 표시가 붙은 곳에 넣는다. 메타 어노테이션까지 따라간다
+    checklist:
+      - 리플렉션이 실행 중에 클래스 정보를 보고 다루는 기능이라고 말했다
+      - private 필드에 값을 넣는 setAccessible이나 프레임워크가 쓰는 이유를 말했다
+      - 어노테이션은 표시일 뿐이고 읽는 코드가 필요하다고 말했다
+      - RUNTIME이어야 실행 중에 읽힌다고 말했다
+      - 스프링이 어노테이션을 찾아 객체를 만들고 주입하는 흐름을 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/annotation/Retention.html
