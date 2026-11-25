@@ -1,8 +1,9 @@
-# 자바 프로그램이 실행되는 과정 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 자바 프로그램이 실행되는 과정
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/java-execution.yaml에 있다.
 title: 자바 프로그램이 실행되는 과정
+description: 자바 소스가 바이트코드가 되어 JVM에서 실행되기까지, JVM과 JRE와 JDK의 차이, 클래스가 읽히는 때, JIT 때문에 켠 직후가 느린 이유. 네 가지 질문에 스스로 답할 수 있게, 직접 컴파일한 클래스 파일과 실행 결과로 배우는 대화형 레슨.
 unit: 자바 언어
+minutes: 20
 roadmap: J1
 type: 개념 설명
 prerequisites: []
@@ -56,11 +57,98 @@ codes:
       }
     }
   commands: |-
-    javac OrderApp.java
-    java OrderApp
+    $ javac OrderApp.java
+    $ ls
+    OrderApp.class  OrderApp.java
+    $ java OrderApp
+  headerRun: |-
+    $ javac OrderApp.java
+    # OrderApp.class의 처음 8바이트를
+    # 16진수로 읽는다
+  coupon: |-
+    class Coupon {
+      static {
+        print("Coupon 읽음");
+      }
+    }
+
+    print("시작");
+    Coupon c = null;
+    print("변수 선언 뒤");
+    [[new Coupon()]];
+    print("new 뒤");
+  loaderRun: |-
+    print(String.class.getClassLoader());
+    print(JavaExecutionTest.class
+        .getClassLoader());
+  notFoundRun: |-
+    Class.forName("lab.shop.Coupon");
+  versionRun: |-
+    # 주 버전을 66(자바 22)으로 바꾼
+    # OrderApp.class를 [[자바 21]]에서 읽는다
+  warmupRun: |-
+    // 같은 계산을 2만 번씩 다섯 묶음
+    for (int b = 1; b <= 5; b++) {
+      long start = System.nanoTime();
+      for (int i = 0; i < 20_000; i++) {
+        discount(10_000 + i, i % 30);
+      }
+      print(b + " " + 걸린 시간);
+    }
+    # 기본 옵션과 [[-Xint]]로 한 번씩 돌린다
+  bootJar: |-
+    $ ./gradlew bootJar
+    $ jar tf build/libs/shop.jar
+    META-INF/MANIFEST.MF
+    org/springframework/boot/loader/...
+    [[BOOT-INF/classes/]]shop/OrderApp.class
+    [[BOOT-INF/lib/]]spring-web-6.2.x.jar
+    ...
+    $ java -jar build/libs/shop.jar
+  toolchain: |-
+    java {
+      toolchain {
+        languageVersion =
+            JavaLanguageVersion.of([[21]])
+      }
+    }
+  dockerBad: |-
+    FROM eclipse-temurin:[[17]]-jre
+    COPY build/libs/shop.jar app.jar
+    ENTRYPOINT ["java", "-jar", "app.jar"]
+  dockerFixed: |-
+    FROM eclipse-temurin:[[21]]-jre
+    COPY build/libs/shop.jar app.jar
+    ENTRYPOINT ["java", "-jar", "app.jar"]
+  versionLog: |-
+    Exception in thread "main" java.lang.Unsupported⤷
+    ClassVersionError: shop/OrderApp has been ⤶
+    compiled by a more recent version of the Java ⤶
+    Runtime (class file version [[65.0]]), this ⤶
+    version of the Java Runtime only recognizes ⤶
+    class file versions up to [[61.0]]
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/javaexecution/JavaExecutionTest.java
+  jvmsClass: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html
+  jvmsLoading: https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-5.html
+  bootJar: https://docs.spring.io/spring-boot/specification/executable-jar/nested-jars.html
+  toolchains: https://docs.gradle.org/current/userguide/toolchains.html
+  bootSystem: https://docs.spring.io/spring-boot/system-requirements.html
 predict:
-  text: '`OrderApp.java`를 윈도우에서 `javac`로 컴파일해 `OrderApp.class`를 얻었어요. 이 `.class` 파일을 자바 21이 깔린 리눅스 서버로 그대로 복사해서 `java OrderApp`을 실행하면 어떻게 될까요? 보기: 리눅스에서 다시 컴파일해야 돈다, 그대로 돈다, `.class`를 리눅스용으로 변환하는 도구를 거쳐야 돈다.'
-  answer: '그대로 돈다. `.class`에는 특정 운영체제의 기계어가 아니라 JVM이 읽는 바이트코드가 들어 있다. 질문 1에서 밝힌다.'
+  title: 윈도우에서 컴파일한 파일이 리눅스에서 돌까요?
+  text: '`OrderApp.java`를 윈도우에서 `javac`로 컴파일해 `OrderApp.class`를 얻었어요. 이 `.class` 파일을 자바 21이 깔린 리눅스 서버로 그대로 복사해서 `java OrderApp`을 실행하면 어떻게 될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: orderApp
+  label: 내 예측
+  options:
+    - value: recompile
+      label: 리눅스에서 다시 컴파일해야 돈다
+    - value: runs
+      label: 그대로 돈다
+    - value: convert
+      label: 리눅스용으로 바꾸는 도구를 거쳐야 돈다
+  answer: runs
+  storageKey: jex-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 자바 소스는 어떤 단계를 거쳐 실행되나요?
@@ -80,6 +168,83 @@ questions:
     asks:
       - '본문의 예시: `OrderApp.java`를 자바 21의 `javac`로 컴파일한 `OrderApp.class`의 처음 4바이트를 16진수로 읽으면 무엇인가 (CAFEBABE)'
       - '옮긴 상황: 맥에서 컴파일한 `.class` 파일 100개를 묶어 리눅스 서버에 올렸다. 서버에는 같은 버전의 자바가 깔려 있다. 서버에서 해야 하는 일은 무엇인가 (다시 컴파일하지 않고 그대로 실행한다)'
+    body:
+      - p: 레슨 내내 쓸 코드는 이것 하나예요. 금액을 출력하는 `main` 메서드 하나뿐이에요.
+      - code: orderApp
+      - p: IDE의 실행 버튼은 이 코드를 두 단계로 실행해요. 터미널에서 직접 하면 이래요.
+      - code: commands
+      - ol:
+          - '**컴파일.** `javac`가 `OrderApp.java`를 읽어 `OrderApp.class`를 만들어요. `javac`는 자바 컴파일러예요.'
+          - '**실행.** `java`가 JVM(Java Virtual Machine)을 띄우고, JVM이 `OrderApp.class`를 읽어 `main`을 실행해요.'
+      - p: 아래에서 한 단계씩 넘기며 디스크와 JVM 안에 무엇이 생기는지 보세요.
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - label: 디스크에 있는 파일
+                rows: [{k: OrderApp.java, v: 소스}]
+              - {label: JVM 안, state: dim, text: JVM이 아직 없어요}
+          scenarios:
+            default:
+              - log: '$ javac OrderApp.java'
+                duo:
+                  - label: 디스크에 있는 파일
+                    rows: [{k: OrderApp.java, v: 소스}, {k: OrderApp.class, v: 바이트코드, mark: changed}]
+                  - {label: JVM 안, state: dim, text: JVM이 아직 없어요}
+              - log: 'OrderApp.class의 앞 8바이트: CA FE BA BE 00 00 00 41'
+                duo:
+                  - label: 디스크에 있는 파일
+                    rows: [{k: OrderApp.class, v: 'CAFEBABE ... 65', mark: changed}]
+                  - {label: JVM 안, state: dim, text: JVM이 아직 없어요}
+              - log: '$ java OrderApp'
+                duo:
+                  - label: 디스크에 있는 파일
+                    rows: [{k: OrderApp.class, v: 바이트코드}]
+                  - label: JVM 안
+                    rows: [{k: JVM, v: 시작됨, mark: changed}]
+              - log: 클래스 로더가 OrderApp.class를 찾아 읽음
+                duo:
+                  - label: 디스크에 있는 파일
+                    rows: [{k: OrderApp.class, v: 바이트코드}]
+                  - label: JVM 안
+                    rows: [{k: JVM, v: 실행 중}, {k: OrderApp, v: 읽어 옴, mark: changed}]
+              - log: 'main 실행 → 주문 12000'
+                duo:
+                  - label: 디스크에 있는 파일
+                    rows: [{k: OrderApp.class, v: 바이트코드}]
+                  - label: JVM 안
+                    rows: [{k: OrderApp, v: 읽어 옴}, {k: 출력, v: 주문 12000, mark: changed}]
+                verdict: 디스크에는 바이트코드가 든 .class가 있고, 그것을 읽어 실행하는 것은 JVM이에요. 운영체제가 .class를 바로 실행하지 않아요.
+      - h3: 바이트코드는 기계어가 아니에요
+      - p: '`.class`에 든 것을 **바이트코드**라고 해요. CPU가 바로 실행하는 기계어가 아니라, JVM이라는 프로그램이 읽어서 실행하는 명령이에요. 자바 21로 컴파일한 `OrderApp.class`의 앞부분을 읽어 볼게요. 처음 몇 바이트는 모든 클래스 파일에서 같아요.'
+      - ci:
+          key: class-header
+          label: 실제 클래스 파일 보기
+          source: JavaExecutionTest.classHeader
+          code: headerRun
+      - ul:
+          - '**처음 4바이트는 언제나 `CAFEBABE`예요.** JVM은 이 값을 보고 클래스 파일이 맞는지 알아봐요. 이런 값을 매직 넘버라고 해요.'
+          - '**그다음이 클래스 파일 버전이에요.** 16진수 `0041`은 65이고, 자바 21의 `javac`가 만든 파일이라는 뜻이에요. 질문 2에서 이 숫자를 다시 써요.'
+      - h3: 운영체제마다 다른 것은 JVM이에요
+      - p: '처음 예측의 답은 **그대로 돈다**예요. {{predict-result}}'
+      - p: '`.class`에는 윈도우의 기계어도 리눅스의 기계어도 없어요. 운영체제마다 따로 있는 것은 JVM이에요. 윈도우용 JVM과 리눅스용 JVM이 같은 `.class`를 읽어서 각자 자기 운영체제에 맞게 실행해요. 그래서 빌드한 결과물 하나를 여러 서버에 그대로 올려요.'
+      - h3: 어느 단계에서 난 오류인가요
+      - p: 두 단계가 나뉘어 있으니 오류도 둘로 나뉘어요. 변수 이름의 오타, 타입이 맞지 않는 대입은 **컴파일 단계**에서 `javac`가 잡아요. `.class`가 만들어지지도 않아요. 0으로 나누기, null에 점 찍기는 **실행 단계**에서 JVM이 예외로 알려요. `javac`의 오류 메시지인지, 실행 중에 나온 스택 트레이스인지를 보면 어느 쪽 문제인지 구분돼요.
+      - more:
+          summary: '더 알아보기: 바이트코드 명령을 직접 보려면'
+          body:
+            - p: 'JDK에 든 `javap -c OrderApp`을 실행하면 `main`의 바이트코드 명령이 줄마다 나와요. `sipush 12000`(12000을 쌓는다), `invokevirtual`(메서드를 부른다) 같은 명령이에요. 외울 필요는 없고, `.class`에 든 것이 이런 명령이라는 것만 알면 돼요.'
+      - quiz:
+          q: '같은 `OrderApp.class`를 윈도우 서버와 리눅스 서버에서 실행할 수 있는 까닭은 무엇일까요?'
+          options:
+            - '`.class`에 두 운영체제의 기계어가 함께 들어 있어서'
+            - 운영체제마다 그에 맞는 JVM이 있고, JVM이 같은 바이트코드를 읽어서
+            - '`java` 명령이 실행 전에 그 운영체제용으로 다시 컴파일해서'
+          answer: 2
+          explain: '`.class`에는 바이트코드만 있어요. 운영체제마다 다른 것은 JVM이에요.'
+      - next: 실행하려면 JVM이 있어야 해요. 그러면 서버에 무엇을 깔아야 하나요? JDK, JRE, JVM은 어떻게 다른가요?
+    recall: '`javac`가 소스를 바이트코드가 든 `.class` 파일로 컴파일하고, `java`가 JVM을 띄워 그 파일을 읽어 실행해요. 바이트코드는 기계어가 아니라 JVM이 읽는 명령이라서, 운영체제마다 다른 JVM이 같은 `.class`를 실행해요. 클래스 파일은 `CAFEBABE`로 시작하고 그 뒤에 버전(자바 21은 65)이 있어요.'
   - id: q2
     title: JVM, JRE, JDK는 무엇이 다른가요?
     conclusion:
@@ -96,6 +261,38 @@ questions:
       - '본문의 예시: `java`는 있고 `javac`는 없는 서버에서 할 수 있는 일은 무엇인가. 조건: 서버의 자바 버전은 21이고, 올린 `.class`는 자바 21로 컴파일했다 (이미 컴파일한 `.class`의 실행은 되고 `.java`의 컴파일은 안 된다)'
       - '옮긴 상황: 자바 21로 컴파일한 클래스 파일(주 버전 65)을 자바 17의 JVM(주 버전 61까지 읽음)으로 실행하면 어떻게 되나 (`UnsupportedClassVersionError`가 나고 실행되지 않는다)'
       - '실무 구역: Gradle의 toolchain을 21로 두고 만든 스프링 부트 jar를 자바 17만 깔린 서버에서 `java -jar`로 켰다. 서버 로그에 나오는 오류는 무엇인가 (`UnsupportedClassVersionError`. 클래스 파일 버전 65.0을 이 런타임은 61.0까지만 읽는다는 메시지)'
+    body:
+      - p: 세 이름은 서로를 감싸는 관계예요. 안쪽부터 볼게요.
+      - table:
+          head: [이름, 들어 있는 것, 할 수 있는 일]
+          rows:
+            - [JVM, 바이트코드를 읽어 실행하는 프로그램, '`.class` 실행']
+            - [JRE, 'JVM + 표준 라이브러리(`String`, `List`, `System` 등)', '`.class` 실행']
+            - [JDK, 'JRE + 개발 도구(`javac`, `javap`, `jar` 등)', '컴파일과 실행']
+      - p: '`OrderApp`은 `String`과 `System.out`을 써요. JVM만 있으면 이 클래스들이 없어서 실행할 수 없어요. 그래서 실행에는 JVM과 표준 라이브러리를 묶은 **JRE**가 있어야 해요. 컴파일러 `javac`는 JRE에 없어요. 컴파일까지 하려면 **JDK**를 깔아요.'
+      - ul:
+          - '**자바 11부터는 JRE를 따로 내려받지 않아요.** 오라클과 OpenJDK가 JDK만 배포해요. 도커 이미지 `eclipse-temurin:21-jre`처럼 이름에 jre가 붙은 것은 배포하는 쪽이 실행에 필요한 것만 추려 만든 거예요. 서버에는 이런 이미지를 쓰고, 빌드하는 곳에는 JDK를 둬요.'
+          - '**JVM은 명세의 이름이기도 해요.** 명세를 따르는 구현이 여럿 있고, OpenJDK에 든 구현이 HotSpot이에요. 이 과정의 레슨은 HotSpot을 기준으로 해요.'
+      - h3: 자바 버전과 클래스 파일 버전
+      - p: '자바는 6개월마다 새 버전이 나와요. 그 가운데 오래 지원하는 버전(LTS)이 8, 11, 17, 21이고, 회사의 서버는 대부분 LTS를 써요. 스프링 부트 3은 자바 17 이상이 있어야 돌아요.'
+      - p: '질문 1에서 본 클래스 파일 버전이 여기서 쓰여요. 자바 17은 61, 자바 21은 65를 적어요. JVM은 자기가 아는 버전까지만 읽고, **더 높은 버전의 클래스 파일은 거부해요.** 반대로 높은 버전의 JVM은 낮은 버전의 파일을 읽어요.'
+      - p: '자바 21의 JVM에게 주 버전을 66(자바 22)으로 바꾼 클래스 파일을 줘 봤어요. 어떤 오류가 날지 예상해 보고 열어 보세요.'
+      - ci:
+          key: unsupported-version
+          label: 실제 오류 보기
+          source: JavaExecutionTest.newerClassFileIsRejected
+          code: versionRun
+      - p: '메시지에 숫자 두 개가 있어요. 앞의 숫자가 **파일을 만든 버전**, 뒤의 숫자가 **이 JVM이 읽을 수 있는 최고 버전**이에요. 앞이 더 크면 빌드한 자바가 서버의 자바보다 새것이라는 뜻이에요. 실무 구역에서 이 오류를 서버 로그로 다시 만나요.'
+      - quiz:
+          q: '서버에 `java`는 있지만 `javac`는 없어요. 서버의 자바는 21이에요. 할 수 있는 일은 무엇일까요?'
+          options:
+            - 자바 21로 컴파일한 `.class` 실행
+            - '`.java` 파일 컴파일'
+            - 둘 다
+          answer: 1
+          explain: '실행에는 JVM과 표준 라이브러리만 있으면 돼요. 컴파일러 `javac`는 JDK에만 있어요.'
+      - next: 'JVM이 `.class`를 읽는다고 했어요. 언제 읽을까요? 프로그램을 시작할 때 모든 클래스를 한꺼번에 읽을까요?'
+    recall: 'JVM은 바이트코드를 실행하는 프로그램이고, JRE는 JVM에 표준 라이브러리를 더한 실행 환경, JDK는 거기에 `javac` 같은 개발 도구를 더한 것이에요. 실행에는 JRE만 있으면 되고 컴파일에는 JDK가 필요해요. 클래스 파일에는 컴파일한 자바의 버전이 적혀서, 낮은 버전의 JVM은 높은 버전의 파일을 `UnsupportedClassVersionError`로 거부해요.'
   - id: q3
     title: JVM은 클래스를 언제, 어떻게 읽어 오나요?
     conclusion:
@@ -112,6 +309,61 @@ questions:
     asks:
       - '본문의 예시: `Coupon`의 static 블록이 "Coupon 읽음"을 출력한다. `main`이 "시작"을 출력한 다음 줄에서 `new Coupon()`을 처음 실행한다. 출력의 순서는 무엇인가 ("시작" 다음에 "Coupon 읽음")'
       - '옮긴 상황: `String.class.getClassLoader()`와 `OrderApp.class.getClassLoader()`를 출력했다. null이 나오는 쪽은 어느 것인가 (`String` 쪽. 부트스트랩 로더가 읽은 클래스다)'
+    body:
+      - p: '스프링 부트 서버는 수천 개의 클래스를 가지고 있어요. JVM이 시작할 때 이것을 전부 읽을까요? 아니에요. **클래스는 처음 쓰이는 순간에 읽혀요.**'
+      - p: '확인해 볼게요. `Coupon`에는 클래스가 준비될 때 한 번 실행되는 static 블록이 있고, 거기서 "Coupon 읽음"을 출력해요. 이 줄이 어디에서 나올지 예상해 보고 열어 보세요.'
+      - ci:
+          key: first-use
+          label: 실제 출력 보기
+          source: JavaExecutionTest.classIsInitializedOnFirstUse
+          code: coupon
+      - p: '`Coupon` 타입의 변수를 선언했을 때는 아무 일도 없었어요. `new Coupon()`으로 처음 쓰는 순간에 읽혔어요. 이렇게 필요할 때 읽으니 시작이 빠르고, 한 번도 쓰지 않는 클래스는 메모리에 올라오지 않아요.'
+      - h3: 읽힌 클래스가 거치는 세 단계
+      - table:
+          head: [단계, 하는 일]
+          rows:
+            - [로딩, '클래스 로더가 `.class` 파일을 찾아 읽어요']
+            - [링크, '바이트코드가 올바른지 검증하고, static 필드의 자리를 기본값(0, null)으로 준비하고, 코드에 적힌 다른 클래스의 이름을 실제로 찾아가는 참조로 바꿔요']
+            - [초기화, 'static 필드의 대입문과 static 블록을 실행해요. 위의 "Coupon 읽음"이 이때 나왔어요']
+      - muted: 'static 필드와 static 블록이 어떤 순서로 실행되는지는 static과 초기화 순서 레슨에서 다뤄요.'
+      - h3: 클래스 로더는 셋이에요
+      - p: '클래스를 찾아 읽는 일은 **클래스 로더**가 해요. 셋이 위아래로 이어져 있어요.'
+      - table:
+          head: [로더, 읽는 것]
+          rows:
+            - [부트스트랩 로더, '`String`, `Object` 같은 자바의 핵심 클래스']
+            - [플랫폼 로더, '그 밖의 JDK 클래스']
+            - [애플리케이션 로더, '클래스패스에 있는 내 코드와 라이브러리(스프링, 잭슨 등)']
+      - p: '`String`과 테스트 클래스를 누가 읽었는지 물어봤어요.'
+      - ci:
+          key: loaders
+          label: 실제 출력 보기
+          source: JavaExecutionTest.classLoaders
+          code: loaderRun
+      - p: '`String`의 로더가 `null`로 나와요. 부트스트랩 로더는 JVM 안에 있는 프로그램이라 자바 객체로 보여 줄 수 없어서 `null`이에요. 내 클래스는 애플리케이션 로더가 읽었고, 그 부모가 플랫폼 로더예요.'
+      - p: '로더는 클래스를 찾으라는 요청을 받으면 **부모에게 먼저 물어요.** 부모가 못 찾을 때만 자기가 찾아요. 그래서 누가 `java.lang.String`이라는 이름의 클래스를 클래스패스에 넣어도 부트스트랩 로더가 먼저 JDK의 `String`을 찾아 주고, 가짜는 쓰이지 않아요.'
+      - h3: 못 찾으면 나는 오류 두 가지
+      - p: '애플리케이션 로더가 찾아보는 경로의 목록을 **클래스패스**라고 해요. 거기에 없으면 못 찾아요. 이름으로 찾다가 없으면 이렇게 나와요.'
+      - ci:
+          key: not-found
+          label: 실제 예외 보기
+          source: JavaExecutionTest.classNotFound
+          code: notFoundRun
+      - table:
+          head: [오류, 생기는 때]
+          rows:
+            - ['`ClassNotFoundException`', '`Class.forName("이름")`처럼 코드가 이름으로 찾았는데 없을 때. 예외라서 잡을 수 있어요']
+            - ['`NoClassDefFoundError`', '컴파일할 때는 있던 클래스가 실행할 때 클래스패스에 없을 때. 의존성이 jar에 빠졌을 때 자주 봐요']
+      - quiz:
+          q: '`main`이 "시작"을 출력하고, 다음 줄에서 `new Coupon()`을 처음 실행해요. `Coupon`의 static 블록은 "Coupon 읽음"을 출력해요. 출력의 순서는?'
+          options:
+            - Coupon 읽음, 시작
+            - 시작, Coupon 읽음
+            - 시작만 출력된다
+          answer: 2
+          explain: '`Coupon`은 처음 쓰이는 `new Coupon()` 줄에서 읽히고 초기화돼요. 프로그램을 시작할 때 미리 읽히지 않아요.'
+      - next: '읽어 온 바이트코드는 기계어가 아니라고 했어요. JVM이 한 줄씩 해석해서 실행한다면 느리지 않을까요?'
+    recall: '프로그램을 시작할 때 전부 읽지 않고, 클래스가 처음 쓰이는 순간에 클래스 로더가 클래스패스에서 찾아 읽어요. 읽은 클래스는 로딩, 링크, 초기화를 거쳐요. 로더는 부트스트랩, 플랫폼, 애플리케이션 셋이고, 찾을 때 부모에게 먼저 물어요. 이름으로 찾다 없으면 `ClassNotFoundException`, 컴파일 때 있던 클래스가 실행 때 없으면 `NoClassDefFoundError`가 나요.'
   - id: q4
     title: 바이트코드를 읽어서 실행하면 느리지 않나요?
     conclusion:
@@ -127,28 +379,128 @@ questions:
     asks:
       - '본문의 예시: 같은 메서드를 2만 번씩 다섯 묶음으로 불러 묶음마다 걸린 시간을 쟀다. 가장 오래 걸릴 것으로 기대되는 묶음은 어느 것인가 (첫 묶음. 아직 인터프리터로 돌고 JIT가 컴파일하기 전이다)'
       - '옮긴 상황: 서버를 새로 배포한 직후 1분 동안의 응답 시간이 평소의 몇 배였다가 저절로 평소로 돌아왔다. 코드와 DB는 바뀌지 않았다. JVM의 동작으로 설명되는 원인 두 가지는 무엇인가 (처음 쓰이는 클래스의 로딩, 아직 기계어로 컴파일되지 않은 코드의 해석 실행)'
+    body:
+      - p: 'JVM은 바이트코드를 두 가지 방법으로 실행해요.'
+      - ul:
+          - '**인터프리터:** 바이트코드 명령을 하나씩 읽어 그때그때 실행해요. 준비 없이 바로 시작하지만, 같은 코드를 백 번 돌면 백 번 해석해요.'
+          - '**JIT 컴파일러:** 실행하는 동안 자주 불리는 메서드를 찾아 **기계어로 컴파일해 둬요.** 그다음부터는 해석하지 않고 기계어를 바로 실행해요. JIT는 Just-In-Time, "필요한 때에"라는 뜻이에요.'
+      - p: 'JVM은 처음에 모든 코드를 인터프리터로 돌리다가, 많이 불리는 메서드만 골라 JIT로 컴파일해요. HotSpot이라는 이름도 자주 도는 곳(hot spot)을 찾는다는 데서 왔어요.'
+      - p: '같은 계산을 2만 번씩 다섯 묶음으로 돌려 묶음마다 걸린 시간을 쟀어요. 같은 일을 JIT를 끄는 옵션 `-Xint`(인터프리터만 쓰기)로도 돌렸어요. 두 칸의 숫자가 어떻게 달라질지 예상해 보고 열어 보세요.'
+      - ci:
+          key: warmup
+          label: 실제 측정값 보기
+          source: JavaExecutionTest.jitWarmup
+          code: warmupRun
+      - ul:
+          - '**기본 칸은 묶음이 지날수록 빨라져요.** 첫 묶음은 인터프리터가 돌렸고, 그사이 JIT가 `discount`를 기계어로 바꿔서 뒤의 묶음은 그것이 돌았어요.'
+          - '**`-Xint` 칸은 줄지 않아요.** 끝까지 해석만 해서, 마지막 묶음도 첫 묶음과 비슷하게 걸려요.'
+      - muted: '시간은 돌린 기계마다 달라요. 위의 숫자는 이 페이지를 배포할 때 CI 서버에서 잰 값이고, 볼 것은 숫자가 아니라 줄어드는 모양이에요.'
+      - p: '모든 코드를 처음부터 기계어로 바꾸지 않는 이유도 있어요. 한 번만 도는 코드를 컴파일하는 것은 시간 낭비이고, 실행하며 모은 정보(어느 분기를 자주 타는지, 어떤 타입이 자주 오는지)로 더 잘 최적화할 수 있어요.'
+      - h3: 그래서 켠 직후가 가장 느려요
+      - p: '배포한 서버에 첫 요청들이 오면 JVM은 처음 쓰는 클래스를 읽고(질문 3), 아직 기계어가 없는 코드를 해석해서 돌려요. 요청이 쌓일수록 자주 쓰는 코드가 기계어로 바뀌어 빨라져요. 이 과정을 **워밍업**이라고 해요. 배포 직후의 응답 시간 그래프가 높게 시작했다가 내려오는 모양이 그래서 나와요.'
+      - more:
+          summary: '더 알아보기: 처음부터 기계어로 만들어 두는 방법'
+          body:
+            - p: 'GraalVM 네이티브 이미지는 빌드할 때 프로그램 전체를 기계어로 만들어 둬요. 시작이 아주 빨라서 잠깐 켰다 끄는 일에 맞아요. 대신 빌드가 오래 걸리고, 실행하면서 모은 정보로 다시 최적화하는 일은 하지 않아요. 스프링 부트도 이 방식을 지원해요.'
+      - quiz:
+          q: 'JIT 컴파일러가 하는 일은 무엇일까요?'
+          options:
+            - 프로그램을 시작하기 전에 모든 바이트코드를 기계어로 바꾼다
+            - 실행 중에 자주 불리는 메서드를 기계어로 바꿔 둔다
+            - '`.java` 파일을 바이트코드로 바꾼다'
+          answer: 2
+          explain: 'JIT는 실행하는 동안 많이 도는 코드만 골라 기계어로 컴파일해요. `.java`를 바이트코드로 바꾸는 것은 `javac`예요.'
+    recall: '처음에는 인터프리터가 바이트코드를 한 줄씩 해석해서 실행하고, 자주 실행되는 메서드는 JIT 컴파일러가 실행 중에 기계어로 바꿔 둬서 빨라져요. 그래서 자바 서버는 클래스 로딩과 해석 실행 때문에 켠 직후가 가장 느리고, 요청을 받으면서 빨라져요. 이것을 워밍업이라고 해요.'
 practice:
+  title: 스프링 부트에서는 이렇게 만나요
   says:
     - '스프링 부트 프로젝트는 `./gradlew bootJar`로 실행 가능한 jar 하나를 만들고 `java -jar app.jar`로 켠다. jar를 풀어 보면 내 클래스는 `BOOT-INF/classes`에, 의존 라이브러리는 `BOOT-INF/lib`에 jar째로 들어 있고, 맨 위에 스프링 부트의 로더 클래스가 있다. 이 로더가 jar 안의 jar를 읽는 클래스 로더를 만들어 내 `main`을 부른다 (스프링 부트 공식 문서 근거. 구조는 실제 jar의 목록으로 보여 준다)'
     - '`build.gradle`의 `java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }`가 컴파일할 자바 버전을 정한다. 이 버전이 클래스 파일 버전이 되고, 서버의 자바는 이 버전 이상이어야 한다 (Gradle 공식 문서 근거)'
     - '흔한 실수: 빌드는 자바 21로 하고 서버(또는 도커 베이스 이미지)는 자바 17이다. 켜자마자 `UnsupportedClassVersionError`가 난다. 고친 것: 도커 이미지를 `eclipse-temurin:21-jre`처럼 빌드 버전과 맞춘다. 오류 메시지의 숫자 65.0과 61.0을 읽는 법을 적는다 (버전이 높은 클래스 파일을 거부하는 것은 JVM 명세가 근거이고, 클래스 파일 버전 65는 테스트로 확인한다)'
     - '로그에서 알아보는 법: `ClassNotFoundException`이나 `NoClassDefFoundError`가 보이면 그 클래스가 든 의존성이 jar의 `BOOT-INF/lib`에 있는지 본다. `compileOnly`로 넣은 의존성은 컴파일은 되지만 jar에 들어가지 않는다'
     - '배포 직후가 느린 것은 질문 3과 질문 4의 결과다. 이 레슨은 원인까지만 말하고, 무중단 배포에서 새 서버에 요청을 천천히 넘기는 것은 T6에서 다룬다'
+  body:
+    - p: '질문 넷에서 본 것은 스프링 부트 서버를 켤 때 그대로 일어나요. 여기서는 빌드한 결과물, 자바 버전 설정, 그리고 가장 흔한 배포 오류를 봐요. jar의 구조와 Gradle 설정은 공식 문서를 근거로 적었고, 클래스 파일 버전과 오류 메시지는 테스트로 확인했어요.'
+    - h3: 실행 가능한 jar 하나
+    - p: '스프링 부트 프로젝트는 `bootJar`로 jar 파일 하나를 만들고 `java -jar`로 켜요. `OrderApp`처럼 `.class`를 하나씩 올리지 않아요.'
+    - code: bootJar
+      notes:
+        - mark: BOOT-INF/classes/
+          text: '내 코드가 컴파일된 `.class`가 여기에 있어요.'
+        - mark: BOOT-INF/lib/
+          text: '의존 라이브러리가 jar째로 여기에 들어가요. 스프링, 톰캣, 잭슨이 모두 여기 있어요.'
+    - p: '`java -jar`를 실행하면 JVM은 jar 맨 위에 있는 스프링 부트의 로더 클래스부터 실행해요. 이 로더가 `BOOT-INF/lib` 안의 jar들까지 읽을 수 있는 **클래스 로더를 하나 더 만들고**, 그 로더로 내 `main`을 불러요. 질문 3의 애플리케이션 로더만으로는 jar 안에 든 jar를 읽을 수 없어서예요.'
+    - muted: '근거: [스프링 부트 문서의 실행 가능한 jar](link:bootJar). 목록은 줄였어요.'
+    - h3: 빌드하는 자바 버전은 toolchain이 정해요
+    - code: toolchain
+      notes:
+        - mark: '21'
+          text: '이 버전의 `javac`로 컴파일해요. 만들어진 클래스 파일의 주 버전이 65가 돼요.'
+    - p: '이 숫자가 서버에 깔 자바의 최소 버전이 돼요. 질문 2에서 본 대로 서버의 JVM이 이보다 낮으면 클래스 파일을 읽지 못해요.'
+    - muted: '근거: [Gradle의 toolchain 문서](link:toolchains), [스프링 부트 3의 시스템 요구 사항](link:bootSystem).'
+    - h3: '흔한 실수: 빌드는 21, 서버는 17'
+    - p: 'toolchain을 21로 올렸는데, 서버를 만드는 도커 파일의 베이스 이미지는 예전 그대로예요.'
+    - code: dockerBad
+      notes:
+        - mark: '17'
+          text: '이 이미지에는 자바 17의 JRE가 들어 있어요.'
+    - p: '서버는 켜지자마자 이 로그를 남기고 꺼져요. 질문 2의 테스트에서 본 메시지와 같은 모양이에요.'
+    - code: versionLog
+      notes:
+        - mark: '65.0'
+          text: 'jar 안의 클래스 파일을 자바 21이 만들었다는 뜻이에요.'
+        - mark: '61.0'
+          text: '이 서버의 JVM은 자바 17이라 61까지만 읽어요.'
+    - p: '앞의 숫자가 크면 빌드한 자바가 서버의 자바보다 새것이에요. 고치는 방법은 베이스 이미지를 빌드 버전과 맞추는 거예요. 반대로 서버의 자바가 더 높은 것은 괜찮아요.'
+    - code: dockerFixed
+    - table:
+        head: [클래스 파일 버전, 자바]
+        rows:
+          - ['52', '8']
+          - ['55', '11']
+          - ['61', '17']
+          - ['65', '21']
+    - h3: '로그에서 클래스를 못 찾는다고 할 때'
+    - p: '`NoClassDefFoundError`나 `ClassNotFoundException`이 나오면 그 클래스가 든 라이브러리가 jar의 `BOOT-INF/lib`에 들어갔는지 봐요. `jar tf`로 목록을 열어 보면 돼요. Gradle에서 `compileOnly`로 넣은 의존성은 컴파일할 때만 쓰이고 jar에는 들어가지 않아요. 그래서 컴파일은 되는데 실행할 때 못 찾는 일이 생겨요.'
+    - h3: 배포 직후가 느린 것은 정상이에요
+    - p: '새 서버의 첫 요청들이 느린 것은 질문 3의 클래스 로딩과 질문 4의 워밍업 때문이에요. 코드의 문제가 아니에요. 다만 트래픽을 한꺼번에 새 서버로 넘기면 그 느린 구간에 요청이 몰려요. 새 서버에 요청을 조금씩 넘기는 배포 방법은 CI/CD와 무중단 배포 레슨에서 다뤄요.'
+interview:
+  question: 자바 프로그램이 실행되는 과정을 설명해 주세요
+  model:
+    - label: 정의
+      text: 자바 소스는 javac가 바이트코드가 든 .class 파일로 컴파일하고, JVM이 그 바이트코드를 읽어 실행합니다. 바이트코드는 운영체제의 기계어가 아니라 JVM이 읽는 명령이라서, 운영체제마다 있는 JVM이 같은 .class를 실행합니다.
+    - label: 원리
+      text: JVM은 클래스를 처음 쓰일 때 클래스 로더로 읽고, 로딩, 링크, 초기화를 거칩니다. 클래스 로더는 부트스트랩, 플랫폼, 애플리케이션 세 단계이고 부모에게 먼저 묻습니다. 실행은 처음에 인터프리터가 하고, 자주 도는 메서드는 JIT 컴파일러가 기계어로 바꿔 빨라집니다.
+    - label: 주의할 점
+      text: 클래스 파일에는 컴파일한 자바의 버전이 적혀서, 낮은 버전의 JVM은 UnsupportedClassVersionError로 거부합니다. 실행에는 JRE만 있으면 되지만 컴파일에는 JDK가 필요합니다. 서버를 켠 직후에는 클래스 로딩과 해석 실행 때문에 느립니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 빌드를 자바 21로 올렸는데 도커 베이스 이미지가 17이라 UnsupportedClassVersionError가 났고, 메시지의 버전 숫자를 보고 이미지를 맞췄습니다.'
+verified: 이 레슨의 클래스 파일, 오류 메시지, 측정값은 짐작이 아니라 자바 21에서 테스트 안에서 직접 컴파일하고 실행해 받은 값이에요. 코드가 바뀔 때마다 테스트([JavaExecutionTest](link:test))가 다시 돌아요.
+footer: '근거: 클래스 파일 형식과 버전은 JVM 명세 4장([링크](link:jvmsClass)), 로딩과 링크와 초기화는 JVM 명세 5장([링크](link:jvmsLoading)), 실행 가능한 jar는 스프링 부트 문서, toolchain은 Gradle 문서. 클래스 파일과 오류 메시지는 OpenJDK 21(HotSpot)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '자바 21로 컴파일한 클래스 파일의 처음 4바이트는 CAFEBABE이고 주 버전은 65다'
     how: '테스트 안에서 `javax.tools.JavaCompiler`로 `OrderApp.java`를 임시 폴더에 컴파일하고, 만들어진 `.class`의 앞 8바이트를 읽는다'
+    test: JavaExecutionTest.classHeader
   - claim: '컴파일한 클래스를 실행하면 "주문 12000"이 출력된다'
     how: '컴파일한 폴더를 가리키는 `URLClassLoader`로 읽어 `main`을 부르고 출력을 잡는다'
+    test: JavaExecutionTest.runCompiledClass
+  - claim: '주 버전이 JVM보다 높은 클래스 파일은 `UnsupportedClassVersionError`로 거부된다. 메시지에 파일의 버전과 읽을 수 있는 최고 버전이 나온다'
+    how: '컴파일한 클래스 파일의 주 버전을 66으로 바꿔 자바 21의 JVM에 읽힌다'
+    test: JavaExecutionTest.newerClassFileIsRejected
   - claim: '클래스는 처음 쓰이는 줄에서 초기화된다. 그 전에는 static 블록이 돌지 않는다'
     how: 'static 블록에서 기록을 남기는 클래스를 두고, 쓰기 전과 쓴 뒤의 기록을 비교한다'
-  - claim: '`String.class.getClassLoader()`는 null이고, 테스트 클래스의 로더는 애플리케이션 로더다'
-    how: '두 값을 출력한다. 로더의 클래스 이름은 실행 환경(Gradle 테스트)에 따라 다를 수 있어 null인지 아닌지와 `ClassLoader.getSystemClassLoader()`와의 관계만 단정한다'
+    test: JavaExecutionTest.classIsInitializedOnFirstUse
+  - claim: '`String.class.getClassLoader()`는 null이고, 테스트 클래스의 로더는 애플리케이션 로더이며 그 부모는 플랫폼 로더다'
+    how: '두 값을 출력한다. 시스템 로더와 플랫폼 로더의 관계를 단정한다'
+    test: JavaExecutionTest.classLoaders
   - claim: '없는 이름으로 `Class.forName`을 부르면 `ClassNotFoundException`이 난다'
     how: '없는 클래스 이름으로 부르고 예외의 타입을 본다'
-  - claim: '같은 메서드를 반복해 부르면 첫 묶음이 뒤의 묶음보다 오래 걸린다'
-    how: '묶음마다 `System.nanoTime()`으로 재서 `CiOutput`에 남긴다. 시간은 환경에 따라 달라서 테스트는 값을 단정하지 않고 기록만 한다. 본문은 실측값을 보여 주고 모양을 말한다'
+    test: JavaExecutionTest.classNotFound
+  - claim: '같은 메서드를 반복해 부르면 마지막 묶음이 첫 묶음보다 빠르고, `-Xint`로 돌린 마지막 묶음보다도 빠르다'
+    how: '자식 JVM 둘(기본, -Xint)에서 묶음마다 `System.nanoTime()`으로 잰다. 값은 단정하지 않고 모양만 단정한다'
+    test: JavaExecutionTest.jitWarmup
   - claim: '스프링 부트의 실행 가능한 jar에는 `BOOT-INF/classes`와 `BOOT-INF/lib`가 있다'
-    how: '공식 문서를 근거로 적는다. 본문 단계에서 `verification`의 `bootJar` 결과물을 `jar tf`로 열어 목록을 붙일 수 있는지 본다'
+    how: '공식 문서를 근거로 적었다'
 sources:
   - '컴파일과 클래스 파일 형식, 매직 넘버와 버전: JVM 명세 4장 https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html'
   - '로딩, 링크, 초기화: JVM 명세 5장 https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-5.html'
