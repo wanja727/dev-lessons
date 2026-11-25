@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/adapter-facade.yaml의 says).
 # 동작에 관한 정답은 verification의 AdapterFacadeTest로 확인했다 (자바 21, 스프링 부트 3.5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -29,7 +30,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: TossAdapter는 우리 PaymentGateway를 구현하고 SDK의 결과 Map을 우리 타입 Approval로 바꿔요. SDK가 {"code"는 "1001", "tid"는 null}을 돌려주면 approve는 무엇을 돌려줄까요?
     code: |-
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 우리 코드는 섭씨를 돌려주는 Thermometer 인터페이스를 원하는데, 장비 라이브러리는 화씨를 주는 double readF()만 있어요. Thermometer를 구현하고 안에서 readF()를 불러 섭씨로 바꾸는 클래스는 무엇이고, 데코레이터와 무엇이 다를까요?
     choices:
@@ -67,7 +68,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 주문 서비스, 환불 서비스, 정산 배치가 모두 PaymentGateway만 쓰고, 토스 SDK는 TossAdapter 안에서만 써요. 결제 대행사를 나이스로 바꾸면 무엇이 바뀔까요?
     choices:
@@ -84,7 +85,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 문자 발송 업체 SDK의 응답 형식이 바뀌었어요. 우리 코드에는 SmsSender 인터페이스와 그 업체용 어댑터가 있고, 서비스들은 SmsSender만 써요. 어디를 고칠까요?
     choices:
@@ -101,7 +102,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: TossAdapter를 만들어 두었지만, 주문 서비스의 메서드가 SDK의 결과 Map<String, String>을 그대로 반환해서 환불 서비스와 정산 배치가 그 Map의 "code"를 읽어요. 대행사를 바꾸면 어떻게 될까요?
     choices:
@@ -113,12 +114,13 @@ questions:
       **Map을 읽는 서비스들도 고쳐야 해요.** SDK 타입이 서비스 사이를 오가면 어댑터를 둔 의미가 사라져요.
 
       - SDK 타입은 어댑터 안에만 두고 서비스 사이에는 Approval 같은 우리 타입만 오가게 해요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/adapterfacade/AdapterFacadeTest.java
   # ── 질문 3 ──
   - key: af-facade-count
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 컨트롤러가 재고 예약, 결제 승인, 배송 요청, 알림을 직접 차례로 부르다가, 이 넷을 순서대로 부르는 OrderFacade.placeOrder(cart)만 부르게 바꿨어요. 컨트롤러가 직접 아는 클래스는 몇 개에서 몇 개가 됐을까요?
     choices:
@@ -135,7 +137,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 다음 둘 가운데 어댑터는 무엇일까요? (가) 레거시 결제 모듈의 메서드 이름이 우리 규칙과 달라서 우리 인터페이스로 감싼 클래스 (나) 회원 가입에 필요한 다섯 시스템을 순서대로 부르는 SignupFacade
     choices:
@@ -145,11 +147,12 @@ questions:
     answer: "1"
     explanation: |-
       **(가)예요.** 하나의 모양을 우리 인터페이스로 바꾸는 것이 어댑터, 여럿을 창구 하나로 묶는 것이 퍼사드예요.
+    source: https://refactoring.guru/design-patterns/facade
   - key: af-aslist
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 아래 코드를 실행하면 array[0]은 무엇이 될까요?
     code: |-
@@ -172,7 +175,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "어댑터 패턴과 퍼사드 패턴을 설명하고, 둘의 차이를 말해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
