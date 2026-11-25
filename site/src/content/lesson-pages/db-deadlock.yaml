@@ -1,7 +1,8 @@
-# DB 데드락 (설계서)
+# DB 데드락
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
 title: DB 데드락
+description: DB 데드락은 어떻게 생기는지, DB는 데드락을 어떻게 푸는지, 데드락을 줄이려면 어떻게 하는지, 데드락이 나면 앱은 어떻게 하는지. 네 가지 질문에 스스로 답할 수 있게 서로에게 동시에 돈을 보내는 이체로 데드락을 직접 만들어 보며 배우는 대화형 레슨.
+minutes: 20
 unit: DB
 roadmap: D11
 type: 동작 확인
@@ -42,6 +43,12 @@ covers:
     where: '질문 4'
   - topic: '자바 스레드의 데드락과 스레드 덤프'
     where: '다루지 않음: 데드락(C5), 스레드 덤프와 힙 덤프(T10)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/dbdeadlock/DbDeadlockTest.java
+  deadlocks: https://www.postgresql.org/docs/16/explicit-locking.html#LOCKING-DEADLOCKS
+  rowLocks: https://www.postgresql.org/docs/16/explicit-locking.html#LOCKING-ROWS
+  config: https://www.postgresql.org/docs/16/runtime-config-locks.html
+  dao: https://docs.spring.io/spring-framework/reference/data-access/dao.html
 codes:
   predict: |-
     -- A: kim → lee 100원
@@ -82,9 +89,24 @@ codes:
         if (i == 3) throw e;
       }
     }
+  log: |-
+    ERROR:  deadlock detected
+    DETAIL:  Process 81 waits for ShareLock
+    on transaction 901; blocked by process 77.
+    Process 77 waits for ShareLock on
+    transaction 902; blocked by process 81.
 predict:
-  text: '코드 predict는 이체 두 개가 각자 보내는 계좌를 먼저 고친 뒤 받는 계좌를 고쳐요. 문장은 A, B, A, B 순서로 실행돼요. 네 번째 문장에서 무슨 일이 생길까요? 보기: 둘 다 성공한다, B가 A의 커밋을 기다린다, 1초쯤 뒤 둘 가운데 하나가 오류로 실패한다.'
-  answer: '1초쯤 뒤 하나가 오류로 실패한다. A는 2번 행을, B는 1번 행을 기다려 서로를 기다린다. PostgreSQL이 이를 알아채고 한쪽을 40P01로 끝낸다. 질문 2에서 밝힌다.'
+  title: 네 번째 문장에서 무슨 일이?
+  text: 'kim이 lee에게, lee가 kim에게 동시에 100원을 보내요. 이체 하나는 보내는 계좌를 먼저 고치고 받는 계좌를 나중에 고쳐요. 문장은 A, B, A, B 순서로 실행돼요. 네 번째 문장에서 무슨 일이 생길까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: ok, label: 둘 다 성공한다}
+    - {value: wait, label: B가 A의 커밋을 기다렸다가 성공한다}
+    - {value: fail, label: 1초쯤 뒤 둘 가운데 하나가 오류로 실패한다}
+  answer: fail
+  storageKey: dl-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: DB 데드락은 어떻게 생기나요?
@@ -102,6 +124,33 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에서 셋째 문장까지만 실행했을 때 A의 상태는 (B가 2번 행을 쥐고 있어 기다린다. 아직 데드락은 아니다)'
       - '옮긴 상황: 주문 A는 상품 7의 재고를 빼고 상품 3의 재고를 빼고, 주문 B는 상품 3을 빼고 상품 7을 뺀다. 둘이 동시에 첫 UPDATE를 끝냈다면 (서로 상대가 잠근 행을 기다려 데드락이 생긴다)'
+    body:
+      - p: '처음 예측의 네 문장을 하나씩 따라가 볼게요. UPDATE는 고친 행을 **트랜잭션이 끝날 때까지 잠가요**([낙관적 락과 비관적 락](lesson:locking)).'
+      - widget:
+          kind: timeline
+          layout: [timeline, buttons, verdict]
+          lanes: [이체 A (kim→lee), 이체 B (lee→kim)]
+          scenarios:
+            default:
+              - event: {dir: right, title: 'A: kim에서 100 빼기', text: '[[1번 행(kim)을 잠금]]', note: 'A가 커밋할 때까지 kim의 행은 A의 것이에요.'}
+              - event: {dir: left, title: 'B: lee에서 100 빼기', text: '[[2번 행(lee)을 잠금]]', note: 'B가 커밋할 때까지 lee의 행은 B의 것이에요.'}
+              - event: {dir: right, title: 'A: lee에 100 더하기', text: '2번 행을 기다림', note: 'B가 쥐고 있어요. 여기까지는 평범한 기다림이에요. B가 끝나면 풀려요.'}
+              - event: {dir: left, title: 'B: kim에 100 더하기', text: '1번 행을 기다림', note: 'A가 쥐고 있어요. 그런데 A는 B를 기다리는 중이에요.'}
+                verdict: 'A는 B를, B는 A를 기다려요. 누구도 커밋하지 못하니, 누군가 끊지 않으면 영원히 끝나지 않아요.'
+      - p: '두 트랜잭션이 **각자 행 하나를 쥔 채, 상대가 쥔 행을 기다리는** 상태예요. 이것이 **데드락**이에요.'
+      - p: '세 번째 문장까지는 데드락이 아니에요. A는 기다리지만, B가 커밋하면 풀려요. 이런 **락 대기**는 흔하고 금방 끝나요. 네 번째 문장에서 B도 A를 기다리면서 **서로 기다리는 고리**가 생겨요. 이때부터는 저절로 풀리지 않아요.'
+      - callout: '`FOR UPDATE`를 쓰지 않은 평범한 이체 코드예요. **UPDATE 하나도 행을 잠그니, 락을 따로 쓰지 않아도 데드락이 생겨요.**'
+      - p: '자바 스레드끼리 `synchronized`로 서로의 락을 기다리는 데드락과 같은 원리예요. 데드락이 생기는 네 가지 조건은 [데드락](lesson:deadlock)(C5)에서 다뤄요.'
+      - quiz:
+          q: '주문 A는 상품 7, 상품 3 순서로 재고를 빼고, 주문 B는 상품 3, 상품 7 순서로 빼요. 둘이 동시에 첫 UPDATE를 끝냈어요. 다음에 무슨 일이 생기나요?'
+          options:
+            - '둘 다 바로 성공한다'
+            - '서로 상대가 잠근 행을 기다려 데드락이 생긴다'
+            - '한쪽만 기다리고 곧 풀린다'
+          answer: 2
+          explain: 'A는 상품 7을, B는 상품 3을 쥔 채 상대의 행을 기다려요. 서로 기다리는 고리라 데드락이에요.'
+      - next: '아무도 커밋하지 못하는 상태가 됐어요. 그러면 영원히 멈춰 있을까요?'
+    recall: '두 트랜잭션이 각자 행 하나씩 잠근 채, 상대가 잠근 행을 잠그려고 기다리면 둘 다 영원히 진행하지 못해요. 이것이 데드락이에요. 상대가 끝나면 풀리는 락 대기와 달리 저절로 풀리지 않아요. UPDATE도 고친 행을 커밋까지 잠그니, FOR UPDATE를 쓰지 않은 평범한 이체 코드에서도 생겨요.'
   - id: q2
     title: DB는 데드락을 어떻게 푸나요?
     conclusion:
@@ -116,6 +165,38 @@ questions:
     asks:
       - '본문의 예시: 코드 predict에서 B가 40P01로 실패했다. B의 첫 문장(lee에서 100 빼기)은 반영되어 있나 (아니다. B 전체가 롤백된다)'
       - '옮긴 상황: `deadlock_timeout`을 1초로 둔 DB에서 데드락이 생겼다. 데드락에 걸린 요청은 오류를 받기까지 대략 얼마나 기다리나 (1초쯤)'
+    body:
+      - p: '처음 예측의 답은 **1초쯤 뒤 하나가 오류로 실패한다**예요. {{predict-result}}'
+      - ci:
+          key: deadlock
+          label: 실제로 돌린 결과
+          source: DbDeadlockTest.deadlockDetected
+          code: predict
+      - p: '1초쯤 뒤 B가 **40P01** 오류(`deadlock detected`)를 받았어요. B가 끝나면서 쥐고 있던 lee의 행을 놓자, 기다리던 A가 진행해 커밋했어요.'
+      - h3: 왜 1초 뒤인가요
+      - p: 'PostgreSQL은 기다림이 **`deadlock_timeout`(기본 1초)**을 넘으면, 그때 서로 기다리는 고리가 있는지 검사해요. 고리가 있으면 그 가운데 한 트랜잭션을 오류로 끝내요. 고리를 찾는 일은 비싸서 기다림마다 바로 하지 않아요. 대부분의 기다림은 데드락이 아니라 금방 풀리거든요.'
+      - ci:
+          key: timeout
+          label: deadlock_timeout을 200ms로 줄였을 때
+          source: DbDeadlockTest.deadlockTimeout
+      - p: '어느 쪽이 실패할지는 앱이 정할 수 없어요. 대개 기다림이 먼저 1초를 넘어 검사를 시작한 쪽이 끝나요. **어느 트랜잭션이든 데드락으로 실패할 수 있다**고 보고 코드를 써요.'
+      - h3: 실패한 쪽은 전부 롤백돼요
+      - p: '위 결과의 잔액을 보세요. kim 900, lee 1100, 합계 2000이에요. A의 이체만 반영됐어요. B는 첫 문장(lee에서 100 빼기)까지 **모두 롤백됐어요.** 돈이 사라지거나 생기지 않았어요.'
+      - more:
+          summary: '더 알아보기: 서버 로그에 남는 것'
+          body:
+            - p: 'PostgreSQL은 데드락을 서버 로그에 남겨요. 누가 누구를 기다렸는지와 두 문장이 함께 찍혀요. 운영에서 데드락의 원인을 찾을 때 이 로그에서 두 문장을 찾아요.'
+            - code: log
+      - quiz:
+          q: 'B가 데드락으로 40P01을 받았어요. B가 그 전에 성공한 첫 문장(lee에서 100 빼기)은 반영되어 있나요?'
+          options:
+            - '반영되어 있다. 실패한 것은 둘째 문장뿐이다'
+            - '반영되어 있지 않다. B 전체가 롤백된다'
+            - 'B가 다시 커밋하면 반영된다'
+          answer: 2
+          explain: '데드락으로 끝난 트랜잭션은 앞에서 성공한 문장까지 모두 롤백돼요.'
+      - next: 'DB가 풀어 주지만, 매번 1초를 기다리고 요청 하나는 실패해요. 처음부터 덜 생기게 할 수는 없을까요?'
+    recall: 'PostgreSQL은 기다림이 deadlock_timeout(기본 1초)을 넘으면 서로 기다리는 고리가 있는지 검사하고, 있으면 그 가운데 한 트랜잭션을 40P01(deadlock detected) 오류로 끝내요. 끝난 트랜잭션은 앞 문장까지 전부 롤백되고 락을 놓아서, 남은 쪽이 진행해요. 어느 쪽이 실패할지는 앱이 정할 수 없어요.'
   - id: q3
     title: 데드락을 줄이려면 어떻게 하나요?
     conclusion:
@@ -130,6 +211,42 @@ questions:
     asks:
       - '본문의 예시: kim(id 1)과 lee(id 2)가 서로 이체한다. 두 이체 모두 id가 작은 계좌부터 잠그면 동시에 실행될 때 생기는 일은 (한쪽이 잠깐 기다린 뒤 차례로 성공한다. 데드락은 없다)'
       - '옮긴 상황: 장바구니 주문이 담긴 상품들의 재고를 담은 순서대로 뺀다. 데드락을 줄이도록 고치면 (상품 id 순으로 정렬해 빼거나 `order by id for update`로 한꺼번에 잠근다)'
+    body:
+      - p: '고리는 A가 1 다음 2를, B가 2 다음 1을 잠그기 때문에 생겨요. **둘 다 1 다음 2를 잠그면** B는 1에서 기다리고, A가 끝난 뒤 진행해요. 기다림은 있어도 고리는 없어요.'
+      - p: '이체라면 "보내는 쪽, 받는 쪽" 순서가 아니라 **id가 작은 계좌부터** 잠가요. 두 계좌를 한 문장으로 잠그면 더 간단해요.'
+      - code: ordered
+        notes:
+          - mark: order by id for update
+            as: code
+            text: 'id 순서로 행을 잠가요. 어느 이체든 같은 순서라 서로 엇갈리지 않아요.'
+      - p: '반대 방향 이체 두 개를 동시에 20번씩 돌려 데드락 수를 셌어요.'
+      - ci:
+          key: ordered
+          label: 실제 결과 보기
+          source: DbDeadlockTest.orderedLocking
+      - p: '보내는 계좌부터 잠그면 일부러 엇갈리게 맞춘 20번이 모두 데드락이었고, id 순으로 잠그면 **0번**이었어요.'
+      - h3: 트랜잭션을 짧게
+      - p: '락은 커밋까지 쥐어요. 락을 잡은 뒤 외부 API를 부르거나 오래 계산하면, 다른 트랜잭션과 겹칠 시간이 길어져요. 락이 필요한 문장은 트랜잭션의 끝 쪽에 모으고 빨리 커밋해요.'
+      - p: '여러 테이블을 고칠 때도 같아요. 주문, 재고, 포인트를 고치는 코드가 여럿이면 **테이블 순서와 행 순서를 정해 두고** 모두 지켜요.'
+      - more:
+          summary: '더 알아보기: 외래 키도 락을 잡아요'
+          body:
+            - p: '외래 키가 있는 자식 행을 넣으면, PostgreSQL은 부모 행이 그사이 지워지지 않게 부모 행에 가벼운 락(`FOR KEY SHARE`)을 걸어요. 그래서 자식을 넣은 트랜잭션이 끝나기 전에 그 부모를 지우려는 트랜잭션은 기다려요.'
+            - ci:
+                key: fk
+                label: 실제 결과 보기
+                source: DbDeadlockTest.foreignKeyLock
+            - p: '이런 숨은 락이 다른 락과 엇갈리면 데드락이 될 수 있어요. 부모의 키가 아닌 열(잔액)을 고치는 것은 이 락과 엮이지 않아요.'
+      - quiz:
+          q: '장바구니 주문이 담긴 상품들의 재고를 장바구니에 담은 순서대로 빼요. 데드락을 줄이도록 고친다면?'
+          options:
+            - '상품 id 순으로 정렬해서 빼거나, `order by id for update`로 한꺼번에 잠근다'
+            - '격리 수준을 SERIALIZABLE로 올린다'
+            - '재고를 빼는 UPDATE를 둘로 나눈다'
+          answer: 1
+          explain: '모든 주문이 같은 순서로 잠그면 서로 엇갈리는 고리가 생기지 않아요.'
+      - next: '그래도 데드락을 완전히 없앨 수는 없어요. 나면 앱은 무엇을 해야 할까요?'
+    recall: '여러 행을 잠글 때 모든 코드가 같은 순서(예: id가 작은 것부터)로 잠그면 서로 기다리는 고리가 생기지 않아요. 이체라면 보내는 쪽, 받는 쪽이 아니라 id 순으로 잠그고, ORDER BY id FOR UPDATE로 한꺼번에 잠가도 돼요. 트랜잭션을 짧게 해서 락을 쥔 시간도 줄여요.'
   - id: q4
     title: 데드락이 나면 앱은 어떻게 하나요?
     conclusion:
@@ -144,12 +261,67 @@ questions:
     asks:
       - '본문의 예시: 데드락으로 실패한 이체를 다시 시도할 때 처음부터 다시 실행해야 하는 이유는 (실패한 트랜잭션의 앞 문장까지 모두 롤백됐다)'
       - '옮긴 상황: 다시 시도를 넣었더니 오류는 사라졌지만 로그에 데드락이 하루 수천 번 찍힌다. 다음에 할 일은 (데드락 로그로 두 문장을 찾아 잠그는 순서를 맞춘다)'
+    body:
+      - p: '동시성이 있는 한 데드락을 완전히 없앨 수는 없어요. 드물게 나는 오류로 보고, **다시 시도**로 받아요.'
+      - ul:
+          - '**다시 시도하는 단위는 트랜잭션 전체예요.** 실패한 문장만 다시 보내면 앞 문장이 이미 롤백된 것을 놓쳐요.'
+          - '**횟수를 정해요.** 3번쯤 해 보고 그래도 실패하면 오류를 돌려줘요.'
+          - '**자주 나면 다시 시도가 아니라 순서를 고칠 신호예요.** 로그에서 두 문장을 찾아 질문 3처럼 고쳐요.'
+      - p: '질문 2의 이체를 스프링의 `TransactionTemplate`으로 돌리고, 실패하면 처음부터 다시 실행하게 했어요.'
+      - ci:
+          key: spring
+          label: 실제 결과 보기
+          source: DbDeadlockTest.springExceptionAndRetry
+      - p: '한쪽이 데드락으로 실패했지만, 다시 실행했더니 상대가 끝난 뒤라 바로 성공했어요. kim이 lee에게, lee가 kim에게 100원씩 보냈으니 **두 이체가 모두 반영되어** 잔액이 처음과 같아요.'
+      - h3: 오래 기다리지 않게
+      - p: '데드락이 아닌 긴 기다림도 있어요. 요청 하나가 락을 쥔 채 오래 걸리면 다른 요청이 줄줄이 쌓여요. `set lock_timeout = ''3s''`를 두면 정한 시간까지만 기다리고 55P03으로 끊어요. 끊긴 요청도 다시 시도하거나 오류로 돌려줘요.'
+      - quiz:
+          q: '데드락 다시 시도를 넣었더니 사용자 오류는 사라졌지만, 로그에 데드락이 하루 수천 번 찍혀요. 다음에 할 일은?'
+          options:
+            - '다시 시도 횟수를 10번으로 늘린다'
+            - '데드락 로그에서 두 문장을 찾아 잠그는 순서를 맞춘다'
+            - 'deadlock_timeout을 10초로 늘린다'
+          answer: 2
+          explain: '자주 나는 데드락은 잠그는 순서가 엇갈린다는 신호예요. 순서를 맞추면 생기지 않아요. 횟수를 늘리면 느려지기만 해요.'
+    recall: '데드락으로 실패한 트랜잭션은 이미 다 롤백됐으니, 트랜잭션을 처음부터 다시 실행해요. 대개 다시 하면 상대가 끝난 뒤라 성공해요. 다시 시도는 3번쯤으로 정하고, 자주 나면 다시 시도가 아니라 잠그는 순서를 고쳐요. lock_timeout으로 긴 기다림도 끊어요.'
 practice:
   says:
     - '스프링은 40P01을 `PessimisticLockingFailureException`의 하위 예외(`CannotAcquireLockException`)로 바꾼다. 정확한 클래스는 테스트로 확인해 적는다'
     - '코드 java는 스프링 서비스에서 id가 작은 계좌부터 잠그는 이체다. 보내는 쪽과 받는 쪽을 `Math.min`, `Math.max`로 정렬해 잠근다. 동시 이체를 돌려 데드락이 나지 않는 것을 테스트로 보인다'
     - '코드 retry처럼 다시 시도는 트랜잭션 바깥에서 한다. `@Transactional` 메서드 안에서 잡아 다시 하면 이미 롤백 표시가 된 트랜잭션이라 소용이 없다(낙관적 락 레슨의 실무 구역과 같은 이유)'
     - '흔한 실수: 데드락 오류를 잡아 로그만 남기고 성공처럼 응답한다. 트랜잭션은 롤백됐으니 이체는 일어나지 않았다. 고친 코드: 다시 시도하거나 실패를 돌려준다'
+  title: 스프링에서는 이렇게 써요
+  body:
+    - p: '스프링은 PostgreSQL의 40P01을 `PessimisticLockingFailureException`으로 바꿔 던져요(질문 4의 결과). 정확한 하위 클래스는 DB와 스프링 버전에 따라 다를 수 있으니, 이 예외나 그 상위인 `ConcurrencyFailureException`으로 잡아요.'
+    - h3: id 순으로 잠그는 이체
+    - code: java
+      notes:
+        - mark: Math.min(from, to)
+          as: code
+          text: '보내는 쪽, 받는 쪽과 상관없이 id가 작은 계좌를 먼저 잠가요. `repo.lock`은 `for update`로 읽는 메서드예요.'
+    - h3: 다시 시도는 트랜잭션 바깥에서
+    - code: retry
+      notes:
+        - mark: txTemplate.executeWithoutResult(
+          as: code
+          text: '부를 때마다 새 트랜잭션이 열려요. 실패하면 처음부터 다시 실행해요.'
+    - p: '`@Transactional` 메서드 **안에서** 데드락을 잡아 다시 하면 소용이 없어요. 이미 롤백 표시가 된 트랜잭션이에요([낙관적 락과 비관적 락](lesson:locking)의 실무 구역과 같은 이유예요).'
+    - h3: '흔한 실수: 잡아서 로그만 남기기'
+    - p: '데드락 예외를 잡아 로그만 남기고 성공처럼 응답하는 코드가 있어요. 트랜잭션은 롤백됐으니 **이체는 일어나지 않았어요.** 사용자는 보냈다고 알고, 돈은 그대로예요. 다시 시도하거나, 실패를 그대로 돌려줘요.'
+    - muted: '근거: 스프링의 예외 변환은 [스프링 문서](link:dao). 예외 클래스는 테스트로 확인했어요.'
+interview:
+  question: DB 데드락이 무엇이고 어떻게 막나요?
+  model:
+    - label: 정의
+      text: DB 데드락은 두 트랜잭션이 각자 행을 잠근 채 상대가 잠근 행을 기다려 둘 다 진행하지 못하는 상태입니다. UPDATE도 행을 커밋까지 잠그므로 서로 반대 순서로 두 행을 고치는 이체에서 흔히 생깁니다.
+    - label: 원리
+      text: PostgreSQL은 기다림이 deadlock_timeout(기본 1초)을 넘으면 기다림의 고리를 검사하고, 고리가 있으면 한 트랜잭션을 40P01로 끝내 전부 롤백합니다. 남은 트랜잭션은 락이 풀려 진행합니다.
+    - label: 주의할 점
+      text: 모든 코드가 같은 순서(id 오름차순)로 행을 잠그면 고리가 생기지 않고, 트랜잭션을 짧게 해 겹칠 시간을 줄입니다. 그래도 날 수 있으니 트랜잭션 전체를 바깥에서 다시 시도하고, 자주 나면 로그로 두 문장을 찾아 순서를 고칩니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 장바구니 주문의 재고 차감이 가끔 deadlock detected를 내서, 상품 id 순으로 정렬해 잠그도록 고쳤습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에 연결 두 개를 열고 순서를 맞춰 데드락을 만들어 받은 값이에요. 스프링 쪽은 스프링 부트 3.5의 `TransactionTemplate`으로 확인했어요. 코드가 바뀔 때마다 테스트([DbDeadlockTest](link:test))가 다시 돌아요.
+footer: '근거: 데드락 검사와 deadlock_timeout은 [PostgreSQL 16 문서](link:deadlocks)와 [잠금 설정](link:config), 행 락의 종류는 [행 수준 잠금](link:rowLocks), 예외 변환은 [스프링 문서](link:dao). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '서로 반대 순서로 두 행을 UPDATE하면 1초쯤 뒤 한쪽이 40P01로 실패하고 다른 쪽은 커밋한다'
     how: 'PostgreSQL 16 컨테이너에 연결 두 개를 열고 `CountDownLatch`로 문장 순서를 맞춘다. 걸린 시간과 SQLState를 남긴다'
