@@ -1,8 +1,9 @@
-# 벌크 연산과 영속성 컨텍스트 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 벌크 연산과 영속성 컨텍스트
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/jpa-bulk-update.yaml에 있다.
 title: 벌크 연산과 영속성 컨텍스트
+description: 벌크 연산이 변경 감지와 무엇이 다른지, 벌크 연산 뒤 조회한 엔티티가 왜 옛 값인지, 둘을 어떻게 맞추는지, 벌크 연산에서 무엇이 빠지는지. 네 가지 질문에 스스로 답할 수 있게, 상품 1,000개의 가격을 올리며 SQL과 값을 견주는 대화형 레슨.
 unit: JPA
+minutes: 15
 roadmap: P8
 type: 동작 확인
 prerequisites:
@@ -26,8 +27,8 @@ covers:
     where: '질문 2'
   - topic: '맞추는 방법: 벌크 연산 뒤 영속성 컨텍스트를 비운다(`clearAutomatically = true`, `em.clear()`), 또는 벌크 연산을 트랜잭션의 맨 앞에서 한다'
     where: '질문 3'
-  - topic: 'clear는 아직 flush하지 않은 변경도 버린다. 그래서 벌크 연산 전에 flush가 되었는지 본다(`flushAutomatically`)'
-    where: '질문 3. Hibernate가 벌크 연산 전에 자동 flush하는지는 테스트로 확인한다'
+  - topic: 'clear는 아직 flush하지 않은 변경도 버린다. Hibernate는 벌크 연산 직전에 자동으로 flush해서 기본 설정에서는 사라지지 않는다. flush 모드를 바꾼 곳에서는 `flushAutomatically`로 보장한다'
+    where: '질문 3 (테스트로 확인)'
   - topic: '벌크 연산은 `@Version`을 올리지 않고 엔티티의 콜백(`@PreUpdate`)도 부르지 않는다'
     where: '질문 4'
   - topic: '벌크 DELETE는 cascade를 따르지 않는다'
@@ -36,7 +37,50 @@ covers:
     where: '다루지 않음: 대량 DML 안전하게 하기(D15)'
   - topic: '낙관적 락의 버전'
     where: '다루지 않음: 낙관적 락과 비관적 락(D10)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/bulkupdate/BulkUpdateTest.java
+  spec: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
+  modifying: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html#jpa.modifying-queries
 codes:
+  dirty: |-
+    @Transactional
+    public void raiseOneByOne() {
+      repository.findAll().forEach(p ->
+          p.changePrice(
+              p.getPrice() * 11 / 10));
+    }
+  staleRun: |-
+    Product pen = repository
+        .findById(1L).orElseThrow();
+    repository.raiseAll();
+    Product again = repository
+        .findById(1L).orElseThrow();
+  clearRepo: |-
+    @Modifying([[clearAutomatically = true]])
+    @Query("""
+        update Product p
+        set p.price = p.price * 11 / 10
+        """)
+    int raiseAll();
+  pendingRun: |-
+    Product pen = repository
+        .findById(1L).orElseThrow();
+    pen.rename("새 펜");
+    repository.raiseAll(); // clear 포함
+  noModifying: |-
+    [[@Query]]("""
+        update Product p
+        set p.price = p.price * 11 / 10
+        """)
+    int raiseAll();
+  service: |-
+    @Transactional
+    public List<ProductView> raise() {
+      repository.raiseAll();
+      return repository.findAll().stream()
+          .map(ProductView::from)
+          .toList();
+    }
   predict: |-
     @Transactional
     public int raise() {
@@ -54,8 +98,17 @@ codes:
         """)
     int raiseAll();
 predict:
-  text: '코드 predict는 펜(가격 1000)을 조회한 뒤, 모든 상품의 가격을 UPDATE 한 번으로 10% 올리고 펜의 가격을 돌려줘요. 돌려준 값은 무엇일까요? 보기: 1000, 1100, 예외가 난다.'
-  answer: '1000. 벌크 연산은 DB만 바꾸고 이미 영속성 컨텍스트에 있는 펜 객체는 그대로다. 질문 2에서 밝힌다.'
+  title: 펜의 가격은 얼마일까요?
+  text: '펜(가격 1000)을 조회한 뒤, 모든 상품의 가격을 UPDATE 한 번으로 10% 올리고 펜의 가격을 돌려줘요. 돌려준 값은 무엇일까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '1000', label: '1000'}
+    - {value: '1100', label: '1100'}
+    - {value: error, label: 예외가 난다}
+  answer: '1000'
+  storageKey: bulk-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 벌크 연산은 변경 감지와 무엇이 다른가요?
@@ -70,6 +123,39 @@ questions:
     asks:
       - '본문의 예시: 상품 500개를 `findAll`로 조회해 가격을 하나씩 바꾸고 커밋했다. UPDATE는 몇 번인가 (500번)'
       - '옮긴 상황: 1년 넘게 로그인하지 않은 회원 3만 명을 휴면 상태로 바꾼다. 변경 감지와 벌크 연산 가운데 SQL 수가 적은 것은 (벌크 연산. UPDATE 1번)'
+    body:
+      - p: '상품 1,000개의 가격을 10% 올려요. 먼저 변경 감지로 하나씩 바꿨어요.'
+      - code: dirty
+      - p: '이번에는 조건에 맞는 행을 UPDATE 한 번으로 바꾸는 쿼리를 썼어요. 이렇게 많은 행을 한꺼번에 고치거나 지우는 쿼리를 **벌크 연산**이라고 해요.'
+      - code: bulk
+      - ci:
+          key: compare
+          label: 두 방법의 실제 결과 보기
+          source: BulkUpdateTest.dirtyCheckingVsBulk
+      - p: '변경 감지는 엔티티마다 UPDATE를 한 번씩, 1,000번 보냈어요. 벌크 연산은 UPDATE 1번이고, 돌려받은 int는 **바뀐 행 수**(1000)예요. 시간도 수십 배 차이가 났어요.'
+      - ul:
+          - 'JPA에서는 JPQL `update`나 `delete`를 `executeUpdate()`로 실행해요'
+          - '스프링 데이터에서는 `@Query`에 쓰고 `@Modifying`을 함께 붙여요'
+          - 'JPQL이라 엔티티와 필드로 써요. Hibernate가 SQL로 바꿔요'
+      - more:
+          summary: '더 알아보기: @Modifying을 빠뜨리면'
+          body:
+            - code: noModifying
+            - ci:
+                key: no-modifying
+                label: 실제 오류 보기
+                source: BulkUpdateTest.withoutModifyingFails
+            - p: '`@Modifying`이 없으면 스프링 데이터가 조회 쿼리로 여기고 결과 목록을 받으려 해요. UPDATE는 결과 목록이 없어서 부를 때 예외가 나요.'
+      - quiz:
+          q: '1년 넘게 로그인하지 않은 회원 3만 명을 휴면으로 바꿔요. 변경 감지와 벌크 연산 가운데 나가는 UPDATE가 적은 것은?'
+          options:
+            - 변경 감지
+            - 벌크 연산
+            - 같다
+          answer: 2
+          explain: '벌크 연산은 조건에 맞는 3만 행을 UPDATE 1번으로 바꿔요. 변경 감지는 3만 번이에요.'
+      - next: '빠르니 벌크 연산을 쓰면 될까요? 처음 예측한 코드에 함정이 있어요.'
+    recall: '변경 감지는 엔티티마다 UPDATE를 한 번씩 보내고, 벌크 연산은 조건에 맞는 행을 UPDATE 한 번으로 바꿔요. JPQL `update`나 `delete`를 `executeUpdate()`로 실행하고, 바뀐 행 수를 돌려받아요. 스프링 데이터에서는 `@Modifying`과 `@Query`로 쓰고, `@Modifying`을 빠뜨리면 부를 때 예외가 나요.'
   - id: q2
     title: 벌크 연산 뒤 조회한 엔티티는 왜 옛 값인가요?
     conclusion:
@@ -86,6 +172,57 @@ questions:
     asks:
       - '본문의 예시: 펜(1000)을 조회한 뒤 벌크 연산으로 10% 올리고 `findById`로 펜을 다시 조회했다. 가격은 (1000)'
       - '옮긴 상황: 회원 kim을 조회한 뒤, 벌크 연산으로 모든 회원의 등급을 GOLD로 바꾸고, 같은 트랜잭션에서 `kim.getGrade()`를 읽었다. 값은 (벌크 연산 전의 등급)'
+    body:
+      - code: predict
+      - ci:
+          key: stale
+          label: 실제 출력 보기
+          source: BulkUpdateTest.staleAfterBulk
+          code: staleRun
+      - p: '답은 **1000**이에요. {{predict-result}} DB의 펜은 1100인데, 코드가 들고 있는 펜은 1000이에요.'
+      - p: '벌크 연산은 **영속성 컨텍스트를 거치지 않고** DB에 UPDATE를 바로 보내요. 이미 담겨 있던 펜 객체는 아무도 고치지 않았어요. 그리고 같은 id로 다시 `findById`하면 1차 캐시에서 같은 객체를 돌려줘요([영속성 컨텍스트](lesson:jpa-persistence-context)). JPQL로 다시 조회하면 SELECT는 나가지만, 이미 있는 엔티티는 캐시의 객체를 돌려줘서 이것도 1000이에요.'
+      - widget:
+          kind: steps
+          layout: [duo, buttons, log, verdict]
+          buttons: each
+          initial:
+            duo:
+              - {label: 영속성 컨텍스트의 펜, state: dim, text: 없음}
+              - {label: DB의 펜, rows: [{k: price, v: '1000'}]}
+          scenarios:
+            default:
+              - label: 'findById(1)'
+                log: 'select ... from product where id=?'
+                duo:
+                  - {label: 영속성 컨텍스트의 펜, rows: [{k: price, v: '1000', mark: changed}]}
+                  - {label: DB의 펜, rows: [{k: price, v: '1000'}]}
+              - label: 'raiseAll()'
+                log: 'update product set price=price*11/10'
+                duo:
+                  - {label: 영속성 컨텍스트의 펜, rows: [{k: price, v: '1000', mark: bad}]}
+                  - {label: DB의 펜, rows: [{k: price, v: '1100', mark: changed}]}
+              - label: '다시 findById(1)'
+                log: {note: '-- SQL 없음. 1차 캐시의 펜을 돌려줌'}
+                duo:
+                  - {label: 영속성 컨텍스트의 펜, rows: [{k: price, v: '1000', mark: bad}]}
+                  - {label: DB의 펜, rows: [{k: price, v: '1100'}]}
+              - label: 'clear() 뒤 findById(1)'
+                log: 'select ... from product where id=?'
+                duo:
+                  - {label: 영속성 컨텍스트의 펜, rows: [{k: price, v: '1100', mark: changed}]}
+                  - {label: DB의 펜, rows: [{k: price, v: '1100'}]}
+                verdict: '비운 뒤에야 DB에서 다시 읽어 1100이 돼요.'
+      - p: '옛 객체를 그대로 쓰면 응답에 옛 가격이 나가요. 이 객체를 바꾸기까지 하면, 변경 감지가 옛 값을 바탕으로 UPDATE를 보내 벌크 연산의 결과를 덮어쓸 수도 있어요.'
+      - quiz:
+          q: '회원 kim을 조회한 뒤, 벌크 연산으로 모든 회원의 등급을 GOLD로 바꾸고, 같은 트랜잭션에서 `kim.getGrade()`를 읽었어요. 값은?'
+          options:
+            - GOLD
+            - 벌크 연산 전의 등급
+            - null
+          answer: 2
+          explain: '벌크 연산은 영속성 컨텍스트를 거치지 않아서, 이미 조회한 kim 객체는 그대로예요.'
+      - next: '그러면 벌크 연산과 영속성 컨텍스트는 어떻게 맞출까요?'
+    recall: '벌크 연산은 영속성 컨텍스트를 거치지 않고 DB만 바꾸기 때문이에요. 이미 담겨 있던 엔티티는 그대로이고, 같은 id로 다시 `findById`하거나 JPQL로 조회해도 1차 캐시의 옛 객체를 돌려줘요. 그 객체로 응답을 만들면 옛 값이 나가요.'
   - id: q3
     title: 벌크 연산과 영속성 컨텍스트는 어떻게 맞추나요?
     conclusion:
@@ -98,6 +235,35 @@ questions:
     asks:
       - '본문의 예시: `@Modifying(clearAutomatically = true)`인 `raiseAll` 뒤에 펜을 `findById`로 조회했다. 가격과 SELECT 여부는 (1100, SELECT가 나간다)'
       - '옮긴 상황: 한 트랜잭션에서 주문을 먼저 조회해 둔 뒤 벌크 연산으로 상태를 바꿔야 한다. 옛 값을 쓰지 않으려면 어떻게 하나 (벌크 연산 뒤 영속성 컨텍스트를 비우고 다시 조회한다)'
+    body:
+      - code: clearRepo
+        notes:
+          - mark: clearAutomatically = true
+            as: code
+            text: '벌크 연산이 끝난 뒤 영속성 컨텍스트를 비워요. `em.clear()`를 부르는 것과 같아요.'
+      - ci:
+          key: clear
+          label: 실제 출력 보기
+          source: BulkUpdateTest.clearAutomatically
+      - p: '비운 뒤에는 캐시에 펜이 없으니 SELECT가 나가고 1100을 읽어요. 이것이 가장 흔한 방법이에요. 다른 방법은 벌크 연산을 **트랜잭션의 맨 처음에** 하고, 그 뒤에 조회하는 거예요. 옛 엔티티가 생길 틈이 없어요.'
+      - h3: 비우면 아직 보내지 않은 변경은요?
+      - p: 'clear는 flush하지 않은 변경도 함께 버려요. 벌크 연산 전에 펜의 이름을 바꿔 두었다면 사라질까요? 해 봤어요.'
+      - ci:
+          key: pending
+          label: 실제 출력 보기
+          source: BulkUpdateTest.pendingChangeBeforeBulk
+          code: pendingRun
+      - p: '사라지지 않았어요. Hibernate가 벌크 연산을 보내기 **직전에 자동으로 flush**해서, 이름을 바꾼 UPDATE가 먼저 나갔어요. JPQL 실행 직전의 자동 flush와 같은 규칙이에요. flush 모드를 커밋 때만으로 바꾼 곳에서는 이 flush가 없으니, `@Modifying(flushAutomatically = true)`로 벌크 연산 전에 flush를 보장해요.'
+      - quiz:
+          q: '`@Modifying(clearAutomatically = true)`인 `raiseAll` 뒤에 펜을 `findById`로 조회했어요. 결과는?'
+          options:
+            - SELECT 없이 1000
+            - SELECT가 나가고 1100
+            - SELECT 없이 1100
+          answer: 2
+          explain: '벌크 연산 뒤 영속성 컨텍스트가 비워져서, 다시 조회할 때 DB에서 새 값을 읽어요.'
+      - next: '값은 맞췄어요. 그런데 엔티티를 거치지 않는다는 것은 다른 것도 빠진다는 뜻이에요.'
+    recall: '벌크 연산 뒤에 영속성 컨텍스트를 비우거나(`@Modifying(clearAutomatically = true)`, `em.clear()`), 벌크 연산을 트랜잭션의 맨 앞에서 해요. 비우면 아직 보내지 않은 변경도 버리지만, Hibernate는 벌크 연산 직전에 자동으로 flush해서 기본 설정에서는 사라지지 않아요. flush 모드를 바꾼 곳은 `flushAutomatically`로 보장해요.'
   - id: q4
     title: 벌크 연산에서 빠지는 것은 무엇인가요?
     conclusion:
@@ -110,7 +276,35 @@ questions:
     asks:
       - '본문의 예시: `@Version`이 0인 상품을 벌크 UPDATE로 바꿨다. DB의 버전은 (0. 벌크 연산은 버전을 올리지 않는다)'
       - '옮긴 상황: `@PreUpdate`로 `updatedAt`을 채우는 회원 엔티티가 있다. 벌크 연산으로 등급을 바꾼 회원들의 `updatedAt`은 (그대로다)'
+    body:
+      - p: '`BulkProduct`에는 `@Version` 필드와, 수정 시각을 채우는 `@PreUpdate` 메서드가 있어요. 펜은 벌크 연산으로, 상품2는 변경 감지로 가격을 바꿨어요.'
+      - ci:
+          key: version
+          label: 실제 출력 보기
+          source: BulkUpdateTest.bulkSkipsVersionAndCallbacks
+      - p: '변경 감지는 버전을 1 올리고 수정 시각을 채웠어요. 벌크 연산은 **버전도 그대로, 수정 시각도 null**이에요. 엔티티를 거치지 않으니, 엔티티에 걸어 둔 동작이 함께 빠져요.'
+      - ul:
+          - '**버전:** 같은 상품을 들고 있던 다른 트랜잭션의 낙관적 락이 이 변경을 알아채지 못해요. 필요하면 `set p.version = p.version + 1`을 직접 써요. 낙관적 락은 [낙관적 락과 비관적 락](lesson:locking)에서 다뤄요'
+          - '**콜백:** `@PreUpdate`, `@PreRemove` 같은 엔티티 콜백이 불리지 않아요. 수정 시각도 쿼리에 직접 써요'
+          - '**cascade:** 벌크 DELETE는 cascade REMOVE와 orphanRemoval을 따르지 않아요. 자식이 남아 있으면 외래 키 위반이 나요([cascade와 orphanRemoval](lesson:cascade-orphan))'
+      - quiz:
+          q: '`@PreUpdate`로 `updatedAt`을 채우는 회원 엔티티가 있어요. 벌크 연산으로 등급을 바꾼 회원들의 `updatedAt`은 어떻게 될까요?'
+          options:
+            - 벌크 연산 시각으로 바뀐다
+            - 그대로다
+            - null이 된다
+          answer: 2
+          explain: '벌크 연산은 엔티티를 거치지 않아 `@PreUpdate`가 불리지 않아요. 원래 값 그대로예요.'
+    recall: '엔티티를 거치지 않으니 엔티티에 걸어 둔 동작이 빠져요. `@Version`이 오르지 않아 낙관적 락이 변경을 모르고, `@PreUpdate` 같은 콜백이 불리지 않고, 벌크 DELETE는 cascade와 orphanRemoval을 따르지 않아요. 필요하면 버전과 수정 시각을 쿼리에 직접 써요.'
 practice:
+  title: 서비스에서는 이렇게 해요
+  body:
+    - p: '리포지토리의 벌크 연산에는 `clearAutomatically = true`를 붙이고(질문 3의 코드), 서비스에서는 벌크 연산을 트랜잭션의 처음에 불러요.'
+    - code: service
+    - h3: '흔한 실수: 벌크 연산 전에 조회한 엔티티로 응답 만들기'
+    - p: '가격 인상 API가 먼저 상품 목록을 조회해 두고, 벌크 연산을 부르고, 처음 조회한 목록으로 응답을 만들어요. 질문 2처럼 응답에는 **오르기 전 가격**이 나가요. 고친 코드는 위처럼 벌크 연산을 먼저 하고, 그 뒤에 조회하는 거예요. `clearAutomatically`가 있으면 앞에서 조회한 엔티티가 남아 있어도 다시 읽어요.'
+    - p: '많은 행을 한 번에 바꾸면 그동안 그 행들이 잠겨 다른 요청이 기다려요. 수십만 행을 나눠서 안전하게 바꾸는 방법은 [대량 DML 안전하게 하기](lesson:bulk-dml)에서 다뤄요.'
+    - muted: '근거: 벌크 연산이 영속성 컨텍스트를 거치지 않는다는 것은 [Jakarta Persistence 3.1 명세](link:spec) 4.10절, `clearAutomatically`와 `flushAutomatically`는 [Spring Data JPA 문서](link:modifying). 값과 SQL은 테스트로 확인했어요.'
   says:
     - '실무 모양: 리포지토리의 코드 bulk에 `clearAutomatically = true`를 붙이고, 서비스에서는 벌크 연산을 트랜잭션 처음에 부른다'
     - '흔한 실수: 벌크 연산 뒤 같은 트랜잭션에서 조회한 엔티티로 응답을 만든다. 옛 가격이 응답에 나간다. 고친 코드는 `clearAutomatically`. 테스트로 두 결과를 보인다'
@@ -130,4 +324,17 @@ claims:
     how: '리포지토리를 만들어 부른다'
 sources:
   - '벌크 연산과 영속성 컨텍스트: Jakarta Persistence 3.1 명세 4.10 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
-  - '`@Modifying`의 clearAutomatically, flushAutomatically: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/modifying-queries.html'
+  - '`@Modifying`의 clearAutomatically, flushAutomatically: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html#jpa.modifying-queries'
+interview:
+  question: 벌크 연산을 쓸 때 무엇을 조심해야 하나요?
+  model:
+    - label: 정의
+      text: 벌크 연산은 JPQL의 update나 delete로 조건에 맞는 행을 한 번에 바꾸는 쿼리입니다. 스프링 데이터에서는 @Modifying과 @Query로 쓰고, 변경 감지가 엔티티마다 UPDATE를 보내는 것과 달리 UPDATE 한 번으로 끝납니다.
+    - label: 원리
+      text: 벌크 연산은 영속성 컨텍스트를 거치지 않고 DB에 바로 갑니다. 그래서 이미 조회한 엔티티는 옛 값이고, 같은 id로 다시 조회해도 1차 캐시의 옛 객체를 돌려줍니다.
+    - label: 주의할 점
+      text: 벌크 연산 뒤에 clearAutomatically나 em.clear로 영속성 컨텍스트를 비우거나, 벌크 연산을 트랜잭션 처음에 합니다. 엔티티를 거치지 않으니 @Version이 오르지 않고 콜백과 cascade도 빠집니다. Hibernate는 벌크 연산 직전에 자동 flush해서 그 전의 변경은 기본 설정에서 사라지지 않습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 가격 일괄 변경 API가 옛 가격을 응답하던 문제를 clearAutomatically와 순서 변경으로 고쳤습니다.'
+verified: 이 레슨의 SQL과 값은 짐작이 아니라 스프링 부트 3.5와 Hibernate 6.6으로 PostgreSQL 16 컨테이너에서 상품 1,000개를 실제로 바꾸며 확인한 값이에요. 코드가 바뀔 때마다 테스트([BulkUpdateTest](link:test))가 다시 돌아요.
+footer: '근거: 벌크 연산과 영속성 컨텍스트는 [Jakarta Persistence 3.1 명세](link:spec), `@Modifying`은 [Spring Data JPA 문서](link:modifying). 결과는 Hibernate 6.6과 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
