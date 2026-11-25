@@ -1,0 +1,376 @@
+# 트랜잭셔널 아웃박스
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/transactional-outbox.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 트랜잭셔널 아웃박스
+description: 주문 저장과 메시지 발행이 어긋나는 이유, 커밋 뒤에 보내는 방식으로도 부족한 이유, 메시지를 같은 트랜잭션의 테이블에 적어 두고 따로 보내는 아웃박스, 아웃박스가 남기는 중복과 운영 문제. 가짜 브로커를 죽였다 살리며 주문과 메시지를 세는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 25
+roadmap: A18
+type: 동작 확인
+prerequisites:
+  - {slug: tx-propagation, title: 트랜잭션 전파와 롤백 규칙}
+  - {slug: kafka-basics, title: 메시지 큐}
+assume: '스프링 부트 3.5, 스프링 데이터 JPA, PostgreSQL 16. 트랜잭션의 커밋과 롤백, 스프링 이벤트와 `@TransactionalEventListener`의 뜻(트랜잭션 전파와 롤백 규칙 레슨, 스프링 이벤트 레슨). 메시지 큐는 같은 메시지를 다시 줄 수 있고 컨슈머가 event_id로 거른다는 것(메시지 큐 레슨).'
+example: '주문 서비스가 주문을 저장하고 "주문 생성" 메시지를 브로커에 보낸다. 브로커는 죽였다 살릴 수 있는 가짜다. 세 방식(트랜잭션 안에서 바로 보내기, 커밋 뒤에 보내기, 아웃박스)으로 주문 테이블과 브로커가 받은 메시지를 센다.'
+intro:
+  - '주문이 실패해 롤백됐는데 배송 서버는 "주문 생성" 메시지를 받아 포장을 시작했어요. 반대로 어떤 날은 주문은 저장됐는데 메시지가 사라져서 배송이 영영 시작되지 않았어요. 둘 다 DB와 브로커가 서로 다른 시스템이라 생긴 일이에요.'
+  - '메시지 큐로 서비스를 떼어 놓으면 "DB에 저장하고 메시지를 보낸다"는 코드가 곳곳에 생겨요. 두 일은 한 트랜잭션으로 묶이지 않아서, 순서와 실패를 어떻게 다루느냐에 따라 유령 메시지나 잃어버린 메시지가 생겨요. 이벤트 기반 서비스를 하는 회사의 경력 면접에서 자주 물어요.'
+  - '이 레슨에서는 같은 주문을 세 가지 방식으로 처리하며 롤백과 브로커 장애를 일으켜, 주문 테이블과 브로커가 받은 메시지 수가 어떻게 어긋나는지 세어 봐요.'
+covers:
+  - topic: 'DB와 브로커는 한 트랜잭션으로 묶이지 않는다. 저장과 발행 가운데 하나만 성공할 수 있다'
+    where: '질문 1'
+  - topic: '트랜잭션 안에서 바로 보내면 롤백돼도 메시지는 나가 있다(유령 메시지). 브로커가 죽으면 주문도 실패한다'
+    where: '질문 1'
+  - topic: '@TransactionalEventListener(AFTER_COMMIT)로 커밋 뒤에 보내면 롤백 땐 안 나가지만, 보내다 실패하면 메시지가 사라지고 호출한 쪽은 모른다'
+    where: '질문 2. 스프링 이벤트는 스프링 이벤트(S13)'
+  - topic: '트랜잭션 밖에서 발행한 이벤트는 AFTER_COMMIT 리스너가 받지 않는다(기본 설정)'
+    where: '질문 2의 더 알아보기'
+  - topic: '아웃박스: 보낼 메시지를 같은 트랜잭션에서 아웃박스 테이블에 저장한다. 주문과 메시지가 함께 커밋되거나 함께 롤백된다'
+    where: '질문 3'
+  - topic: '릴레이가 아웃박스의 보내지 않은 행을 저장된 순서대로 읽어 보내고 표시한다. 브로커가 죽어 있어도 주문은 성공하고, 살아나면 보낸다'
+    where: '질문 3'
+  - topic: '릴레이가 보낸 뒤 표시하기 전에 죽으면 같은 메시지를 다시 보낸다(최소 한 번). 받는 쪽은 event_id로 거른다'
+    where: '질문 4'
+  - topic: '아웃박스의 대가: 메시지가 조금 늦게 나간다, 테이블이 쌓여 지워야 한다, 릴레이를 여러 대 돌리면 같은 행을 나눠 가져야 한다'
+    where: '질문 4'
+  - topic: 'DB의 변경 기록을 읽어 보내는 방식(CDC, 예: Debezium)'
+    where: '질문 4의 더 알아보기'
+  - topic: '스프링에서 릴레이를 @Scheduled로 만드는 코드, 여러 서버에서 FOR UPDATE SKIP LOCKED로 나눠 가지기'
+    where: '실무에서는'
+  - topic: '여러 서비스에 걸친 일을 보상으로 되돌리기'
+    where: '다루지 않음: 분산 트랜잭션과 사가(A19)'
+codes:
+  predict: |-
+    @Transactional
+    public Long place(String item) {
+      Order o = orders.saveAndFlush(
+          new Order(item));
+      broker.send(toMessage(o));
+      checkStock(o); // 여기서 예외
+      return o.getId();
+    }
+  direct: |-
+    @Transactional
+    public Long place(String item) {
+      Order o = orders.saveAndFlush(...);
+      [[broker.send(toMessage(o));]]
+      checkStock(o);
+      return o.getId();
+    }
+  afterCommit: |-
+    @Transactional
+    public Long place(String item) {
+      Order o = orders.saveAndFlush(...);
+      events.publishEvent(
+          new OrderPlaced(o.getId(), ...));
+      return o.getId();
+    }
+
+    @TransactionalEventListener(
+        phase = [[AFTER_COMMIT]])
+    public void on(OrderPlaced e) {
+      broker.send(e.payload());
+    }
+  outbox: |-
+    @Transactional
+    public Long place(String item) {
+      Order o = orders.saveAndFlush(...);
+      [[outbox.save(new OutboxEvent(]]
+          [["OrderPlaced", payload(o)));]]
+      return o.getId();
+    }
+  relay: |-
+    public int publishPending() {
+      int sent = 0;
+      for (OutboxEvent e : outbox
+          .findTop100ByPublishedAtIsNull⤷
+    OrderByIdAsc()) {
+        [[broker.send(e.toMessage());]]
+        [[e.markPublished();]]
+        outbox.save(e);
+        sent++;
+      }
+      return sent;
+    }
+  table: |-
+    create table outbox_event (
+      id bigserial primary key,
+      event_id uuid not null unique,
+      type varchar(50) not null,
+      payload text not null,
+      created_at timestamptz not null,
+      published_at timestamptz
+    );
+  scheduled: |-
+    @Scheduled(fixedDelay = 1000)
+    @Transactional
+    public void relay() {
+      relayService.publishPending();
+    }
+  skipLocked: |-
+    select * from outbox_event
+    where published_at is null
+    order by id
+    limit 100
+    [[for update skip locked]];
+  markFirst: |-
+    for (OutboxEvent e : pending) {
+      [[e.markPublished();]]
+      outbox.save(e);
+      broker.send(e.toMessage());
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/outbox/TransactionalOutboxTest.java
+  pattern: https://microservices.io/patterns/data/transactional-outbox.html
+  txEvents: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html
+  pgSelect: https://www.postgresql.org/docs/16/sql-select.html#SQL-FOR-UPDATE-SHARE
+  debezium: https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html
+predict:
+  title: 롤백됐는데 메시지는?
+  text: '코드 predict는 주문을 저장하고 브로커에 메시지를 보낸 뒤, 재고 확인에서 예외가 나 트랜잭션이 롤백돼요. 주문 테이블과 브로커가 받은 메시지는 각각 어떻게 될까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: both0
+      label: 주문 0행, 메시지 0개
+    - value: ghost
+      label: 주문 0행, 메시지 1개
+    - value: both1
+      label: 주문 1행, 메시지 1개
+  answer: ghost
+  storageKey: outbox-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: DB 저장과 메시지 발행은 왜 어긋나나요?
+    conclusion:
+      lead: 'DB와 브로커는 서로 다른 시스템이라 한 트랜잭션으로 묶이지 않아서, 둘 가운데 하나만 성공할 수 있어요.'
+      sub: '트랜잭션 안에서 바로 보내면 롤백돼도 메시지는 이미 나가 있고(유령 메시지), 브로커가 죽으면 주문까지 실패해요.'
+    says:
+      - '바로 발행 + 롤백: 주문 0행, 메시지 1개. 예측의 답'
+      - '바로 발행 + 브로커 장애: 주문도 실패한다'
+    asks:
+      - '본문의 예시: 트랜잭션 안에서 메시지를 보낸 뒤 예외로 롤백됐다. 주문과 메시지는 (주문 없음, 메시지는 나가 있음)'
+      - '옮긴 상황: 회원 가입 트랜잭션 안에서 가입 축하 메일을 바로 보냈는데 커밋에서 실패했다. 회원과 메일은 (회원은 없고 메일은 나갔다)'
+    body:
+      - p: '처음 예측의 코드예요. 저장하고, 보내고, 그다음 예외가 나요.'
+      - code: direct
+        notes:
+          - mark: broker.send(toMessage(o));
+            as: code
+            text: '브로커는 DB 트랜잭션에 들어 있지 않아요. 보내는 순간 메시지는 브로커에 있어요.'
+      - ci:
+          key: direct-rollback
+          label: 실제 결과 보기
+          source: TransactionalOutboxTest.directPublishLeaksOnRollback
+          code: predict
+      - p: '답은 **주문 0행, 메시지 1개**예요. {{predict-result}} DB는 롤백했지만 브로커에 보낸 메시지는 되돌릴 수 없어요. 배송 서버는 **없는 주문**의 메시지를 받아요. 이런 메시지를 유령 메시지라고 불러요.'
+      - p: '거꾸로도 문제예요. 브로커가 죽어 있으면 `send`가 예외를 던져 **주문까지 실패**해요. 주문은 DB만 있으면 되는데, 브로커 장애가 주문을 막아요. 테스트에서도 브로커를 죽이자 주문이 저장되지 않았어요.'
+      - p: '근본 원인은 하나예요. DB와 브로커는 **서로 다른 시스템**이라 `@Transactional` 하나로 함께 커밋하거나 함께 롤백할 수 없어요([모놀리스와 마이크로서비스](lesson:monolith-msa)에서 본 "다른 서버의 DB"와 같은 이유).'
+      - quiz:
+          q: '회원 가입 트랜잭션 안에서 가입 축하 메일을 바로 보냈는데, 그 뒤 커밋에서 실패했어요. 회원과 메일은?'
+          options:
+            - '회원도 없고 메일도 안 나갔다'
+            - '회원은 있고 메일은 안 나갔다'
+            - '회원은 없고 메일은 나갔다'
+          answer: 3
+          explain: '메일 발송은 DB 트랜잭션에 묶이지 않아요. 롤백돼도 이미 나간 메일은 되돌릴 수 없어요.'
+      - next: '그럼 커밋이 끝난 뒤에 보내면 되지 않을까요?'
+    recall: 'DB와 브로커는 서로 다른 시스템이라 한 트랜잭션으로 함께 커밋하거나 롤백할 수 없어요. 그래서 트랜잭션 안에서 바로 보내면, 그 뒤 롤백돼도 메시지는 이미 나가 있어 없는 주문의 유령 메시지가 생기고, 브로커가 죽어 있으면 보내다 예외가 나서 주문까지 실패해요.'
+  - id: q2
+    title: 커밋한 뒤에 보내면 해결되나요?
+    conclusion:
+      lead: '롤백일 때 보내지 않는 문제는 풀리지만, 커밋 뒤 보내다 실패하면 주문은 남고 메시지는 사라져요. 호출한 쪽은 그것을 알지도 못해요.'
+      sub: '`@TransactionalEventListener(AFTER_COMMIT)`가 이 방식이에요. 유령 메시지 대신 잃어버린 메시지가 생겨요.'
+    says:
+      - 'AFTER_COMMIT: 롤백이면 안 보내고, 커밋이면 커밋 뒤에 보낸다'
+      - '브로커 장애: place()는 예외 없이 끝나고 주문 1행, 메시지 0개'
+      - '더 알아보기: 트랜잭션 밖에서 발행한 이벤트는 기본 설정에서 무시된다'
+    asks:
+      - '본문의 예시: AFTER_COMMIT 리스너가 보내다 브로커 장애로 실패했다. 주문과 메시지, 호출한 쪽은 (주문은 있고 메시지는 없으며, 호출한 쪽은 예외를 받지 않는다)'
+      - '옮긴 상황: AFTER_COMMIT 리스너로 포인트 적립 메시지를 보낸다. 커밋 직후 서버가 꺼졌다 (주문은 있고 메시지는 나가지 않는다)'
+    body:
+      - p: '스프링에는 커밋이 끝난 뒤에 실행되는 이벤트 리스너가 있어요([스프링 문서](link:txEvents)).'
+      - code: afterCommit
+        notes:
+          - mark: AFTER_COMMIT
+            as: code
+            text: '트랜잭션이 커밋되면 그 뒤에 실행돼요. 롤백되면 실행되지 않아요.'
+      - p: '롤백되면 보내지 않으니 유령 메시지는 사라져요. 테스트에서도 그랬어요. 그런데 커밋한 **뒤에** 보내다 브로커가 죽어 있으면요?'
+      - ci:
+          key: after-commit-lost
+          label: 실제 결과 보기
+          source: TransactionalOutboxTest.afterCommitLosesMessageWhenBrokerDown
+      - p: '주문은 커밋됐는데 **메시지는 0개**예요. 게다가 `place()`는 예외 없이 끝났어요. 커밋 뒤의 리스너에서 난 예외는 호출한 쪽에 전해지지 않아요. 배송 서버는 이 주문을 영영 모르고, 누구도 알아채지 못해요. 커밋 직후 서버가 꺼져도 마찬가지예요.'
+      - p: '바로 보내기는 **유령 메시지**를, 커밋 뒤에 보내기는 **잃어버린 메시지**를 만들어요. 순서를 바꿔서는 풀리지 않아요. 둘 다 "DB와 브로커가 따로"라는 원인이 그대로이기 때문이에요.'
+      - more:
+          summary: 트랜잭션 밖에서 발행하면
+          body:
+            - p: '`@TransactionalEventListener`는 트랜잭션에 붙어 동작해서, 트랜잭션 밖에서 발행한 이벤트는 기본 설정에서 **아무 일도 하지 않아요.** 테스트에서도 그랬어요. `fallbackExecution = true`를 주면 트랜잭션이 없을 때 바로 실행해요.'
+      - quiz:
+          q: 'AFTER_COMMIT 리스너로 포인트 적립 메시지를 보내요. 주문이 커밋된 직후, 리스너가 보내기 전에 서버가 꺼졌어요. 주문과 메시지는?'
+          options:
+            - '주문은 있고 메시지는 나가지 않는다'
+            - '주문도 메시지도 없다'
+            - '서버가 다시 뜨면 메시지가 저절로 나간다'
+          answer: 1
+          explain: '커밋은 끝났고 보낼 메시지는 메모리에만 있었어요. 서버가 꺼지면 사라져요.'
+      - next: '보낼 메시지를 메모리가 아니라 DB에, 그것도 주문과 같은 트랜잭션에 적어 두면 어떨까요?'
+    recall: '`@TransactionalEventListener(AFTER_COMMIT)`로 커밋 뒤에 보내면 롤백일 때는 보내지 않아 유령 메시지는 막아요. 하지만 커밋한 뒤 보내다 브로커 장애가 나거나 서버가 꺼지면, 주문은 남고 메시지는 사라져요. 리스너의 예외는 호출한 쪽에 전해지지 않아 아무도 몰라요. 순서를 바꿔도 DB와 브로커가 따로라는 원인은 그대로예요.'
+  - id: q3
+    title: 아웃박스는 어떻게 둘을 맞추나요?
+    conclusion:
+      lead: '보낼 메시지를 주문과 같은 트랜잭션에서 아웃박스 테이블에 저장하고, 릴레이가 따로 그 테이블을 읽어 보내요.'
+      sub: '주문과 메시지 행이 함께 커밋되거나 함께 롤백되니 어긋나지 않아요. 브로커가 죽어 있어도 주문은 성공하고, 살아나면 릴레이가 저장된 순서대로 보내요.'
+    says:
+      - '아웃박스 롤백: 주문과 아웃박스 행이 함께 사라진다'
+      - '아웃박스 커밋: 함께 남고 릴레이 전에는 안 나간다'
+      - '브로커 장애: 주문 성공, 복구 뒤 릴레이가 보낸다'
+      - '릴레이는 저장 순서대로 보낸다'
+    widget:
+      kind: steps
+      note: '주문 2건 커밋(브로커 장애) → 릴레이 1회차 0개 → 브로커 복구 → 릴레이 2회차 2개'
+    asks:
+      - '본문의 예시: 아웃박스 방식에서 브로커가 죽어 있을 때 주문 2건이 들어왔다. 주문과 아웃박스는 (주문 2행, 아웃박스 2행이 커밋되고 메시지는 아직 안 나간다)'
+      - '옮긴 상황: 아웃박스에 행을 저장한 트랜잭션이 롤백됐다. 릴레이는 (보낼 행이 없어 보내지 않는다)'
+    body:
+      - p: '생각을 바꿔요. 브로커에 바로 보내지 말고, **보낼 메시지를 DB에 적어** 둬요. 그것도 주문과 **같은 트랜잭션**에서요.'
+      - code: outbox
+        notes:
+          - mark: outbox.save(new OutboxEvent(
+            as: code
+            text: '아웃박스 테이블에 한 행을 넣을 뿐이에요. 같은 DB, 같은 트랜잭션이라 주문과 함께 커밋되거나 함께 롤백돼요.'
+      - code: table
+      - p: '보내는 일은 **릴레이**가 따로 해요. 아웃박스에서 아직 보내지 않은 행을 저장된 순서로 읽어 브로커에 보내고, 보냈다고 표시해요([마이크로서비스 패턴](link:pattern)).'
+      - code: relay
+      - p: '이제 롤백이면 주문과 아웃박스 행이 함께 사라지고, 커밋이면 함께 남아요. 어긋날 수가 없어요. 브로커가 죽어 있는 동안 주문 2건이 들어온 경우를 넘겨 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: DB, rows: [{k: order, v: 0행}, {k: outbox 안 보냄, v: 0행}]}
+              - {label: 브로커, rows: [{k: 상태, v: 장애}, {k: 받은 메시지, v: 0개}]}
+          scenarios:
+            default:
+              - log: '주문 2건 커밋. 아웃박스 행도 함께 커밋'
+                duo:
+                  - {label: DB, rows: [{k: order, v: 2행, mark: changed}, {k: outbox 안 보냄, v: 2행, mark: changed}]}
+                  - {label: 브로커, rows: [{k: 상태, v: 장애}, {k: 받은 메시지, v: 0개}]}
+              - log: '릴레이 1회차: 보내기 실패, 표시하지 않음'
+                duo:
+                  - {label: DB, rows: [{k: order, v: 2행}, {k: outbox 안 보냄, v: 2행}]}
+                  - {label: 브로커, rows: [{k: 상태, v: 장애, mark: bad}, {k: 받은 메시지, v: 0개}]}
+              - log: '브로커 복구'
+                duo:
+                  - {label: DB, rows: [{k: order, v: 2행}, {k: outbox 안 보냄, v: 2행}]}
+                  - {label: 브로커, rows: [{k: 상태, v: 정상, mark: changed}, {k: 받은 메시지, v: 0개}]}
+              - log: '릴레이 2회차: 2개를 순서대로 보내고 표시'
+                duo:
+                  - {label: DB, rows: [{k: order, v: 2행}, {k: outbox 안 보냄, v: 0행, mark: changed}]}
+                  - {label: 브로커, rows: [{k: 상태, v: 정상}, {k: 받은 메시지, v: 2개, mark: changed}]}
+                verdict: '브로커가 죽어 있어도 주문은 성공했고, 살아나자 빠짐없이 나갔어요.'
+      - ci:
+          key: outbox-outage
+          label: 실제 결과 보기
+          source: TransactionalOutboxTest.outboxSurvivesBrokerOutage
+      - p: '바로 보내기와 비교하면 두 문제가 모두 풀렸어요. 롤백된 주문의 메시지는 나가지 않고(유령 없음), 브로커가 죽어도 주문은 성공하고 메시지는 DB에 남아 있다가 나가요(잃어버림 없음). 릴레이는 id 순서로 읽으니 **저장된 순서대로** 보내요. 테스트에서도 순서가 지켜졌어요.'
+      - quiz:
+          q: '아웃박스에 행을 저장한 주문 트랜잭션이 재고 부족으로 롤백됐어요. 릴레이는 그 주문의 메시지를 어떻게 하나요?'
+          options:
+            - '보낸다'
+            - '보낼 행이 없어서 보내지 않는다'
+            - '두 번 보낸다'
+          answer: 2
+          explain: '아웃박스 행은 주문과 같은 트랜잭션이라 함께 롤백됐어요. 릴레이가 읽을 행이 없어요.'
+      - next: '아웃박스로 어긋남은 사라졌어요. 대신 새로 생기는 문제는 없을까요?'
+    recall: '보낼 메시지를 주문과 같은 트랜잭션에서 아웃박스 테이블에 한 행으로 저장해요. 같은 DB의 한 트랜잭션이라 주문과 메시지 행이 함께 커밋되거나 함께 롤백돼요. 보내는 일은 릴레이가 따로 해서, 보내지 않은 행을 id 순서로 읽어 브로커에 보내고 표시해요. 브로커가 죽어 있어도 주문은 성공하고, 살아나면 빠짐없이 저장된 순서대로 나가요.'
+  - id: q4
+    title: 아웃박스가 남기는 문제는 무엇인가요?
+    conclusion:
+      lead: '릴레이가 보낸 뒤 표시하기 전에 죽으면 같은 메시지를 다시 보내요. 그래서 받는 쪽이 event_id로 걸러야 해요.'
+      sub: '그 밖에 메시지가 릴레이 주기만큼 늦게 나가고, 아웃박스 테이블이 쌓여 지워야 하고, 릴레이를 여러 대 돌리면 같은 행을 나눠 가져야 해요.'
+    says:
+      - '보낸 뒤 표시 전에 죽으면: 브로커가 같은 event_id 메시지 2개. 걸러서 1번 처리'
+      - '대가: 지연, 테이블 정리, 여러 릴레이'
+      - '더 알아보기: CDC(Debezium)'
+    asks:
+      - '본문의 예시: 릴레이가 메시지를 보낸 뒤 published_at을 표시하기 전에 죽었다. 재시작하면 (같은 메시지를 다시 보낸다)'
+      - '옮긴 상황: 릴레이를 1초마다 돌린다. 주문 직후 배송 서버가 메시지를 받기까지 걸리는 시간은 (릴레이 주기만큼, 최대 1초쯤 늦을 수 있다)'
+    body:
+      - p: '릴레이는 "보내고, 표시하고"를 해요. 보낸 직후 표시하기 전에 릴레이가 죽으면, 그 행은 아직 안 보낸 것으로 남아요. 재시작한 릴레이는 그 행을 **또 보내요.**'
+      - ci:
+          key: relay-duplicate
+          label: 실제 결과 보기
+          source: TransactionalOutboxTest.relayCrashSendsDuplicate
+      - p: '같은 event_id의 메시지가 두 번 나갔어요. 아웃박스는 메시지를 **잃지 않는 대신 두 번 보낼 수 있어요**(최소 한 번). 그래서 아웃박스 테이블에 고유한 `event_id`를 두고, 받는 쪽이 처리한 event_id를 기록해 걸러요([메시지 큐](lesson:kafka-basics)의 컨슈머 멱등 처리). 걸러 보니 한 번만 처리됐어요.'
+      - h3: 그 밖의 대가
+      - ul:
+          - '**늦게 나가요.** 릴레이가 1초마다 돌면 메시지는 최대 1초쯤 늦게 나가요. 바로 결과가 필요한 일이면 맞지 않아요.'
+          - '**테이블이 쌓여요.** 보낸 행이 계속 남으니, 며칠 지난 행은 지우거나 옮겨요.'
+          - '**릴레이가 여러 대면 나눠 가져야 해요.** 서버마다 릴레이가 돌면 같은 행을 둘이 보낼 수 있어요. 실무 구역에서 `FOR UPDATE SKIP LOCKED`로 나눠요.'
+      - more:
+          summary: 테이블을 읽지 않고 변경 기록을 읽는 방법
+          body:
+            - p: '릴레이가 주기마다 테이블을 읽는 대신, DB가 남기는 변경 기록(PostgreSQL의 WAL)을 읽어 아웃박스에 들어온 행을 바로 보내는 방법도 있어요. 이를 CDC(변경 데이터 캡처)라고 하고, Debezium 같은 도구가 아웃박스용 설정을 제공해요([Debezium 문서](link:debezium)). 늦음이 줄지만 운영할 것이 늘어요.'
+      - quiz:
+          q: '릴레이가 브로커에 메시지를 보낸 직후, 보냈다고 표시하기 전에 서버가 꺼졌어요. 다시 뜬 릴레이는 그 메시지를 어떻게 하나요?'
+          options:
+            - '보냈다고 기억하고 건너뛴다'
+            - '안 보낸 것으로 보이니 다시 보낸다'
+            - '지운다'
+          answer: 2
+          explain: '표시가 없으니 다시 보내요(최소 한 번). 받는 쪽이 event_id로 걸러요.'
+      - next: '원리는 여기까지예요. 이제 스프링에서 릴레이를 만드는 코드와 흔한 실수를 볼게요.'
+    recall: '릴레이가 메시지를 보낸 뒤 표시하기 전에 죽으면, 그 행이 안 보낸 것으로 남아 다시 보내요. 아웃박스는 잃지 않는 대신 두 번 보낼 수 있으니(최소 한 번), 고유한 event_id를 두고 받는 쪽이 걸러요. 그 밖에 메시지가 릴레이 주기만큼 늦게 나가고, 보낸 행이 쌓여 정리해야 하고, 릴레이를 여러 대 돌리면 같은 행을 나눠 가져야 해요.'
+practice:
+  title: 스프링에서 릴레이를 만들 때
+  says:
+    - '@Scheduled(fixedDelay)로 릴레이. 여러 서버는 FOR UPDATE SKIP LOCKED. PostgreSQL 문서가 근거'
+    - '흔한 실수: 표시를 먼저 하고 보낸다. 보내기 전에 죽으면 메시지를 잃는다'
+  body:
+    - p: '릴레이는 보통 `@Scheduled`로 짧은 간격마다 돌려요. 앞 실행이 끝난 뒤 1초를 쉬는 `fixedDelay`가 겹침이 없어요.'
+    - code: scheduled
+    - p: '서버가 여러 대면 릴레이도 여러 개가 돌아요([서버를 늘리는 방법](lesson:scale-out)에서 본 스케줄러). 같은 행을 둘이 읽어 보내지 않게, 행을 잠그며 읽고 **이미 잠긴 행은 건너뛰게** 해요. PostgreSQL의 `FOR UPDATE SKIP LOCKED`예요([PostgreSQL 문서](link:pgSelect)). 이 쿼리는 이 레슨의 테스트에서 돌리지 않아서 문서가 근거예요.'
+    - code: skipLocked
+      notes:
+        - mark: for update skip locked
+          as: code
+          text: '다른 릴레이가 잠근 행은 기다리지 않고 건너뛰어요. 릴레이마다 다른 행을 가져가요.'
+    - h3: 흔한 실수 하나
+    - code: markFirst
+      notes:
+        - mark: e.markPublished();
+          as: code
+          text: '보내기 전에 표시부터 해요. 표시를 저장한 뒤 보내기 전에 죽거나 보내기가 실패하면, 그 행은 보낸 것으로 남아 다시 보내지 않아요.'
+    - p: '중복이 싫어서 표시를 먼저 하면 **잃어버린 메시지**가 돌아와요. 질문 2의 문제로 되돌아가는 셈이에요. 순서는 꼭 **보내고, 그다음 표시**예요. 생기는 중복은 받는 쪽의 event_id로 걸러요. 잃는 것보다 두 번 받는 것이 다루기 쉬워요.'
+interview:
+  question: DB 저장과 메시지 발행을 어떻게 맞추나요?
+  model:
+    - label: 문제
+      text: DB와 브로커는 한 트랜잭션으로 묶이지 않습니다. 트랜잭션 안에서 바로 보내면 롤백돼도 메시지가 나가 유령 메시지가 생기고, 브로커 장애가 주문까지 실패시킵니다. 커밋 뒤에 보내면 보내다 실패할 때 메시지를 잃고 호출한 쪽은 모릅니다.
+    - label: 원리
+      text: 트랜잭셔널 아웃박스는 보낼 메시지를 같은 트랜잭션에서 아웃박스 테이블에 저장해 주문과 함께 커밋하거나 롤백합니다. 릴레이가 보내지 않은 행을 순서대로 읽어 보내고 표시하므로, 브로커가 죽어도 주문은 성공하고 나중에 빠짐없이 나갑니다.
+    - label: 주의할 점
+      text: 보낸 뒤 표시하기 전에 죽으면 다시 보내니 최소 한 번이고, 받는 쪽이 event_id로 거릅니다. 표시를 먼저 하면 메시지를 잃습니다. 메시지가 릴레이 주기만큼 늦고, 테이블을 정리해야 하며, 릴레이가 여러 대면 FOR UPDATE SKIP LOCKED로 나눕니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 주문 롤백 뒤에도 배송 메시지가 나가던 문제를 아웃박스 테이블과 1초 주기 릴레이로 바꿔 없앴습니다.'
+verified: 세 방식에서 주문 테이블, 아웃박스 행, 브로커가 받은 메시지의 수는 스프링 부트 3.5와 PostgreSQL 16, 죽였다 살릴 수 있는 가짜 브로커로 받은 값이에요. 코드가 바뀔 때마다 테스트([TransactionalOutboxTest](link:test))가 다시 돌아요.
+footer: '근거: 아웃박스 패턴은 [마이크로서비스 패턴](link:pattern), `@TransactionalEventListener`는 [스프링 문서](link:txEvents), `SKIP LOCKED`는 [PostgreSQL 문서](link:pgSelect), CDC는 [Debezium 문서](link:debezium). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '트랜잭션 안에서 바로 보내면 롤백돼도 메시지는 나가 있고, 브로커가 죽으면 주문도 실패한다'
+    how: '가짜 브로커'
+    test: 'TransactionalOutboxTest.directPublishLeaksOnRollback, directPublishFailsOrderWhenBrokerDown'
+  - claim: 'AFTER_COMMIT은 롤백이면 안 보내고, 보내다 실패하면 주문은 남고 메시지는 사라지며 호출한 쪽은 예외를 받지 않는다. 트랜잭션 밖 이벤트는 무시된다'
+    how: '같은 구성'
+    test: 'TransactionalOutboxTest.afterCommitSkipsOnRollback, afterCommitLosesMessageWhenBrokerDown, afterCommitIgnoresEventWithoutTransaction'
+  - claim: '아웃박스는 주문과 함께 커밋되거나 롤백되고, 브로커 장애 뒤 릴레이가 순서대로 보낸다'
+    how: '같은 구성'
+    test: 'TransactionalOutboxTest.outboxRollsBackTogether, outboxSurvivesBrokerOutage, relayKeepsOrder'
+  - claim: '릴레이가 보낸 뒤 표시 전에 죽으면 같은 메시지를 다시 보내고, event_id로 걸러 한 번 처리한다'
+    how: '같은 구성'
+    test: 'TransactionalOutboxTest.relayCrashSendsDuplicate'
+sources:
+  - '트랜잭셔널 아웃박스: https://microservices.io/patterns/data/transactional-outbox.html'
+  - '트랜잭션에 묶인 이벤트: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html'
+  - 'FOR UPDATE SKIP LOCKED: https://www.postgresql.org/docs/16/sql-select.html'
