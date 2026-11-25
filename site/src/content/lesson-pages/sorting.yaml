@@ -1,8 +1,9 @@
-# 정렬 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 정렬
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/sorting.yaml에 있다.
 title: 정렬
+description: 버블 정렬은 왜 데이터가 많으면 쓸 수 없는지, 병합 정렬과 퀵 정렬은 어떻게 O(n log n)에 정렬하는지, 안정 정렬은 무엇이고 자바의 정렬은 안정인지, 자바에서 정렬 기준을 어떻게 정하는지. 네 가지 질문에 스스로 답할 수 있게, 주문 목록을 정렬하며 비교 횟수를 세어 보는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 25
 roadmap: K6
 type: 자바 실행
 prerequisites:
@@ -11,7 +12,7 @@ prerequisites:
 assume: '자바 21(OpenJDK). 재귀가 큰 문제를 같은 모양의 작은 문제로 나눈다는 것(재귀 레슨). 람다로 `Comparator`를 넘기는 문법(람다와 함수형 인터페이스 레슨). O(n²)과 O(n log n)이 뜻하는 것(시간 복잡도 레슨).'
 example: '주문 목록을 금액 순으로, 같은 금액이면 주문 시각 순으로 정렬해요. 정렬 방법 세 가지가 비교를 몇 번 하는지 세고, 자바의 `List.sort`에 정렬 기준을 넘기는 방법을 봐요. 실무 구역에서는 뺄셈으로 만든 `Comparator`와 DB의 `ORDER BY`로 옮겨요.'
 intro:
-  - '주문 관리 화면에서 "금액 높은 순"을 눌렀더니 같은 금액의 주문들이 누를 때마다 다른 순서로 섞여 보인다는 문의가 와요. 어떤 정렬은 같은 값의 원래 순서를 지키고 어떤 정렬은 지키지 않아요. 또 금액이 아주 큰 주문이 맨 뒤로 가는 일도 있어요. 정렬 기준을 뺄셈으로 만들었기 때문이에요.'
+  - '주문 관리 화면에서 "금액 순"을 눌렀더니 같은 금액의 주문들이 누를 때마다 다른 순서로 섞여 보인다는 문의가 와요. 어떤 정렬은 같은 값의 원래 순서를 지키고 어떤 정렬은 지키지 않아요. 또 금액이 아주 큰 주문이 엉뚱한 자리로 가는 일도 있어요. 정렬 기준을 뺄셈으로 만들었기 때문이에요.'
   - '자바 개발자가 정렬 알고리즘을 직접 짤 일은 거의 없어요. `List.sort`와 `Arrays.sort`가 해 줘요. 대신 정렬 기준(`Comparable`, `Comparator`)은 매일 직접 써요. 면접에서는 "퀵 정렬과 병합 정렬의 차이", "안정 정렬이 무엇인가"를 묻고, 그 답이 자바의 정렬이 왜 그렇게 동작하는지로 이어져요.'
   - '이 레슨에서는 버블, 퀵, 병합 정렬이 같은 배열에 비교를 몇 번 하는지 세고, 같은 금액의 주문 순서가 정렬 뒤에 어떻게 되는지 확인해요.'
 covers:
@@ -65,25 +66,47 @@ codes:
     // id 순서는?
   bubble: |-
     for (int i = 0; i < n - 1; i++) {
-      for (int j = 0; j < n - 1 - i; j++) {
-        if (a[j] > a[j + 1]) {
+      for (int j = 0; [[j < n - 1 - i]]; j++) {
+        if ([[a[j] > a[j + 1]]]) {
           int t = a[j];
           a[j] = a[j + 1];
           a[j + 1] = t;
         }
       }
     }
+  compareRun: |-
+    // 같은 무작위 배열 10,000개를
+    // 세 방법으로 정렬하며 비교를 센다
   merge: |-
     static void sort(int[] a, int lo, int hi) {
-      if (hi - lo < 2) return;
+      [[if (hi - lo < 2) return;]]
       int mid = (lo + hi) >>> 1;
       sort(a, lo, mid);
       sort(a, mid, hi);
-      merge(a, lo, mid, hi);
+      [[merge(a, lo, mid, hi)]];
     }
+  mergeStep: |-
+    // 정렬된 두 절반 [1, 4, 7], [2, 3, 9]
+    // 맨 앞끼리 비교해 작은 것을 옮긴다
+    1 vs 2 → 1    [1]
+    4 vs 2 → 2    [1, 2]
+    4 vs 3 → 3    [1, 2, 3]
+    4 vs 9 → 4    [1, 2, 3, 4]
+    7 vs 9 → 7    [1, 2, 3, 4, 7]
+    남은 9        [1, 2, 3, 4, 7, 9]
+  quickRun: |-
+    // 맨 앞 원소를 피벗으로 쓰는 퀵 정렬
+    quick([0, 1, 2, ..., 1999]); // 정렬됨
+    quick(shuffled(2000));       // 섞임
+  stableRun: |-
+    // 코드 predict의 주문을 금액 순으로
+    orders.sort(comparingInt(Order::amount));
+    quickByAmount(orders);
+    // 이미 정렬된 1,000개를 세며 정렬
+    sorted.sort(countingComparator);
   comparable: |-
     record Order(long id, int amount)
-        implements Comparable<Order> {
+        implements [[Comparable<Order>]] {
       public int compareTo(Order o) {
         return Integer.compare(
             amount, o.amount);
@@ -92,14 +115,61 @@ codes:
   chain: |-
     orders.sort(Comparator
         .comparingInt(Order::amount)
-        .reversed()
+        [[.reversed()]]
         .thenComparing(Order::createdAt));
+  chainMoved: |-
+    orders.sort(Comparator
+        .comparingInt(Order::amount)
+        .thenComparing(Order::createdAt)
+        [[.reversed()]]);
+  secondOnly: |-
+    orders.sort(Comparator
+        .comparingInt(Order::amount)
+        .thenComparing(Order::createdAt,
+            [[Comparator.reverseOrder()]]));
+  nulls: |-
+    products.sort(Comparator.comparing(
+        Product::price,
+        [[Comparator.nullsLast(]]
+            Comparator.naturalOrder())));
   subtract: |-
     Comparator<Order> byAmount =
-        (a, b) -> a.amount() - b.amount();
+        (a, b) -> [[a.amount() - b.amount()]];
+  subtractFixed: |-
+    Comparator<Order> byAmount =
+        Comparator.[[comparingInt]](
+            Order::amount);
+  subtractRun: |-
+    // 금액 2000000000, -500000000, 1000
+    orders.sort(bySubtract);
+    orders.sort(byCompare);
+  repository: |-
+    List<Order> findByStatus(
+        OrderStatus status, Sort sort);
+
+    repository.findByStatus(PAID,
+        Sort.by(desc("amount"),
+                asc("createdAt"),
+                [[asc("id")]]));
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/sorting/SortingTest.java
+  arrays: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  comparable: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Comparable.html
+  comparator: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  springSort: https://docs.spring.io/spring-data/jpa/reference/repositories/query-methods-details.html
+  pgOrder: https://www.postgresql.org/docs/current/queries-order.html
 predict:
-  text: '코드 predict는 id 1~4의 주문을 금액 순으로 정렬해요. 1번과 3번은 5000원, 2번과 4번은 3000원이에요. 정렬한 뒤 id의 순서는 무엇일까요? 보기: 2, 4, 1, 3 / 4, 2, 3, 1 / 실행할 때마다 다르다.'
-  answer: '2, 4, 1, 3. `List.sort`는 안정 정렬이라 금액이 같은 주문은 원래 순서(2가 4보다, 1이 3보다 앞)를 지킨다. 질문 3에서 밝힌다.'
+  title: 같은 금액의 주문은 어떤 순서로?
+  text: '코드 predict는 id 1~4의 주문을 금액 순으로 정렬해요. 1번과 3번은 5000원, 2번과 4번은 3000원이에요. 정렬한 뒤 id의 순서는 무엇일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '2413', label: '2, 4, 1, 3'}
+    - {value: '4231', label: '4, 2, 3, 1'}
+    - {value: random, label: 실행할 때마다 다르다}
+  answer: '2413'
+  storageKey: sort-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 버블 정렬은 왜 데이터가 많으면 쓸 수 없나요?
@@ -118,6 +188,109 @@ questions:
     asks:
       - '본문의 예시: 원소 6개의 배열을 코드 bubble로 정렬하면 비교는 몇 번인가 (15번)'
       - '옮긴 상황: 버블 정렬로 원소 1천 개를 정렬하는 데 0.01초가 걸렸다. 원소 10만 개면 대략 얼마나 걸리나 (100초쯤. 원소가 100배면 비교는 1만 배다)'
+    body:
+      - p: '가장 단순한 정렬부터 봐요. **버블 정렬**은 앞에서부터 이웃한 두 값을 비교해서, 앞이 크면 자리를 바꿔요.'
+      - code: bubble
+        notes:
+          - mark: 'a[j] > a[j + 1]'
+            as: code
+            text: '이웃한 두 값을 비교해요. 앞이 크면 바꿔요.'
+          - mark: 'j < n - 1 - i'
+            as: code
+            text: '한 바퀴 돌 때마다 가장 큰 값이 맨 뒤에 자리 잡아서, 다음 바퀴는 하나 덜 돌아요.'
+      - p: '[5, 1, 4, 2, 3]을 한 비교씩 정렬해 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - label: 배열 (괄호는 비교하는 두 칸)
+                rows: [{k: 칸, v: '5 1 4 2 3'}]
+              - label: 센 것
+                rows: [{k: 비교, v: '0번'}, {k: 자리 잡음, v: '없음'}]
+          scenarios:
+            default:
+              - log: '첫째 바퀴: 5와 1 → 바꿔요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '(1 5) 4 2 3', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '1번'}, {k: 자리 잡음, v: '없음'}]
+              - log: '5와 4 → 바꿔요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 (4 5) 2 3', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '2번'}, {k: 자리 잡음, v: '없음'}]
+              - log: '5와 2 → 바꿔요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 4 (2 5) 3', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '3번'}, {k: 자리 잡음, v: '없음'}]
+              - log: '5와 3 → 바꿔요. 가장 큰 5가 맨 뒤에 자리 잡았어요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 4 2 (3 5)', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '4번'}, {k: 자리 잡음, v: '5'}]
+                verdict: '한 바퀴에 비교 4번. 가장 큰 값이 거품처럼 맨 뒤로 올라가서 버블 정렬이에요.'
+              - log: '둘째 바퀴: 1과 4 → 그대로'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '(1 4) 2 3 | 5'}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '5번'}, {k: 자리 잡음, v: '5'}]
+              - log: '4와 2 → 바꿔요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 (2 4) 3 | 5', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '6번'}, {k: 자리 잡음, v: '5'}]
+              - log: '4와 3 → 바꿔요. 4가 자리 잡았어요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 2 (3 4) | 5', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '7번'}, {k: 자리 잡음, v: '4, 5'}]
+              - log: '셋째 바퀴: 1과 2, 2와 3 → 그대로. 3이 자리 잡았어요'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 2 3 | 4 5'}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '9번'}, {k: 자리 잡음, v: '3, 4, 5'}]
+                verdict: '이미 정렬됐지만 이 코드는 그걸 모르고 계속 비교해요.'
+              - log: '넷째 바퀴: 1과 2 → 그대로. 끝'
+                duo:
+                  - label: 배열 (괄호는 비교하는 두 칸)
+                    rows: [{k: 칸, v: '1 2 3 4 5', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 비교, v: '10번', mark: bad}, {k: 자리 잡음, v: '모두'}]
+                verdict: '비교는 4 + 3 + 2 + 1 = 10번이에요. 원소 n개면 n(n-1)/2번이에요.'
+      - p: '비교는 바퀴마다 하나씩 줄어 (n-1) + (n-2) + ... + 1 = **n(n-1)/2**번이에요. 원소 10개면 45번, 1천 개면 499,500번이에요. 이 코드는 배열이 이미 정렬되어 있어도 같은 수를 비교해요. 시간 복잡도 레슨에서 본 겹친 반복, O(n²)이에요.'
+      - p: '원소 1만 개면 어떨까요. 같은 무작위 배열을 버블 정렬과 질문 2의 병합 정렬, 자바의 `Arrays.sort`로 정렬했어요.'
+      - ci:
+          key: compare
+          label: 비교 횟수와 걸린 시간 보기
+          source: SortingTest.bubbleVersusMerge
+          code: compareRun
+      - p: '버블 정렬은 비교가 **약 5천만 번**이에요. 원소가 10배 늘면 비교는 100배 늘어서, 10만 개면 50억 번이에요. 그래서 버블 정렬은 원리를 배우는 데 쓰고 실제 코드에서는 쓰지 않아요.'
+      - more:
+          summary: '더 알아보기: 선택 정렬과 삽입 정렬'
+          body:
+            - ul:
+                - '**선택 정렬**은 남은 것 가운데 가장 작은 것을 찾아 앞에 둬요. 비교는 늘 n(n-1)/2번이에요.'
+                - '**삽입 정렬**은 원소를 하나씩 앞쪽의 정렬된 부분 사이에 끼워 넣어요. 최악은 O(n²)이지만 거의 정렬된 배열에서는 비교가 n번에 가깝게 줄어요. 그래서 자바의 정렬도 아주 작은 구간에는 삽입 정렬을 써요.'
+      - quiz:
+          q: '버블 정렬로 원소 1천 개를 정렬하는 데 0.01초가 걸렸어요. 원소 10만 개면 대략 얼마나 걸릴까요?'
+          options:
+            - '1초쯤'
+            - '100초쯤'
+            - '0.01초쯤'
+          answer: 2
+          explain: '원소가 100배면 n(n-1)/2의 비교는 약 1만 배가 돼요. 0.01초 × 1만 = 100초예요.'
+      - next: '`Arrays.sort`는 같은 1만 개를 몇 밀리초에 끝냈어요. 비교를 어떻게 그렇게 줄였을까요?'
+    recall: '이웃끼리 비교해 바꾸기를 되풀이해서 비교가 n(n-1)/2번인 O(n²)이기 때문이에요. 한 바퀴에 가장 큰 값 하나가 맨 뒤에 자리 잡고, 다음 바퀴는 하나 덜 비교해요. 원소 1만 개면 비교가 약 5천만 번이고, 원소가 10배 늘면 비교는 100배 늘어요.'
   - id: q2
     title: 병합 정렬과 퀵 정렬은 어떻게 O(n log n)에 정렬하나요?
     conclusion:
@@ -133,6 +306,51 @@ questions:
     asks:
       - '본문의 예시: 원소 16개를 병합 정렬로 나누면 원소 하나가 될 때까지 몇 겹으로 나뉘나 (4겹. 16, 8, 4, 2, 1)'
       - '옮긴 상황: 맨 앞 원소를 피벗으로 쓰는 퀵 정렬에 이미 오름차순으로 정렬된 원소 n개를 넣었다. 시간 복잡도는 무엇이고 왜 그런가 (O(n²). 피벗이 매번 가장 작아서 한쪽으로 나머지가 다 간다)'
+    body:
+      - p: '버블 정렬은 비교 한 번에 원소 하나를 한 칸 옮길 뿐이었어요. 빠른 정렬들은 **나눠서** 풀어요. 재귀 레슨에서 본, 큰 문제를 같은 모양의 작은 문제로 나누는 방법이에요.'
+      - h3: '병합 정렬: 나누고, 정렬하고, 합쳐요'
+      - code: merge
+        notes:
+          - mark: 'if (hi - lo < 2) return;'
+            as: code
+            text: '끝나는 조건이에요. 원소가 하나면 이미 정렬된 거예요.'
+          - mark: 'merge(a, lo, mid, hi)'
+            as: code
+            text: '정렬된 두 절반을 하나로 합쳐요. 아래에서 봐요.'
+      - p: '배열을 절반으로 나눠 두 절반을 각각 정렬하고(재귀), **정렬된 두 절반을 합쳐요.** 합치기는 두 절반의 맨 앞끼리 비교해 작은 것을 옮기는 일의 되풀이예요.'
+      - code: mergeStep
+      - p: '원소마다 한 번씩 옮기니 합치기는 O(n)이에요. 대신 옮겨 담을 자리가 n만큼 **더 필요해요.**'
+      - h3: 왜 n log n일까요
+      - p: '원소 8개는 4, 2, 1로 **세 겹**에 걸쳐 나뉘어요. 2를 세 번 곱하면 8이니 log₂ 8 = 3이에요. 그리고 겹마다 모든 원소를 한 번씩 합쳐요. 그래서 일의 양은 n × log n이에요. 위의 실제 출력에서 원소 1만 개의 병합 정렬은 비교가 **12만 번 남짓**이었어요. 버블 정렬의 5천만 번보다 400배 적어요.'
+      - h3: '퀵 정렬: 기준값으로 나눠요'
+      - p: '**퀵 정렬**은 기준값(**피벗**) 하나를 골라, 그보다 작은 것은 왼쪽으로, 큰 것은 오른쪽으로 모아요. 그러면 피벗은 제자리를 찾아요. 양쪽을 각각 같은 방법으로 정렬해요. 합칠 일이 없고 배열 안에서 자리만 바꿔서 **메모리를 거의 더 쓰지 않아요.** 피벗이 배열을 비슷한 크기로 나누면 깊이가 log n이라 평균 O(n log n)이에요.'
+      - p: '문제는 피벗이 **한쪽 끝의 값**일 때예요. 이미 정렬된 배열에서 맨 앞을 피벗으로 고르면 피벗이 매번 가장 작은 값이라, 왼쪽은 비고 오른쪽에 나머지가 다 가요. 나누는 깊이가 n이 되어 O(n²)이에요.'
+      - ci:
+          key: quick
+          label: 두 경우의 비교 횟수 보기
+          source: SortingTest.depthsAndQuickWorstCase
+          code: quickRun
+      - p: '이미 정렬된 배열이 오히려 버블 정렬과 같은 n(n-1)/2번이에요. 실제로 쓰는 퀵 정렬은 피벗을 가운데 값이나 여러 값의 중간값으로 골라 이것을 피해요.'
+      - table:
+          head: ['', 병합 정렬, 퀵 정렬]
+          rows:
+            - ['시간', '늘 O(n log n)', '평균 O(n log n), 최악 O(n²)']
+            - ['더 쓰는 메모리', 'n만큼', '거의 없음']
+            - ['같은 값의 순서', '지켜요 (질문 3)', '보통 지키지 않아요']
+      - more:
+          summary: '더 알아보기: 비교로 정렬하는 한계'
+          body:
+            - p: '두 값을 비교하는 것만으로 정렬하는 방법은 최악에 O(n log n)번보다 적게 비교할 수 없다는 것이 증명되어 있어요. 병합 정렬은 이 한계에 닿아 있어요.'
+      - quiz:
+          q: '맨 앞 원소를 피벗으로 쓰는 퀵 정렬에 이미 오름차순으로 정렬된 원소 n개를 넣었어요. 시간 복잡도는 무엇일까요?'
+          options:
+            - 'O(n log n). 퀵 정렬이니까'
+            - 'O(n²). 피벗이 매번 가장 작아서 한쪽으로 나머지가 다 간다'
+            - 'O(n). 이미 정렬되어 있으니까'
+          answer: 2
+          explain: '피벗이 늘 가장 작은 값이라 배열이 1개와 n-1개로 나뉘어요. 나누는 깊이가 n이 되어 비교가 n(n-1)/2번이에요. 테스트에서 원소 2천 개면 1,999,000번이었어요.'
+      - next: '표의 마지막 줄, "같은 값의 순서"가 남았어요. 처음 예측에서 물은 것이 바로 그거예요.'
+    recall: '나눠서 각각 정렬하는 일을 재귀로 되풀이해서, 나누는 깊이가 log n이고 깊이마다 하는 일이 n이에요. 병합 정렬은 절반씩 나누고 정렬된 두 절반을 합쳐서 늘 O(n log n)이지만 합칠 때 n만큼 메모리를 더 써요. 퀵 정렬은 피벗보다 작은 것과 큰 것으로 나눠서 메모리를 거의 안 쓰고 평균 O(n log n)이지만, 이미 정렬된 배열에서 맨 앞을 피벗으로 고르면 O(n²)이 돼요.'
   - id: q3
     title: 안정 정렬은 무엇이고, 자바의 정렬은 안정인가요?
     conclusion:
@@ -148,6 +366,44 @@ questions:
     asks:
       - '본문의 예시: (A, 3000), (B, 1000), (C, 3000), (D, 1000)인 주문 목록을 `List.sort`로 금액 순 정렬하면 이름의 순서는 무엇인가 (B, D, A, C)'
       - '옮긴 상황: 학생 목록을 이름 순으로 정렬한 뒤, 다시 학년 순으로 정렬했다. 정렬 방법이 안정 정렬이면 같은 학년 안의 순서는 무엇인가 (이름 순)'
+    body:
+      - p: '처음 예측의 답은 **2, 4, 1, 3**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 출력 보기
+          source: SortingTest.stableListSort
+          code: predict
+      - p: '금액 순으로 정렬하니 3000원인 2번과 4번이 앞에, 5000원인 1번과 3번이 뒤에 왔어요. 그리고 **같은 금액끼리는 원래 순서**(2가 4보다, 1이 3보다 앞)를 그대로 지켰어요. 이렇게 같은 값의 원소들이 정렬 전의 순서를 지키는 정렬을 **안정 정렬**이라고 해요.'
+      - h3: 어디에 필요할까요
+      - p: '주문 목록이 이미 주문 시각 순으로 놓여 있어요. 화면에서 "금액 순"을 누르면 금액으로 다시 정렬해요. 안정 정렬이면 **같은 금액 안에서는 주문 시각 순서가 남아요.** 안정이 아니면 같은 금액의 주문이 누를 때마다 다르게 섞일 수 있어요. 도입부의 문의가 이거예요.'
+      - h3: 병합 정렬은 안정, 퀵 정렬은 보통 아니에요
+      - p: '병합 정렬은 합칠 때 두 값이 같으면 **왼쪽 절반의 것을 먼저** 옮겨서 원래 순서를 지켜요. 퀵 정렬은 피벗을 기준으로 멀리 떨어진 원소끼리 자리를 바꿔서 같은 값의 순서가 뒤집힐 수 있어요. 같은 주문을 맨 앞 피벗의 퀵 정렬로도 정렬해 봤어요.'
+      - ci:
+          key: stable
+          label: 두 정렬의 실제 결과 보기
+          source: SortingTest.quickIsNotStableAndTimSortRuns
+          code: stableRun
+      - p: '퀵 정렬은 3000원인 4번을 2번보다 앞에 놓았어요. 금액 순으로는 맞지만 원래 순서는 깨졌어요.'
+      - h3: 자바의 정렬
+      - table:
+          head: [메서드, 쓰는 방법, 안정]
+          rows:
+            - ['`List.sort`, `Collections.sort`, `Arrays.sort(Object[])`', 'TimSort', '안정이에요']
+            - ['`Arrays.sort(int[])` 같은 기본형 배열', 'Dual-Pivot Quicksort', '필요 없어요']
+      - ul:
+          - '**TimSort**는 병합 정렬에 삽입 정렬을 섞고, 데이터 안에 이미 정렬된 구간이 있으면 찾아서 그대로 써요. 안정이고 최악도 O(n log n)이에요. 위 출력의 마지막처럼 이미 정렬된 1,000개는 비교 **999번**(n-1번)에 끝나요.'
+          - '**Dual-Pivot Quicksort**는 피벗을 둘 써서 세 부분으로 나누는 퀵 정렬이에요. 기본형은 3과 3을 구분할 방법이 없어서, 같은 값의 순서가 바뀌어도 결과가 똑같아요. 그래서 안정이 필요 없어요.'
+      - p: '둘 다 [Arrays API 문서](link:arrays)에 적혀 있어요.'
+      - quiz:
+          q: '(A, 3000), (B, 1000), (C, 3000), (D, 1000)인 주문 목록을 `List.sort`로 금액 순 정렬하면 이름의 순서는 무엇일까요?'
+          options:
+            - 'B, D, A, C'
+            - 'D, B, C, A'
+            - '실행할 때마다 다르다'
+          answer: 1
+          explain: '`List.sort`는 안정 정렬이라 같은 1000원인 B와 D, 같은 3000원인 A와 C가 원래 순서를 지켜요.'
+      - next: '지금까지는 금액이라는 기준 하나로 정렬했어요. 자바에서 이런 기준은 어떻게 정하고, 여러 개를 어떻게 이을까요?'
+    recall: '같은 값의 원소들이 정렬 전의 순서를 그대로 지키는 정렬이에요. 이미 시각 순인 주문을 금액 순으로 다시 정렬해도 같은 금액 안에서는 시각 순이 남아요. 병합 정렬은 안정이고 퀵 정렬은 보통 아니에요. 자바의 `List.sort`와 `Arrays.sort(Object[])`는 병합 정렬을 바탕으로 한 TimSort라 안정이고, 기본형 배열은 Dual-Pivot Quicksort인데 같은 값을 구분할 수 없어 안정이 필요 없어요.'
   - id: q4
     title: 자바에서는 정렬 기준을 어떻게 정하나요?
     conclusion:
@@ -164,29 +420,124 @@ questions:
       - '본문의 예시: 코드 chain에서 `.reversed()`를 `thenComparing` 뒤로 옮기면, 같은 금액의 주문은 어떤 순서가 되나 (최근 순. 뒤집기가 두 기준 모두에 걸린다)'
       - '옮긴 상황: 회원 목록을 나이 많은 순으로, 나이가 같으면 이름의 사전 순으로 정렬하는 `Comparator`를 고르면 (`comparingInt(Member::age).reversed().thenComparing(Member::name)`)'
       - '실무 구역: 코드 subtract로 금액이 2,000,000,000원인 주문과 -500,000,000원인 환불 건을 비교하면 어느 쪽이 앞에 오나 (2,000,000,000원 쪽이 앞에 온다. 뺄셈이 int를 넘어 음수가 된다)'
+    body:
+      - p: '자바에서 정렬 기준을 정하는 방법은 둘이에요.'
+      - h3: 'Comparable: 클래스가 정하는 자연 순서'
+      - code: comparable
+        notes:
+          - mark: Comparable<Order>
+            as: code
+            text: '"주문은 원래 금액 순으로 놓인다"를 클래스 안에 정해요. 이것이 자연 순서예요. `Collections.sort(orders)`가 기준 없이 이 순서로 정렬해요.'
+      - p: '`String`은 사전 순, `Integer`는 크기 순이라는 자연 순서를 이미 가져요. 한 클래스에 자연 순서는 **하나**예요.'
+      - h3: 'Comparator: 밖에서 넘기는 기준'
+      - p: '같은 주문을 관리 화면에서는 금액 순으로, 고객 화면에서는 시각 순으로 보여 줘야 해요. 이렇게 그때그때 다른 기준은 `Comparator`로 만들어 `List.sort`에 넘겨요. 몇 개든 만들 수 있어요. 코드 predict의 `Comparator.comparingInt(Order::amount)`가 그거예요.'
+      - p: '`compareTo`와 `compare`의 약속은 같아요. **앞이 먼저면 음수, 같으면 0, 뒤면 양수**예요. 크기는 뜻이 없어서 -1이든 -500이든 같아요.'
+      - h3: 기준을 잇기
+      - p: '"금액 높은 순, 같은 금액이면 오래된 순"은 기준 둘을 이어요.'
+      - code: chain
+        notes:
+          - mark: .reversed()
+            as: code
+            text: '그때까지 만든 기준(금액 순)을 뒤집어 금액 높은 순으로 만들어요. 그다음 `thenComparing`이 같은 금액일 때의 기준을 더해요.'
+      - p: '`reversed()`는 **그때까지 만든 기준 전체**를 뒤집어요. 자리를 `thenComparing` 뒤로 옮기면 시각 순까지 뒤집혀요.'
+      - code: chainMoved
+      - ci:
+          key: chain
+          label: 두 코드의 실제 결과 보기
+          source: SortingTest.reversedScope
+      - p: '옮긴 코드는 같은 5000원인 1번과 3번이 최근 순(3, 1)이 됐어요. 둘째 기준만 뒤집고 싶으면 그 자리에 뒤집은 순서를 넘겨요.'
+      - code: secondOnly
+        notes:
+          - mark: Comparator.reverseOrder()
+            as: code
+            text: '시각 순만 뒤집어요. 금액은 여전히 낮은 순이에요.'
+      - more:
+          summary: '더 알아보기: null이 섞여 있으면'
+          body:
+            - p: '정렬할 값에 null이 있으면 `Comparator.comparing`은 `NullPointerException`을 던져요. `nullsLast`로 감싸면 null을 뒤로 보내요. 앞으로 보내려면 `nullsFirst`예요. 테스트로 확인했어요.'
+            - code: nulls
+      - quiz:
+          q: '회원 목록을 나이 많은 순으로, 나이가 같으면 이름의 사전 순으로 정렬하려면 무엇을 넘길까요?'
+          options:
+            - '`comparingInt(Member::age).reversed().thenComparing(Member::name)`'
+            - '`comparingInt(Member::age).thenComparing(Member::name).reversed()`'
+            - '`comparing(Member::name).thenComparingInt(Member::age)`'
+          answer: 1
+          explain: '`reversed()`를 나이 기준 바로 뒤에 둬야 나이만 뒤집혀요. 맨 뒤에 두면 이름 순까지 뒤집혀요. 셋째는 이름이 첫 기준이에요.'
+    recall: '클래스가 정하는 자연 순서는 `Comparable`의 `compareTo`로, 화면마다 다른 기준은 `Comparator`로 만들어 `List.sort`에 넘겨요. 둘 다 앞이면 음수, 같으면 0, 뒤면 양수를 돌려줘요. 기준 여럿은 `comparingInt`와 `thenComparing`으로 잇고, `reversed()`는 그때까지 만든 기준 전체를 뒤집으니 자리에 주의해요.'
 practice:
+  title: 서비스 코드에서는 이렇게 만나요
   says:
     - '흔한 실수: 코드 subtract처럼 `a.amount() - b.amount()`로 `Comparator`를 만든다. 두 값의 차가 int의 범위를 넘으면 부호가 뒤집혀(J19) 큰 값이 앞에 온다. 평소 금액에서는 드러나지 않다가 아주 큰 값이나 음수가 섞인 날 순서가 틀린다. 고친 코드: `Comparator.comparingInt(Order::amount)` 또는 `Integer.compare(a, b)`. 두 코드로 같은 목록을 정렬한 결과를 테스트로 남긴다'
     - '`compareTo`를 쓸 때도 같다. 뺄셈 대신 `Integer.compare`, `Long.compare`를 부른다'
     - '정렬은 대개 DB에 맡긴다. 주문 10만 건을 모두 읽어 자바에서 정렬하지 않고 `ORDER BY amount DESC, created_at`으로 정렬된 한 페이지만 읽는다. 스프링 데이터 JPA에서는 `Sort.by(Sort.Order.desc("amount"), Sort.Order.asc("createdAt"))`를 리포지토리 메서드에 넘긴다 (스프링 데이터 공식 문서 근거)'
     - 'DB의 정렬이 안정이라는 약속은 없다. `ORDER BY amount`만 주면 같은 금액의 행 순서는 실행할 때마다 달라질 수 있어서, 페이지를 넘길 때 같은 행이 두 번 나오거나 빠지기도 한다. 마지막 기준으로 겹치지 않는 열(id)을 붙인다. 자세한 것은 페이지네이션(D8)'
+  body:
+    - h3: '흔한 실수: 뺄셈으로 만든 Comparator'
+    - code: subtract
+      notes:
+        - mark: a.amount() - b.amount()
+          as: code
+          text: '"앞이 작으면 음수"를 뺄셈으로 만들었어요. 평소 금액에서는 맞아요. 그런데 차가 `int`의 범위를 넘으면 부호가 뒤집혀요.'
+    - p: '20억 원 주문과 -5억 원 환불 건이 섞인 목록으로 돌려 봤어요.'
+    - ci:
+        key: subtract
+        label: 두 Comparator의 실제 결과 보기
+        source: SortingTest.subtractionComparatorOverflows
+        code: subtractRun
+    - p: '2,000,000,000 - (-500,000,000)은 25억이라 `int`를 넘어 음수가 됐어요([숫자 타입의 한계](lesson:number-limits)의 오버플로예요). 그래서 20억이 -5억보다 앞에 왔어요. 평소 금액에서는 드러나지 않다가 큰 값이나 음수가 섞인 날 순서가 틀려요. 빼지 말고 비교해요.'
+    - code: subtractFixed
+      notes:
+        - mark: comparingInt
+          as: code
+          text: '안에서 `Integer.compare`를 써서 넘치지 않아요. `compareTo`를 직접 쓸 때도 `Integer.compare`, `Long.compare`를 불러요.'
+    - h3: 많은 데이터의 정렬은 DB에
+    - p: '주문 10만 건을 모두 읽어 자바에서 정렬하지 않아요. DB가 `ORDER BY`로 정렬하고 한 페이지만 보내게 해요. 스프링 데이터 JPA에서는 리포지토리 메서드에 `Sort`를 넘겨요.'
+    - code: repository
+      notes:
+        - mark: asc("id")
+          as: code
+          text: '금액과 시각이 모두 같은 행도 순서가 하나로 정해지게, 겹치지 않는 열을 마지막 기준으로 붙여요.'
+    - p: 'DB의 정렬은 안정이라는 약속이 없어요. `ORDER BY`에 적지 않은 순서는 정해지지 않아서([PostgreSQL 문서](link:pgOrder)), `ORDER BY amount`만 주면 같은 금액의 행 순서가 실행할 때마다 달라질 수 있어요. 그러면 페이지를 넘길 때 같은 주문이 두 번 나오거나 빠지기도 해요. 그래서 마지막에 id를 붙여요. 페이지를 나누는 법은 페이지네이션 레슨에서 다뤄요.'
+    - muted: '근거: `Sort`는 [스프링 데이터 JPA 문서](link:springSort), `ORDER BY`에 없는 순서는 PostgreSQL 문서. 뺄셈 `Comparator`의 결과는 테스트로 확인했어요.'
+interview:
+  question: 퀵 정렬과 병합 정렬의 차이, 그리고 자바의 정렬은 무엇을 쓰나요?
+  model:
+    - label: 정의
+      text: 둘 다 나눠서 정렬하는 O(n log n) 정렬입니다. 병합 정렬은 절반으로 나눠 정렬하고 합치고, 퀵 정렬은 피벗보다 작은 것과 큰 것으로 나눠 각각 정렬합니다.
+    - label: 원리
+      text: 병합 정렬은 늘 O(n log n)이고 안정이지만 합칠 때 n만큼 메모리를 더 씁니다. 퀵 정렬은 메모리를 거의 안 쓰고 평균이 빠르지만 피벗이 한쪽 끝이면 O(n²)이고 보통 안정이 아닙니다. 자바는 객체에 TimSort(안정), 기본형 배열에 Dual-Pivot Quicksort를 씁니다.
+    - label: 주의할 점
+      text: 정렬 기준은 Comparator.comparingInt와 thenComparing으로 만들고 뺄셈으로 만들지 않습니다. 오버플로로 순서가 뒤집힙니다. reversed는 앞의 기준 전체에 걸립니다. 많은 데이터는 DB의 ORDER BY에 맡기고, 겹치지 않는 열을 마지막 기준으로 둡니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 금액 순 목록에서 같은 금액의 주문이 페이지마다 겹쳐 나와 ORDER BY에 id를 붙였고, 뺄셈 Comparator를 comparingInt로 바꿨습니다.'
+verified: 이 레슨의 비교 횟수와 결과는 짐작이 아니라 자바 21에서 정렬을 돌리며 센 값이에요. 걸린 시간은 환경마다 달라서 비교 횟수와 순서만 테스트로 확인해요. 코드가 바뀔 때마다 테스트([SortingTest](link:test))가 다시 돌아요.
+footer: '근거: `List.sort`와 `Arrays.sort`의 안정성, TimSort, Dual-Pivot Quicksort는 `Arrays` API 문서([링크](link:arrays)), `compareTo`와 `compare`의 약속은 API 문서([Comparable](link:comparable), [Comparator](link:comparator)), `Sort`는 스프링 데이터 JPA 문서([링크](link:springSort)), `ORDER BY`는 PostgreSQL 문서([링크](link:pgOrder)). 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict의 결과는 id 2, 4, 1, 3이다'
-    how: '정렬한 뒤 id를 모은다'
+    how: '정렬한 뒤 id를 모은다. (A, 3000), (B, 1000), (C, 3000), (D, 1000)은 B, D, A, C다'
+    test: SortingTest.stableListSort
   - claim: '코드 bubble의 비교 횟수는 원소 10개면 45, 1천 개면 499500이다'
-    how: '비교 카운터로 센다'
+    how: '비교 카운터로 센다. 5개면 10, 6개면 15이고 이미 정렬된 배열도 같다'
+    test: SortingTest.bubbleComparisons
   - claim: '원소 1만 개에서 병합 정렬의 비교 횟수는 버블 정렬보다 수백 배 적다'
-    how: '같은 무작위 배열을 두 방법으로 정렬하며 비교를 센다. 값을 `CiOutput`에 남긴다'
+    how: '같은 무작위 배열을 두 방법으로 정렬하며 비교를 센다. 로컬에서 49,995,000번과 120,441번이었다'
+    test: SortingTest.bubbleVersusMerge
   - claim: '맨 앞을 피벗으로 쓰는 퀵 정렬은 정렬된 배열에서 비교가 n(n-1)/2번이고, 섞인 배열에서는 훨씬 적다'
     how: '원소 2천 개로 두 경우의 비교를 센다'
-  - claim: '이미 정렬된 리스트를 `List.sort`로 정렬하면 `Comparator`가 n-1번 불린다'
-    how: '세는 `Comparator`로 원소 1천 개를 정렬한다'
+    test: SortingTest.depthsAndQuickWorstCase
+  - claim: '맨 앞 피벗의 퀵 정렬은 같은 금액의 주문 순서를 바꾼다. 이미 정렬된 리스트를 `List.sort`로 정렬하면 `Comparator`가 n-1번 불린다'
+    how: '코드 predict의 주문을 퀵 정렬로 정렬해 id 순서를 보고(4, 2, 1, 3), 세는 `Comparator`로 원소 1천 개를 정렬한다'
+    test: SortingTest.quickIsNotStableAndTimSortRuns
   - claim: '`thenComparing(...).reversed()`는 두 기준을 모두 뒤집고, `thenComparing(b, reverseOrder())`는 둘째만 뒤집는다'
-    how: '같은 목록을 두 기준으로 정렬해 결과를 비교한다'
+    how: '같은 목록을 기준 셋으로 정렬해 결과를 비교한다'
+    test: SortingTest.reversedScope
   - claim: '`Comparator.comparing`은 null 값에서 `NullPointerException`을 던지고 `nullsLast`는 null을 뒤로 보낸다'
     how: 'null이 섞인 목록으로 정렬한다'
+    test: SortingTest.nullsInSort
   - claim: '뺄셈 `Comparator`는 2,000,000,000과 -500,000,000을 거꾸로 놓고, `comparingInt`는 바르게 놓는다'
     how: '두 `Comparator`로 같은 목록을 정렬한다'
+    test: SortingTest.subtractionComparatorOverflows
 sources:
   - '`List.sort`, `Arrays.sort(Object[])`가 안정 정렬이고 TimSort를 바탕으로 한다는 것: `Arrays` API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html'
   - '기본형 배열의 Dual-Pivot Quicksort: 같은 문서의 `sort(int[])` 설명'

@@ -1,0 +1,251 @@
+# 정렬 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/sorting.yaml의 says).
+# 동작에 관한 정답은 verification의 SortingTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: sorting
+  title: 정렬
+  unit: 자료구조와 알고리즘
+  order: 60
+concepts:
+  - key: core
+    name: 정렬
+coreQuestions:
+  - key: q1
+    text: "버블 정렬은 왜 데이터가 많으면 쓸 수 없나요?"
+  - key: q2
+    text: "병합 정렬과 퀵 정렬은 어떻게 O(n log n)에 정렬하나요?"
+  - key: q3
+    text: "안정 정렬은 무엇이고, 자바의 정렬은 안정인가요?"
+  - key: q4
+    text: "자바에서는 정렬 기준을 어떻게 정하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: sort-bubble-six
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 원소 6개의 배열을 아래 버블 정렬로 정렬해요. if의 비교는 모두 몇 번 일어날까요?
+    code: |-
+      for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - 1 - i; j++) {
+          if (a[j] > a[j + 1]) {
+            int t = a[j];
+            a[j] = a[j + 1];
+            a[j + 1] = t;
+          }
+        }
+      }
+    choices:
+      - 6번
+      - 15번
+      - 30번
+      - 36번
+    answer: "2"
+    explanation: |-
+      **15번이에요.** 바퀴마다 하나씩 줄어 5 + 4 + 3 + 2 + 1 = 15, 곧 n(n-1)/2번이에요.
+
+      - 이 코드는 배열이 어떻게 놓여 있든 같은 수를 비교해요
+      - 비교가 n²에 비례하는 O(n²)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: sort-bubble-scale
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 버블 정렬로 원소 1,000개를 정렬하는 데 0.01초가 걸렸어요. 같은 컴퓨터에서 원소 100,000개면 대략 얼마나 걸릴까요?
+    choices:
+      - 1초쯤
+      - 10초쯤
+      - 100초쯤
+      - 0.01초쯤
+    answer: "3"
+    explanation: |-
+      **100초쯤이에요.** 원소가 100배면 n(n-1)/2의 비교는 약 1만 배가 돼요.
+
+      - 0.01초 × 10,000 = 100초예요
+      - 시간이 원소 수의 제곱에 비례하는 O(n²)이라 데이터가 늘면 감당할 수 없어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  # ── 질문 2 ──
+  - key: sort-merge-depth
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 원소 16개를 병합 정렬로 절반씩 나눠요. 원소 하나가 될 때까지 몇 겹으로 나뉠까요?
+    choices:
+      - 2겹
+      - 4겹
+      - 8겹
+      - 16겹
+    answer: "2"
+    explanation: |-
+      **4겹이에요.** 16, 8, 4, 2, 1로 나뉘어요. 2를 네 번 곱하면 16이라 log₂ 16 = 4예요.
+
+      - 겹마다 모든 원소를 한 번씩 합쳐서 일의 양은 n × log n이에요
+      - 그래서 병합 정렬은 늘 O(n log n)이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: sort-quick-sorted-input
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 맨 앞 원소를 피벗으로 쓰는 퀵 정렬에 이미 오름차순으로 정렬된 원소 n개를 넣었어요. 시간 복잡도는 무엇이고, 왜 그럴까요?
+    choices:
+      - O(n log n). 퀵 정렬은 늘 그렇다
+      - O(n). 이미 정렬되어 있으니 비교만 하고 끝난다
+      - O(n²). 피벗이 매번 가장 작은 값이라 한쪽으로 나머지가 다 가서 나누는 깊이가 n이 된다
+      - O(log n). 절반씩 나눈다
+    answer: "3"
+    explanation: |-
+      **O(n²)이에요.** 피벗이 늘 가장 작은 값이라 배열이 0개와 n-1개로 나뉘어요.
+
+      - 나누는 깊이가 n이 되어 비교가 n(n-1)/2번이에요
+      - 원소 2천 개면 1,999,000번이었어요. 섞인 배열은 2만 번 남짓이었어요
+      - 실제 구현은 피벗을 가운데 값이나 중간값으로 골라 이것을 피해요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  # ── 질문 3 ──
+  - key: sort-stable-names
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 주문 목록을 List.sort로 금액 순 정렬해요. 정렬한 뒤 이름의 순서는 무엇일까요?
+    code: |-
+      // (이름, 금액)
+      // (A, 3000), (B, 1000),
+      // (C, 3000), (D, 1000)
+      orders.sort(Comparator.comparingInt(
+          Order::amount));
+    choices:
+      - B, D, A, C
+      - D, B, C, A
+      - B, D, C, A
+      - 실행할 때마다 다르다
+    answer: "1"
+    explanation: |-
+      **B, D, A, C예요.** List.sort는 안정 정렬이라 같은 금액의 원소가 원래 순서를 지켜요.
+
+      - 1000원인 B와 D, 3000원인 A와 C가 원래대로 B가 D보다, A가 C보다 앞이에요
+      - List.sort와 Arrays.sort(Object[])는 병합 정렬을 바탕으로 한 TimSort예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  - key: sort-stable-resort
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 학생 목록을 이름 순으로 정렬한 뒤, 다시 학년 순으로 정렬했어요. 둘째 정렬이 안정 정렬이면 같은 학년 안의 학생 순서는 무엇일까요?
+    choices:
+      - 이름 순
+      - 처음 목록에 들어 있던 순서
+      - 이름의 역순
+      - 정해지지 않는다
+    answer: "1"
+    explanation: |-
+      **이름 순이에요.** 안정 정렬은 같은 값(같은 학년)의 원소들이 정렬 직전의 순서를 지켜요.
+
+      - 정렬 직전의 순서가 이름 순이었으니 학년 안에서는 이름 순이 남아요
+      - 안정이 아닌 정렬이면 같은 학년 안의 순서가 섞일 수 있어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
+  # ── 질문 4 ──
+  - key: sort-reversed-moved
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 금액 높은 순, 같은 금액이면 오래된 순으로 정렬하던 코드에서 reversed()를 맨 뒤로 옮겼어요. 같은 금액의 주문은 어떤 순서가 될까요?
+    code: |-
+      orders.sort(Comparator
+          .comparingInt(Order::amount)
+          .thenComparing(Order::createdAt)
+          .reversed());
+    choices:
+      - 오래된 순
+      - 최근 순
+      - 원래 목록의 순서
+      - 금액이 낮은 순으로 바뀌고, 같은 금액은 오래된 순
+    answer: "2"
+    explanation: |-
+      **최근 순이에요.** reversed()는 그때까지 만든 기준 전체를 뒤집어서 금액과 시각이 모두 뒤집혀요.
+
+      - 금액은 높은 순, 같은 금액은 최근 순이 돼요
+      - 시각만 오래된 순으로 두려면 reversed()를 comparingInt 바로 뒤에 둬요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  - key: sort-member-comparator
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회원 목록을 나이 많은 순으로, 나이가 같으면 이름의 사전 순으로 정렬하려고 해요. List.sort에 무엇을 넘길까요?
+    choices:
+      - comparingInt(Member::age).reversed().thenComparing(Member::name)
+      - comparingInt(Member::age).thenComparing(Member::name).reversed()
+      - comparing(Member::name).thenComparingInt(Member::age).reversed()
+      - comparingInt(Member::age).thenComparing(Member::name)
+    answer: "1"
+    explanation: |-
+      **reversed()를 나이 기준 바로 뒤에 둬요.** 그래야 나이만 뒤집히고 이름은 사전 순으로 남아요.
+
+      - 맨 뒤의 reversed()는 이름 순까지 뒤집어요
+      - 셋째는 이름이 첫 기준이에요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  - key: sort-subtract-overflow
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 금액 순(오름차순)으로 정렬하려고 뺄셈으로 Comparator를 만들었어요. 금액 2,000,000,000원 주문과 -500,000,000원 환불 건을 이 기준으로 정렬하면 어느 쪽이 앞에 올까요? (amount는 int예요)
+    code: |-
+      Comparator<Order> byAmount =
+          (a, b) -> a.amount() - b.amount();
+    choices:
+      - -500,000,000원이 앞에 온다. 작은 값이 먼저다
+      - 2,000,000,000원이 앞에 온다. 뺄셈이 int를 넘어 음수가 된다
+      - 컴파일 오류가 난다
+      - ArithmeticException이 난다
+    answer: "2"
+    explanation: |-
+      **2,000,000,000원이 앞에 와요.** 2,000,000,000 - (-500,000,000) = 25억은 int를 넘어 -1794967296이 돼요.
+
+      - compare가 음수를 돌려주니 20억이 -5억보다 앞이라고 판단해요
+      - 정수 오버플로는 예외 없이 틀린 값을 내요
+      - Comparator.comparingInt나 Integer.compare를 쓰면 바르게 놓여요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Comparator.html
+  # ── 네 질문을 하나로 ──
+  - key: sort-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "퀵 정렬과 병합 정렬의 차이는 무엇이고, 자바의 정렬은 무엇을 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **둘 다 나눠서 정렬하는 O(n log n) 정렬이고, 자바는 객체에 안정 정렬인 TimSort를 써요.**
+
+      - **병합 정렬:** 절반씩 나눠 정렬하고 합친다. 늘 O(n log n), 안정, 메모리를 n만큼 더 쓴다
+      - **퀵 정렬:** 피벗보다 작은 것과 큰 것으로 나눈다. 평균 O(n log n), 메모리를 거의 안 쓰지만 최악 O(n²), 보통 안정이 아니다
+      - **자바:** List.sort와 Arrays.sort(Object[])는 TimSort(안정), 기본형 배열은 Dual-Pivot Quicksort
+      - **기준:** Comparable과 Comparator. 뺄셈 대신 comparingInt와 Integer.compare
+    checklist:
+      - 병합 정렬은 나눠 정렬하고 합치며 늘 O(n log n)이라고 말했다
+      - 퀵 정렬은 피벗으로 나누고 최악이 O(n²)이라고 말했다
+      - 안정 정렬의 뜻과 병합 정렬은 안정, 퀵 정렬은 보통 아니라고 말했다
+      - 자바의 객체 정렬은 안정 정렬(TimSort)이라고 말했다
+      - 정렬 기준을 Comparator로 넘기고 뺄셈으로 만들지 않는다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html
