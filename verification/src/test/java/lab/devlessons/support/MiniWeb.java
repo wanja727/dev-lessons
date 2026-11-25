@@ -67,6 +67,24 @@ public final class MiniWeb implements AutoCloseable {
         return new MiniWeb(ctx);
     }
 
+    /** 속성(예: "server.forward-headers-strategy=framework")을 더해 띄운다 */
+    public static MiniWeb startWith(String[] properties, Class<?>... components) {
+        Class<?>[] sources = new Class<?>[components.length + 1];
+        sources[0] = App.class;
+        System.arraycopy(components, 0, sources, 1, components.length);
+        ConfigurableApplicationContext ctx = new SpringApplicationBuilder(sources)
+                .properties("server.port=0", "spring.main.banner-mode=off",
+                        "server.error.include-message=always")
+                .properties(properties)
+                .run();
+        return new MiniWeb(ctx);
+    }
+
+    /** 내장 톰캣이 듣는 포트. 소켓으로 직접 요청할 때 쓴다 */
+    public int port() {
+        return port;
+    }
+
     public ConfigurableApplicationContext context() {
         return context;
     }

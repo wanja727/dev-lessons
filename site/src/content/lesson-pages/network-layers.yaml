@@ -1,8 +1,9 @@
-# OSI 7계층과 TCP/IP 4계층 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# OSI 7계층과 TCP/IP 4계층
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/network-layers.yaml에 있다.
 title: OSI 7계층과 TCP/IP 4계층
+description: 네트워크를 왜 계층으로 나누는지, TCP/IP 4계층이 각각 무엇을 하는지, 데이터가 계층을 지나며 어떻게 싸이고 풀리는지, OSI 7계층과 어떻게 맞춰 보는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: 네트워크와 웹
+minutes: 18
 roadmap: N2
 type: 개념 설명
 prerequisites:
@@ -37,21 +38,72 @@ codes:
     GET /products/7 HTTP/1.1
     Host: localhost
     Connection: close
+  twoTransports: |-
+    // 통로 1: TCP 소켓 (IP 주소와 포트)
+    SocketChannel.open([[INET]]).connect(
+        new InetSocketAddress(
+            "127.0.0.1", port));
 
-  tcpSocket: |-
-    Socket s = new Socket(
-        "127.0.0.1", 8080);
-  unixSocket: |-
-    SocketChannel ch = SocketChannel.open(
-        UnixDomainSocketAddress.of(path));
+    // 통로 2: 유닉스 도메인 소켓 (파일)
+    SocketChannel.open([[UNIX]]).connect(
+        UnixDomainSocketAddress.of(
+            "shop.sock"));
+
+    // 두 통로에 같은 요청 글을 쓴다
+    ch.write(요청글);
+  portsRun: |-
+    // 같은 컴퓨터에 서버 둘
+    GET http://127.0.0.1:포트A/whoami
+    GET http://127.0.0.1:포트B/whoami
   fourTuple: |-
-    s.getLocalAddress();  // 출발 IP
-    s.getLocalPort();     // 출발 포트
-    s.getInetAddress();   // 도착 IP
-    s.getPort();          // 도착 포트
+    // 같은 서버 포트로 연결 둘
+    Socket c1 = new Socket("127.0.0.1", port);
+    Socket c2 = new Socket("127.0.0.1", port);
+    // 연결마다 네 값을 출력한다
+    c.getLocalAddress();  // 출발 IP
+    c.getLocalPort();     // 출발 포트
+    c.getInetAddress();   // 도착 IP
+    c.getPort();          // 도착 포트
+  bigWrite: |-
+    // 보내는 쪽: 1MB를 write 한 번으로
+    out.write(new byte[1024 * 1024]);
+
+    // 받는 쪽: 끝(-1)까지 읽으며 센다
+    while ((n = in.read(buf)) != -1) {
+      reads++;
+    }
+  remoteAddr: |-
+    @GetMapping("/ip")
+    String ip(HttpServletRequest request) {
+      return request.[[getRemoteAddr()]];
+    }
+  forwardedYml: |-
+    server:
+      [[forward-headers-strategy]]: framework
+  forwardedRun: |-
+    # 로드 밸런서가 붙여 보낸 것처럼
+    GET /ip HTTP/1.1
+    X-Forwarded-For: 203.0.113.7
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/networklayers/NetworkLayersTest.java
+  rfc1122: https://www.rfc-editor.org/rfc/rfc1122.html
+  bootProxy: https://docs.spring.io/spring-boot/how-to/webserver.html#howto.webserver.use-behind-a-proxy-server
+  rfc7239: https://www.rfc-editor.org/rfc/rfc7239.html
 predict:
-  text: '코드 request를 한 번은 TCP 소켓(127.0.0.1의 포트)으로, 한 번은 같은 컴퓨터 안의 파일 경로로 여는 유닉스 도메인 소켓으로 보냈어요. 받는 쪽은 두 통로에서 같은 코드로 요청을 읽어 응답해요. 두 응답은 어떨까요? 보기: 같다, 유닉스 소켓은 IP 주소가 없어서 HTTP를 쓸 수 없다, 유닉스 소켓 쪽은 요청을 다시 써야 한다.'
-  answer: '같다. HTTP는 아래 통로가 바이트를 순서대로 날라 주기만 하면 되고, 그 통로가 TCP인지는 모른다. 질문 1에서 밝힌다.'
+  title: 통로를 바꾸면 요청도 바꿔야 할까요?
+  text: '아래 요청 글을 한 번은 TCP 소켓(IP 주소와 포트)으로, 한 번은 같은 컴퓨터 안의 파일 경로로 여는 유닉스 도메인 소켓으로 보냈어요. 받는 쪽은 두 통로에서 같은 코드로 요청을 읽어 응답해요. 두 응답은 어떨까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: request
+  label: 내 예측
+  options:
+    - value: same
+      label: 두 응답이 같다
+    - value: noip
+      label: 유닉스 소켓은 IP가 없어서 HTTP를 못 쓴다
+    - value: rewrite
+      label: 유닉스 소켓 쪽은 요청 글을 다르게 써야 한다
+  answer: same
+  storageKey: nl-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 네트워크는 왜 계층을 나누나요?
@@ -66,6 +118,33 @@ questions:
     asks:
       - '본문의 예시: 같은 HTTP 요청을 TCP 소켓과 유닉스 도메인 소켓으로 보낼 때 요청 글에서 바꿔야 하는 것은 (없다)'
       - '옮긴 상황: 회사 와이파이에서 휴대폰 핫스팟으로 바꿔도 스프링 서버의 컨트롤러 코드를 고칠 필요가 없는 이유 (HTTP는 아래 계층이 무엇인지 모르고 바이트가 순서대로 온다는 것만 믿는다)'
+    body:
+      - p: 'N1에서 본 `GET /products/7` 요청 하나가 서버에 닿으려면 할 일이 많아요.'
+      - ul:
+          - 서버 컴퓨터 안의 **어느 프로그램**에게 줄지 정해야 해요.
+          - 인터넷의 수많은 컴퓨터 가운데 **어느 컴퓨터**로 갈지, 어떤 길로 갈지 정해야 해요.
+          - 공유기나 기지국처럼 **바로 옆 장비**에 전파나 전기 신호로 넘겨야 해요.
+          - 가다가 **빠지거나 순서가 바뀐 것**을 다시 맞춰야 해요.
+      - p: 이것을 한 프로그램이 다 하면, 와이파이를 LTE로 바꾸기만 해도 브라우저를 고쳐야 해요. 그래서 네트워크는 일을 **계층**으로 나눠요. 각 계층은 자기 일만 하고, 바로 아래 계층이 해 주는 일을 믿고 써요. 아래가 그 일을 **어떻게** 하는지는 몰라요.
+      - p: 정말 모르는지 확인해 봤어요. 처음 예측한 요청 글을 두 통로로 보냈어요. 하나는 IP 주소와 포트로 여는 TCP 소켓이고, 하나는 같은 컴퓨터 안에서 **파일 경로로 여는 유닉스 도메인 소켓**이에요. 유닉스 소켓에는 IP 주소도 포트도 없어요.
+      - ci:
+          key: two-transports
+          label: 두 통로의 실제 응답 보기
+          source: NetworkLayersTest.sameHttpOverDifferentTransports
+          code: twoTransports
+      - p: '두 응답이 같아요. **두 응답이 같다**가 정답이에요. {{predict-result}} 요청 글은 한 글자도 바꾸지 않았고, 받는 쪽도 같은 코드로 읽었어요. HTTP가 아래 통로에 바라는 것은 "보낸 바이트를 순서대로 날라 달라"뿐이에요. 그 일을 TCP가 하든 유닉스 소켓이 하든 HTTP는 상관하지 않아요.'
+      - p: 이것이 계층을 나눈 이유예요. 와이파이가 LTE로 바뀌어도, IPv4가 IPv6로 바뀌어도 그 위의 계층은 고치지 않아요. 스프링 컨트롤러가 사용자가 어떤 망으로 접속했는지 몰라도 되는 이유예요.
+      - muted: 유닉스 도메인 소켓은 같은 컴퓨터 안의 프로그램끼리 쓰는 통로라서 인터넷에서는 쓰지 않아요. 도커가 이 방식으로 명령을 받고, PostgreSQL도 같은 컴퓨터의 접속에 써요.
+      - quiz:
+          q: 회사 와이파이에서 휴대폰 핫스팟으로 바꿔 접속해도 스프링 서버의 컨트롤러 코드를 고칠 필요가 없어요. 가장 알맞은 이유는 무엇일까요?
+          options:
+            - 스프링이 와이파이와 핫스팟을 자동으로 구별해서
+            - HTTP는 아래 계층이 바이트를 순서대로 날라 준다는 것만 믿고, 그 방법은 몰라서
+            - 핫스팟도 결국 와이파이라서
+          answer: 2
+          explain: 위 계층은 아래 계층이 해 주는 일만 믿어요. 그 일을 어떻게 하는지는 아래 계층이 알아서 해요.
+      - next: 계층마다 자기 일이 있다고 했어요. 인터넷에서 쓰는 계층은 몇 개이고, 각각 무엇을 할까요?
+    recall: 각 계층이 바로 아래 계층이 해 주는 일만 믿고 자기 일만 하게 하려고요. 그래서 한 계층을 바꿔도 위아래를 고치지 않아요. 같은 HTTP 요청을 TCP 소켓과 유닉스 도메인 소켓으로 보내도 응답이 같았어요. HTTP는 바이트가 순서대로 온다는 것만 믿어요.
   - id: q2
     title: TCP/IP 4계층은 각각 무엇을 하나요?
     conclusion:
@@ -80,6 +159,44 @@ questions:
     asks:
       - '본문의 예시: 한 컴퓨터에서 8080 포트와 8081 포트로 서버 둘이 떠 있다. 요청이 둘 중 어느 서버로 갈지 정하는 값은 어느 계층의 무엇인가 (전송 계층의 포트)'
       - '옮긴 상황: 브라우저가 같은 서버의 443번 포트로 연결을 둘 열었다. 서버는 두 연결을 무엇으로 구별하나 (클라이언트 쪽 포트가 다르다)'
+    body:
+      - p: 인터넷은 **TCP/IP 4계층**으로 움직여요. 위에서부터 응용, 전송, 인터넷, 링크 계층이에요. 위 계층일수록 프로그램에 가깝고, 아래 계층일수록 전선과 전파에 가까워요.
+      - table:
+          head: [계층, 하는 일, 구별하는 값, 예]
+          rows:
+            - ['응용', '프로그램끼리 무엇을 주고받을지 약속', '(약속마다 다름. HTTP는 경로)', 'HTTP, DNS']
+            - ['전송', '어느 **프로그램**에게 줄지, 빠짐없이 줄지', '포트 번호', 'TCP, UDP']
+            - ['인터넷', '어느 **컴퓨터**로 갈지, 어떤 길로 갈지', 'IP 주소', 'IP']
+            - ['링크', '**바로 옆 장비**까지 신호로 전하기', 'MAC 주소', '이더넷, 와이파이']
+      - h3: 인터넷 계층과 링크 계층
+      - p: '인터넷 계층은 IP 주소로 목적지 컴퓨터를 정해요. 그런데 서울의 노트북에서 미국의 서버까지 바로 이어진 선은 없어요. 중간에 **라우터**라는 장비들이 있어서, 각 라우터는 목적지 IP 주소를 보고 "다음은 저 장비로" 넘길 곳만 골라요. 길 전체를 아는 장비는 없고, 한 칸씩 넘기다 보면 도착해요.'
+      - p: '한 칸을 넘기는 일, 곧 바로 옆 장비까지 신호로 전하는 일은 링크 계층이 해요. 노트북에서 공유기까지는 와이파이, 공유기에서 통신사 장비까지는 이더넷처럼 칸마다 방법이 다를 수 있어요. 같은 네트워크 안의 장비는 **MAC 주소**라는, 장비마다 붙은 번호로 구별해요.'
+      - h3: 전송 계층은 프로그램을 구별해요
+      - p: IP 주소로 컴퓨터에 닿아도 끝이 아니에요. 서버 컴퓨터 하나에 프로그램이 여럿 떠 있을 수 있어요. 그래서 전송 계층은 **포트 번호**로 프로그램을 구별해요. 한 컴퓨터에 서버 둘을 서로 다른 포트로 띄우고 같은 주소로 요청해 봤어요.
+      - ci:
+          key: ports
+          label: 두 서버의 실제 응답 보기
+          source: NetworkLayersTest.portsTellProgramsApart
+          code: portsRun
+      - p: IP 주소는 같고 포트만 다른데 다른 프로그램이 답했어요.
+      - h3: 연결은 네 값으로 구별해요
+      - p: 그러면 같은 서버, 같은 포트로 브라우저가 연결을 둘 열면 서버는 둘을 어떻게 구별할까요? 연결 둘을 열고 각 연결의 출발 주소와 도착 주소를 출력해 봤어요.
+      - ci:
+          key: four-tuple
+          label: 두 연결의 주소 보기
+          source: NetworkLayersTest.connectionIsFourTuple
+          code: fourTuple
+      - p: '도착(서버의 IP와 포트)은 같고 **출발 포트가 달라요**. 연결을 맺을 때 OS가 클라이언트 쪽에 빈 포트를 하나씩 골라 줘요. 그래서 연결 하나는 **출발 IP, 출발 포트, 도착 IP, 도착 포트** 네 값으로 구별돼요. 서버는 이 네 값으로 어느 연결에서 온 바이트인지 알아요.'
+      - quiz:
+          q: '브라우저가 같은 서버의 443번 포트로 연결을 둘 열었어요. 서버는 두 연결을 무엇으로 구별할까요?'
+          options:
+            - 클라이언트 쪽 포트 번호가 서로 다르다
+            - 서버 쪽 포트 번호가 서로 다르다
+            - 두 연결의 MAC 주소가 다르다
+          answer: 1
+          explain: 도착 IP와 포트(443)는 같아요. OS가 클라이언트 쪽에 연결마다 다른 포트를 골라 줘서 네 값이 달라져요.
+      - next: 계층마다 구별하는 값(포트, IP 주소, MAC 주소)이 다르다고 했어요. 이 값들은 요청 글 어디에 적혀서 갈까요?
+    recall: 응용 계층은 프로그램끼리의 약속(HTTP, DNS), 전송 계층은 포트로 어느 프로그램인지와 빠짐없이 전하는 일(TCP, UDP), 인터넷 계층은 IP 주소로 어느 컴퓨터인지와 가는 길(라우터), 링크 계층은 MAC 주소로 바로 옆 장비까지 전하는 일을 해요. 연결 하나는 출발 IP와 포트, 도착 IP와 포트 네 값으로 구별돼요.
   - id: q3
     title: 데이터는 계층을 지나며 어떻게 바뀌나요?
     conclusion:
@@ -97,6 +214,74 @@ questions:
     asks:
       - '본문의 예시: 서버의 자바 코드가 소켓에서 읽은 바이트에 들어 있는 것은 (보기: HTTP 요청 글만, TCP 헤더와 HTTP 글, 이더넷부터 HTTP까지 모든 헤더)'
       - '옮긴 상황: 1MB 파일을 `write` 한 번으로 보냈다. 받는 쪽이 `read` 한 번에 1MB를 다 받는다고 믿고 짠 코드는 왜 틀릴 수 있나 (작은 조각으로 나뉘어 와서 여러 번 읽어야 할 수 있다)'
+    body:
+      - p: '계층마다 자기가 쓸 정보(포트, IP 주소, MAC 주소)는 **헤더**에 적어요. 보내는 쪽에서 요청 글이 아래 계층으로 내려갈 때마다 그 계층의 헤더가 앞에 하나씩 붙어요. 편지를 봉투에 넣고, 그 봉투를 다시 큰 봉투에 넣는 것과 같아요. 이것을 **캡슐화**라고 해요.'
+      - p: 버튼을 눌러 한 단계씩 넘겨 보세요.
+      - widget:
+          kind: steps
+          layout: [duo, buttons, log, verdict]
+          buttons: each
+          initial:
+            duo:
+              - label: 지금 보내는 덩어리
+                rows: [{k: HTTP, v: 'GET /products/7 ...'}]
+              - label: 이 단계에서 본 값
+                text: 없음
+          scenarios:
+            default:
+              - label: 전송 계층 (TCP 헤더)
+                log: 'TCP 헤더를 붙여요. 출발 포트 58090, 도착 포트 443, 순서 번호'
+                duo:
+                  - label: 지금 보내는 덩어리
+                    rows: [{k: TCP 헤더, v: '포트, 순서 번호', mark: changed}, {k: HTTP, v: 'GET /products/7 ...'}]
+                  - label: 이 단계에서 본 값
+                    rows: [{k: 포트, v: '58090 → 443'}]
+              - label: 인터넷 계층 (IP 헤더)
+                log: 'IP 헤더를 붙여요. 출발 IP 192.168.0.5, 도착 IP 93.184.215.14'
+                duo:
+                  - label: 지금 보내는 덩어리
+                    rows: [{k: IP 헤더, v: 'IP 주소', mark: changed}, {k: TCP 헤더, v: '포트, 순서 번호'}, {k: HTTP, v: 'GET /products/7 ...'}]
+                  - label: 이 단계에서 본 값
+                    rows: [{k: IP 주소, v: '192.168.0.5 → 93.184.215.14'}]
+              - label: 링크 계층 (이더넷 헤더)
+                log: '이더넷 헤더를 붙여요. 도착은 서버가 아니라 바로 옆 공유기의 MAC 주소예요'
+                duo:
+                  - label: 지금 보내는 덩어리
+                    rows: [{k: 이더넷 헤더, v: 'MAC 주소', mark: changed}, {k: IP 헤더, v: 'IP 주소'}, {k: TCP 헤더, v: '포트, 순서 번호'}, {k: HTTP, v: 'GET /products/7 ...'}]
+                  - label: 이 단계에서 본 값
+                    rows: [{k: MAC 주소, v: '내 노트북 → 공유기'}]
+              - label: 받는 쪽 (헤더 떼기)
+                log: '서버는 이더넷 헤더, IP 헤더, TCP 헤더를 차례로 보고 떼어 내요'
+                duo:
+                  - label: 서버 프로그램이 받은 것
+                    rows: [{k: HTTP, v: 'GET /products/7 ...', mark: changed}]
+                  - label: 이 단계에서 본 값
+                    text: '헤더는 OS가 보고 버렸어요'
+                verdict: '내려가며 붙인 헤더를 받는 쪽이 올라가며 떼어 내요. 서버 프로그램 손에는 클라이언트 프로그램이 쓴 바이트만 남아요.'
+      - p: '받는 쪽은 반대로 해요. 이더넷 헤더를 보고 "내게 온 것이 맞다"고 확인한 뒤 떼어 내고, IP 헤더를 보고 떼어 내고, TCP 헤더의 포트를 보고 어느 프로그램에게 줄지 정해 떼어 내요. 이 일은 OS가 해요. 그래서 자바 프로그램이 소켓에서 읽는 바이트에는 **헤더가 없어요**. 상대 프로그램이 쓴 바이트만 있어요.'
+      - p: 헤더의 크기도 표준이 정해 뒀어요. 옵션이 없으면 TCP 헤더 20바이트, IPv4 헤더 20바이트, 이더넷 헤더 14바이트예요.
+      - h3: 큰 데이터는 나뉘어 가요
+      - p: '링크 계층에는 한 번에 실을 수 있는 크기가 있어요. 이것을 **MTU**라고 하고, 이더넷은 보통 1500바이트예요. 그래서 큰 데이터는 아래 계층에서 여러 조각으로 나뉘어 가요. 1MB를 `write` 한 번으로 보내고, 받는 쪽이 `read`를 몇 번 불러야 다 받는지 세어 봤어요.'
+      - ci:
+          key: pieces
+          label: 받는 쪽이 읽은 횟수 보기
+          source: NetworkLayersTest.bigWriteArrivesInPieces
+          code: bigWrite
+      - p: '한 번에 썼지만 받는 쪽은 여러 번에 나눠 읽었어요. 읽을 때마다 그때까지 도착한 만큼만 돌려주기 때문이에요. 횟수는 돌릴 때마다 달라요. 그래서 "한 번 `read`하면 보낸 것을 다 받는다"고 믿고 짠 코드는 틀려요. 끝(-1)이 나올 때까지, 또는 정해 둔 길이만큼 읽어야 해요. 그래도 다 모은 바이트는 보낸 것과 한 바이트도 다르지 않았어요. 이 테스트는 같은 컴퓨터 안의 통로라 MTU가 더 크지만, 나뉘어 온다는 것은 같아요.'
+      - more:
+          summary: '더 알아보기: 계층마다 데이터를 부르는 이름'
+          body:
+            - p: '같은 덩어리도 어느 계층에서 보느냐에 따라 이름이 달라요. TCP 헤더를 붙인 것은 **세그먼트**, IP 헤더까지 붙인 것은 **패킷**, 링크 계층의 헤더까지 붙인 것은 **프레임**이라고 불러요. "패킷이 빠졌다"는 인터넷 계층에서 덩어리 하나가 사라졌다는 말이에요.'
+      - quiz:
+          q: 서버의 자바 코드가 소켓에서 읽은 바이트에 들어 있는 것은 무엇일까요?
+          options:
+            - 클라이언트가 쓴 HTTP 요청 글만
+            - TCP 헤더와 HTTP 요청 글
+            - 이더넷, IP, TCP 헤더와 HTTP 요청 글 모두
+          answer: 1
+          explain: 헤더는 받는 쪽 OS가 계층마다 보고 떼어 내요. 프로그램에는 상대 프로그램이 쓴 바이트만 와요.
+      - next: 지금까지 본 것은 TCP/IP 4계층이에요. 면접에서 묻는 OSI 7계층과는 어떻게 맞춰 볼까요?
+    recall: 보내는 쪽은 내려가며 계층마다 자기 헤더(TCP는 포트, IP는 IP 주소, 이더넷은 MAC 주소)를 앞에 붙이고, 받는 쪽은 올라가며 하나씩 떼어 내요. 그래서 프로그램은 상대가 보낸 바이트만 받아요. 한 번에 실을 수 있는 크기(MTU)가 있어서 큰 데이터는 나뉘어 오고, 받는 쪽은 여러 번 나눠 읽어요.
   - id: q4
     title: OSI 7계층과 TCP/IP 4계층은 어떻게 맞춰 보나요?
     conclusion:
@@ -112,25 +297,118 @@ questions:
     asks:
       - '본문의 예시: OSI 7계층의 네트워크 계층(3)은 TCP/IP 4계층의 어느 계층인가 (인터넷 계층)'
       - '옮긴 상황: `/api`로 오는 요청은 API 서버로, `/images`로 오는 요청은 이미지 서버로 보내는 로드 밸런서는 L4인가 L7인가 (L7. HTTP의 경로를 봐야 한다)'
+    body:
+      - p: 'OSI 7계층은 국제 표준 기구가 만든 **참조 모델**이에요. 네트워크가 할 일을 일곱으로 나눠 설명하는 틀이에요. 실제 인터넷은 그보다 먼저 자리 잡은 TCP/IP로 움직여요. 그래서 둘을 맞춰 보면 OSI가 더 잘게 나뉘어 있어요.'
+      - table:
+          head: [OSI 번호, OSI 계층, TCP/IP 계층, 예]
+          rows:
+            - ['7', '응용', '응용', 'HTTP, DNS']
+            - ['6', '표현', '응용', '인코딩, 압축']
+            - ['5', '세션', '응용', '대화의 시작과 끝']
+            - ['4', '전송', '전송', 'TCP, UDP']
+            - ['3', '네트워크', '인터넷', 'IP, 라우터']
+            - ['2', '데이터 링크', '링크', '이더넷, 스위치, MAC 주소']
+            - ['1', '물리', '링크', '전선, 광케이블, 전파']
+      - p: 'OSI의 **표현 계층**은 데이터의 모양(글자 인코딩, 압축, 암호화)을, **세션 계층**은 대화를 시작하고 끝내는 일을 맡는다고 정의되어 있어요. 인터넷에서는 이 일을 따로 하는 계층이 없고 HTTP나 TLS가 함께 해요. 예를 들어 TLS는 암호화(표현)도 하고 연결 맺기(세션)도 해서, 어느 한 번호에 딱 맞추기 어려워요. 면접에서 "TLS는 몇 계층인가요"에 정답이 하나가 아닌 이유예요.'
+      - h3: 장비를 계층 번호로 불러요
+      - p: '실무에서는 OSI 번호로 장비를 불러요. 그 장비가 **어느 계층의 헤더까지 읽는지**를 뜻해요.'
+      - ul:
+          - '**스위치(L2):** MAC 주소를 보고 같은 네트워크 안의 장비로 넘겨요.'
+          - '**라우터(L3):** IP 주소를 보고 다음 장비를 골라요.'
+          - '**L4 로드 밸런서:** IP와 포트까지 보고 연결을 서버들에 나눠 줘요. HTTP는 읽지 않아요.'
+          - '**L7 로드 밸런서:** HTTP까지 읽어서 경로(`/api`, `/images`)나 헤더를 보고 나눠 줘요.'
+      - p: 아래 항목이 TCP/IP의 어느 계층인지 골라 보세요.
+      - widget:
+          kind: classify
+          categories: [응용, 전송, 인터넷, 링크]
+          items:
+            - {text: 'HTTP 요청의 `GET /products/7`', answer: 1, explain: 'HTTP는 응용 계층이에요(OSI 7).'}
+            - {text: 이름을 IP 주소로 바꾸는 DNS, answer: 1, explain: 'DNS도 프로그램끼리의 약속이라 응용 계층이에요.'}
+            - {text: 포트 번호 443, answer: 2, explain: '포트는 전송 계층(TCP, UDP)이 프로그램을 구별하는 값이에요(OSI 4).'}
+            - {text: 빠진 데이터를 다시 보내는 TCP, answer: 2, explain: 'TCP는 전송 계층이에요.'}
+            - {text: 목적지 IP 주소를 보고 다음 장비를 고르는 라우터, answer: 3, explain: '라우터는 인터넷 계층(OSI 3)의 장비예요.'}
+            - {text: 같은 네트워크의 장비를 MAC 주소로 찾는 스위치, answer: 4, explain: '스위치는 링크 계층(OSI 2)의 장비예요.'}
+            - {text: '`/api`는 API 서버로, `/images`는 이미지 서버로 보내는 로드 밸런서', answer: 1, explain: 'HTTP의 경로를 읽어야 하니 응용 계층까지 보는 L7 로드 밸런서예요.'}
+      - quiz:
+          q: OSI 7계층의 네트워크 계층(3)은 TCP/IP 4계층의 어느 계층에 해당할까요?
+          options:
+            - 전송 계층
+            - 인터넷 계층
+            - 링크 계층
+          answer: 2
+          explain: OSI의 네트워크 계층은 IP 주소와 길 찾기를 맡아서 TCP/IP의 인터넷 계층이에요.
+    recall: OSI의 응용, 표현, 세션(7, 6, 5)이 TCP/IP의 응용 계층에, 전송(4)이 전송 계층에, 네트워크(3)가 인터넷 계층에, 데이터 링크와 물리(2, 1)가 링크 계층에 해당해요. OSI는 설명하는 틀이고 인터넷은 TCP/IP로 움직여요. 실무에서는 스위치를 L2, 라우터를 L3, 포트까지 보는 로드 밸런서를 L4, HTTP까지 보는 로드 밸런서를 L7이라고 불러요.
 practice:
+  title: 계층이 드러나는 곳
   says:
     - '스프링 개발자의 코드는 응용 계층에 있다. 계층이 드러나는 곳은 오류다. 예외 이름으로 어느 계층에서 멈췄는지 읽는다'
-    - '`UnknownHostException`: 이름을 주소로 못 바꿈(응용 계층의 DNS). `ConnectException: Connection refused`: 그 컴퓨터에는 갔지만 그 포트에 프로그램이 없음(전송 계층). `NoRouteToHostException`이나 연결 시간 초과: 그 컴퓨터까지 길이 없거나 막힘(인터넷 계층 쪽). HTTP 502, 504: 연결은 됐고 중간의 프록시가 답함(응용 계층). 앞의 둘을 테스트로 만든다'
+    - '`UnknownHostException`: 이름을 주소로 못 바꿈(응용 계층의 DNS). `ConnectException: Connection refused`: 그 컴퓨터에는 갔지만 그 포트에 프로그램이 없음(전송 계층). `NoRouteToHostException`이나 연결 시간 초과: 그 컴퓨터까지 길이 없거나 막힘(인터넷 계층 쪽). HTTP 502, 504: 연결은 됐고 중간의 프록시가 답함(응용 계층). 앞의 둘은 N1에서 테스트로 만들었다'
     - '흔한 실수: `Connection refused`를 보고 네트워크(방화벽)를 의심한다. refused는 상대 컴퓨터가 "그 포트에는 아무도 없다"고 답한 것이라, 대개 서버가 안 떠 있거나 포트를 잘못 적은 것이다. 방화벽이 버리면 답이 없어서 시간 초과가 된다'
-    - '로드 밸런서의 L4와 L7: L4는 연결을 나눠 주고 HTTP를 보지 않는다. L7은 HTTP를 읽어 경로로 나누고, 원래 클라이언트 IP를 `X-Forwarded-For` 헤더로 넘긴다. 스프링에서 `request.getRemoteAddr()`가 로드 밸런서의 IP를 주는 이유다 (문서 근거)'
+    - '로드 밸런서의 L4와 L7: L4는 연결을 나눠 주고 HTTP를 보지 않는다. L7은 HTTP를 읽어 경로로 나누고, 원래 클라이언트 IP를 `X-Forwarded-For` 헤더로 넘긴다. 스프링에서 `request.getRemoteAddr()`가 로드 밸런서의 IP를 주는 이유다. `server.forward-headers-strategy`로 그 헤더를 읽게 하는 것을 테스트로 보인다'
+  body:
+    - p: 스프링 개발자의 코드는 응용 계층에 있어서 아래 계층을 직접 만질 일이 드물어요. 계층이 드러나는 곳은 두 군데예요. **오류**와 **로드 밸런서**예요.
+    - h3: 오류가 난 계층 읽기
+    - p: '다른 서버를 부르다 실패하면 예외의 이름이 어느 계층에서 멈췄는지 알려 줘요. 앞의 둘은 브라우저에 주소를 입력하면 레슨에서 직접 만들어 봤어요.'
+    - table:
+        head: [보이는 것, 멈춘 계층, 뜻]
+        rows:
+          - ['`UnknownHostException`', '응용(DNS)', '이름을 IP 주소로 못 바꿨어요']
+          - ['Connection refused', '전송', '그 컴퓨터는 답했는데, 그 포트에 프로그램이 없어요']
+          - ['연결 시간 초과', '인터넷 쪽', '그 컴퓨터까지 길이 없거나 중간에서 버려졌어요']
+          - ['HTTP 502, 504', '응용', '연결은 됐고, 중간의 프록시가 뒤의 서버 대신 답했어요']
+    - h3: '흔한 실수: refused를 보고 방화벽을 의심하기'
+    - p: '`Connection refused`가 나면 "네트워크가 막혔다"고 생각하기 쉬워요. 그런데 refused는 **상대 컴퓨터까지 갔고, 그 컴퓨터가 "그 포트에는 아무도 없다"고 답한 것**이에요. 길은 열려 있어요. 대개 서버 프로그램이 꺼져 있거나, 포트 번호를 잘못 적었거나, 서버가 다른 주소(`127.0.0.1`)에서만 듣고 있는 거예요. 방화벽이 막으면 보통 아무 답 없이 버려서, refused가 아니라 시간 초과가 나요.'
+    - h3: 로드 밸런서 뒤에서 클라이언트 IP 읽기
+    - p: 'L7 로드 밸런서는 클라이언트와 연결을 맺고, 우리 서버와는 **따로 연결을 맺어** 요청을 넘겨요. 그래서 우리 서버가 보는 연결의 출발 IP(질문 2의 네 값)는 클라이언트가 아니라 로드 밸런서예요. 아래 코드로 접속한 사람의 IP를 로그에 남기면 모두 로드 밸런서의 IP가 찍혀요.'
+    - code: remoteAddr
+      notes:
+        - mark: getRemoteAddr()
+          as: code
+          text: 이 연결의 출발 IP예요. 로드 밸런서 뒤라면 로드 밸런서의 IP예요.
+    - p: 'L7 로드 밸런서는 원래 클라이언트의 IP를 `X-Forwarded-For` 헤더에 적어 넘겨요. 스프링 부트가 이 헤더를 읽게 하려면 설정을 켜요.'
+    - code: forwardedYml
+      notes:
+        - mark: forward-headers-strategy
+          as: code
+          text: '`framework`면 스프링이 `X-Forwarded-For` 같은 헤더를 읽어 `getRemoteAddr()`에 반영해요.'
+    - p: 로드 밸런서인 척 헤더를 붙여 두 설정으로 요청해 봤어요.
+    - ci:
+        key: forwarded
+        label: 두 설정의 결과 보기
+        source: NetworkLayersTest.forwardedForNeedsSetting
+        code: forwardedRun
+    - p: 기본 설정은 연결의 출발 IP를 그대로 줘요. 설정을 켜면 헤더의 값을 줘요. 스프링은 헤더를 반영한 뒤 그 헤더를 요청에서 지워서, 같은 값을 두 번 다루지 않게 해요.
+    - callout: '**믿는 로드 밸런서 뒤에서만 켜요.** `X-Forwarded-For`는 누구나 요청에 적을 수 있는 헤더예요. 로드 밸런서 없이 바로 열린 서버에서 켜면, 사용자가 적은 가짜 IP를 그대로 믿게 돼요.'
+    - muted: '근거: [스프링 부트 문서의 프록시 뒤에서 쓰기](link:bootProxy), [RFC 7239](link:rfc7239). L4 로드 밸런서는 HTTP를 읽지 않아서 이 헤더를 붙이지 못해요.'
+interview:
+  question: OSI 7계층과 TCP/IP 4계층을 설명하고, 왜 계층을 나누는지 말해 주세요
+  model:
+    - label: 정의
+      text: 네트워크가 할 일을 층으로 나눈 모델입니다. TCP/IP는 응용, 전송, 인터넷, 링크 4계층이고, OSI는 응용, 표현, 세션, 전송, 네트워크, 데이터 링크, 물리 7계층으로 더 잘게 나눈 참조 모델입니다.
+    - label: 원리
+      text: 응용 계층은 HTTP 같은 프로그램끼리의 약속, 전송 계층은 포트로 프로그램을 구별하고 TCP로 빠짐없이 전하는 일, 인터넷 계층은 IP 주소와 라우터로 컴퓨터까지 가는 길, 링크 계층은 MAC 주소로 바로 옆 장비까지 전하는 일을 합니다. 보낼 때는 계층마다 헤더를 붙이고 받을 때 떼어 내서, 프로그램은 상대가 보낸 바이트만 받습니다.
+    - label: 주의할 점
+      text: 각 계층은 아래 계층이 주는 기능만 믿어서, 한 계층을 바꿔도 위는 고치지 않습니다. OSI의 표현과 세션 계층은 인터넷에서 따로 없고 TLS처럼 한 번호에 딱 맞지 않는 것도 있습니다. 실무에서는 L4, L7 로드 밸런서처럼 장비가 어느 계층까지 읽는지를 OSI 번호로 부릅니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 로드 밸런서 뒤에서 로그에 모든 사용자의 IP가 같게 찍혀서, X-Forwarded-For를 읽도록 forward-headers-strategy를 켰습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라, 자바 21의 소켓과 유닉스 도메인 소켓, 스프링 부트 3.5 서버로 요청을 보내 받은 값이에요. 헤더를 붙이고 떼는 아래 계층의 동작은 자바에서 보이지 않아서 RFC를 근거로 적었어요. 코드가 바뀔 때마다 테스트([NetworkLayersTest](link:test))가 다시 돌아요.
+footer: '근거: TCP/IP 계층은 RFC 1122, OSI 참조 모델은 ITU-T X.200, 헤더 크기는 RFC 9293(TCP), RFC 791(IPv4), 이더넷의 MTU는 RFC 894, X-Forwarded-For는 RFC 7239, 유닉스 도메인 소켓은 JEP 380, forward-headers-strategy는 스프링 부트 문서. 응답은 톰캣 10.1(스프링 부트 3.5에 든 것)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '같은 HTTP 요청 글을 TCP 소켓과 유닉스 도메인 소켓으로 보내면 같은 응답 글을 받는다'
     how: '요청 글을 읽어 응답 글을 쓰는 작은 처리기를 두 통로에 붙인다'
+    test: NetworkLayersTest.sameHttpOverDifferentTransports
   - claim: '같은 IP에서 포트가 다른 서버 둘은 각자 다른 응답을 준다'
     how: 'MiniWeb 둘을 띄운다'
+    test: NetworkLayersTest.portsTellProgramsApart
   - claim: '같은 서버 포트로 연 연결 둘은 출발 포트만 다르다'
     how: 'Socket 둘의 local/remote 주소와 포트를 출력한다'
-  - claim: '소켓에서 읽은 바이트는 보낸 바이트와 같고 헤더가 없다'
-    how: '보낸 바이트와 받은 바이트를 비교한다'
-  - claim: '1MB를 한 번에 쓰면 받는 쪽은 여러 번 나눠 읽는다'
+    test: NetworkLayersTest.connectionIsFourTuple
+  - claim: '1MB를 한 번에 쓰면 받는 쪽은 여러 번 나눠 읽고, 받은 바이트는 보낸 바이트와 같다'
     how: '읽은 횟수를 센다. 1번보다 많다는 것만 단정한다'
-  - claim: '없는 이름은 `UnknownHostException`, 아무도 듣지 않는 포트는 `ConnectException`(Connection refused)이다'
-    how: '`.invalid` 이름과 닫은 포트로 연결한다'
+    test: NetworkLayersTest.bigWriteArrivesInPieces
+  - claim: 'X-Forwarded-For를 스프링은 기본으로 쓰지 않고, forward-headers-strategy=framework면 getRemoteAddr()가 그 값이 된다'
+    how: '두 설정으로 앱을 띄워 같은 헤더로 요청한다'
+    test: NetworkLayersTest.forwardedForNeedsSetting
 sources:
   - 'TCP/IP 계층(응용, 전송, 인터넷, 링크): RFC 1122 https://www.rfc-editor.org/rfc/rfc1122.html'
   - 'OSI 참조 모델: ITU-T X.200 https://www.itu.int/rec/T-REC-X.200-199407-I/en'
