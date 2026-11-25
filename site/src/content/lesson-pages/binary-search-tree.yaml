@@ -1,8 +1,9 @@
-# 이진 탐색 트리 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 이진 탐색 트리
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/binary-search-tree.yaml에 있다.
 title: 이진 탐색 트리
+description: 이진 탐색 트리가 어떻게 값을 찾는지, 넣는 순서에 따라 왜 느려지는지, TreeMap은 그것을 어떻게 막는지, HashMap 대신 TreeMap은 언제 쓰는지. 네 가지 질문에 스스로 답할 수 있게 상품 가격 트리를 직접 만들고 재 보며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 20
 roadmap: K8
 type: 자바 실행
 prerequisites:
@@ -63,10 +64,16 @@ codes:
       if (n == null || n.key == key) {
         return n;
       }
-      return key < n.key
+      return [[key < n.key]]
           ? find(n.left, key)
           : find(n.right, key);
     }
+  treeA: |2-
+          4
+        /   \
+       2     6
+      / \   / \
+     1   3 5   7
   inorder: |-
     void print(Node n) {
       if (n == null) return;
@@ -74,6 +81,35 @@ codes:
       System.out.print(n.key + " ");
       print(n.right);
     }
+  inorderRun: |-
+    // 50, 30, 70, 20, 40 순서로 넣고
+    print(root);
+  heightRun: |-
+    for (int i = 1; i <= 10_000; i++) {
+      root = insert(root, i);
+    }
+    // 같은 1만 개를 섞어서도 넣어 본다
+  rotateBefore: |-
+    1
+     \
+      2
+       \
+        3
+  rotateAfter: |2-
+      2
+     / \
+    1   3
+  countGet: |-
+    Comparator<Integer> counting = (x, y) -> {
+      count.incrementAndGet();
+      return Integer.compare(x, y);
+    };
+    var map = new TreeMap<Integer, Integer>(
+        counting);
+    for (int i = 1; i <= 1_000_000; i++) {
+      map.put(i, i);
+    }
+    map.get(1_000_000);
   treeMap: |-
     TreeMap<Integer, String> byPrice =
         new TreeMap<>();
@@ -82,20 +118,51 @@ codes:
     byPrice.put(8_000, "컵받침");
     byPrice.put(27_000, "드리퍼");
 
-    byPrice.floorKey(30_000);
-    byPrice.subMap(10_000, 30_000);
+    byPrice.[[floorKey]](30_000);
+    byPrice.[[subMap]](10_000, 30_000);
   priceSet: |-
     record Product(String name, int price) {}
 
     Set<Product> products = new TreeSet<>(
         Comparator.comparingInt(
-            Product::price));
+            [[Product::price]]));
     products.add(new Product("머그컵", 12000));
     products.add(new Product("텀블러", 12000));
     System.out.println(products.size());
+  priceFixed: |-
+    Set<Product> products = new TreeSet<>(
+        Comparator.comparingInt(Product::price)
+            [[.thenComparing(Product::name)]]);
+  rateTable: |-
+    TreeMap<LocalDateTime, Integer> fee =
+        new TreeMap<>();
+    fee.put(LocalDateTime.parse(
+        "2026-01-01T00:00"), 3000);
+    fee.put(LocalDateTime.parse(
+        "2026-07-01T00:00"), 3500);
+
+    int now = fee.[[floorEntry]](
+        LocalDateTime.now()).getValue();
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/bst/BinarySearchTreeTest.java
+  treeMap: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  treeSet: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeSet.html
+  navigable: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/NavigableMap.html
 predict:
-  text: '같은 숫자 1~7을 두 순서로 빈 이진 탐색 트리에 넣어요. a는 4, 2, 6, 1, 3, 5, 7 순서, b는 1부터 7까지 차례로요. 뿌리부터 가장 깊은 노드까지의 노드 수(높이)는 각각 얼마일까요? 보기: 둘 다 3, a는 3이고 b는 7, 둘 다 7.'
-  answer: 'a는 3이고 b는 7이다. 차례로 넣으면 매번 가장 큰 값이라 오른쪽으로만 붙는다. 질문 2에서 밝힌다.'
+  title: 같은 숫자, 다른 순서
+  text: '같은 숫자 1~7을 두 순서로 빈 이진 탐색 트리에 넣어요. a는 4, 2, 6, 1, 3, 5, 7 순서, b는 1부터 7까지 차례로요. 뿌리부터 가장 깊은 노드까지의 노드 수(높이)는 각각 얼마일까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: same3
+      label: 둘 다 3
+    - value: diff
+      label: a는 3, b는 7
+    - value: same7
+      label: 둘 다 7
+  answer: diff
+  storageKey: bst-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 이진 탐색 트리는 어떻게 값을 찾나요?
@@ -112,6 +179,45 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 a 순서로 만든 트리에서 5를 찾으면 어느 노드들을 거치나 (4, 6, 5)'
       - '옮긴 상황: 빈 트리에 50, 30, 70, 20, 40을 차례로 넣었다. 코드 inorder로 출력하면 무엇이 나오나 (20 30 40 50 70)'
+    body:
+      - p: '**이진 탐색 트리**는 노드를 이어 만든 트리예요. 노드 하나는 키 하나와, 왼쪽 자식과 오른쪽 자식을 가리키는 참조를 가져요. 맨 위의 노드를 **뿌리**라고 해요.'
+      - p: '규칙은 하나예요. **어느 노드에서 보든 왼쪽 아래의 키는 모두 그 노드보다 작고, 오른쪽 아래의 키는 모두 커요.** 예측의 a 순서로 넣은 트리가 이 모양이에요.'
+      - code: treeA
+      - h3: 찾기는 작으면 왼쪽, 크면 오른쪽
+      - code: node
+        notes:
+          - mark: key < n.key
+            as: code
+            text: '찾는 값이 이 노드보다 작으면, 규칙에 따라 오른쪽 아래에는 있을 수 없어요. 왼쪽으로 내려가며 오른쪽을 통째로 버려요. 이진 탐색 레슨에서 가운데와 비교해 절반을 버린 것과 같아요. 노드가 `null`이면 그 값은 없어요.'
+      - p: '위 트리에서 5를 찾으면 4보다 크니 오른쪽 6으로, 6보다 작으니 왼쪽 5로 가서 찾아요. **4, 6, 5** 세 노드를 거쳐요.'
+      - p: '**넣기**도 같은 길로 내려가다가 빈 자리(`null`)를 만나면 거기에 새 노드를 붙여요. 정렬된 배열처럼 뒤의 원소를 밀지 않아요.'
+      - p: '그래서 찾기와 넣기의 비용은 **내려간 칸 수, 곧 트리의 높이**예요. 양쪽이 고르게 차 있으면 한 층 내려갈 때마다 남은 노드가 절반쯤 되니 높이는 log₂ n 남짓이에요. 노드 100만 개도 20층 남짓이에요.'
+      - h3: 왼쪽, 자기, 오른쪽 순서로 돌면 정렬돼요
+      - code: inorder
+      - p: '왼쪽 아래를 다 출력하고, 자기를 출력하고, 오른쪽 아래를 출력해요. 이것을 **중위 순회**라고 해요. 규칙 때문에 넣은 순서와 상관없이 정렬된 순서로 나와요.'
+      - ci:
+          key: inorder
+          label: 실제 출력 보기
+          source: BinarySearchTreeTest.inorderSorted
+          code: inorderRun
+      - p: '트리는 넣고 빼는 동안 **늘 정렬을 유지해요.** 무작위 순서로 0부터 999까지 넣고 돌아도 0부터 차례로 나오는 것을 테스트로 확인했어요.'
+      - more:
+          summary: '더 알아보기: 지우기의 세 경우'
+          body:
+            - ul:
+                - '**자식이 없으면** 그냥 떼어 내요.'
+                - '**자식이 하나면** 그 자식을 자기 자리로 올려요.'
+                - '**자식이 둘이면** 오른쪽 아래에서 가장 작은 노드(바로 다음 키)를 가져와 자기 자리에 두고, 그 노드를 원래 자리에서 지워요. 그 노드는 왼쪽 자식이 없어서 앞의 두 경우로 끝나요.'
+      - quiz:
+          q: '빈 트리에 50, 30, 70, 20, 40을 차례로 넣고 코드 inorder로 출력하면?'
+          options:
+            - '50 30 70 20 40'
+            - '20 30 40 50 70'
+            - '50 30 20 40 70'
+          answer: 2
+          explain: '중위 순회는 왼쪽, 자기, 오른쪽 순서로 돌아서 넣은 순서와 상관없이 정렬된 순서가 나와요.'
+      - next: '비용이 높이에 달렸어요. 그러면 높이는 늘 log₂ n 남짓일까요?'
+    recall: '뿌리에서 시작해 찾는 값이 노드보다 작으면 왼쪽, 크면 오른쪽으로 내려가요. 왼쪽 아래는 모두 작고 오른쪽 아래는 모두 크다는 규칙 덕분에 한쪽을 통째로 버려요. 넣기도 같은 길로 내려가 빈 자리에 붙여요. 비용은 트리의 높이만큼이고, 고르게 차 있으면 log₂ n 남짓이에요. 중위 순회하면 정렬된 순서가 나와요.'
   - id: q2
     title: 넣는 순서에 따라 트리는 어떻게 달라지나요?
     conclusion:
@@ -120,7 +226,7 @@ questions:
     says:
       - '예측의 답을 밝힌다. a 순서는 4가 뿌리, 2와 6이 그 아래, 1, 3, 5, 7이 맨 아래라 높이 3이다. b 순서는 1이 뿌리, 2가 1의 오른쪽, 3이 2의 오른쪽 ... 높이 7이다'
       - '같은 일곱 개인데 7을 찾는 비교가 a는 3번, b는 7번이다'
-      - '1부터 1만까지 차례로 넣은 트리와 무작위 순서로 넣은 트리의 높이를 직접 만든 트리로 재서 보인다. 하나는 1만이고 하나는 수십이다'
+      - '1부터 1만까지 차례로 넣은 트리와 무작위 순서로 넣은 트리의 높이를 직접 만든 트리로 재서 보인다. 하나는 1만이고 하나는 수십이다(테스트에서는 30)'
       - '정렬된 순서는 드물지 않다. 자동으로 늘어나는 주문 번호, 시각 순으로 쌓이는 로그는 늘 커지는 순서로 들어온다. 넣는 쪽이 순서를 고를 수 없으니, 트리가 스스로 높이를 지켜야 한다'
       - '깊이가 1만인 트리에서 코드 node의 `find`처럼 재귀로 내려가면 `StackOverflowError`가 날 수도 있다(K5)'
     widget:
@@ -129,6 +235,72 @@ questions:
     asks:
       - '본문의 예시: 빈 트리에 7, 6, 5, 4, 3, 2, 1 순서로 넣으면 높이는 얼마이고, 1을 찾을 때 비교는 몇 번인가 (7, 7번)'
       - '옮긴 상황: 균형을 맞추지 않는 이진 탐색 트리에 자동 증가 주문 번호를 키로 주문 n건을 넣는다. 새 주문 하나를 넣는 비용은 무엇인가 (O(n). 매번 가장 오른쪽 끝까지 내려간다)'
+    body:
+      - p: '처음 예측의 답은 **a는 3, b는 7**이에요. {{predict-result}} 두 순서를 골라 층마다 어떤 노드가 있는지 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 넣는 순서
+            options:
+              - {value: a, label: 'a: 4, 2, 6, 1, 3, 5, 7'}
+              - {value: b, label: 'b: 1, 2, 3, 4, 5, 6, 7'}
+          scenes:
+            a:
+              duo:
+                - label: 층마다 있는 노드
+                  rows:
+                    - {k: 1층, v: '4', mark: changed}
+                    - {k: 2층, v: '2, 6', mark: changed}
+                    - {k: 3층, v: '1, 3, 5, 7', mark: changed}
+                - label: 7을 찾을 때
+                  rows:
+                    - {k: 거치는 노드, v: '4 → 6 → 7'}
+                    - {k: 비교, v: '3번'}
+                    - {k: 높이, v: '3'}
+              verdict: '가운데 값 4가 먼저 들어가 뿌리가 되고, 양쪽이 고르게 찼어요. 높이 3이에요.'
+            b:
+              duo:
+                - label: 층마다 있는 노드
+                  rows:
+                    - {k: 1층, v: '1', mark: bad}
+                    - {k: 2층, v: '2', mark: bad}
+                    - {k: 3층, v: '3', mark: bad}
+                    - {k: 4층, v: '4', mark: bad}
+                    - {k: 5층, v: '5', mark: bad}
+                    - {k: 6층, v: '6', mark: bad}
+                    - {k: 7층, v: '7', mark: bad}
+                - label: 7을 찾을 때
+                  rows:
+                    - {k: 거치는 노드, v: '1 → 2 → 3 → 4 → 5 → 6 → 7', mark: bad}
+                    - {k: 비교, v: '7번', mark: bad}
+                    - {k: 높이, v: '7', mark: bad}
+              verdict: '새 값이 매번 가장 커서 오른쪽에만 붙었어요. 한 줄로 늘어선 연결 리스트와 같아요.'
+      - ci:
+          key: predict
+          label: 직접 만든 트리로 잰 실제 값 보기
+          source: BinarySearchTreeTest.insertOrderHeight
+          code: predict
+      - p: 'b 순서에서는 새 값이 늘 지금까지 중 가장 커서 오른쪽 끝에만 붙어요. 트리가 **한 줄**이 되고, 찾기는 처음부터 하나씩 보는 것과 같은 **O(n)**이 돼요. 일곱 개에서는 차이가 작지만, 1만 개로 늘려 보면 이래요.'
+      - ci:
+          key: height
+          label: 1만 개로 잰 실제 높이 보기
+          source: BinarySearchTreeTest.sortedVsRandom
+          code: heightRun
+      - p: '차례로 넣으면 높이 1만, 섞어서 넣으면 30이에요. 같은 데이터인데 찾는 비용이 300배 넘게 차이 나요.'
+      - h3: 정렬된 순서는 흔해요
+      - p: '자동으로 늘어나는 주문 번호, 시각 순으로 쌓이는 로그는 **늘 커지는 순서로 들어와요.** 넣는 쪽이 순서를 고를 수 없어요. 그러니 트리가 스스로 높이를 지켜야 해요.'
+      - muted: '깊이가 1만인 트리를 코드 node의 `find`처럼 재귀로 내려가면 호출 스택이 깊어져 `StackOverflowError`가 날 수도 있어요(재귀 레슨). 이 레슨의 테스트도 그래서 넣기와 높이 재기를 반복문으로 짰어요.'
+      - quiz:
+          q: '빈 트리에 7, 6, 5, 4, 3, 2, 1 순서로 넣었어요. 1을 찾을 때 비교는 몇 번일까요?'
+          options:
+            - '3번'
+            - '4번'
+            - '7번'
+          answer: 3
+          explain: '새 값이 매번 가장 작아 왼쪽에만 붙어서 높이 7의 한 줄이 돼요. 1은 맨 아래라 일곱 노드를 모두 거쳐요.'
+      - next: '자바의 `TreeMap`도 이진 탐색 트리예요. 주문 번호를 차례로 넣으면 똑같이 느려질까요?'
+    recall: '정렬된 순서로 넣으면 새 값이 늘 한쪽 끝에 붙어서 한 줄로 자라고, 높이가 원소 수와 같아져요. 그러면 연결 리스트와 같아져 찾기와 넣기가 O(n)이에요. 1만 개를 차례로 넣으면 높이 1만, 섞어 넣으면 30이었어요. 자동 증가 번호나 시각처럼 늘 커지는 데이터에서 흔히 생겨요.'
   - id: q3
     title: TreeMap은 한쪽으로 치우치는 것을 어떻게 막나요?
     conclusion:
@@ -138,10 +310,41 @@ questions:
       - '회전은 부모와 자식의 위아래를 바꾸면서 왼쪽은 작고 오른쪽은 크다는 규칙을 지키는 조작이다. 1, 2, 3 순서로 넣어 한 줄이 된 트리를 왼쪽으로 한 번 회전하면 2가 뿌리, 1과 3이 자식이 된다. 그림 두 장으로 보인다'
       - '레드-블랙 트리는 노드마다 빨강이나 검정을 칠하고 몇 가지 규칙(빨강 노드가 연달아 오지 않는다, 뿌리에서 맨 아래까지 검정 노드 수가 같다)을 지킨다. 규칙이 깨지면 색을 바꾸고 회전한다. 그 결과 가장 깊은 길이 가장 얕은 길의 두 배를 넘지 않는다. 규칙의 세부는 외우지 않아도 된다'
       - '자바의 `TreeMap`과 `TreeSet`이 이 트리다. API 문서에 적혀 있다'
-      - '1부터 100만까지 차례로 `TreeMap`에 넣은 뒤 `get` 한 번에 키 비교가 몇 번 일어나는지 세는 `Comparator`로 센다. 질문 2의 직접 만든 트리는 같은 순서에서 100만 번 가까이 비교하지만 `TreeMap`은 수십 번이다'
+      - '1부터 100만까지 차례로 `TreeMap`에 넣은 뒤 `get` 한 번에 키 비교가 몇 번 일어나는지 세는 `Comparator`로 센다. 질문 2의 직접 만든 트리는 같은 순서에서 100만 번 가까이 비교하지만 `TreeMap`은 수십 번이다(테스트에서는 37번)'
     asks:
       - '본문의 예시: 1부터 100만까지 차례로 넣은 `TreeMap`에서 `get` 한 번의 키 비교는 대략 몇 번 이하인가 (40번 남짓. 높이가 2 log₂(n + 1)을 넘지 않는다)'
       - '옮긴 상황: 시간 순으로 들어오는 로그를 시각을 키로 `TreeMap`에 담는다. 로그가 n개일 때 새 로그 하나를 넣는 비용은 무엇인가 (O(log n). 레드-블랙 트리가 높이를 맞춘다)'
+    body:
+      - p: '`TreeMap`은 **균형 트리**예요. 넣고 뺄 때마다 한쪽이 너무 깊어지면 노드를 **회전**시켜 높이를 다시 낮춰요.'
+      - h3: 회전은 규칙을 지키며 위아래를 바꿔요
+      - p: '1, 2, 3을 차례로 넣으면 한 줄이 돼요. 2를 위로 올리고 1을 2의 왼쪽으로 내리면(왼쪽 회전) 높이가 3에서 2로 줄어요.'
+      - code: rotateBefore
+      - code: rotateAfter
+      - p: '회전한 뒤에도 1은 2의 왼쪽, 3은 2의 오른쪽이라 **왼쪽은 작고 오른쪽은 크다는 규칙이 그대로예요.** 중위 순회도 여전히 1, 2, 3이에요. 규칙을 지키면서 모양만 바꾸는 조작이라 몇 번을 해도 찾기가 틀리지 않아요.'
+      - h3: 레드-블랙 트리는 언제 회전할지 정해 둬요
+      - p: '자바의 `TreeMap`과 `TreeSet`은 **레드-블랙 트리**예요([API 문서](link:treeMap)). 노드마다 빨강이나 검정을 칠하고 규칙 두 가지를 지켜요.'
+      - ul:
+          - '빨강 노드가 연달아 오지 않아요.'
+          - '뿌리에서 맨 아래 어디로 가든 지나는 검정 노드의 수가 같아요.'
+      - p: '넣거나 빼서 규칙이 깨지면 색을 바꾸고 회전해서 되돌려요. 그 결과 **가장 깊은 길이 가장 얕은 길의 두 배를 넘지 않고**, 높이는 2 log₂(n + 1)을 넘지 않아요. 색을 바꾸는 세부 규칙은 외우지 않아도 돼요. "회전으로 높이를 log n 수준에 묶어 둔다"가 핵심이에요.'
+      - h3: 차례로 100만 개를 넣어도
+      - p: '질문 2에서 직접 만든 트리는 차례로 넣으면 한 줄이 됐어요. `TreeMap`에 1부터 100만까지 차례로 넣고, 비교할 때마다 숫자를 세는 `Comparator`로 `get` 한 번의 비교를 셌어요.'
+      - ci:
+          key: treemap
+          label: 실제로 센 비교 횟수 보기
+          source: BinarySearchTreeTest.treeMapStaysBalanced
+          code: countGet
+      - p: '37번이에요. 2 log₂(100만 + 1)은 40쯤이라 그 안에 들어요. 같은 순서로 직접 만든 트리였다면 100만 번 가까이 비교했을 거예요. 그래서 `TreeMap`의 `get`, `put`, `remove`는 **어떤 순서로 넣어도 O(log n)**이에요.'
+      - quiz:
+          q: '시각을 키로 로그를 `TreeMap`에 담아요. 로그는 늘 시간 순으로 들어와요. 로그가 n개일 때 새 로그 하나를 넣는 비용은?'
+          options:
+            - 'O(1)'
+            - 'O(log n)'
+            - 'O(n)'
+          answer: 2
+          explain: '시간 순으로 들어와도 레드-블랙 트리가 회전으로 높이를 log n 수준에 묶어 둬서 O(log n)이에요. 균형을 맞추지 않는 트리라면 O(n)이었어요.'
+      - next: '`TreeMap`이 O(log n)이면 `HashMap`의 평균 O(1)보다 느려요. 그러면 `TreeMap`은 언제 쓸까요?'
+    recall: '넣고 뺄 때 한쪽이 깊어지면 노드를 회전시켜 높이를 다시 맞추는 균형 트리, 레드-블랙 트리를 써요. 회전은 왼쪽은 작고 오른쪽은 크다는 규칙을 지키며 위아래만 바꿔요. 그래서 어떤 순서로 넣어도 높이가 2 log₂(n + 1)을 넘지 않아요. 100만 개를 차례로 넣어도 `get`은 비교 37번이었어요.'
   - id: q4
     title: HashMap 대신 TreeMap은 언제 쓰나요?
     conclusion:
@@ -158,27 +361,119 @@ questions:
       - '본문의 예시: 코드 treeMap에서 `byPrice.ceilingKey(13_000)`은 무엇인가 (27000. 13,000 이상에서 가장 작은 키)'
       - '옮긴 상황: 회원 id로 회원을 찾기만 하고 순서는 필요 없는 캐시를 만든다. `HashMap`과 `TreeMap` 가운데 무엇을 고르고, 찾는 비용은 각각 무엇인가 (`HashMap`. 평균 O(1)과 O(log n))'
       - '실무 구역: 코드 priceSet은 무엇을 출력하나 (1. 가격이 같아 비교가 0이라 같은 원소로 본다)'
+    body:
+      - p: '`TreeMap`은 키가 늘 정렬되어 있어서 **순서에 관한 질문**에 바로 답해요. 가격을 키로 상품을 담아 봤어요.'
+      - code: treeMap
+        notes:
+          - mark: floorKey
+            as: code
+            text: '이 값 이하에서 가장 큰 키예요. 3만 원 이하에서 가장 비싼 상품의 가격 27,000이에요. 반대는 `ceilingKey`(이 값 이상에서 가장 작은 키)예요.'
+          - mark: subMap
+            as: code
+            text: '1만 원 이상 3만 원 미만의 상품만 담은 맵이에요. `headMap`(이 값 미만), `tailMap`(이 값 이상)도 있어요.'
+      - ci:
+          key: navigation
+          label: 실제 출력 보기
+          source: BinarySearchTreeTest.navigation
+      - p: '넣은 순서는 12,000, 35,000, 8,000, 27,000인데 출력은 가격 순이에요. 가장 작은 키 `firstKey()`와 가장 큰 키 `lastKey()`도 바로 꺼내요. 모두 트리를 한 번 내려가는 일이라 O(log n)이에요([NavigableMap API 문서](link:navigable)). `HashMap`으로 같은 일을 하려면 키를 모두 꺼내 정렬하거나 하나씩 비교해야 해서 O(n) 이상이에요.'
+      - h3: 키는 서로 비교될 수 있어야 해요
+      - p: '`TreeMap`은 키를 비교해서 자리를 정해요. 그래서 키가 `Comparable`을 구현했거나, `TreeMap`을 만들 때 `Comparator`를 넘겨야 해요. 비교할 수 없는 키를 넣으면 `ClassCastException`이 나요.'
+      - p: '**같은 키인지도 비교로 정해요.** `compareTo`나 `compare`가 0을 돌려주면 같은 키로 보고 값을 덮어써요. `equals`와 `hashCode`는 보지 않아요. 실무 구역의 실수가 여기서 나와요.'
+      - table:
+          head: ['', '`HashMap`', '`TreeMap`']
+          rows:
+            - ['찾기, 넣기, 지우기', '평균 O(1)', 'O(log n)']
+            - ['도는 순서', '정해지지 않음', '키 순서']
+            - ['가장 작은 키, 이 값 이하의 키, 범위', 'O(n) 이상', 'O(log n)']
+            - ['키의 조건', '`equals`와 `hashCode`', '`Comparable`이나 `Comparator`']
+            - ['null 키', '하나 넣을 수 있음', '넣을 수 없음']
+      - p: '순서가 필요 없으면 `HashMap`이에요. 순서로 묻는 일이 있으면 `TreeMap`이에요.'
+      - more:
+          summary: '더 알아보기: null 키'
+          body:
+            - p: '`TreeMap`에는 null 키를 넣을 수 없어요. 자리를 정하려면 다른 키와 비교해야 하는데 null은 비교할 수 없어서, `put(null, ...)`은 `NullPointerException`을 던져요. 테스트로 확인했어요.'
+      - quiz:
+          q: '코드 treeMap에서 `byPrice.ceilingKey(13_000)`은 무엇일까요?'
+          options:
+            - '12000'
+            - '27000'
+            - '35000'
+          answer: 2
+          explain: '`ceilingKey`는 이 값 이상에서 가장 작은 키예요. 13,000 이상인 키는 27,000과 35,000이고 그중 작은 것이 27,000이에요.'
+    recall: '키의 순서가 필요할 때 써요. 정렬된 순서로 돌기, `firstKey`, `floorKey`, `ceilingKey`, `subMap` 같은 순서와 범위의 질문을 O(log n)에 답해요. 대신 찾고 넣는 것은 `HashMap`의 평균 O(1)보다 느린 O(log n)이고, 키가 `Comparable`이거나 `Comparator`를 줘야 해요. 같은 키인지도 비교가 0인지로 정해요.'
 practice:
+  title: 실무에서는 이렇게 만나요
   says:
     - '시간이나 금액의 구간을 다룰 때 `TreeMap`을 쓴다. 시각을 키로 한 요금표에서 `floorEntry(지금)`로 지금 적용되는 요금을 찾고, 기간의 로그를 `subMap(시작, 끝)`으로 잘라 본다'
     - '흔한 실수: 코드 priceSet처럼 가격으로만 비교하는 `Comparator`로 `TreeSet`을 만든다. 가격이 같은 상품을 넣으면 비교가 0이라 같은 원소로 보고 넣지 않는다. 상품이 조용히 사라진다. 고친 코드: 가격이 같으면 겹치지 않는 값(상품 id나 이름)으로 한 번 더 비교한다. `comparingInt(Product::price).thenComparing(Product::name)`. 고치기 전후의 크기를 테스트로 남긴다'
     - '같은 실수가 `TreeMap`에서는 값을 덮어쓰는 것으로 나타난다. API 문서는 `Comparator`가 `equals`와 같은 판단을 하도록(0을 돌려주는 경우가 `equals`가 참인 경우와 같도록) 권한다'
     - 'DB의 인덱스도 정렬된 트리다. 다만 한 노드에 키를 수백 개 담아 디스크를 덜 읽는 B-트리다. B-트리(K13)와 인덱스와 실행계획(D7)에서 다룬다'
+  body:
+    - h3: 시각과 금액의 구간
+    - p: '요금이 날짜마다 바뀌는 요금표는 시작 시각을 키로 `TreeMap`에 담아요. 지금 적용되는 요금은 "지금 이하에서 가장 늦은 시작 시각"이에요.'
+    - code: rateTable
+      notes:
+        - mark: floorEntry
+          as: code
+          text: '지금 이하에서 가장 큰 키의 항목이에요. 7월 1일이 지났으면 3,500원, 아니면 3,000원이에요. 한 기간의 로그를 볼 때는 `subMap(시작, 끝)`으로 잘라요.'
+    - h3: '흔한 실수: 가격으로만 비교하는 TreeSet'
+    - p: '상품을 가격 순으로 보여 주려고 가격으로 비교하는 `TreeSet`을 만들었어요. 가격이 같은 상품 둘을 넣어요.'
+    - code: priceSet
+      notes:
+        - mark: Product::price
+          as: code
+          text: '가격만 비교해요. 머그컵과 텀블러는 가격이 같아서 비교가 0이에요.'
+    - ci:
+        key: priceSet
+        label: 고치기 전후의 실제 결과 보기
+        source: BinarySearchTreeTest.comparatorEquality
+    - p: '크기가 1이에요. 질문 4에서 본 대로 `TreeSet`은 비교가 0이면 **같은 원소로 보고 텀블러를 넣지 않았어요.** 예외도 경고도 없이 상품 하나가 사라졌어요. `TreeMap`이면 키는 머그컵으로 남고 값만 텀블러의 재고 3으로 덮여요. 둘 다 테스트로 확인했어요.'
+    - code: priceFixed
+      notes:
+        - mark: .thenComparing(Product::name)
+          as: code
+          text: '가격이 같으면 이름으로 한 번 더 비교해요. 겹치지 않는 값(상품 id가 가장 좋아요)으로 비교해야 서로 다른 상품이 0이 되지 않아요.'
+    - p: '[TreeMap API 문서](link:treeMap)는 비교가 0인 경우와 `equals`가 참인 경우가 같도록 `Comparator`를 만들라고 권해요. 그렇지 않으면 `TreeSet`이 `Set`의 약속(같은 원소는 하나만)을 `equals`가 아닌 비교로 지켜서, 위처럼 다른 상품이 같은 것으로 취급돼요.'
+    - h3: DB 인덱스도 정렬된 트리예요
+    - p: 'DB의 인덱스도 키를 정렬된 트리로 들고 있어서 범위 조건(`BETWEEN`, `<`)과 `ORDER BY`에 강해요. 다만 한 노드에 키를 수백 개 담아 디스크를 덜 읽는 B-트리예요. [인덱스와 실행계획](lesson:index-explain) 레슨에서 다뤄요.'
+interview:
+  question: HashMap과 TreeMap은 어떻게 다르고, TreeMap은 왜 느려지지 않나요?
+  model:
+    - label: 정의
+      text: TreeMap은 키를 이진 탐색 트리에 담은 맵입니다. 노드마다 왼쪽 아래는 작고 오른쪽 아래는 큰 키가 있어서, 키가 늘 정렬되어 있고 찾기는 높이만큼 내려가는 비용입니다.
+    - label: 원리
+      text: 균형을 맞추지 않는 트리는 정렬된 순서로 넣으면 한 줄이 되어 O(n)이 됩니다. TreeMap은 레드-블랙 트리라 넣고 뺄 때 회전으로 높이를 2 log(n + 1) 안에 묶어서 get, put, remove가 O(log n)입니다.
+    - label: 주의할 점
+      text: HashMap의 평균 O(1)보다 느리므로 키 순서, floorKey 같은 이웃 찾기, subMap 같은 범위가 필요할 때 씁니다. 같은 키인지를 compareTo로 정하므로, 가격으로만 비교하는 TreeSet에 같은 가격의 상품을 넣으면 하나가 사라집니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 날짜별 요금표를 TreeMap에 담아 floorEntry로 지금 적용되는 요금을 찾게 바꿨습니다.'
+verified: 이 레슨의 높이와 비교 횟수는 짐작이 아니라 자바 21에서 직접 만든 트리와 `TreeMap`을 돌려 센 값이에요. 코드가 바뀔 때마다 테스트([BinarySearchTreeTest](link:test))가 다시 돌아요.
+footer: '근거: `TreeMap`이 레드-블랙 트리이고 주요 연산이 log(n)이라는 것과 `Comparator`가 `equals`와 맞아야 한다는 권고는 [TreeMap API 문서](link:treeMap), `TreeSet`이 비교로 같은 원소를 정한다는 것은 [TreeSet API 문서](link:treeSet), floor와 ceiling과 subMap은 [NavigableMap API 문서](link:navigable). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict의 a 순서는 높이 3, b 순서는 높이 7이다'
-    how: '직접 만든 트리에 넣고 높이를 재귀로 잰다'
+    how: '직접 만든 트리에 넣고 높이를 잰다. a에서 5를 찾으면 4, 6, 5를 거친다'
+    test: BinarySearchTreeTest.insertOrderHeight
   - claim: '코드 inorder는 넣은 순서와 상관없이 정렬된 순서로 출력한다'
     how: '무작위 순서로 넣고 출력을 정렬한 것과 비교한다'
+    test: BinarySearchTreeTest.inorderSorted
   - claim: '1부터 1만까지 차례로 넣은 직접 만든 트리의 높이는 1만이고, 무작위로 넣으면 수십이다'
-    how: '반복문으로 넣고(재귀는 깊이 때문에 쓰지 않는다) 높이를 반복문으로 잰다. 무작위 쪽은 값을 남기고 100 미만인 것만 단정한다'
+    how: '반복문으로 넣고 높이를 반복문으로 잰다. 무작위(시드 42)는 30이었다'
+    test: BinarySearchTreeTest.sortedVsRandom
   - claim: '1부터 100만까지 차례로 넣은 `TreeMap`에서 `get` 한 번의 비교는 40번을 넘지 않는다'
-    how: '비교를 세는 `Comparator`로 `TreeMap`을 만들어 여러 키를 `get`하며 최댓값을 센다'
+    how: '비교를 세는 `Comparator`로 센다. 37번이었다'
+    test: BinarySearchTreeTest.treeMapStaysBalanced
   - claim: '코드 treeMap에서 `floorKey(30_000)`은 27000, `ceilingKey(13_000)`은 27000, `subMap(10_000, 30_000)`은 머그컵과 드리퍼다'
     how: '실행해 본다'
+    test: BinarySearchTreeTest.navigation
   - claim: '`Comparable`이 아닌 키를 `Comparator` 없이 넣으면 `ClassCastException`, null 키는 `NullPointerException`이다'
     how: '예외를 잡아 본다'
-  - claim: '코드 priceSet은 1을 출력하고, 이름으로 한 번 더 비교하면 2를 출력한다'
+    test: BinarySearchTreeTest.keyRequirements
+  - claim: '코드 priceSet은 1을 출력하고, 이름으로 한 번 더 비교하면 2를 출력한다. `TreeMap`은 처음 키를 남기고 값을 덮어쓴다'
     how: '두 `Comparator`로 실행한다'
+    test: BinarySearchTreeTest.comparatorEquality
+  - claim: '1, 2, 3 한 줄을 왼쪽으로 한 번 회전하면 2가 뿌리, 1과 3이 자식이고 중위 순회는 그대로다'
+    how: '직접 만든 노드로 회전한다'
+    test: BinarySearchTreeTest.rotation
 sources:
   - '`TreeMap`이 레드-블랙 트리이고 주요 연산이 log(n)이라는 것, `Comparator`와 `equals`의 일치 권고: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html'
   - '`TreeSet`이 `compareTo`나 `compare`로 원소가 같은지 정한다는 것: API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeSet.html'

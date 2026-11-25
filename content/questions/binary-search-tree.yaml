@@ -1,0 +1,249 @@
+# 이진 탐색 트리 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/binary-search-tree.yaml의 says).
+# 동작에 관한 정답은 verification의 BinarySearchTreeTest로 확인했다 (자바 21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: binary-search-tree
+  title: 이진 탐색 트리
+  unit: 자료구조와 알고리즘
+  order: 62
+concepts:
+  - key: core
+    name: 이진 탐색 트리
+coreQuestions:
+  - key: q1
+    text: "이진 탐색 트리는 어떻게 값을 찾나요?"
+  - key: q2
+    text: "넣는 순서에 따라 트리는 어떻게 달라지나요?"
+  - key: q3
+    text: "TreeMap은 한쪽으로 치우치는 것을 어떻게 막나요?"
+  - key: q4
+    text: "HashMap 대신 TreeMap은 언제 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: bst-find-path
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 빈 이진 탐색 트리에 4, 2, 6, 1, 3, 5, 7을 이 순서로 넣었어요. 5를 찾을 때 거치는 노드를 차례로 고르면 무엇일까요?
+    choices:
+      - 4, 2, 3, 5
+      - 4, 6, 5
+      - 1, 2, 3, 4, 5
+      - 4, 5
+    answer: "2"
+    explanation: |-
+      **4, 6, 5예요.** 뿌리 4보다 크니 오른쪽 6으로, 6보다 작으니 왼쪽 5로 가요.
+
+      - 어느 노드든 왼쪽 아래는 작고 오른쪽 아래는 커요
+      - 한 번 내려갈 때마다 나머지 한쪽을 통째로 버려요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  - key: bst-inorder
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 빈 이진 탐색 트리에 50, 30, 70, 20, 40을 차례로 넣은 뒤 뿌리로 아래 print를 불렀어요. 무엇이 출력될까요?
+    code: |-
+      void print(Node n) {
+        if (n == null) return;
+        print(n.left);
+        System.out.print(n.key + " ");
+        print(n.right);
+      }
+    choices:
+      - 50 30 70 20 40
+      - 20 30 40 50 70
+      - 50 30 20 40 70
+      - 20 40 30 70 50
+    answer: "2"
+    explanation: |-
+      **20 30 40 50 70이에요.** 왼쪽 아래, 자기, 오른쪽 아래 순서로 돌면(중위 순회) 정렬된 순서가 나와요.
+
+      - 왼쪽 아래는 모두 작고 오른쪽 아래는 모두 크다는 규칙 때문이에요
+      - 넣은 순서와 상관없어요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  # ── 질문 2 ──
+  - key: bst-descending
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 균형을 맞추지 않는 빈 이진 탐색 트리에 7, 6, 5, 4, 3, 2, 1 순서로 넣었어요. 1을 찾을 때 비교는 몇 번일까요?
+    choices:
+      - 1번
+      - 3번
+      - 4번
+      - 7번
+    answer: "4"
+    explanation: |-
+      **7번이에요.** 새 값이 매번 가장 작아 왼쪽에만 붙어서 높이 7의 한 줄이 돼요.
+
+      - 1은 맨 아래에 있어 일곱 노드를 모두 거쳐요
+      - 정렬된 순서로 넣으면 커지는 쪽이든 작아지는 쪽이든 한 줄이 돼요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  - key: bst-auto-increment
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 균형을 맞추지 않는 이진 탐색 트리에 자동 증가 주문 번호(1, 2, 3, ...)를 키로 주문 n건이 들어 있어요. 새 주문 하나를 넣는 비용은 무엇일까요?
+    choices:
+      - O(1)
+      - O(log n)
+      - O(n)
+      - O(n log n)
+    answer: "3"
+    explanation: |-
+      **O(n)이에요.** 번호가 늘 지금까지 중 가장 커서 트리가 오른쪽으로만 자란 한 줄이에요.
+
+      - 새 주문은 매번 가장 오른쪽 끝까지 내려가야 붙어요
+      - 연결 리스트의 끝에 붙이는 것과 같아요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  # ── 질문 3 ──
+  - key: bst-treemap-compares
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: TreeMap에 1부터 100만까지 차례로 put했어요. 이후 get 한 번에 일어나는 키 비교는 대략 몇 번 이하일까요?
+    choices:
+      - 1번
+      - 40번 남짓
+      - 약 50만 번
+      - 약 100만 번
+    answer: "2"
+    explanation: |-
+      **40번 남짓이에요.** TreeMap은 레드-블랙 트리라 높이가 2 log₂(n + 1)을 넘지 않아요.
+
+      - 넣고 뺄 때 회전으로 높이를 다시 맞춰요
+      - 테스트로 세어 보니 37번이었어요. 균형을 맞추지 않는 트리라면 100만 번 가까이예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  - key: bst-log-insert
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 시간 순으로 들어오는 로그를 시각을 키로 TreeMap에 담아요. 로그가 n개 있을 때 새 로그 하나를 넣는 비용은 무엇일까요?
+    choices:
+      - O(1)
+      - O(log n)
+      - O(n). 시간 순이라 한쪽으로 치우친다
+      - O(n log n)
+    answer: "2"
+    explanation: |-
+      **O(log n)이에요.** 시간 순으로 들어와도 레드-블랙 트리가 회전으로 높이를 log n 수준에 묶어 둬요.
+
+      - 회전은 왼쪽은 작고 오른쪽은 크다는 규칙을 지키며 위아래만 바꿔요
+      - 한쪽으로 치우쳐 O(n)이 되는 것은 균형을 맞추지 않는 트리예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  # ── 질문 4 ──
+  - key: bst-ceiling
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 가격을 키로 상품을 담은 TreeMap이에요. 마지막 줄의 결과는 무엇일까요?
+    code: |-
+      TreeMap<Integer, String> byPrice =
+          new TreeMap<>();
+      byPrice.put(12_000, "머그컵");
+      byPrice.put(35_000, "텀블러");
+      byPrice.put(8_000, "컵받침");
+      byPrice.put(27_000, "드리퍼");
+      byPrice.ceilingKey(13_000);
+    choices:
+      - "12000"
+      - "27000"
+      - "35000"
+      - "null"
+    answer: "2"
+    explanation: |-
+      **27000이에요.** ceilingKey는 이 값 이상에서 가장 작은 키예요.
+
+      - 13,000 이상인 키는 27,000과 35,000이고 그중 작은 것이에요
+      - 이 값 이하에서 가장 큰 키는 floorKey예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/NavigableMap.html
+  - key: bst-cache-choice
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회원 id로 회원을 찾기만 하고 순서는 전혀 필요 없는 캐시를 만들어요. 무엇을 고르고, 찾는 비용은 어떻게 다를까요?
+    choices:
+      - HashMap. 평균 O(1)이고 TreeMap은 O(log n)이다
+      - TreeMap. O(1)이고 HashMap은 O(log n)이다
+      - 둘 다 O(log n)이라 아무거나 쓴다
+      - TreeMap. 키가 정렬되어 있어 찾기가 더 빠르다
+    answer: "1"
+    explanation: |-
+      **HashMap이에요.** 순서가 필요 없으면 평균 O(1)인 HashMap이 빨라요.
+
+      - TreeMap은 트리를 내려가야 해서 O(log n)이에요
+      - TreeMap은 키 순서, floorKey, subMap처럼 순서로 묻는 일이 있을 때 골라요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
+  - key: bst-price-set
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 상품을 가격 순으로 보여 주려고 TreeSet을 만들었어요. 무엇이 출력될까요?
+    code: |-
+      record Product(String name, int price) {}
+
+      Set<Product> products = new TreeSet<>(
+          Comparator.comparingInt(
+              Product::price));
+      products.add(new Product("머그컵", 12000));
+      products.add(new Product("텀블러", 12000));
+      System.out.println(products.size());
+    choices:
+      - "2"
+      - "1"
+      - "0"
+      - ClassCastException이 난다
+    answer: "2"
+    explanation: |-
+      **1이에요.** 가격이 같아 비교가 0이라 TreeSet이 텀블러를 같은 원소로 보고 넣지 않아요.
+
+      - TreeSet과 TreeMap은 같은 원소인지를 equals가 아니라 비교로 정해요
+      - 가격이 같으면 상품 id나 이름처럼 겹치지 않는 값으로 한 번 더 비교해요(thenComparing)
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeSet.html
+  # ── 네 질문을 하나로 ──
+  - key: bst-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "HashMap과 TreeMap은 어떻게 다르고, TreeMap은 왜 느려지지 않나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **TreeMap은 키를 정렬된 채로 담는 레드-블랙 트리라, 순서가 필요할 때 O(log n)으로 쓰고 순서가 필요 없으면 HashMap을 써요.**
+
+      - **구조:** 왼쪽 아래는 작고 오른쪽 아래는 큰 이진 탐색 트리. 찾기는 높이만큼
+      - **치우침:** 균형을 맞추지 않으면 정렬된 순서로 넣을 때 한 줄이 되어 O(n)
+      - **균형:** 레드-블랙 트리가 회전으로 높이를 2 log(n + 1) 안에 묶는다
+      - **고르기:** 키 순서, floorKey, subMap이 필요하면 TreeMap, 아니면 평균 O(1)인 HashMap
+    checklist:
+      - 이진 탐색 트리의 규칙(왼쪽은 작고 오른쪽은 크다)을 말했다
+      - 정렬된 순서로 넣으면 한쪽으로 치우쳐 O(n)이 된다고 말했다
+      - TreeMap은 레드-블랙 트리라 회전으로 높이를 맞춰 O(log n)이라고 말했다
+      - TreeMap은 키 순서나 범위 질의가 필요할 때, HashMap은 평균 O(1)이라고 말했다
+      - TreeMap은 같은 키를 compareTo로 정한다고 말했다
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/TreeMap.html
