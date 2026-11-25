@@ -43,6 +43,9 @@ dependencies {
     testImplementation 'org.testcontainers:kafka'
     testImplementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
     testImplementation 'io.github.resilience4j:resilience4j-retry:2.2.0'
+
+    // 가비지 컬렉션 레슨: 크기가 정해진 캐시 (버전은 스프링 부트가 관리)
+    testImplementation 'com.github.ben-manes.caffeine:caffeine'
 }
 
 tasks.named('test') {

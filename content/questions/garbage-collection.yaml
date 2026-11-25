@@ -1,0 +1,255 @@
+# 가비지 컬렉션 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/garbage-collection.yaml의 says).
+# 동작에 관한 정답은 verification의 GarbageCollectionTest로 확인했다 (자바 21, HotSpot).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만든 문제다. 검수 전이라 draft다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: garbage-collection
+  title: 가비지 컬렉션
+  unit: 자바 언어
+  order: 51
+concepts:
+  - key: core
+    name: 가비지 컬렉션
+coreQuestions:
+  - key: q1
+    text: "가비지 컬렉터는 어떤 객체를 치우나요?"
+  - key: q2
+    text: "힙을 왜 세대로 나눠서 치우나요?"
+  - key: q3
+    text: "가비지 컬렉터가 일하는 동안 애플리케이션은 어떻게 되나요?"
+  - key: q4
+    text: "가비지 컬렉터가 있는데 왜 메모리 누수가 생기나요?"
+questions:
+  # ── 질문 1 ──
+  - key: gc-roots-handle
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 handle()을 한 번 부르고 끝났어요. temp가 가리키던 객체와 saved가 가리키던 객체 가운데 가비지 컬렉터가 치울 대상은 무엇일까요?
+    code: |-
+      static List<Order> history =
+          new ArrayList<>();
+
+      static void handle() {
+        Order temp = new Order();
+        Order saved = new Order();
+        history.add(saved);
+      }
+    choices:
+      - temp가 가리키던 객체만
+      - saved가 가리키던 객체만
+      - 둘 다
+      - 둘 다 아니다
+    answer: "1"
+    explanation: |-
+      **temp가 가리키던 객체만 치울 대상이에요.** 메서드가 끝나면 프레임과 함께 temp가 사라져 그 객체로 가는 길이 없어요.
+
+      - saved가 가리키던 객체는 static 필드 history의 리스트에서 닿아요
+      - 가비지 컬렉터는 GC 루트(지역 변수, static 필드)에서 닿는지를 봐요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/package-summary.html
+  - key: gc-cycle-three
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 노드 셋이 A는 B를, B는 C를, C는 A를 가리키는 고리를 이뤄요. 지역 변수 head가 A를 가리키다가 head = null;이 됐고, 이 노드들을 가리키는 다른 변수는 없어요. 치울 대상은 몇 개일까요?
+    choices:
+      - 0개. 서로를 가리키고 있다
+      - 1개. A만
+      - 2개. B와 C
+      - 3개. 셋 다
+    answer: "4"
+    explanation: |-
+      **셋 다 치울 대상이에요.** 루트에서 A, B, C로 가는 길이 없어요.
+
+      - 자바의 가비지 컬렉터는 몇 개가 가리키는지를 세지 않아요
+      - 서로를 가리키는 객체도 루트에서 닿지 않으면 치워져요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/package-summary.html
+  # ── 질문 2 ──
+  - key: gc-minor-eden
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 에덴에 객체 여섯이 있고 그 가운데 하나만 닿을 수 있어요. 마이너 GC가 돈 직후 에덴과 서바이버에 있는 객체는 각각 몇 개일까요?
+    choices:
+      - 에덴 5개, 서바이버 1개
+      - 에덴 0개, 서바이버 1개
+      - 에덴 1개, 서바이버 0개
+      - 에덴 0개, 서바이버 6개
+    answer: "2"
+    explanation: |-
+      **에덴 0개, 서바이버 1개예요.** 마이너 GC는 살아 있는 객체만 서바이버로 옮기고 에덴을 통째로 비워요.
+
+      - 살아 있는 것이 적어서 빨리 끝나요
+      - 여러 번 살아남으면 늙은 세대로 승격돼요
+    source: https://docs.oracle.com/en/java/javase/21/gctuning/garbage-collector-implementation1.html
+  - key: gc-old-grows
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 A는 요청마다 응답 DTO를 만들어 보내고 버려요. 서버 B는 요청마다 만든 객체를 static 리스트에 담아 둬요. 시간이 지날수록 늙은 세대의 사용량이 계속 오르는 쪽은 어디일까요?
+    choices:
+      - 서버 A
+      - 서버 B
+      - 둘 다
+      - 둘 다 아니다
+    answer: "2"
+    explanation: |-
+      **서버 B예요.** static 리스트가 가리키는 객체는 수집에서 계속 살아남아 늙은 세대로 승격되고 쌓여요.
+
+      - 서버 A의 DTO는 응답 뒤 닿을 수 없어서 대부분 젊은 세대에서 치워져요
+    source: https://docs.oracle.com/en/java/javase/21/gctuning/garbage-collector-implementation1.html
+  # ── 질문 3 ──
+  - key: gc-default-collector
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 자바 21을 CPU 8개, 메모리 16GB인 서버에서 GC 옵션 없이 실행했어요. 쓰이는 수집기는 무엇일까요?
+    choices:
+      - Serial
+      - Parallel
+      - G1
+      - ZGC
+    answer: "3"
+    explanation: |-
+      **G1이에요.** 자바 21의 기본 수집기는 G1이에요.
+
+      - JVM은 CPU가 2개 미만이거나 메모리가 약 2GB 미만이면 Serial을 골라요
+      - 이 서버는 그보다 커서 G1이 쓰여요
+    source: https://docs.oracle.com/en/java/javase/21/gctuning/ergonomics1.html
+  - key: gc-stw-latency
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 평소 응답 시간이 10ms인 서버에서 300ms짜리 stop-the-world 수집이 한 번 일어났어요. 그 구간이 시작될 때 처리 중이던 요청은 어떻게 될까요?
+    choices:
+      - 영향이 없다. GC는 다른 스레드에서 돈다
+      - 멈춘 시간만큼 늘어나 300ms 넘게 걸린다
+      - 요청이 실패한다
+      - 10ms 안에 끝나고 GC가 기다린다
+    answer: "2"
+    explanation: |-
+      **멈춘 시간만큼 늘어나요.** stop-the-world 동안에는 애플리케이션의 모든 스레드가 멈춰요.
+
+      - 요청이 실패하지는 않고 그만큼 늦게 응답해요
+      - 응답 시간이 가끔 튀는 이유 가운데 하나예요
+    source: https://docs.oracle.com/en/java/javase/21/gctuning/available-collectors.html
+  # ── 질문 4 ──
+  - key: gc-leak-map
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 RateCache 객체는 static 필드에서 닿아요. get을 서로 다른 키 100만 개로 한 번씩 부르고, 그 뒤 어떤 키도 다시 쓰지 않아요. GC가 돈 뒤 맵에 남은 항목은 몇 개일까요?
+    code: |-
+      class RateCache {
+        private final Map<String, Rate> cache =
+            new HashMap<>();
+
+        Rate get(String key) {
+          return cache.computeIfAbsent(
+              key, k -> load(k));
+        }
+      }
+    choices:
+      - 0개. 다시 쓰지 않으니 모두 치워진다
+      - 100만 개. 맵이 모두 가리키고 있다
+      - 마지막에 넣은 하나
+      - 늙은 세대로 간 것만 남는다
+    answer: "2"
+    explanation: |-
+      **100만 개가 모두 남아요.** 맵이 모든 값을 가리키고, 맵은 static 필드에서 닿아요.
+
+      - 가비지 컬렉터는 쓰이는지가 아니라 닿는지만 봐요
+      - 넣기만 하고 빼지 않는 캐시가 자바의 대표적인 메모리 누수예요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/package-summary.html
+  - key: gc-static-buffers
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: static final List<byte[]> buffers에 1MB 배열을 요청마다 하나씩 add하고 빼지 않아요. 어느 요청도 예전 배열을 읽지 않아요. 이 배열들은 가비지 컬렉터가 치울 대상일까요?
+    choices:
+      - 치울 대상이다. 아무도 읽지 않는다
+      - 치울 대상이 아니다. static 리스트에서 닿는다
+      - 늙은 세대로 가면 치울 대상이 된다
+      - 풀 GC가 돌면 치울 대상이 된다
+    answer: "2"
+    explanation: |-
+      **치울 대상이 아니에요.** static 리스트가 모든 배열을 가리켜서 루트에서 닿아요.
+
+      - 읽지 않아도 닿을 수 있으면 남아요
+      - 계속 쌓이면 결국 OutOfMemoryError가 나요
+    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/package-summary.html
+  - key: gc-search-cache-bean
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 아래 SearchCache 빈은 검색어마다 결과를 넣고 지우지 않아요. 검색어의 종류에는 끝이 없어요. 서버를 오래 켜 두면 큰 수집 뒤의 늙은 세대 사용량은 어떻게 될까요?
+    code: |-
+      @Component
+      class SearchCache {
+        private final Map<String, Result>
+            cache = new HashMap<>();
+
+        Result find(String query) {
+          return cache.computeIfAbsent(
+              query, q -> search(q));
+        }
+      }
+    choices:
+      - 수집 때마다 0에 가깝게 떨어진다
+      - 수집 뒤의 바닥이 돌 때마다 높아진다
+      - 일정하게 유지된다
+      - 빈이 요청마다 새로 만들어져 늘지 않는다
+    answer: "2"
+    explanation: |-
+      **수집 뒤의 바닥이 돌 때마다 높아져요.** 싱글톤 빈은 서버가 꺼질 때까지 살고, 빈의 맵이 모든 결과를 가리켜요.
+
+      - 빈의 필드가 가리키는 컬렉션은 static 컬렉션처럼 끝까지 닿아요
+      - 크기와 만료가 있는 캐시(예: Caffeine의 maximumSize, expireAfterWrite)로 고쳐요
+    source: https://github.com/ben-manes/caffeine/wiki/Eviction
+  # ── 면접 ──
+  - key: gc-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "가비지 컬렉션이 어떻게 동작하고, 자바에서 메모리 누수는 왜 생기는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **닿을 수 없는 객체를 세대별로 치우고, 닿을 수 있는 한 쓰지 않는 객체도 치우지 못해 누수가 생겨요.**
+
+      - **대상:** GC 루트(지역 변수, static 필드)에서 참조를 따라가 닿지 않는 객체. 서로를 가리켜도 치워진다
+      - **세대:** 새 객체는 에덴, 마이너 GC에서 살아남으면 서바이버, 오래 살면 늙은 세대로 승격
+      - **멈춤:** 수집의 일부 구간에서 모든 스레드가 멈춘다. 자바 21의 기본은 멈춤 목표를 맞추려는 G1
+      - **누수:** static 컬렉션이나 빈의 맵에 넣기만 하면 남는다. 캐시에는 크기와 만료, ThreadLocal은 finally에서 remove
+    checklist:
+      - GC 루트에서 닿지 않는 객체를 치운다고 말했다
+      - 세대를 나누는 이유(대부분 금방 죽는다)와 마이너 GC, 승격을 말했다
+      - stop-the-world와 응답 시간의 관계를 말했다
+      - 닿을 수 있으면 쓰지 않아도 남는 것이 누수라고 말했다
+      - 캐시의 크기와 만료, ThreadLocal 정리 같은 고치는 방법을 들었다
+    source: https://docs.oracle.com/en/java/javase/21/gctuning/available-collectors.html
