@@ -6,6 +6,7 @@
 # VmSize와 VmRSS에 관한 정답은 verification의 virtualmemory/VirtualMemoryTest로 확인했다 (자바 21, 리눅스 CI).
 # 스왑과 OOM 킬러는 리눅스 커널 문서가 근거다.
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -30,7 +31,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 프로세스 A와 B가 각자 가상 주소 0x1000에 값을 썼어요. 두 값은 어디에 있을까요?
     choices:
@@ -48,7 +49,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"같은 프로세스의 스레드도 스레드마다 페이지 테이블이 따로라서, 같은 객체의 주소를 써도 서로 다른 물리 메모리를 본다\""
     answer: X
@@ -62,7 +63,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: java -Xms512m -Xmx512m으로 띄운 JVM이 힙을 거의 쓰지 않은 채 /proc/self/status를 읽었어요. VmRSS(실제로 쓰는 물리 메모리)로 맞는 것은? (리눅스)
     choices:
@@ -81,7 +82,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 같은 JVM(java -Xms512m -Xmx512m)에 -XX:+AlwaysPreTouch를 더해 띄웠어요. 힙을 거의 쓰지 않아도 VmRSS는 어떻게 될까요? (리눅스)
     choices:
@@ -101,7 +102,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서버의 CPU 사용률은 낮은데 디스크 읽기와 쓰기가 계속 바쁘고, 자바의 GC 시간이 크게 늘었어요. 가장 먼저 의심할 것은?
     choices:
@@ -119,7 +120,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: ox
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "\"스왑이 없는 컨테이너에서 자바 프로세스의 실제 사용이 메모리 한도를 넘으면, JVM이 먼저 OutOfMemoryError를 로그에 남기고 끝난다\""
     answer: X
@@ -132,7 +133,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 메모리가 4GB인 서버에서 top을 보니 자바 프로세스의 VIRT가 6.1g, RES가 0.7g이에요. 이 프로세스가 지금 쓰는 물리 메모리는 대략 얼마일까요?
     choices:
@@ -151,7 +152,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "가상 메모리가 무엇이고 왜 쓰는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
