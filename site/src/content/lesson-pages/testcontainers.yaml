@@ -1,16 +1,17 @@
-# 통합 테스트와 Testcontainers (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 통합 테스트와 Testcontainers
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/testcontainers.yaml에 있다.
 title: 통합 테스트와 Testcontainers
+description: H2 대신 진짜 DB로 테스트하는 이유, Testcontainers가 테스트에 DB를 붙이는 방법, 컨테이너가 뜨는 횟수, 테스트끼리 데이터가 섞이지 않게 하는 법. 네 가지 질문에 스스로 답할 수 있게 상품 재고 쿼리로 배우는 대화형 레슨.
 unit: 테스트와 운영
+minutes: 20
 roadmap: T4
 type: 동작 확인
 prerequisites:
   - {slug: spring-test, title: 스프링 테스트}
 assume: '스프링 부트 3.5, Testcontainers 1.21, PostgreSQL 16, H2 2.3. `@SpringBootTest`와 `@DataJpaTest`, 테스트의 트랜잭션 롤백(스프링 테스트 레슨). 도커가 이미지로 컨테이너를 띄운다는 것은 한 문장으로 설명하고, 자세한 것은 도커와 컨테이너 레슨에서 다뤄요.'
-example: '상품 재고 리포지토리. 운영 DB는 PostgreSQL이고, 재고를 넣을 때 같은 상품이 있으면 수량만 더하는 `INSERT ... ON CONFLICT` 쿼리를 써요. 이 쿼리를 H2로 테스트할 때와 PostgreSQL 컨테이너로 테스트할 때를 비교해요.'
+example: '상품 재고 테이블. 운영 DB는 PostgreSQL이고, 재고를 넣을 때 같은 상품이 있으면 수량만 더하는 `INSERT ... ON CONFLICT` 쿼리를 써요. 이 쿼리를 H2로 테스트할 때와 PostgreSQL 컨테이너로 테스트할 때를 비교해요.'
 intro:
-  - '테스트는 다 초록색이었는데 배포하자마자 "syntax error at or near ON"이 나요. 테스트는 H2라는 메모리 DB에서 돌았고, 운영은 PostgreSQL이었어요. 테스트가 확인한 것은 운영과 다른 DB였던 거예요.'
+  - '테스트는 다 초록색이었는데 배포하자마자 쿼리 오류가 나요. 테스트는 H2라는 메모리 DB에서 돌았고, 운영은 PostgreSQL이었어요. 테스트가 확인한 것은 운영과 다른 DB였던 거예요.'
   - '스프링 개발자는 리포지토리와 쿼리를 진짜 DB로 확인해야 마음 놓고 배포할 수 있어요. Testcontainers는 테스트가 시작할 때 도커로 운영과 같은 DB를 띄우고, 끝나면 지워요. 컨테이너를 언제 띄우고 몇 번 띄울지, 테스트끼리 데이터를 어떻게 나눌지는 개발자가 정해야 해요.'
   - '이 레슨에서는 같은 쿼리를 H2와 PostgreSQL 컨테이너에서 돌려 결과를 비교하고, 컨테이너가 어떤 포트로 붙는지, 몇 번 뜨는지, 데이터가 다음 테스트로 새는지를 실제로 돌려서 확인해요.'
 covers:
@@ -44,35 +45,82 @@ covers:
     where: '실무에서는. CI 자체는 CI/CD와 무중단 배포(T6)'
   - topic: '이미지와 컨테이너가 무엇인지'
     where: '다루지 않음: 도커와 컨테이너(T5)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/testcontainers/TestcontainersTest.java
+  config: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/support/PostgresContainerConfig.java
+  tcJunit: https://java.testcontainers.org/test_framework_integration/junit_5/
+  tcManual: https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/
+  tcConfig: https://java.testcontainers.org/features/configuration/
+  bootTc: https://docs.spring.io/spring-boot/reference/testing/testcontainers.html
+  h2Compat: https://www.h2database.com/html/features.html#compatibility
+  sql: https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/executing-sql.html
 codes:
   upsert: |-
-    @Modifying
-    @Query(nativeQuery = true, value = """
-        INSERT INTO stock(product_id, qty)
-        VALUES (:id, :qty)
-        ON CONFLICT (product_id)
-        DO UPDATE SET qty = stock.qty + :qty
-        """)
-    void add(Long id, int qty);
+    INSERT INTO stock(product_id, qty)
+    VALUES (:id, :qty)
+    [[ON CONFLICT (product_id)]]
+    DO UPDATE SET qty = stock.qty
+        + EXCLUDED.qty
   predict: |-
     stockRepository.add(1L, 5);
     stockRepository.add(1L, 3);
     // H2(기본 모드)에서 돌리면?
+  upsertRun: |-
+    // 같은 테이블과 쿼리를 세 DB에서
+    add(1L, 5);
+    add(1L, 3);
+    select qty from stock
+        where product_id = 1;
+  h2OnlyRun: |-
+    CREATE TABLE coupon(
+      id BIGINT PRIMARY KEY,
+      code VARCHAR(20) NOT NULL,
+      created_at TIMESTAMP NOT NULL);
+
+    -- 문자열 열을 숫자와 비교
+    SELECT count(*) FROM coupon
+    WHERE id = 1 AND [[code = 100]];
+
+    -- H2에만 있는 함수
+    SELECT DATEADD('DAY', 7, created_at)
+    FROM coupon WHERE id = 1;
   serviceConnection: |-
     @TestConfiguration(proxyBeanMethods = false)
     class PostgresContainerConfig {
       @Bean
-      @ServiceConnection
+      [[@ServiceConnection]]
       PostgreSQLContainer<?> postgres() {
         return new PostgreSQLContainer<>(
             "postgres:16-alpine");
       }
     }
+  useConfig: |-
+    @DataJpaTest
+    @AutoConfigureTestDatabase(
+        replace = Replace.NONE)
+    @Import(PostgresContainerConfig.class)
+    class StockRepositoryTest { ... }
+  portRun: |-
+    var postgres = new PostgreSQLContainer<>(
+        "postgres:16-alpine");
+    postgres.start();
+    postgres.getJdbcUrl();
+    postgres.getMappedPort(5432);
   dynamic: |-
+    @Container
+    static PostgreSQLContainer<?> postgres =
+        new PostgreSQLContainer<>(
+            "postgres:16-alpine");
+
     @DynamicPropertySource
-    static void props(DynamicPropertyRegistry r) {
+    static void props(
+        DynamicPropertyRegistry r) {
       r.add("spring.datasource.url",
           postgres::getJdbcUrl);
+      r.add("spring.datasource.username",
+          postgres::getUsername);
+      r.add("spring.datasource.password",
+          postgres::getPassword);
     }
   perMethod: |-
     @Testcontainers
@@ -81,20 +129,64 @@ codes:
       PostgreSQLContainer<?> db =
           new PostgreSQLContainer<>(
               "postgres:16-alpine");
+
+      @Test void a() { ... }
+      @Test void b() { ... }
+      @Test void c() { ... }
+    }
+  shared: |-
+    @Container
+    [[static]] PostgreSQLContainer<?> db =
+        new PostgreSQLContainer<>(
+            "postgres:16-alpine");
+  singleton: |-
+    abstract class ContainerBase {
+      static final PostgreSQLContainer<?> DB =
+          new PostgreSQLContainer<>(
+              "postgres:16-alpine");
+
+      static {
+        DB.start();
+      }
     }
   leak: |-
     @Test @Order(1)
     void 상품을_넣는다() {
-      repo.add(1L, 5);
+      insert(1L, 5);
     }
 
     @Test @Order(2)
     void 재고가_없으면_0개() {
-      assertThat(repo.count()).isZero();
+      assertThat(count()).isZero();
     }
+  truncate: |-
+    @AfterEach
+    void truncate() {
+      jdbc.execute("TRUNCATE stock");
+    }
+  sqlAnnotation: |-
+    @Sql(scripts = "/truncate.sql",
+        executionPhase = AFTER_TEST_METHOD)
+  latest: |-
+    new PostgreSQLContainer<>(
+        "postgres:[[latest]]");
+  redis: |-
+    @Container
+    static GenericContainer<?> redis =
+        new GenericContainer<>("redis:7")
+            .withExposedPorts(6379);
 predict:
-  text: '코드 upsert는 PostgreSQL의 `ON CONFLICT`로, 같은 상품이 이미 있으면 수량을 더해요. 코드 predict처럼 이 쿼리를 테스트용 메모리 DB인 H2(기본 모드)에서 돌리면 어떻게 될까요? 보기: 수량 8로 PostgreSQL과 같다, 수량 3으로 덮어쓴다, 문법 오류로 실패한다.'
-  answer: '문법 오류로 실패한다. H2는 `ON CONFLICT`를 모른다. 반대로 H2에서만 통과하는 쿼리도 있다. 질문 1에서 밝힌다.'
+  title: H2에서 돌리면 어떻게 될까요?
+  text: '운영 DB는 PostgreSQL이고, 재고를 넣을 때 같은 상품이 이미 있으면 수량을 더하는 `ON CONFLICT` 쿼리를 써요. 이 리포지토리를 테스트용 메모리 DB인 H2(기본 모드)에서 돌리면 어떻게 될까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: same, label: '수량 8로 PostgreSQL과 같다'}
+    - {value: overwrite, label: 수량 3으로 덮어쓴다}
+    - {value: error, label: 오류로 실패한다}
+  answer: error
+  storageKey: tc-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 왜 H2 대신 진짜 DB로 테스트하나요?
@@ -103,17 +195,84 @@ questions:
       sub: '테스트가 확인해야 하는 것은 운영에서 도는 쿼리예요. 운영과 같은 DB로 테스트해야 그 확인이 의미가 있어요.'
     says:
       - '통합 테스트는 스프링 컨텍스트, DB 같은 여러 부품을 진짜로 붙여서 함께 확인한다. 목으로 바꾼 단위 테스트(T2)는 SQL이 맞는지, 매핑이 맞는지, 제약 조건이 걸리는지를 확인하지 못한다'
-      - '예측의 답을 밝힌다. 코드 upsert를 H2 2.3 기본 모드에서 돌리면 문법 오류, PostgreSQL 16 컨테이너에서는 수량 8이다. 두 실제 출력을 나란히 보인다'
-      - 'H2의 PostgreSQL 호환 모드(`MODE=PostgreSQL`)도 모든 문법을 받지는 않는다. 호환 모드에서 같은 쿼리를 돌린 결과를 보인다'
-      - '반대 방향: H2에서는 통과하고 PostgreSQL에서는 실패하는 예. 예를 들어 `GROUP BY`에 없는 열을 SELECT하는 쿼리나 문자열과 숫자를 비교하는 쿼리처럼, 하나를 테스트로 골라 보인다'
+      - '예측의 답을 밝힌다. 코드 upsert를 H2 2.3 기본 모드에서 돌리면 오류, PostgreSQL 16 컨테이너에서는 수량 8이다. 두 실제 출력을 나란히 보인다'
+      - 'H2의 PostgreSQL 호환 모드(`MODE=PostgreSQL`)도 모든 문법을 같게 받지는 않는다. 호환 모드에서 같은 쿼리를 돌린 결과를 보인다'
+      - '반대 방향: 문자열 열을 따옴표 없는 숫자와 비교하는 쿼리, H2에만 있는 함수 `DATEADD`는 H2에서 통과하고 PostgreSQL에서 실패한다. 테스트로 보인다. (설계서는 boolean 열을 1과 비교하는 예를 들었지만 H2 2.x도 그것을 거절해서 바꿨다)'
       - '잠금과 격리 수준 같은 동작도 DB마다 다르다. 동시성 테스트는 특히 운영 DB로 해야 한다(D9, D10)'
       - '더 알아보기: 테스트 피라미드. 빠른 단위 테스트를 많이, 진짜 부품을 붙이는 통합 테스트를 적당히, 화면부터 DB까지 잇는 끝에서 끝까지 테스트를 적게 둔다. 통합 테스트는 느린 만큼 단위 테스트가 못 잡는 것에 쓴다'
     widget:
       kind: toggle
-      note: '같은 쿼리 셋(`ON CONFLICT`, H2에서만 통과하는 쿼리, 둘 다 되는 평범한 SELECT)을 고르고, DB를 H2, H2 PostgreSQL 모드, PostgreSQL 16으로 바꿔 가며 실제 결과(성공과 결과값, 오류 메시지)를 보인다'
+      note: '같은 쿼리 둘(`ON CONFLICT`, 문자열 열과 숫자 비교)을 고르고, DB를 H2, H2 PostgreSQL 모드, PostgreSQL 16으로 바꿔 가며 실제 결과(성공과 결과값, 오류 메시지)를 보인다'
     asks:
-      - '본문의 예시: `ON CONFLICT ... DO UPDATE`를 쓰는 리포지토리를 H2(기본 모드)로만 테스트했다. 이 테스트가 운영(PostgreSQL)의 동작을 보장하나 (못 한다. H2에서는 문법 오류로 아예 돌지 않는다)'
+      - '본문의 예시: `ON CONFLICT ... DO UPDATE`를 쓰는 리포지토리를 H2(기본 모드)로만 테스트했다. 이 테스트가 운영(PostgreSQL)의 동작을 보장하나 (못 한다. H2에서는 오류로 아예 돌지 않는다)'
       - '옮긴 상황: 리포지토리를 목으로 바꾼 서비스 단위 테스트가 모두 통과했다. 엔티티의 열 이름을 잘못 매핑한 실수를 이 테스트가 잡나 (못 잡는다. SQL이 DB에 가지 않는다. 진짜 DB를 붙인 통합 테스트가 잡는다)'
+    body:
+      - p: '앞 레슨의 `@DataJpaTest`는 기본으로 설정의 DB 대신 **H2** 같은 내장 DB로 바꿔 띄워요. H2는 자바로 만든 작은 DB라 메모리에서 바로 떠서 편해요. 그런데 운영 DB가 PostgreSQL이라면 테스트는 무엇을 확인한 걸까요?'
+      - p: '재고를 넣는 쿼리예요. 같은 상품이 이미 있으면 새로 넣지 않고 수량을 더해요. PostgreSQL의 `ON CONFLICT` 문법이에요.'
+      - code: upsert
+        notes:
+          - mark: ON CONFLICT (product_id)
+            as: code
+            text: '같은 기본 키가 이미 있으면 INSERT 대신 아래의 UPDATE를 해요.'
+      - p: '예측의 답이에요. 같은 테이블과 같은 쿼리를 H2 기본 모드, H2의 PostgreSQL 호환 모드, PostgreSQL 16 컨테이너에서 돌려 봤어요.'
+      - ci:
+          key: upsert
+          label: 실제 결과 보기
+          source: TestcontainersTest.h2IsNotPostgres
+          code: upsertRun
+      - p: '{{predict-result}} H2는 `ON CONFLICT` 앞에서 문법 오류를 내며 쿼리를 **실행하지도 못했어요**. 운영의 PostgreSQL에서는 5 + 3으로 수량 8이 됐어요. H2에는 다른 DB의 문법을 흉내 내는 호환 모드가 있지만, 위 출력의 둘째 줄처럼 PostgreSQL 모드에서도 이 문법은 받지 않았어요. 호환 모드는 모든 문법을 같게 만들어 주지 못해요([H2 문서](link:h2Compat)).'
+      - h3: 반대로 H2에서만 통과하는 쿼리도 있어요
+      - p: '쿠폰의 `code`는 문자열 열이에요. 실수로 따옴표 없이 숫자 `100`과 비교하는 쿼리를 썼어요. 그리고 H2로 테스트하다 보면 H2에만 있는 함수 `DATEADD`를 쓰게 되기도 해요.'
+      - code: h2OnlyRun
+        notes:
+          - mark: code = 100
+            as: code
+            text: '문자열 열을 따옴표 없는 숫자와 비교했어요.'
+      - ci:
+          key: h2-only
+          label: 실제 결과 보기
+          source: TestcontainersTest.h2IsNotPostgres
+      - p: 'H2는 문자열을 숫자로 바꿔 비교해 통과시켰고, PostgreSQL은 문자열과 정수를 비교하는 연산자가 없다며 거절했어요. `DATEADD`도 H2에서는 7일 뒤를 돌려줬지만 PostgreSQL에는 그런 함수가 없어요. 두 테스트 모두 초록색인데 운영에서는 실패해요. **거짓 통과**예요.'
+      - p: '두 방향의 차이가 다 있어요. H2에서 통과해도 운영에서 실패하고, 운영에서는 되는 쿼리가 H2 테스트에서 실패하기도 해요. 문법만이 아니라 잠금과 격리 수준처럼 동시에 도는 트랜잭션의 동작도 DB마다 달라요(격리 수준과 이상 현상 레슨). 그래서 테스트가 확인해야 하는 **운영의 쿼리는 운영과 같은 DB로** 돌려요.'
+      - p: '이렇게 스프링 컨텍스트, DB처럼 여러 부품을 진짜로 붙여 함께 확인하는 테스트를 **통합 테스트**라고 해요. 저장소를 목으로 바꾼 단위 테스트는 SQL이 DB에 가지 않으니 쿼리 문법, 열 이름 매핑, 제약 조건을 확인하지 못해요. 그 빈자리를 통합 테스트가 채워요.'
+      - p: '세 DB와 두 쿼리를 골라 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 쿼리
+            options:
+              - {value: upsert, label: 'ON CONFLICT upsert'}
+              - {value: varchar, label: 'code = 100 (문자열 열)'}
+          scenes:
+            upsert:
+              duo:
+                - label: H2 기본 모드
+                  rows: [{k: 결과, v: 문법 오류, mark: bad}]
+                - label: PostgreSQL 16
+                  rows: [{k: 결과, v: '성공, 수량 8', mark: changed}]
+              verdict: '운영에서 도는 쿼리를 H2 테스트가 아예 돌리지 못해요.'
+            varchar:
+              duo:
+                - label: H2 기본 모드
+                  rows: [{k: 결과, v: '성공, 1행', mark: bad}]
+                - label: PostgreSQL 16
+                  rows: [{k: 결과, v: '오류 (character varying = integer 연산자 없음)', mark: changed}]
+              verdict: 'H2 테스트는 통과하는데 운영에서 실패해요. 거짓 통과예요.'
+      - more:
+          summary: '더 알아보기: 테스트 피라미드'
+          body:
+            - p: '빠른 단위 테스트를 가장 많이, 진짜 부품을 붙이는 통합 테스트를 그보다 적게, 화면부터 DB까지 잇는 끝에서 끝까지(E2E) 테스트를 가장 적게 둬요. 아래가 넓은 피라미드 모양이라 이렇게 불러요. 통합 테스트는 느린 만큼 단위 테스트가 잡지 못하는 것(SQL, 매핑, 설정)에 써요.'
+      - quiz:
+          q: '`ON CONFLICT ... DO UPDATE`를 쓰는 리포지토리를 H2 기본 모드로만 테스트했어요. 이 테스트가 운영(PostgreSQL)의 동작을 보장할까요?'
+          options:
+            - 보장한다. SQL은 표준이다
+            - 못 한다. H2에서는 이 쿼리가 오류로 돌지도 않는다
+            - 호환 모드를 켜지 않아도 결과가 같다
+          answer: 2
+          explain: 'H2는 운영 DB와 다른 DB예요. 운영의 쿼리는 운영과 같은 DB로 확인해요.'
+      - next: '그럼 테스트마다 PostgreSQL을 어떻게 띄울까요? 개발자 PC마다 DB를 깔아야 할까요?'
+    recall: 'H2는 운영 DB와 다른 DB라서 SQL 문법, 함수, 타입 변환, 잠금 동작이 달라요. PostgreSQL의 `ON CONFLICT` upsert는 H2에서 (PostgreSQL 모드로도) 돌지 않고, 문자열 열을 숫자와 비교하는 쿼리나 `DATEADD`는 H2에서만 통과해요. 그래서 H2 테스트는 운영의 동작을 보장하지 못하고 거짓 통과도 만들어요. 운영의 쿼리는 운영과 같은 DB를 붙인 통합 테스트로 확인해요.'
   - id: q2
     title: Testcontainers는 테스트에 DB를 어떻게 붙이나요?
     conclusion:
@@ -129,6 +288,40 @@ questions:
     asks:
       - '본문의 예시: `PostgreSQLContainer`로 띄운 DB에 테스트가 붙는 호스트 포트는 5432인가 (아니다. 임의 포트다. `getMappedPort(5432)`나 `getJdbcUrl()`로 읽는다)'
       - '옮긴 상황: 동료의 PC에 PostgreSQL 14가 깔려 있고 내 PC에는 16이 있다. Testcontainers로 `postgres:16-alpine`을 쓰는 테스트는 두 PC에서 어느 버전으로 도나 (둘 다 16. 이미지가 버전을 정한다)'
+    body:
+      - p: '**Testcontainers**는 테스트 코드에서 도커 컨테이너를 띄우는 라이브러리예요. 도커는 프로그램이 설치된 틀(이미지)로 격리된 프로세스(컨테이너)를 띄우는 도구예요. 자세한 것은 도커와 컨테이너 레슨에서 봐요. 여기서는 "PostgreSQL 16이 깔린 틀로 DB를 하나 띄운다"로 충분해요.'
+      - p: '이 저장소의 레슨 테스트가 실제로 쓰는 설정이에요([PostgresContainerConfig](link:config)).'
+      - code: serviceConnection
+        notes:
+          - mark: '@ServiceConnection'
+            as: anno
+            text: '컨테이너의 JDBC URL, 사용자, 비밀번호를 스프링의 DB 연결 정보로 넘겨요.'
+      - code: useConfig
+      - p: '컨테이너를 빈으로 두면 스프링 컨텍스트가 뜰 때 컨테이너가 함께 떠요. `@ServiceConnection`(스프링 부트 3.1부터)은 그 컨테이너의 접속 정보를 `spring.datasource.url` 같은 설정 대신 쓰게 해 줘요. `@DataJpaTest`에는 `replace = NONE`을 줘서 내장 DB로 바꾸지 않게 해요.'
+      - h3: 포트는 매번 달라요
+      - p: '컨테이너를 하나 띄워 접속 정보를 찍어 봤어요.'
+      - ci:
+          key: port
+          label: 실제 출력 보기
+          source: TestcontainersTest.containerUsesRandomHostPort
+          code: portRun
+      - ul:
+          - '**포트:** 컨테이너 안의 PostgreSQL은 늘 5432로 듣지만, 내 PC(호스트)에서는 **비어 있는 아무 포트**로 열려요. 내 PC에 이미 PostgreSQL이 5432로 떠 있거나, 테스트 여러 개가 동시에 컨테이너를 띄워도 부딪치지 않게 하려는 거예요. 그래서 접속 정보는 코드에서 `getJdbcUrl()`로 읽어 넘겨요.'
+          - '**버전:** 이미지 태그(`postgres:16-alpine`)가 버전을 정해요. 누구의 PC에서 돌려도, CI에서 돌려도 같은 PostgreSQL 16이에요. PC에 DB를 깔 필요도 없어요.'
+          - '**기다리기:** Testcontainers는 DB가 접속을 받을 준비가 될 때까지 기다린 뒤 테스트를 시작해요. 그래서 컨테이너를 띄우는 데 몇 초가 걸려요.'
+          - '**지우기:** 테스트 JVM이 끝나면 Ryuk라는 작은 정리 컨테이너가 남은 컨테이너를 지워요. 테스트가 중간에 죽어도 컨테이너가 쌓이지 않아요([Testcontainers 문서](link:tcConfig)).'
+      - p: '스프링 부트 3.1 전에는 `@DynamicPropertySource`로 접속 정보를 직접 넘겼어요. 오래된 프로젝트에서 만나는 모양이에요.'
+      - code: dynamic
+      - quiz:
+          q: 'Testcontainers의 `PostgreSQLContainer`로 띄운 DB에 테스트가 붙는 호스트 포트는 무엇일까요?'
+          options:
+            - 늘 5432
+            - '비어 있는 임의 포트. `getJdbcUrl()`로 읽는다'
+            - application.yml에 적은 포트
+          answer: 2
+          explain: '컨테이너 안은 5432지만 호스트에서는 임의 포트로 열려서, 접속 정보를 코드에서 읽어 넘겨요.'
+      - next: '컨테이너를 띄우는 데 몇 초가 걸린다면, 테스트마다 띄우면 어떻게 될까요?'
+    recall: 'Testcontainers는 테스트가 시작할 때 도커로 운영과 같은 버전의 DB 컨테이너를 띄우고, 접속을 받을 준비가 될 때까지 기다려요. 컨테이너의 5432 포트는 호스트의 임의 포트로 열려서, `@ServiceConnection`(예전에는 `@DynamicPropertySource`)이 그 접속 정보를 스프링에 넘겨요. 테스트가 끝나면 Ryuk가 컨테이너를 지워요.'
   - id: q3
     title: 컨테이너는 언제 몇 번 띄우나요?
     conclusion:
@@ -139,17 +332,47 @@ questions:
       - '같은 필드를 static으로 바꾸면 클래스의 모든 테스트가 컨테이너 하나를 쓴다. 컨테이너 ID가 셋 모두 같다'
       - '코드 serviceConnection처럼 스프링 빈으로 두면 컨텍스트와 같이 뜨고 같이 닫힌다. 스프링의 컨텍스트 캐시(T3 질문 4) 덕분에 설정이 같은 테스트 클래스는 컨테이너도 같이 쓴다'
       - '여러 클래스가 하나를 쓰는 다른 방법: static 블록에서 `start()`만 하고 멈추지 않는 싱글톤 컨테이너. JVM이 끝날 때 Ryuk가 지운다'
-      - '세 방식에서 테스트 셋을 돌리는 데 걸린 시간을 실제 출력으로 비교한다'
+      - '두 방식에서 테스트 셋을 돌리는 데 걸린 시간을 실제 출력으로 비교한다'
     asks:
       - '본문의 예시: 코드 perMethod의 클래스에 테스트 메서드가 4개 있다. 컨테이너는 몇 번 뜨나 (4번. 인스턴스 필드는 메서드마다 띄운다)'
       - '옮긴 상황: 테스트 클래스 다섯이 모두 같은 `@Import(PostgresContainerConfig.class)`와 같은 설정의 `@SpringBootTest`다. 컨테이너는 몇 번 뜨나 (한 번. 컨텍스트가 캐시되어 같은 빈을 쓴다)'
+    body:
+      - p: 'JUnit 5와 함께 쓸 때는 클래스에 `@Testcontainers`, 컨테이너 필드에 `@Container`를 붙여요. 그러면 JUnit이 테스트 전에 컨테이너를 띄우고 끝나면 멈춰요. 이때 **필드가 인스턴스 필드인지 static인지**가 띄우는 횟수를 정해요.'
+      - code: perMethod
+      - p: 'JUnit은 테스트 메서드마다 테스트 클래스의 객체를 새로 만들어요. 그래서 인스턴스 필드의 컨테이너는 메서드마다 새로 떠요. 같은 필드를 static으로 바꾸면 클래스에 하나라서 모든 메서드가 함께 써요.'
+      - code: shared
+        notes:
+          - mark: static
+            as: code
+            text: '클래스에 하나라서 테스트 메서드들이 컨테이너 하나를 함께 써요.'
+      - p: '두 클래스의 테스트 메서드 셋에서 각자 본 컨테이너 ID와 걸린 시간이에요.'
+      - ci:
+          key: lifecycle
+          label: 실제 출력 보기
+          source: TestcontainersTest.containerLifecycleFollowsField
+      - p: '인스턴스 필드는 컨테이너 셋을 차례로 띄우고 멈추느라 시간이 몇 배 걸렸어요. 테스트 메서드가 100개면 컨테이너를 100번 띄워요.'
+      - h3: 여러 클래스가 하나를 같이 쓰기
+      - ul:
+          - '**스프링 빈으로 두기.** 질문 2의 `PostgresContainerConfig`처럼 컨테이너를 빈으로 두면 컨텍스트와 같이 뜨고 닫혀요. 스프링 테스트 레슨에서 본 **컨텍스트 캐시** 덕분에, 설정이 같은 테스트 클래스는 컨텍스트와 그 안의 컨테이너를 함께 다시 써요. 이 저장소의 레슨 테스트들이 이렇게 해요.'
+          - '**싱글톤 컨테이너.** 부모 클래스의 static 블록에서 `start()`만 하고 멈추지 않아요. 그 클래스를 상속한 모든 테스트가 JVM이 끝날 때까지 컨테이너 하나를 써요. 끝나면 Ryuk가 지워요([Testcontainers 문서](link:tcManual)).'
+      - code: singleton
+      - quiz:
+          q: '`@Container`를 인스턴스 필드에 둔 테스트 클래스에 테스트 메서드가 4개 있어요. 컨테이너는 몇 번 뜰까요?'
+          options:
+            - 한 번
+            - 4번
+            - 0번. 스프링이 띄운다
+          answer: 2
+          explain: 'JUnit은 메서드마다 테스트 객체를 새로 만들어서 인스턴스 필드의 컨테이너도 메서드마다 새로 떠요.'
+      - next: '컨테이너 하나를 여러 테스트가 같이 쓰면 DB도 같이 써요. 앞 테스트가 넣은 데이터는 어떻게 될까요?'
+    recall: '`@Container`를 인스턴스 필드에 두면 JUnit이 테스트 메서드마다 컨테이너를 새로 띄우고, static 필드에 두면 클래스에 한 번 띄워요. 컨테이너를 스프링 빈으로 두면 컨텍스트와 함께 뜨고 컨텍스트 캐시 덕분에 설정이 같은 테스트 클래스끼리 같이 써요. 부모 클래스의 static 블록에서 띄우는 싱글톤 컨테이너도 있어요. 띄우는 데 몇 초가 걸리니 하나를 같이 쓰게 둬요.'
   - id: q4
     title: 테스트끼리 데이터가 섞이지 않게 하려면 어떻게 하나요?
     conclusion:
       lead: '컨테이너를 같이 쓰면 DB도 같이 쓰니, 앞 테스트가 넣은 데이터가 뒤 테스트에 남아요. 테스트마다 데이터를 되돌리거나 지워야 해요.'
-      sub: '롤백이 가장 쉽지만 T3에서 본 대로 운영과 다르게 돌 수 있어요. 커밋까지 확인해야 하는 테스트는 끝나고 테이블을 비워요.'
+      sub: '롤백이 가장 쉽지만 스프링 테스트 레슨에서 본 대로 운영과 다르게 돌 수 있어요. 커밋까지 확인해야 하는 테스트는 끝나고 테이블을 비워요.'
     says:
-      - '코드 leak. 트랜잭션 없는 `@SpringBootTest`에서 첫 테스트가 넣은 재고가 둘째 테스트에 남아 실패한다. 순서를 바꾸면 통과한다. 순서에 따라 결과가 달라지는 테스트가 가장 고치기 어렵다. 실제 출력을 보인다'
+      - '코드 leak. 트랜잭션 없는 테스트에서 첫 테스트가 넣은 재고가 둘째 테스트에 남아 실패한다. 순서를 바꾸면 통과한다. 순서에 따라 결과가 달라지는 테스트가 가장 고치기 어렵다. 실제 출력을 보인다'
       - '방법 하나: 테스트에 `@Transactional`. 끝나면 롤백된다. 지연 로딩과 커밋 시점이 운영과 달라지는 한계는 T3 질문 3에서 봤다'
       - '방법 둘: 테스트 전후에 비우기. `@Sql(scripts = "/truncate.sql", executionPhase = AFTER_TEST_METHOD)`나 `@AfterEach`에서 `TRUNCATE`를 한다. 커밋까지 운영처럼 돈다. 테이블이 많으면 느려진다'
       - '방법 셋: 테스트마다 겹치지 않는 키(상품 id, 이메일)를 쓴다. 비우지 않아도 서로 보지 않는다. 전체 수를 세는 테스트에는 쓸 수 없다'
@@ -157,26 +380,88 @@ questions:
     asks:
       - '본문의 예시: 코드 leak의 두 테스트 순서를 바꾸면 결과는 (둘 다 통과한다. 비어 있는 상태에서 세고 나서 넣는다)'
       - '옮긴 상황: 주문 생성 API를 `RANDOM_PORT`로 띄워 HTTP로 부르는 테스트에 `@Transactional`을 붙였다. 테스트가 끝나면 주문 행이 지워지나 (지워지지 않는다. 서버 쪽 처리는 다른 스레드의 다른 트랜잭션이라 커밋된다)'
+    body:
+      - p: '컨테이너 하나를 여러 테스트가 같이 쓰면 DB도 같이 써요. 트랜잭션 없이 커밋하는 테스트 둘이에요.'
+      - code: leak
+      - p: '같은 두 테스트를 순서만 바꿔 돌려 봤어요. 셋째 줄은 아래에서 볼 고친 방법이에요.'
+      - ci:
+          key: leak
+          label: 실제 결과 보기
+          source: TestcontainersTest.dataLeaksBetweenTests
+      - p: '넣는 테스트가 먼저 돌면 그 재고가 DB에 남아서, 뒤의 "재고가 없으면 0개" 테스트가 1개를 보고 **실패**해요. 순서를 바꾸면 둘 다 통과해요. 테스트 하나만 돌리면 늘 통과하고 전체를 돌릴 때만 가끔 실패하니, 이런 테스트가 가장 고치기 어려워요. 테스트는 서로 기대지 않고 어떤 순서로 돌아도 같은 결과를 내야 해요.'
+      - h3: 데이터를 나누는 세 가지 방법
+      - table:
+          head: [방법, 하는 일, 한계]
+          rows:
+            - ['테스트에 `@Transactional`', '끝나면 롤백해요. 가장 쉬워요', '지연 로딩과 flush가 운영과 달라져요(스프링 테스트 레슨). 서버 스레드처럼 다른 트랜잭션에서 한 일은 남아요']
+            - ['테스트마다 비우기', '`@AfterEach`에서 `TRUNCATE`하거나 `@Sql`로 지우는 SQL을 돌려요. 커밋까지 운영처럼 돌아요', '테이블이 많으면 느려지고, 비울 테이블을 챙겨야 해요']
+            - ['겹치지 않는 키', '테스트마다 다른 상품 id, 이메일을 써서 서로 보지 않아요', '"전체 몇 건" 같은 테스트에는 쓸 수 없어요']
+      - p: '코드 leak을 둘째 방법으로 고쳤어요. 테스트가 끝날 때마다 테이블을 비워요.'
+      - code: truncate
+      - p: '실제 결과의 셋째 줄이에요. 넣는 테스트가 먼저 돌아도 끝나면 비워지니, 순서와 상관없이 통과해요. 스프링에서는 지우는 SQL 파일을 `@Sql`로 걸어도 돼요([스프링 문서](link:sql)).'
+      - code: sqlAnnotation
+      - quiz:
+          q: '트랜잭션 없이 커밋하는 테스트 둘이 같은 DB를 써요. "상품을 넣는다"가 먼저, "재고가 없으면 0개"가 나중에 돌아요. 결과는?'
+          options:
+            - 둘 다 통과한다
+            - '"재고가 없으면 0개"가 실패한다'
+            - '"상품을 넣는다"가 실패한다'
+          answer: 2
+          explain: '앞 테스트가 커밋한 재고가 남아서 뒤 테스트가 1개를 봐요. 테스트마다 데이터를 지워야 해요.'
+    recall: '컨테이너를 같이 쓰면 DB도 같이 써서, 앞 테스트가 커밋한 데이터가 뒤 테스트에 남아 순서에 따라 결과가 달라져요. 나누는 방법은 셋이에요. 테스트에 `@Transactional`을 붙여 롤백하기(쉽지만 운영과 다르게 돌 수 있음), `@AfterEach`의 `TRUNCATE`나 `@Sql`로 비우기(운영처럼 커밋까지 돌지만 느려질 수 있음), 테스트마다 겹치지 않는 키 쓰기예요.'
 practice:
+  title: 실무에서는 이렇게 써요
   says:
     - '이 저장소의 실제 설정(`support/PostgresContainerConfig`)과 레슨 테스트가 쓰는 모양을 보인다: `@DataJpaTest`, `@AutoConfigureTestDatabase(replace = NONE)`, `@Import(PostgresContainerConfig.class)`. `replace = NONE`이 없으면 `@DataJpaTest`가 DB를 내장 DB로 바꾸려 한다'
     - '흔한 실수 하나: 이미지 태그를 `postgres:latest`로 둔다. 새 버전이 나오면 어느 날 테스트가 다른 DB로 돈다. 고친 코드: 운영과 같은 버전(`postgres:16-alpine`)으로 고정한다 (Testcontainers 문서 근거)'
     - '흔한 실수 둘: 질문 3의 인스턴스 필드 `@Container`를 그대로 둬 테스트 메서드마다 컨테이너가 뜬다. 고친 코드: static 필드나 스프링 빈으로 바꾼다'
     - '같은 방식으로 Redis(`GenericContainer("redis:7")`)와 Kafka(`KafkaContainer`)도 띄운다. 이 저장소의 Redis, Kafka 레슨이 그렇게 테스트한다'
     - 'CI에서 돌리려면 실행기에 도커가 있어야 한다. 깃허브 액션의 `ubuntu-latest`에는 도커가 있어 이 저장소의 `Verify lessons`가 그대로 돈다. 로컬에서는 도커 데스크톱을 켜 둔다'
+  body:
+    - p: '이 저장소의 레슨 테스트는 질문 2의 설정(`PostgresContainerConfig`)을 `@Import`해서 써요. 스프링 테스트 레슨의 테스트도 그랬어요. 설정이 같으니 컨텍스트와 컨테이너를 테스트 클래스들이 함께 써요.'
+    - h3: '흔한 실수: 이미지 태그를 latest로 둔다'
+    - code: latest
+      notes:
+        - mark: latest
+          as: code
+          text: 'PostgreSQL의 새 버전이 나오는 날 테스트가 다른 DB로 돌아요.'
+    - p: '`latest`는 "지금 가장 새 버전"이라 PostgreSQL 17이 나오면 어느 날부터 테스트가 17에서 돌아요. 운영은 아직 16이라면 질문 1의 문제가 버전 사이에서 다시 생겨요. 고친 코드는 운영과 같은 버전으로 고정하는 거예요: `postgres:16-alpine`. 운영 DB를 올릴 때 이 태그도 함께 올려요([Testcontainers 문서](link:tcJunit)).'
+    - h3: '흔한 실수: 인스턴스 필드의 @Container'
+    - p: '질문 3의 실제 출력처럼 테스트 메서드마다 컨테이너가 떠서 느려져요. static 필드로 바꾸거나 스프링 빈으로 둬요.'
+    - h3: DB 말고도 띄워요
+    - p: 'Redis, Kafka처럼 테스트에 필요한 다른 서버도 같은 방식으로 띄워요. 이 저장소의 Redis와 Kafka 레슨 테스트가 그렇게 해요.'
+    - code: redis
+    - h3: CI에서도 돌아요
+    - p: 'Testcontainers는 도커가 있어야 돌아요. 로컬에서는 도커 데스크톱을 켜 두고, CI에서는 실행기에 도커가 있어야 해요. 깃허브 액션의 `ubuntu-latest` 실행기에는 도커가 있어서, 이 저장소의 `Verify lessons` 워크플로가 이 레슨의 테스트를 그대로 돌려요. 워크플로는 CI/CD와 무중단 배포 레슨에서 봐요.'
+interview:
+  question: 'H2 대신 Testcontainers로 테스트하는 이유와, 통합 테스트끼리 데이터가 섞이지 않게 하는 방법을 설명해 주세요'
+  model:
+    - label: 정의
+      text: 통합 테스트는 스프링 컨텍스트와 DB 같은 부품을 진짜로 붙여 확인하는 테스트이고, Testcontainers는 테스트가 시작할 때 도커로 운영과 같은 DB를 띄워 붙여 주는 라이브러리입니다.
+    - label: 원리
+      text: H2는 다른 DB라서 문법과 타입 변환, 잠금 동작이 달라 H2에서 통과해도 운영에서 실패하거나 그 반대가 생깁니다. 컨테이너는 임의 포트로 열리고 @ServiceConnection이 접속 정보를 넘기며, 인스턴스 필드면 메서드마다, static이나 스프링 빈이면 클래스나 컨텍스트마다 뜹니다.
+    - label: 주의할 점
+      text: 컨테이너를 같이 쓰면 DB도 같이 써서 데이터가 다음 테스트로 새므로 롤백, TRUNCATE, 겹치지 않는 키로 나눕니다. 롤백은 운영과 다르게 돌 수 있습니다. 이미지 태그는 latest가 아니라 운영 버전으로 고정합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: H2로 통과하던 upsert 쿼리가 운영 PostgreSQL에서 다르게 동작해서, 리포지토리 테스트를 Testcontainers로 옮기고 컨테이너를 스프링 빈으로 둬 한 번만 띄웠습니다.'
+verified: 이 레슨의 출력은 짐작이 아니라 H2 2.x와 PostgreSQL 16 컨테이너에서 쿼리를 돌려 받은 값이에요. 컨테이너가 뜨는 횟수와 데이터가 새는지는 JUnit의 EngineTestKit으로 안쪽 테스트 클래스를 돌려 확인했어요. 코드가 바뀔 때마다 테스트([TestcontainersTest](link:test))가 다시 돌아요.
+footer: '근거: `@Container` 필드와 수명은 [Testcontainers JUnit 5 문서](link:tcJunit), 싱글톤 컨테이너는 [수동 수명 관리 문서](link:tcManual), Ryuk는 [설정 문서](link:tcConfig), `@ServiceConnection`과 `@DynamicPropertySource`는 [스프링 부트 문서](link:bootTc), H2의 호환 모드는 [H2 문서](link:h2Compat). 결과는 H2 2.x와 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '코드 upsert는 H2 2.3 기본 모드에서 문법 오류로 실패하고, PostgreSQL 16에서는 수량을 8로 만든다'
-    how: 'H2는 `JdbcTemplate`과 `jdbc:h2:mem:` 연결로 직접 돌리고, PostgreSQL은 컨테이너로 돌린다. 오류 메시지를 남긴다. H2는 `testImplementation`으로 더한다'
-  - claim: 'H2의 `MODE=PostgreSQL`에서 같은 쿼리를 돌린 결과'
-    how: '같은 방법. 결과(성공 또는 오류)를 그대로 레슨에 적는다'
-  - claim: 'H2에서는 통과하고 PostgreSQL에서는 실패하는 쿼리가 있다'
-    how: '후보 몇 개를 두 DB에서 돌려 하나를 고른다'
+  - claim: '코드 upsert는 H2 기본 모드와 PostgreSQL 모드에서 문법 오류로 실패하고, PostgreSQL 16에서는 수량을 8로 만든다'
+    how: 'H2는 `jdbc:h2:mem:` URL로 직접 연결하고, PostgreSQL은 컨테이너로 돌린다. H2는 `testImplementation`으로 더했다'
+    test: TestcontainersTest.h2IsNotPostgres
+  - claim: '문자열 열을 숫자와 비교하는 쿼리와 `DATEADD`는 H2에서 통과하고 PostgreSQL에서 실패한다.'
+    how: '같은 방법'
+    test: TestcontainersTest.h2IsNotPostgres
   - claim: '컨테이너는 호스트의 임의 포트로 열리고, 띄우는 데 몇 초가 걸린다'
     how: '`getMappedPort(5432)`, `getJdbcUrl()`, 시작 시간을 남긴다'
+    test: TestcontainersTest.containerUsesRandomHostPort
   - claim: '인스턴스 필드 `@Container`는 테스트 메서드마다, static 필드는 클래스에 한 번 컨테이너를 띄운다'
     how: '`EngineTestKit`으로 안쪽 테스트 클래스 둘을 돌리고 각 메서드가 본 `getContainerId()`를 모은다'
+    test: TestcontainersTest.containerLifecycleFollowsField
   - claim: '트랜잭션 없는 테스트끼리는 앞 테스트의 데이터가 남아 순서에 따라 결과가 달라지고, `@AfterEach`의 `TRUNCATE`로 고치면 순서와 상관없이 통과한다'
-    how: '`EngineTestKit`으로 두 순서를 돌려 결과를 남긴다'
+    how: '`EngineTestKit`으로 세 순서를 돌려 결과를 남긴다'
+    test: TestcontainersTest.dataLeaksBetweenTests
 sources:
   - 'Testcontainers의 `@Container` 필드와 수명, 싱글톤 컨테이너: https://java.testcontainers.org/test_framework_integration/junit_5/ , https://java.testcontainers.org/test_framework_integration/manual_lifecycle_control/'
   - 'Ryuk와 정리: https://java.testcontainers.org/features/configuration/'

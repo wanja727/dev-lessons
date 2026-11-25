@@ -1,0 +1,214 @@
+# 통합 테스트와 Testcontainers 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/testcontainers.yaml의 says).
+# 동작에 관한 정답은 verification의 TestcontainersTest로 확인했다 (H2 2.x, PostgreSQL 16, Testcontainers 1.21).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: testcontainers
+  title: 통합 테스트와 Testcontainers
+  unit: 테스트와 운영
+  order: 904
+concepts:
+  - key: core
+    name: 통합 테스트와 Testcontainers
+coreQuestions:
+  - key: q1
+    text: "왜 H2 대신 진짜 DB로 테스트하나요?"
+  - key: q2
+    text: "Testcontainers는 테스트에 DB를 어떻게 붙이나요?"
+  - key: q3
+    text: "컨테이너는 언제 몇 번 띄우나요?"
+  - key: q4
+    text: "테스트끼리 데이터가 섞이지 않게 하려면 어떻게 하나요?"
+questions:
+  # ── 질문 1 ──
+  - key: tc-h2-upsert
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 운영 DB는 PostgreSQL 16이고, 재고 리포지토리가 INSERT ... ON CONFLICT (product_id) DO UPDATE 쿼리를 써요. 이 리포지토리를 H2 2.x 기본 모드로만 테스트하면 어떻게 될까요?
+    choices:
+      - PostgreSQL과 같은 결과가 나온다
+      - H2에서 쿼리가 오류로 돌지 않아 운영의 동작을 확인할 수 없다
+      - H2가 자동으로 MERGE로 바꿔 실행한다
+      - 수량을 더하지 않고 덮어쓴다
+    answer: "2"
+    explanation: |-
+      **H2에서 오류가 나요.** H2는 운영 DB와 다른 DB라 PostgreSQL의 ON CONFLICT 문법을 기본 모드에서 받지 않아요.
+
+      - 같은 쿼리를 PostgreSQL 16 컨테이너에서 돌리면 5 + 3으로 수량 8이 돼요
+      - 운영의 쿼리는 운영과 같은 DB로 확인해요
+    source: https://www.h2database.com/html/features.html#compatibility
+  - key: tc-mock-cannot-catch
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 주문 엔티티의 열 이름을 @Column(name = "order_amout")로 잘못 적었어요. 리포지토리를 목으로 바꾼 서비스 단위 테스트는 모두 통과했어요. 이 실수를 잡는 테스트는?
+    choices:
+      - 지금의 단위 테스트를 한 번 더 돌린다
+      - 실제 테이블이 있는 DB를 붙인 통합 테스트
+      - verify로 save 호출을 검증하는 테스트
+      - 실수를 잡을 수 있는 테스트는 없다
+    answer: "2"
+    explanation: |-
+      **진짜 DB를 붙인 통합 테스트예요.** 목으로 바꾼 저장소는 SQL을 DB에 보내지 않아서 열 이름이 틀려도 모르고 지나가요.
+
+      - 통합 테스트는 SQL, 매핑, 제약 조건처럼 단위 테스트가 못 잡는 것을 잡아요
+    source: https://docs.spring.io/spring-boot/reference/testing/testcontainers.html
+  # ── 질문 2 ──
+  - key: tc-random-port
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 테스트에서 new PostgreSQLContainer<>("postgres:16-alpine")로 DB를 띄웠어요. 테스트가 이 DB에 붙을 때 쓰는 호스트 포트는?
+    choices:
+      - 늘 5432
+      - 비어 있는 임의 포트. getJdbcUrl()이나 getMappedPort(5432)로 읽는다
+      - application.yml의 spring.datasource.url에 적은 포트
+      - 테스트 클래스 이름으로 정해지는 포트
+    answer: "2"
+    explanation: |-
+      **임의 포트예요.** 컨테이너 안의 5432가 호스트에서는 비어 있는 아무 포트로 열려요.
+
+      - 내 PC의 다른 DB나 동시에 도는 다른 테스트와 부딪치지 않게 하려는 거예요
+      - @ServiceConnection이 이 접속 정보를 스프링에 넘겨요
+    source: https://java.testcontainers.org/test_framework_integration/junit_5/
+  - key: tc-version-by-image
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 동료의 PC에는 PostgreSQL 14가, 내 PC에는 PostgreSQL 15가 깔려 있어요. postgres:16-alpine 이미지를 쓰는 Testcontainers 테스트는 각 PC에서 어느 버전의 DB로 돌까요?
+    choices:
+      - 동료는 14, 나는 15
+      - 둘 다 16
+      - 둘 다 깔린 버전 가운데 높은 15
+      - PC에 깔린 DB가 없어야만 돈다
+    answer: "2"
+    explanation: |-
+      **둘 다 16이에요.** 컨테이너는 이미지 태그가 정한 버전으로 떠요. PC에 깔린 DB와 상관없어요.
+
+      - 그래서 누가 돌려도, CI에서 돌려도 같은 버전으로 확인해요
+    source: https://java.testcontainers.org/test_framework_integration/junit_5/
+  # ── 질문 3 ──
+  - key: tc-instance-field
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 테스트 클래스를 돌리면 PostgreSQL 컨테이너는 몇 번 뜰까요?
+    code: |-
+      @Testcontainers
+      class StockTest {
+        @Container
+        PostgreSQLContainer<?> db =
+            new PostgreSQLContainer<>(
+                "postgres:16-alpine");
+
+        @Test void a() { }
+        @Test void b() { }
+        @Test void c() { }
+        @Test void d() { }
+      }
+    choices:
+      - 한 번
+      - 4번
+      - 2번
+      - 0번
+    answer: "2"
+    explanation: |-
+      **4번이에요.** 인스턴스 필드라서 JUnit이 테스트 메서드마다 새 테스트 객체와 함께 컨테이너를 띄우고 멈춰요.
+
+      - static 필드로 바꾸면 클래스에 한 번만 떠요
+    source: https://java.testcontainers.org/test_framework_integration/junit_5/
+  - key: tc-shared-bean
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 테스트 클래스 다섯이 모두 같은 @SpringBootTest 설정에 같은 @Import(PostgresContainerConfig.class)를 써요. 컨테이너는 PostgresContainerConfig의 @Bean이에요. 다섯 클래스를 한 번에 돌리면 컨테이너는 몇 번 뜰까요?
+    choices:
+      - 5번
+      - 한 번
+      - 테스트 메서드 수만큼
+      - 0번
+    answer: "2"
+    explanation: |-
+      **한 번이에요.** 설정이 같으니 스프링이 컨텍스트를 캐시해 다시 쓰고, 컨테이너는 그 컨텍스트의 빈이라 함께 다시 쓰여요.
+
+      - 클래스마다 @MockitoBean이 다르면 컨텍스트도 컨테이너도 그만큼 새로 떠요
+    source: https://docs.spring.io/spring-boot/reference/testing/testcontainers.html
+  # ── 질문 4 ──
+  - key: tc-order-dependent
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 트랜잭션 없이 커밋하는 테스트 둘이 같은 PostgreSQL 컨테이너를 써요. 첫째는 재고 하나를 넣고, 둘째는 "재고가 0개"인지 확인해요. 넣는 테스트가 먼저 돌면 어떻게 될까요?
+    choices:
+      - 둘 다 통과한다
+      - 둘째 테스트가 1개를 보고 실패한다
+      - 첫째 테스트가 실패한다
+      - 테스트 사이에 컨테이너가 다시 떠서 통과한다
+    answer: "2"
+    explanation: |-
+      **둘째 테스트가 실패해요.** 앞 테스트가 커밋한 재고가 DB에 남아 있어요.
+
+      - 순서를 바꾸면 통과해서, 전체를 돌릴 때만 가끔 실패하는 테스트가 돼요
+      - @AfterEach에서 TRUNCATE하면 순서와 상관없이 통과해요
+    source: https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/executing-sql.html
+  - key: tc-random-port-tx
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 3
+    body: 주문 생성 API를 @SpringBootTest(webEnvironment = RANDOM_PORT)로 띄워 HTTP로 부르는 테스트에 @Transactional을 붙였어요. 테스트가 끝나면 API가 저장한 주문 행은 어떻게 될까요?
+    choices:
+      - 테스트의 트랜잭션과 함께 롤백되어 지워진다
+      - 남는다. 서버 쪽 저장은 톰캣 스레드의 다른 트랜잭션에서 커밋됐다
+      - 다음 테스트가 시작할 때 자동으로 지워진다
+      - 저장 자체가 되지 않는다
+    answer: "2"
+    explanation: |-
+      **남아요.** 트랜잭션은 스레드에 묶여 있어서, 톰캣 스레드에서 처리한 요청은 테스트의 트랜잭션을 모르고 자기 트랜잭션으로 커밋해요.
+
+      - 이런 테스트는 @AfterEach에서 TRUNCATE하거나 @Sql로 지워요
+    source: https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/tx.html
+  # ── 면접 ──
+  - key: tc-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "H2 대신 Testcontainers로 테스트하는 이유와, 통합 테스트끼리 데이터가 섞이지 않게 하는 방법을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **H2는 운영 DB와 다른 DB라서, 운영과 같은 DB를 컨테이너로 띄워 확인하고, 테스트마다 데이터를 되돌리거나 지워요.**
+
+      - **이유:** 문법, 타입 변환, 잠금이 달라 거짓 통과와 거짓 실패가 생긴다
+      - **붙이는 법:** 임의 포트로 뜬 컨테이너의 접속 정보를 @ServiceConnection이 넘긴다
+      - **횟수:** 인스턴스 필드는 메서드마다, static이나 스프링 빈은 한 번
+      - **데이터:** 롤백, TRUNCATE나 @Sql, 겹치지 않는 키. 각각의 한계
+    checklist:
+      - H2와 운영 DB의 문법이나 동작이 다르다는 예를 들었다
+      - 컨테이너가 운영과 같은 버전의 DB를 띄운다고 말했다
+      - 컨테이너를 한 번만 띄우게 static이나 스프링 빈으로 둔다고 말했다
+      - 같은 DB를 쓰면 데이터가 다음 테스트로 남는다고 말했다
+      - 롤백, 비우기, 겹치지 않는 키 가운데 방법과 한계를 말했다
+    source: https://java.testcontainers.org/test_framework_integration/junit_5/
