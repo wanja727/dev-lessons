@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/unit-test-double.yaml의 says).
 # 동작에 관한 정답은 verification의 UnitTestDoubleTest로 확인했다 (자바 21, Mockito 5).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 할인 정책 클래스 DiscountPolicy의 공개 메서드 discount(price)가 안에서 private 메서드 round를 불러요. round가 맞게 반올림하는지 확인하고 싶을 때 단위 테스트는 어떻게 쓰는 것이 맞을까요?
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 포인트 적립 규칙이 "결제 금액 5만 원 이상이면 2% 적립, 미만이면 1% 적립"이에요. 테스트에 10000원 입력 하나만 있어요. 조건을 > 와 >= 로 헷갈린 버그를 잡으려면 어떤 입력을 더해야 할까요?
     choices:
@@ -69,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: SignupService의 생성자가 this.mail = new SmtpMailSender(); 처럼 메일 발송 객체를 직접 만들어요. 단위 테스트에서 메일을 가짜로 바꿀 수 있을까요?
     choices:
@@ -87,7 +88,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 주문 서비스 테스트에서 OrderRepository 대신, 저장과 조회를 HashMap으로 진짜처럼 구현한 MemoryOrderRepository를 넣었어요. 이 테스트 더블은 무엇일까요?
     choices:
@@ -107,7 +108,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 테스트에서 repo와 mail은 Mockito의 mock()으로 만들었고, 다른 답은 정하지 않았어요. signup은 existsByEmail이 true면 DuplicateEmail을 던지고, 아니면 save한 뒤 mail.send를 불러요. 결과는 무엇일까요?
     code: |-
@@ -131,7 +132,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 주문을 취소하면 PushSender의 void 메서드 push(userId, text)를 불러 알림을 보내는 서비스가 있어요. 취소했을 때 알림이 갔는지 단위 테스트로 확인하는 방법은?
     choices:
@@ -150,7 +151,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 3
     body: '@ExtendWith(MockitoExtension.class) 테스트에서 @Mock OrderRepository repo의 findById는 Optional<Order>를 돌려줘요. findById를 스텁하지 않고 아래 서비스 코드를 테스트하면 어떻게 될까요?'
     code: |-
@@ -174,7 +175,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: SignupService의 중복 확인을 repo.existsByEmail(email)에서 repo.findByEmail(email).isPresent()로 바꿨어요. 동작은 같아요. verify(repo).existsByEmail("a@b.com")이 든 테스트는 어떻게 될까요?
     choices:
@@ -192,7 +193,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 장바구니 합계를 테스트하면서 상품 값 객체 Item을 mock(Item.class)로 만들고 getPrice()를 스텁했어요. 더 나은 방법은 무엇일까요?
     choices:
@@ -212,7 +213,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "목과 스텁의 차이를 설명하고, 목을 언제 쓰는지 말해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

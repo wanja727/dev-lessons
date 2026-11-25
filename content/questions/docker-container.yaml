@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/docker-container.yaml의 says).
 # 동작에 관한 정답은 verification의 DockerContainerTest로 확인했다 (도커, eclipse-temurin:21-jre).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 우분투 22.04 리눅스 서버에서 docker run --rm alpine uname -r로 커널 버전을 찍었어요. 무엇이 나올까요?
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 컨테이너 안에서 java -jar app.jar로 띄운 스프링 서버가 시작 중에 예외로 끝났어요. 컨테이너는 어떻게 될까요?
     choices:
@@ -68,7 +69,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 컨테이너 A 안에서 /tmp/order.log를 만들었어요. A를 지우고 같은 이미지로 컨테이너를 다시 띄우면 /tmp/order.log는 있을까요?
     choices:
@@ -86,7 +87,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 개발 PC에서 MySQL을 볼륨 없이 컨테이너로 띄워 회원 데이터를 넣었어요. MySQL 이미지를 새 버전으로 바꾸려고 컨테이너를 지우고 새 이미지로 다시 띄웠어요. 회원 데이터는 어떻게 될까요?
     choices:
@@ -105,7 +106,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 Dockerfile로 한 번 빌드한 뒤 src의 컨트롤러 한 줄만 고치고 다시 빌드했어요. RUN ./gradlew dependencies 층은 어떻게 될까요?
     code: |-
@@ -130,7 +131,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Node 서버의 Dockerfile이 COPY . . 다음 RUN npm install이에요. 소스 한 줄만 고쳐도 빌드가 3분씩 걸려요. 어떻게 고치는 것이 맞을까요?
     choices:
@@ -149,7 +150,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 메모리 한도 2GB를 준 컨테이너에서 자바 21로 스프링 서버를 띄웠어요. -Xmx 같은 메모리 옵션은 없어요. 힙 최대 크기는 얼마쯤일까요?
     choices:
@@ -167,7 +168,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 한도 1GB 컨테이너가 로그 한 줄 없이 재시작을 반복해요. docker inspect에는 종료 코드 137, OOMKilled true가 보여요. 자바 옵션은 -Xmx1g예요. 원인으로 가장 맞는 것은?
     choices:
@@ -187,7 +188,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: docker run -m 1g -e JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75" order-api:1.4.0으로 띄운 스프링 서버의 힙 최대 크기는 얼마쯤일까요?
     choices:
@@ -207,7 +208,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "컨테이너와 가상 머신의 차이, 컨테이너에서 자바 앱의 메모리를 정할 때 주의할 점을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

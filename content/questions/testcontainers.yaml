@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/testcontainers.yaml의 says).
 # 동작에 관한 정답은 verification의 TestcontainersTest로 확인했다 (H2 2.x, PostgreSQL 16, Testcontainers 1.21).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 운영 DB는 PostgreSQL 16이고, 재고 리포지토리가 INSERT ... ON CONFLICT (product_id) DO UPDATE 쿼리를 써요. 이 리포지토리를 H2 2.x 기본 모드로만 테스트하면 어떻게 될까요?
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 주문 엔티티의 열 이름을 @Column(name = "order_amout")로 잘못 적었어요. 리포지토리를 목으로 바꾼 서비스 단위 테스트는 모두 통과했어요. 이 실수를 잡는 테스트는?
     choices:
@@ -69,7 +70,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 테스트에서 new PostgreSQLContainer<>("postgres:16-alpine")로 DB를 띄웠어요. 테스트가 이 DB에 붙을 때 쓰는 호스트 포트는?
     choices:
@@ -88,7 +89,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 동료의 PC에는 PostgreSQL 14가, 내 PC에는 PostgreSQL 15가 깔려 있어요. postgres:16-alpine 이미지를 쓰는 Testcontainers 테스트는 각 PC에서 어느 버전의 DB로 돌까요?
     choices:
@@ -107,7 +108,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 테스트 클래스를 돌리면 PostgreSQL 컨테이너는 몇 번 뜰까요?
     code: |-
@@ -138,7 +139,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 테스트 클래스 다섯이 모두 같은 @SpringBootTest 설정에 같은 @Import(PostgresContainerConfig.class)를 써요. 컨테이너는 PostgresContainerConfig의 @Bean이에요. 다섯 클래스를 한 번에 돌리면 컨테이너는 몇 번 뜰까요?
     choices:
@@ -157,7 +158,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 트랜잭션 없이 커밋하는 테스트 둘이 같은 PostgreSQL 컨테이너를 써요. 첫째는 재고 하나를 넣고, 둘째는 "재고가 0개"인지 확인해요. 넣는 테스트가 먼저 돌면 어떻게 될까요?
     choices:
@@ -176,7 +177,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 주문 생성 API를 @SpringBootTest(webEnvironment = RANDOM_PORT)로 띄워 HTTP로 부르는 테스트에 @Transactional을 붙였어요. 테스트가 끝나면 API가 저장한 주문 행은 어떻게 될까요?
     choices:
@@ -195,7 +196,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "H2 대신 Testcontainers로 테스트하는 이유와, 통합 테스트끼리 데이터가 섞이지 않게 하는 방법을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
