@@ -1,127 +1,250 @@
 # 멱등성과 중복 요청 방지 문제
-# 노션 문제 DB에서 옮김 (2026-11-17). 키 q-xxxxxxxx는 노션 페이지 id 끝 8자리
 # 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/idempotency.yaml의 says).
+# 동작에 관한 정답은 verification의 IdempotencyTest와 IdempotencyPracticeTest로 확인했다 (PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-25에 핵심 질문 구조로 다시 쓰면서 예전 문제를 지우고 새로 썼다.
 subject:
   key: dev
   name: 개발자 면접
 lesson:
   key: idempotency
   title: 멱등성과 중복 요청 방지
-  unit: Spring
-  order: 18
+  unit: 시스템 설계와 아키텍처
+  order: 906
 concepts:
   - key: core
     name: 멱등성과 중복 요청 방지
+coreQuestions:
+  - key: q1
+    text: "같은 요청은 왜 두 번 오나요?"
+  - key: q2
+    text: "먼저 조회하고 없으면 저장하면 왜 막지 못하나요?"
+  - key: q3
+    text: "멱등 키로 재시도에 어떻게 답하나요?"
+  - key: q4
+    text: "멱등 키만으로 충분하지 않은 곳은 어디인가요?"
 questions:
-  - key: q-525f2f5f
+  # ── 질문 1 ──
+  - key: id-lost-response
     concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 결제 API에서 중복 결제를 어떻게 막는지 1분 안에 설명해 보세요
-    explanation: |-
-      - 재시도·더블 클릭으로 같은 요청이 오는 것은 막을 수 없으니 API를 멱등하게
-      - 클라이언트가 멱등 키를 보내고, 서버는 키 컬럼 유니크 제약 + 바로 INSERT, 중복이면 처음 결과 반환
-      - 먼저 조회는 동시 요청에서 실패, 내용이 다른 같은 키는 거절
-    checklist:
-      - 같은 요청이 두 번 오는 상황을 말했다
-      - 멱등 키를 말했다
-      - DB 유니크 제약을 말했다
-      - 중복 시 처음 결과를 돌려준다고 말했다
-      - 조회 후 저장이 왜 안 되는지 말했다
-    source: https://docs.stripe.com/api/idempotent_requests
-  - key: q-8754f4c8
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 2
-    body: 중복 요청 방지 방법인 "먼저 조회 후 저장", "synchronized", "DB 유니크 제약"을 비교해 보세요
-    explanation: |-
-      - 조회 후 저장: 순차 재시도는 막지만 동시 요청은 둘 다 조회를 통과(check-then-act)
-      - synchronized: 서버 한 대 안에서만 효과, 여러 대면 무의미. 트랜잭션 커밋 시점과도 어긋날 수 있음
-      - DB 유니크 제약: 서버 수와 상관없이 DB가 하나만 통과시킴. 최종 방어선
-    checklist:
-      - 조회 후 저장의 경쟁 상태를 말했다
-      - synchronized가 서버 한 대에서만 효과라고 말했다
-      - 유니크 제약이 서버 수와 무관하다고 말했다
-      - 각 방법이 막는 상황(순차/동시)을 구분했다
-      - 최종 판단을 DB에 맡긴다는 결론을 말했다
-    source: https://docs.stripe.com/api/idempotent_requests
-  - key: q-f983f53a
-    concept: core
-    type: descriptive
-    status: reviewed
-    difficulty: 3
-    body: 멱등 키로 중복 결제를 막는 API를 설계할 때, 키 하나 외에 더 챙겨야 할 것들을 말해 보세요
-    explanation: "- 키 범위(사용자별 유니크), 처음 응답 저장과 재사용, 같은 키·다른 내용 거절, 처리 중 상태(외부 호출 중 재요청), 키 보관 기간, 외부 PG사에도 멱등 키 전달"
-    checklist:
-      - 처음 응답을 저장해 그대로 돌려준다고 말했다
-      - 같은 키·다른 내용을 거절한다고 말했다
-      - 처리 중 상태를 말했다
-      - 보관 기간(TTL)을 말했다
-      - 외부 연동에도 멱등 키를 넘긴다고 말했다
-    source: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/
-  - key: q-5fdcfdeb
-    concept: core
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: "\"먼저 같은 멱등 키가 있는지 조회하고 없을 때만 저장하면, 동시에 온 같은 키 요청도 항상 하나만 저장된다\""
-    answer: X
-    explanation: |-
-      - 두 요청이 모두 저장 전에 조회하면 둘 다 "없음"을 보고 저장한다
-      - 검증: IdempotencyTest (checkThenInsertFailsUnderConcurrency)
-    source: https://docs.stripe.com/api/idempotent_requests
-  - key: q-17d9cdf2
-    concept: core
+    coreQuestion: q1
     type: multiple_choice
-    status: reviewed
-    difficulty: 2
-    body: 같은 멱등 키로 결제 요청 10개가 동시에 왔다. 키 컬럼에 유니크 제약이 있고, 서버는 바로 INSERT하되 중복이면 처음 결제를 돌려준다. 결과는?
-    choices:
-      - 결제 10건, 각자 다른 id
-      - 결제 1건, 9개 요청은 예외로 실패 응답
-      - 결제 1건, 10개 요청 모두 같은 결제 id를 응답받음
-      - 교착 상태(데드락)로 멈춤
-    answer: "3"
-    explanation: |-
-      - DB가 하나만 통과시키고, 나머지는 유니크 위반을 받아 처음 결제를 찾아 그대로 돌려준다
-      - 검증: IdempotencyTest (idempotentUnderConcurrency)
-    source: https://docs.stripe.com/api/idempotent_requests
-  - key: q-2fa54686
-    concept: core
-    type: multiple_choice
-    status: reviewed
+    status: draft
     difficulty: 1
-    body: 다음 HTTP 메서드 중 RFC 9110상 멱등이 아닌 것은?
+    body: 서버가 결제를 저장하고 응답을 보냈는데, 응답이 클라이언트에 닿기 전에 연결이 끊겼어요. 클라이언트가 보는 것과, 같은 요청을 다시 보냈을 때 아무 대책이 없는 서버의 결과로 맞는 것은?
     choices:
-      - GET
-      - PUT
-      - DELETE
-      - POST
-    answer: "4"
+      - 클라이언트는 성공을 본다. 결제는 1건이다
+      - 클라이언트는 응답 없음을 본다. 다시 보내면 결제가 2건이 된다
+      - 클라이언트는 실패를 본다. 결제는 0건이다
+      - 클라이언트는 응답 없음을 본다. 서버가 알아서 두 번째를 거절한다
+    answer: "2"
     explanation: |-
-      - POST는 요청마다 새 리소스를 만들 수 있어 멱등이 아니다. 그래서 결제 생성 API는 멱등 키로 서버가 직접 멱등하게 만든다
-      - 근거: RFC 9110 (테스트 없음)
-    source: https://www.rfc-editor.org/rfc/rfc9110.html
-  - key: q-b209211e
+      **응답 없음을 보고, 다시 보내면 결제가 2건이 돼요.** 클라이언트는 처리됐는지 알 수 없어 다시 보내는 것이 맞는 행동이에요.
+
+      - 테스트에서 대책 없는 서비스에 같은 요청을 두 번 보내니 2건이 저장됐어요
+      - 그래서 서버를 멱등하게 만들어야 해요
+    source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  - key: id-which-idempotent
     concept: core
-    type: line_pick
-    status: reviewed
-    difficulty: 3
-    body: "[코드 6-A] 멱등 처리를 넣었는데 중복 요청 때 \"현재 트랜잭션이 중단됨\" 오류가 난다. 원인이 되는 줄은?"
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 다음 요청 가운데 같은 요청을 여러 번 보내도 결과가 한 번 보낸 것과 같은 것은 무엇일까요?
+    choices:
+      - "POST /orders (주문 만들기)"
+      - "PUT /members/1/nickname (닉네임을 민지로 바꾸기)"
+      - "POST /points/earn (포인트 100 적립)"
+      - "POST /payments (결제하기)"
+    answer: "2"
+    explanation: |-
+      **PUT /members/1/nickname이에요.** 같은 값을 몇 번 넣어도 결과는 민지 하나예요.
+
+      - HTTP 명세는 PUT, DELETE를 멱등한 메서드로, POST는 멱등하지 않은 메서드로 정해요
+      - 만들기와 적립은 할 때마다 새로 생겨요
+    source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  # ── 질문 2 ──
+  - key: id-check-then-insert
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 아래 코드에서 같은 키의 결제 요청 두 개가 동시에 들어와, 둘 다 existsByIdempotencyKey를 실행한 뒤에 저장으로 넘어갔어요. 멱등 키 칸에 유니크 제약은 없어요. 결제는 몇 건 저장될까요?
     code: |-
       @Transactional
-      public Payment pay(String key, Long orderId, long amount) {
-          try {
-              return paymentRepository.saveAndFlush(new Payment(key, orderId, amount));
-          } catch (DataIntegrityViolationException duplicate) {
-              return paymentRepository.findByIdempotencyKey(key).orElseThrow();
-          }
+      boolean pay(String key, long orderId,
+          long amount) {
+        if (repo.existsByIdempotencyKey(key)) {
+          return false;
+        }
+        repo.save(new Payment(key, orderId,
+            amount));
+        return true;
       }
-    answer: "1"
+    choices:
+      - 1건
+      - 2건
+      - 0건
+      - "@Transactional이 있어서 1건"
+    answer: "2"
     explanation: |-
-      - 메서드 전체가 한 트랜잭션이라, 4번 줄의 INSERT가 실패하면 그 트랜잭션은 더 쓸 수 없다(PostgreSQL은 이후 질의를 거절, 마지막에는 롤백 전용). 6번 줄의 재조회는 실패한 트랜잭션 밖에서 해야 한다
-      - 고치기: @Transactional을 빼서 saveAndFlush가 자기 트랜잭션에서 INSERT하게 한다 (레슨 4장)
-      - 근거: 레슨 구현은 @Transactional 없이 검증됨 (IdempotencyTest). 이 오류 자체는 테스트하지 않음
-    source: https://docs.stripe.com/api/idempotent_requests
+      **2건이에요.** 두 요청 모두 조회할 때는 결제가 없어서 둘 다 저장했어요.
+
+      - 확인과 저장 사이에 틈이 있고, @Transactional도 아직 없는 행을 서로 막지 않아요
+      - 테스트로 재현하니 두 요청 모두 true를 받고 결제가 2건이었어요
+    source: https://www.postgresql.org/docs/16/ddl-constraints.html
+  - key: id-signup-email
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 회원 가입에서 existsByEmail로 확인한 뒤 저장해요. 같은 이메일로 가입 버튼을 아주 빠르게 두 번 눌렀더니 회원이 둘 생겼어요. 가장 알맞은 고치는 방법은?
+    choices:
+      - existsByEmail을 저장 직전에 한 번 더 부른다
+      - 이메일 칸에 유니크 제약을 걸고, 위반이 나면 "이미 가입한 이메일"로 답한다
+      - 메서드에 @Transactional을 붙인다
+      - 버튼을 누른 뒤 1초 동안 막는 코드를 화면에만 넣는다
+    answer: "2"
+    explanation: |-
+      **이메일 칸에 유니크 제약을 걸어요.** DB가 같은 값의 두 번째 INSERT를 거절해서 동시에 와도 하나만 성공해요.
+
+      - 확인을 여러 번 해도 확인과 저장 사이의 틈은 그대로예요
+      - 화면에서만 막으면 다른 클라이언트나 재시도는 막지 못해요
+    source: https://www.postgresql.org/docs/16/ddl-constraints.html
+  # ── 질문 3 ──
+  - key: id-retry-same-key
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서버는 멱등 키 칸에 유니크 제약을 걸고, 같은 키로 다시 오면 처음 결제를 돌려줘요. 클라이언트가 멱등 키 abc로 결제해 id 7을 받았는데 응답을 놓쳐, 같은 키 abc로 다시 보냈어요. 클라이언트가 받는 것은?
+    choices:
+      - 새 결제 id 8
+      - 처음 결제인 id 7
+      - 409 오류
+      - 아무 응답도 없다
+    answer: "2"
+    explanation: |-
+      **처음 결제인 id 7을 받아요.** 같은 키의 두 번째 저장은 유니크 제약에 걸리고, 서버는 그 키의 처음 결제를 찾아 돌려줘요.
+
+      - 재시도한 클라이언트는 오류가 아니라 같은 성공 응답을 받아요
+      - 테스트에서 같은 키로 동시에 10번 보내도 결제는 1건, 모두 같은 id였어요
+    source: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/
+  - key: id-new-uuid-retry
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 앱이 응답을 받지 못할 때마다 새 UUID를 만들어 Idempotency-Key 헤더에 넣고 다시 보내요. 서버는 멱등 키로 중복을 막고 있어요. 이중 결제가 생길 수 있나요?
+    choices:
+      - 생기지 않는다. 서버가 멱등 키로 막는다
+      - 생긴다. 키가 다르면 서버에게는 다른 요청이다
+      - 서버가 오류로 거절한다
+      - 두 번째 요청은 서버에 닿지 않는다
+    answer: "2"
+    explanation: |-
+      **생겨요.** 서버는 키로 같은 요청인지 알아보는데, 재시도마다 키가 달라요.
+
+      - 멱등 키는 결제 시도마다 한 번 만들고, 재시도에는 같은 값을 보내요
+      - 키를 잘못 쓰는 클라이언트까지 막으려면 업무 키 제약을 함께 둬요
+    source: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/
+  - key: id-same-tx-catch
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 3
+    body: 아래 메서드로 이미 있는 키의 결제를 다시 요청했어요. 무슨 일이 생길까요? (스프링 데이터 JPA, PostgreSQL)
+    code: |-
+      @Transactional
+      Payment pay(String key, long orderId,
+          long amount) {
+        try {
+          return repo.saveAndFlush(
+              new Payment(key, orderId, amount));
+        } catch (
+            DataIntegrityViolationException e) {
+          return repo.findByIdempotencyKey(key)
+              .orElseThrow();
+        }
+      }
+    choices:
+      - 처음 결제를 정상으로 돌려준다
+      - 처음 결제를 돌려주지 못한다. 같은 트랜잭션이 이미 망가져 조회나 커밋이 실패한다
+      - 결제가 2건 저장된다
+      - 컴파일 오류가 난다
+    answer: "2"
+    explanation: |-
+      **처음 결제를 돌려주지 못해요.** 저장이 실패한 트랜잭션 안에서 조회하고 커밋하려 했기 때문이에요.
+
+      - 테스트에서는 조회 전 flush에서 Hibernate의 AssertionFailure가 났고, 커밋은 UnexpectedRollbackException이었어요
+      - 메서드에 트랜잭션을 걸지 않고 saveAndFlush가 자기 트랜잭션에서 INSERT하게 하면, 바깥에서 잡아 새로 조회할 수 있어요
+    source: https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-propagation.html
+  # ── 질문 4 ──
+  - key: id-order-unique
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 결제 테이블의 order_id 칸에 유니크 제약이 있어요. 클라이언트가 주문 1을 멱등 키 a로 결제한 뒤, 같은 주문 1을 멱등 키 b로 또 결제했어요. 두 번째 결제는 어떻게 되나요?
+    choices:
+      - 키가 다르니 저장된다
+      - order_id 유니크 위반으로 거절된다
+      - 첫 번째 결제를 덮어쓴다
+      - 멱등 키 a의 결과를 돌려준다
+    answer: "2"
+    explanation: |-
+      **order_id 유니크 위반으로 거절돼요.** 업무 키 제약은 멱등 키와 상관없이 같은 주문의 두 번째 결제를 막아요.
+
+      - 테스트에서 DuplicateKeyException이 나고 주문 1의 결제는 1건이었어요
+      - 멱등 키는 같은 요청에 같은 응답을, 업무 키는 규칙상 둘이면 안 되는 것을 막아요
+    source: https://www.postgresql.org/docs/16/ddl-constraints.html
+  - key: id-key-expired
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버가 멱등 키를 1시간 동안만 기억해요. 모바일 앱이 비행기 모드에서 쌓아 둔 결제 요청을 3시간 뒤에 같은 키로 다시 보냈어요. order_id 같은 업무 키 제약은 없어요. 무슨 일이 생길까요?
+    choices:
+      - 처음 결제를 돌려준다
+      - 서버가 키를 잊어서 새 요청으로 처리되어 중복 결제가 생긴다
+      - 409 오류가 난다
+      - 요청이 버려진다
+    answer: "2"
+    explanation: |-
+      **새 요청으로 처리되어 중복 결제가 생겨요.** 보관 기간이 지난 키는 처음 보는 키와 같아요.
+
+      - 보관 기간을 재시도가 올 수 있는 기간보다 길게 잡아요
+      - 업무 키에 유니크 제약을 두면 키를 잊어도 같은 주문의 두 번째 결제는 막혀요
+    source: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/
+  # ── 네 질문을 하나로 ──
+  - key: id-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "같은 결제 요청이 두 번 오는 것을 어떻게 막나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **멱등 키와 유니크 제약으로 같은 요청은 한 번만 처리하고, 재시도에는 처음 결과를 돌려줘요.**
+
+      - **왜 오나:** 응답을 잃은 클라이언트는 처리됐는지 몰라 다시 보낸다. 두 번 클릭, 자동 재시도도 있다
+      - **조회 후 저장은 안 된다:** 동시 요청이 둘 다 조회를 통과한다. 판단은 DB의 유니크 제약에 맡긴다
+      - **멱등 키:** 시도마다 키를 만들고 재시도에 같은 키를 쓴다. 위반이 나면 처음 결과를 돌려주고, 내용이 다르면 거절한다
+      - **부족한 곳:** 키 보관 기간, 업무 키 유니크 제약, 외부 결제 API에도 키를 넘긴다
+    checklist:
+      - 응답을 잃은 재시도가 같은 요청을 두 번 보낸다고 말했다
+      - 먼저 조회 후 저장이 동시 요청을 막지 못한다고 말했다
+      - 유니크 제약으로 DB가 막게 한다고 말했다
+      - 멱등 키로 재시도에 처음 결과를 돌려준다고 말했다
+      - 업무 키나 외부 API처럼 멱등 키만으로 부족한 곳을 말했다
+    source: https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/

@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import lab.devlessons.idempotency.PaymentServices.CheckThenInsertPaymentService;
 import lab.devlessons.idempotency.PaymentServices.IdempotentPaymentService;
 import lab.devlessons.idempotency.PaymentServices.NaivePaymentService;
+import lab.devlessons.support.CiOutput;
 import lab.devlessons.support.PostgresContainerConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +32,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 @SpringBootTest
 @Import(PostgresContainerConfig.class)
 class IdempotencyTest {
+
+    static final String LESSON = "idempotency";
 
     @Autowired NaivePaymentService naive;
     @Autowired CheckThenInsertPaymentService checkThenInsert;
@@ -57,6 +60,7 @@ class IdempotencyTest {
         naive.pay(1L, 10_000); // 응답을 못 받은 클라이언트의 재시도
 
         assertThat(unguarded.countByOrderId(1L)).isEqualTo(2);
+        CiOutput.record(LESSON, "naive", "[대책 없음] pay(주문 1, 10000원)을 두 번\n주문 1의 결제: " + unguarded.countByOrderId(1L) + "건");
     }
 
     @Test
@@ -78,6 +82,7 @@ class IdempotencyTest {
 
         assertThat(results).containsExactly(true, true);
         assertThat(unguarded.countByIdempotencyKey("key-1")).isEqualTo(2);
+        CiOutput.record(LESSON, "check-race", "[먼저 조회 후 저장] 같은 키의 요청 두 개가 둘 다 조회를 마친 뒤 저장\n두 요청의 결과: " + results + "\nkey-1의 결제: " + unguarded.countByIdempotencyKey("key-1") + "건");
     }
 
     @Test
@@ -109,6 +114,7 @@ class IdempotencyTest {
         results.forEach(p -> ids.add(p.getId()));
         assertThat(ids).hasSize(1);
         assertThat(payments.count()).isEqualTo(1);
+        CiOutput.record(LESSON, "idempotent", "[멱등 키 + 유니크 제약] 같은 키로 동시에 10번\n저장된 결제: " + payments.count() + "건\n10개 응답이 받은 결제 id: " + ids);
     }
 
     @Test
