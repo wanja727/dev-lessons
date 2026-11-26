@@ -1,0 +1,358 @@
+# 헥사고날 아키텍처
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/hexagonal.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: 헥사고날 아키텍처
+description: 도메인을 가운데 두고 바깥 기술을 포트와 어댑터로 떼어 내는 구조, 의존이 안쪽을 향한다는 것, 계층형 아키텍처와 다른 점, 그 대가와 쓸 때. 결제 어댑터를 가짜에서 HTTP로 바꿔 끼워도 도메인이 그대로인 것을 확인하는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 20
+roadmap: A21
+type: 설계
+prerequisites:
+  - {slug: domain-model, title: 도메인 모델과 트랜잭션 스크립트}
+assume: '자바 21, 스프링 부트 3.5. 컨트롤러, 서비스, 리포지토리로 나누는 계층형 구조(계층형 아키텍처 레슨). 규칙을 엔티티에 두는 도메인 모델(도메인 모델과 트랜잭션 스크립트 레슨). 인터페이스에 기대고 구현을 주입받는 것(의존 역전 원칙 레슨).'
+example: '주문하기 유스케이스. 주문을 만들고, 결제를 요청하고, 저장한다. 결제는 처음엔 가짜, 나중엔 HTTP로 부르는 PG이고, 주문하기는 웹 컨트롤러와 배치가 함께 부른다.'
+intro:
+  - 'PG사를 바꾸기로 했는데 결제 API 호출 코드가 주문 서비스, 환불 서비스, 정산 배치 곳곳에 흩어져 있어요. 주문 서비스의 테스트도 진짜 PG를 불러야 돌아가서 느리고 자주 깨져요.'
+  - '헥사고날 아키텍처는 업무 규칙(도메인)을 가운데 두고, DB, 웹, 외부 API 같은 바깥 기술은 모두 도메인이 정한 인터페이스(포트) 뒤의 구현(어댑터)으로 둬요. 경력 면접에서 "헥사고날, 클린 아키텍처를 써 봤나요, 계층형과 무엇이 다른가요"를 물어요.'
+  - '이 레슨에서는 주문하기 유스케이스에 결제 어댑터를 가짜에서 HTTP로 바꿔 끼우고, 웹과 배치가 같은 유스케이스를 부르고, 도메인 클래스 파일이 바깥 기술을 하나도 참조하지 않는 것을 확인해요.'
+covers:
+  - topic: '헥사고날(포트와 어댑터): 도메인을 가운데 두고, 바깥과는 포트(도메인이 정한 인터페이스)로만 만난다. 어댑터가 포트를 구현하거나 부른다'
+    where: '질문 1'
+  - topic: '들어오는 포트(유스케이스)와 나가는 포트(저장, 결제). 들어오는 어댑터(컨트롤러, 배치, 컨슈머)와 나가는 어댑터(JPA, HTTP 클라이언트)'
+    where: '질문 1'
+  - topic: '의존은 늘 안쪽을 향한다. 도메인은 스프링, JPA, HTTP를 모른다'
+    where: '질문 2'
+  - topic: '어댑터를 바꿔 끼워도 도메인은 그대로다. 테스트에서는 가짜 어댑터로 도메인을 빠르게 시험한다'
+    where: '질문 2'
+  - topic: '계층형과 다른 점: 계층형은 서비스가 아래층(리포지토리, JPA)에 기대지만, 헥사고날은 포트를 도메인이 소유해 바깥이 안쪽에 기댄다'
+    where: '질문 3. 원리는 의존 역전 원칙(O5)'
+  - topic: '대가: 인터페이스와 변환 코드가 늘어난다. 단순한 CRUD에는 과하다'
+    where: '질문 4'
+  - topic: 'JPA 엔티티와 도메인 객체를 나눌지'
+    where: '질문 4'
+  - topic: '스프링에서 패키지 나누기(domain, application, adapter)와 빈 조립'
+    where: '실무에서는'
+codes:
+  predict: |-
+    // 결제를 가짜에서 HTTP로 바꾼다
+    PlaceOrder useCase = new PlaceOrderService(
+        store, [[new HttpPayment(pgUrl)]]);
+    useCase.place("o-1", 30_000);
+    // PlaceOrderService는 고쳐야 할까?
+  ports: |-
+    // 나가는 포트 (도메인이 정함)
+    interface OrderStore {
+      void save(Order order);
+      Order find(String id);
+    }
+    interface PaymentPort {
+      boolean pay(String orderId,
+          long amount);
+    }
+    // 들어오는 포트 (유스케이스)
+    interface PlaceOrder {
+      Order place(String orderId,
+          long amount);
+    }
+  service: |-
+    class PlaceOrderService
+        implements PlaceOrder {
+      private final OrderStore store;
+      private final PaymentPort payment;
+
+      public Order place(String id,
+          long amount) {
+        Order order = new Order(id, amount);
+        if (payment.pay(id, amount)) {
+          order.markPaid();
+        }
+        store.save(order);
+        return order;
+      }
+    }
+  adapter: |-
+    class HttpPayment implements PaymentPort {
+      public boolean pay(String orderId,
+          long amount) {
+        HttpResponse<String> res =
+            [[http.send(...)]];
+        return "approved"
+            .equals(res.body());
+      }
+    }
+  layeredDep: |-
+    계층형:   컨트롤러 → 서비스 → [[JpaRepository]]
+    헥사고날: 컨트롤러 → [[유스케이스 ← 도메인 포트]]
+                         ↑
+              JPA 어댑터가 포트를 구현
+  packages: |-
+    order/
+      domain/        Order, 규칙
+      application/   PlaceOrder,
+                     PlaceOrderService,
+                     OrderStore, PaymentPort
+      adapter/
+        in/web/      OrderController
+        out/persist/ JpaOrderStore
+        out/pg/      HttpPayment
+  config: |-
+    @Configuration
+    class OrderConfig {
+      @Bean
+      PlaceOrder placeOrder(OrderStore store,
+          PaymentPort payment) {
+        return new PlaceOrderService(
+            store, payment);
+      }
+    }
+  leak: |-
+    class PlaceOrderService {
+      [[@Transactional]]
+      public Order place(...) {
+        ...
+        [[RestTemplate]] rest = ...;
+      }
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/hexagonal/HexagonalTest.java
+  cockburn: https://alistair.cockburn.us/hexagonal-architecture/
+  springBean: https://docs.spring.io/spring-framework/reference/core/beans/java/bean-annotation.html
+predict:
+  title: 어댑터를 바꾸면 도메인은?
+  text: '주문하기 유스케이스는 결제를 `PaymentPort`로만 불러요. 결제 구현을 가짜에서 HTTP로 PG를 부르는 `HttpPayment`로 바꿔요. `PlaceOrderService`는 고쳐야 할까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: no
+      label: 고치지 않는다
+    - value: yes
+      label: HTTP 호출 코드를 넣어 고친다
+    - value: both
+      label: 두 구현을 if로 나눠 고친다
+  answer: 'no'
+  storageKey: hexagonal-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 헥사고날 아키텍처는 어떻게 생겼나요?
+    conclusion:
+      lead: '도메인을 가운데 두고, 바깥과는 도메인이 정한 인터페이스인 포트로만 만나요. 바깥 기술은 포트를 구현하거나 부르는 어댑터로 둬요.'
+      sub: '들어오는 포트는 유스케이스(주문하기), 나가는 포트는 도메인이 필요한 기능(저장, 결제)이에요. 컨트롤러와 배치는 들어오는 어댑터, JPA와 HTTP 클라이언트는 나가는 어댑터예요.'
+    says:
+      - '가운데 도메인, 포트, 어댑터'
+      - '들어오는 쪽과 나가는 쪽'
+      - '웹과 배치가 같은 유스케이스를 부른다'
+    asks:
+      - '본문의 예시: 결제를 요청하는 PaymentPort는 들어오는 포트와 나가는 포트 가운데 무엇인가 (나가는 포트. 도메인이 바깥에 요청한다)'
+      - '옮긴 상황: 카프카 메시지를 받아 주문하기 유스케이스를 부르는 컨슈머는 무엇인가 (들어오는 어댑터)'
+    body:
+      - p: '헥사고날 아키텍처(포트와 어댑터)는 앨리스터 코번이 제안한 구조예요([코번의 글](link:cockburn)). 육각형 그림은 "바깥과 만나는 면이 여럿"이라는 뜻일 뿐, 여섯이라는 숫자에 의미는 없어요.'
+      - ul:
+          - '**도메인(가운데):** 업무 규칙. 주문과 그 규칙이에요.'
+          - '**포트:** 도메인이 바깥과 만나는 인터페이스. **도메인이** 자기 말로 정해요.'
+          - '**어댑터(바깥):** 포트를 실제 기술로 잇는 코드. 웹, DB, 외부 API예요.'
+      - code: ports
+      - table:
+          head: [방향, 포트, 어댑터의 예]
+          rows:
+            - ['들어오는 쪽 (바깥이 도메인을 부름)', '`PlaceOrder` 유스케이스', '웹 컨트롤러, 배치, 메시지 컨슈머']
+            - ['나가는 쪽 (도메인이 바깥에 요청)', '`OrderStore`, `PaymentPort`', 'JPA 저장소, HTTP PG 클라이언트']
+      - p: '같은 유스케이스를 웹 컨트롤러와 배치가 각자 불러 봤어요.'
+      - ci:
+          key: incoming
+          label: 실제 결과 보기
+          source: HexagonalTest.twoIncomingAdapters
+      - p: '들어오는 어댑터가 둘이어도 유스케이스는 하나예요. 카프카 컨슈머를 더해도 같은 `PlaceOrder`를 부르면 돼요.'
+      - quiz:
+          q: '카프카 메시지를 받아 주문하기 유스케이스를 부르는 컨슈머는 무엇인가요?'
+          options:
+            - '나가는 어댑터'
+            - '들어오는 어댑터'
+            - '도메인'
+          answer: 2
+          explain: '바깥에서 들어와 도메인을 부르니 들어오는 어댑터예요. 웹 컨트롤러와 같은 자리예요.'
+      - next: '어댑터를 바깥에 두면 무엇이 좋을까요? 결제 어댑터를 바꿔 봐요.'
+    recall: '도메인(업무 규칙)을 가운데 두고, 바깥과는 도메인이 자기 말로 정한 인터페이스인 포트로만 만나요. 바깥 기술은 포트를 구현하거나 부르는 어댑터로 둬요. 들어오는 포트는 유스케이스(PlaceOrder)이고 웹 컨트롤러, 배치, 메시지 컨슈머가 들어오는 어댑터예요. 나가는 포트는 저장과 결제(OrderStore, PaymentPort)이고 JPA 저장소와 HTTP 클라이언트가 나가는 어댑터예요.'
+  - id: q2
+    title: 의존이 안쪽을 향하면 무엇이 좋은가요?
+    conclusion:
+      lead: '도메인이 바깥 기술을 하나도 모르니, 어댑터를 바꿔 끼워도 도메인 코드는 그대로예요.'
+      sub: '결제를 가짜에서 HTTP로 바꿔도 PlaceOrderService는 고치지 않아요. 테스트에서는 가짜 어댑터를 넣어 도메인을 DB와 네트워크 없이 빠르게 시험해요.'
+    says:
+      - '어댑터 바꾸기: FakePayment, HttpPayment 둘 다 PAID. 예측의 답'
+      - '도메인 클래스 파일에 스프링, 서블릿, JPA, HTTP 참조 없음'
+      - '도메인 규칙을 어댑터 없이 시험'
+    asks:
+      - '본문의 예시: 결제를 FakePayment에서 HttpPayment로 바꿨다. PlaceOrderService는 (고치지 않는다)'
+      - '옮긴 상황: 저장을 JPA에서 MongoDB로 바꾼다. OrderStore 포트를 쓰는 구조라면 새로 만들 것은 (OrderStore를 구현한 MongoDB 어댑터 하나)'
+    body:
+      - p: '모든 화살표가 **안쪽**을 향해요. 어댑터는 도메인의 포트를 알지만, 도메인은 어댑터를 몰라요. 유스케이스 구현이에요.'
+      - code: service
+      - p: '`PlaceOrderService`가 아는 것은 `OrderStore`와 `PaymentPort`뿐이에요. 결제 어댑터를 가짜와, 내장 톰캣으로 띄운 PG를 HTTP로 부르는 것으로 바꿔 끼워 봤어요.'
+      - code: adapter
+      - ci:
+          key: swap
+          label: 실제 결과 보기
+          source: HexagonalTest.swapOutgoingAdapter
+          code: predict
+      - p: '답은 **고치지 않는다**예요. {{predict-result}} 둘 다 PAID였고 도메인 코드는 한 글자도 바뀌지 않았어요. PG사를 바꾸면 새 어댑터 하나를 만들면 돼요.'
+      - p: '정말 도메인이 바깥을 모르는지, 클래스 파일이 참조하는 타입을 읽어 확인했어요.'
+      - ci:
+          key: deps
+          label: 실제 결과 보기
+          source: HexagonalTest.domainHasNoFrameworkReferences
+      - p: '도메인 클래스에는 스프링도, 서블릿도, HTTP 클라이언트도 없어요. 그래서 도메인 규칙("금액은 0보다 커야 한다")은 스프링을 띄우지 않고 `new Order(...)`로 바로 시험해요. 테스트에서도 그렇게 확인했어요.'
+      - quiz:
+          q: '저장을 JPA에서 MongoDB로 바꿔요. 도메인은 `OrderStore` 포트만 알아요. 무엇을 하나요?'
+          options:
+            - 'PlaceOrderService에 MongoDB 코드를 넣는다'
+            - 'OrderStore를 구현한 MongoDB 어댑터를 만들어 끼운다'
+            - 'Order 엔티티에 MongoDB 애너테이션을 단다'
+          answer: 2
+          explain: '바깥 기술이 바뀌면 그 어댑터만 새로 만들어요. 도메인은 그대로예요.'
+      - next: '계층형 아키텍처도 서비스가 리포지토리 인터페이스에 기댔어요. 무엇이 다를까요?'
+    recall: '의존이 늘 안쪽을 향해서, 어댑터는 도메인의 포트를 알지만 도메인은 스프링, JPA, HTTP 같은 바깥 기술을 하나도 몰라요. 그래서 결제 어댑터를 가짜에서 HTTP로 바꿔 끼워도 유스케이스 코드는 그대로이고, 기술이 바뀌면 어댑터 하나만 새로 만들어요. 도메인 규칙은 가짜 어댑터나 new로 DB와 네트워크 없이 빠르게 시험해요.'
+  - id: q3
+    title: 계층형 아키텍처와 무엇이 다른가요?
+    conclusion:
+      lead: '계층형은 서비스가 아래층인 데이터 접근 계층에 기대지만, 헥사고날은 포트를 도메인이 소유해서 데이터 접근 쪽이 도메인에 기대요.'
+      sub: '계층형에서 리포지토리가 JpaRepository를 상속하면 서비스가 JPA에 묶여요. 헥사고날은 도메인 말로 된 포트를 두고 JPA는 그 포트를 구현하는 어댑터 안에 가둬요. 의존 역전 원칙을 층 전체에 적용한 셈이에요.'
+    says:
+      - '화살표 비교'
+      - '포트를 누가 소유하나'
+    widget:
+      kind: compare
+      note: '왼쪽 계층형, 오른쪽 헥사고날. 요구(JPA를 MongoDB로, PG사 바꾸기)를 고르면 고칠 곳이 강조된다'
+    asks:
+      - '본문의 예시: 계층형에서 OrderRepository가 JpaRepository를 상속하고 서비스가 그것을 쓴다. 서비스는 무엇에 묶여 있나 (JPA)'
+      - '옮긴 상황: 헥사고날에서 OrderStore 포트를 둘 패키지는 (도메인이나 애플리케이션 쪽. 어댑터 쪽이 아니다)'
+    body:
+      - p: '[계층형 아키텍처](lesson:layered-architecture)도 서비스가 리포지토리 인터페이스에 기댔어요. 차이는 **그 인터페이스가 누구 것이냐**예요.'
+      - code: layeredDep
+      - p: '계층형에서 `OrderRepository extends JpaRepository<Order, Long>`를 쓰면, 서비스는 `findById`, `saveAll`, `Page` 같은 JPA의 말과 타입에 묶여요. 인터페이스가 데이터 접근 계층의 것이기 때문이에요.'
+      - p: '헥사고날은 포트를 **도메인이** 자기가 필요한 말로 정해요(`OrderStore.save`, `find`). JPA는 그 포트를 구현하는 어댑터 안으로 들어가고, 화살표는 어댑터에서 도메인 쪽을 향해요. [의존 역전 원칙과 의존성 주입](lesson:dip-di)을 층 전체에 적용한 모양이에요.'
+      - widget:
+          kind: compare
+          layout: [selector, sides, verdict]
+          selector:
+            label: 바뀐 요구
+            options:
+              - {value: mongo, label: 저장을 JPA에서 MongoDB로}
+              - {value: pg, label: PG사 바꾸기}
+          sides:
+            - label: 계층형 (JpaRepository를 서비스가 씀)
+              items:
+                - {name: OrderService, note: 'JpaRepository와 PG 클라이언트를 직접 씀'}
+                - {name: OrderRepository, note: 'JpaRepository 상속'}
+            - label: 헥사고날
+              items:
+                - {name: PlaceOrderService, note: 포트만 씀}
+                - {name: JpaOrderStore, note: OrderStore 구현}
+                - {name: HttpPayment, note: PaymentPort 구현}
+          scenes:
+            mongo:
+              sides:
+                - marks: [{name: OrderService, tag: 고침, mark: bad}, {name: OrderRepository, tag: 고침}]
+                  result: [{k: 고치는 곳, v: '서비스와 리포지토리', mark: bad}]
+                - add: [{name: MongoOrderStore, note: OrderStore 구현, tag: 새로 만듦}]
+                  result: [{k: 고치는 곳, v: '새 어댑터 하나'}]
+              verdict: '헥사고날은 도메인의 포트가 그대로라 어댑터만 더해요.'
+            pg:
+              sides:
+                - marks: [{name: OrderService, tag: 고침, mark: bad}]
+                  result: [{k: 고치는 곳, v: 서비스}]
+                - add: [{name: NewPgPayment, note: PaymentPort 구현, tag: 새로 만듦}]
+                  result: [{k: 고치는 곳, v: '새 어댑터 하나'}]
+              verdict: 'PG 호출이 어댑터 안에 갇혀 있어 서비스는 그대로예요.'
+      - quiz:
+          q: '헥사고날 구조에서 `OrderStore` 포트 인터페이스는 어느 패키지에 두나요?'
+          options:
+            - '어댑터 패키지 (JPA 쪽)'
+            - '도메인이나 애플리케이션 패키지'
+            - '컨트롤러 패키지'
+          answer: 2
+          explain: '포트는 도메인이 소유해요. 어댑터가 그 포트를 구현해서 화살표가 안쪽을 향해요.'
+      - next: '좋은 점만 있을까요? 언제 쓰고 언제 쓰지 않을까요?'
+    recall: '계층형은 서비스가 데이터 접근 계층의 인터페이스에 기대서, JpaRepository를 상속한 리포지토리를 쓰면 서비스가 JPA의 말과 타입에 묶여요. 헥사고날은 포트를 도메인이 자기 말로 정해 소유하고, JPA는 그 포트를 구현하는 어댑터 안에 가둬서 화살표가 어댑터에서 도메인 쪽을 향해요. 의존 역전 원칙을 층 전체에 적용한 모양이에요.'
+  - id: q4
+    title: 대가는 무엇이고 언제 쓰나요?
+    conclusion:
+      lead: '포트 인터페이스와 어댑터, 도메인 객체와 바깥 모델 사이의 변환 코드가 늘어나요. 규칙이 많고 오래 살며 바깥 기술이 바뀔 서비스에 맞고, 단순한 CRUD에는 과해요.'
+      sub: 'JPA 엔티티를 도메인 객체로 그대로 쓸지 나눌지도 정해야 해요. 나누면 깨끗하지만 변환이 늘고, 함께 쓰면 짧지만 도메인에 JPA 애너테이션이 들어와요.'
+    says:
+      - '늘어나는 것: 인터페이스, 어댑터, 변환'
+      - '맞는 경우와 과한 경우'
+      - 'JPA 엔티티를 도메인으로 쓸지'
+    asks:
+      - '본문의 예시: 화면에서 공지사항을 등록하고 조회만 하는 관리자 기능에 헥사고날을 쓰면 (포트와 어댑터, 변환 코드만 늘어 얻는 것이 적다)'
+      - '옮긴 상황: 결제, 정산 규칙이 많고 PG사를 바꿀 계획이 있는 서비스라면 (헥사고날이 맞는다)'
+    body:
+      - p: '헥사고날은 공짜가 아니에요.'
+      - ul:
+          - '**인터페이스와 어댑터가 늘어요.** 저장 하나에도 포트, 어댑터, 스프링 데이터 리포지토리가 생겨요.'
+          - '**변환이 늘어요.** 도메인 객체와 JPA 엔티티, 요청 DTO를 서로 바꾸는 코드가 생겨요.'
+          - '**처음 보는 사람에게 낯설어요.** 파일이 흩어져 흐름을 따라가기 어려워요.'
+      - table:
+          head: [상황, 판단]
+          rows:
+            - ['규칙이 많고 오래 살며, DB나 외부 API를 바꿀 수 있는 핵심 도메인 (결제, 정산)', '헥사고날이 값어치가 있다']
+            - ['입력을 받아 저장하고 보여 주는 CRUD (공지사항, 설정)', '계층형으로 충분하다']
+      - p: '한 프로젝트에서 섞어 써요. [도메인 모델과 트랜잭션 스크립트](lesson:domain-model)에서 규칙이 많은 곳에만 도메인 모델을 썼던 것과 같은 판단이에요.'
+      - h3: JPA 엔티티를 도메인으로 쓸까
+      - p: '도메인 객체를 JPA 엔티티로 그대로 쓰면 짧지만, 도메인 클래스에 `@Entity`, `@Id` 같은 JPA 애너테이션이 들어와 "도메인은 바깥을 모른다"가 조금 깨져요. 나누면 깨끗하지만 저장할 때마다 변환해요. 많은 팀이 애너테이션 정도는 받아들이고 함께 쓰고, 도메인이 복잡해지면 나눠요. 정답이 하나인 문제가 아니라 팀이 정하는 선택이에요.'
+      - quiz:
+          q: '관리자가 공지사항을 등록하고 조회만 하는 기능에 헥사고날을 적용하면 어떤가요?'
+          options:
+            - '꼭 해야 한다'
+            - '포트, 어댑터, 변환 코드만 늘어 얻는 것이 적다'
+            - '계층형보다 코드가 줄어든다'
+          answer: 2
+          explain: '지킬 규칙도 바뀔 바깥 기술도 거의 없어요. 계층형으로 충분해요.'
+      - next: '원리는 여기까지예요. 이제 스프링 프로젝트에서 패키지를 나누고 빈을 조립하는 모양과 흔한 실수를 볼게요.'
+    recall: '포트 인터페이스와 어댑터가 늘고, 도메인 객체와 JPA 엔티티, DTO 사이의 변환 코드가 생기고, 흐름을 따라가기 낯설어져요. 그래서 결제, 정산처럼 규칙이 많고 오래 살며 DB나 외부 API가 바뀔 수 있는 핵심 도메인에 쓰고, 공지사항 같은 CRUD는 계층형으로 둬요. JPA 엔티티를 도메인으로 함께 쓸지 나눌지는 변환 비용과 깨끗함 사이에서 팀이 정해요.'
+practice:
+  title: 스프링 프로젝트에서 헥사고날로 짤 때
+  says:
+    - 'domain, application, adapter 패키지와 @Bean으로 조립. 문서 근거'
+    - '흔한 실수: 유스케이스에 RestTemplate, 스프링 애너테이션이 새어 들어온다'
+  body:
+    - code: packages
+    - p: '도메인과 유스케이스 클래스에는 `@Service`를 붙이지 않고, 설정 클래스에서 `@Bean`으로 조립하기도 해요([스프링 문서](link:springBean)). 그러면 도메인 패키지에 스프링이 아예 들어오지 않아요. 질문 1의 테스트가 이 방식으로 웹 앱을 띄웠어요.'
+    - code: config
+    - p: '스프링이 `OrderStore`와 `PaymentPort`의 구현(어댑터 빈)을 찾아 넣어요. 어댑터를 바꾸려면 다른 어댑터를 빈으로 등록하면 돼요.'
+    - h3: 흔한 실수 하나
+    - code: leak
+      notes:
+        - mark: RestTemplate
+          as: code
+          text: '유스케이스 안에서 바로 HTTP를 불러요. PG 호출이 어댑터를 거치지 않아 PG를 바꾸면 유스케이스를 고쳐야 하고, 테스트에서 가짜로 바꿀 수 없어요.'
+    - p: '이름만 헥사고날이고 바깥 기술이 안쪽으로 새는 흔한 모양이에요. HTTP 호출은 `PaymentPort` 어댑터로 옮겨요. `@Transactional`은 많은 팀이 유스케이스에 두는 것을 받아들이지만, 도메인 패키지를 순수하게 두려면 트랜잭션을 여는 얇은 어댑터나 `TransactionTemplate`으로 감싸요. 질문 2처럼 도메인 클래스가 바깥 패키지를 참조하는지 테스트로 지키면 새는 것을 빨리 찾아요.'
+interview:
+  question: 헥사고날 아키텍처는 무엇이고, 계층형과 무엇이 다른가요?
+  model:
+    - label: 정의
+      text: 도메인을 가운데 두고 바깥과는 도메인이 정한 인터페이스인 포트로만 만나는 구조입니다. 들어오는 포트는 유스케이스이고 컨트롤러나 컨슈머가 들어오는 어댑터, 나가는 포트는 저장이나 결제이고 JPA나 HTTP 클라이언트가 나가는 어댑터입니다.
+    - label: 원리
+      text: 의존이 늘 안쪽을 향해 도메인은 스프링, JPA, HTTP를 모릅니다. 그래서 어댑터를 바꿔 끼워도 도메인이 그대로이고, 가짜 어댑터로 도메인을 빠르게 시험합니다. 계층형은 서비스가 데이터 접근 계층에 기대지만 헥사고날은 포트를 도메인이 소유해 바깥이 안쪽에 기댑니다.
+    - label: 트레이드오프
+      text: 인터페이스, 어댑터, 변환 코드가 늘어 단순한 CRUD에는 과합니다. 규칙이 많고 바깥 기술이 바뀔 핵심 도메인에 씁니다. JPA 엔티티를 도메인으로 쓸지는 팀이 정합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 여러 서비스에 흩어진 PG 호출을 PaymentPort 어댑터로 모아, PG사를 바꿀 때 어댑터 하나만 새로 만들고 도메인 테스트는 가짜 어댑터로 돌렸습니다.'
+verified: 어댑터를 바꿔 끼운 결과, 두 들어오는 어댑터, 도메인 클래스의 참조는 자바 21과 스프링 부트 3.5에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([HexagonalTest](link:test))가 다시 돌아요.
+footer: '근거: 헥사고날 아키텍처는 [앨리스터 코번의 글](link:cockburn), @Bean 조립은 [스프링 문서](link:springBean). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '결제 어댑터를 가짜에서 HTTP로 바꿔도 유스케이스 코드는 그대로이고 결과가 같다'
+    how: 'MiniWeb으로 PG를 띄운다'
+    test: HexagonalTest.swapOutgoingAdapter
+  - claim: '같은 유스케이스를 웹 컨트롤러와 배치가 부른다'
+    how: 'MiniWeb과 직접 호출'
+    test: HexagonalTest.twoIncomingAdapters
+  - claim: '도메인 클래스는 스프링, 서블릿, JPA, HTTP 클라이언트를 참조하지 않고 어댑터는 참조한다'
+    how: '클래스 파일을 바이트로 읽는다'
+    test: HexagonalTest.domainHasNoFrameworkReferences
+  - claim: '도메인 규칙은 어댑터 없이 시험한다'
+    how: 'new Order'
+    test: HexagonalTest.domainRuleWithoutAdapters
+sources:
+  - '헥사고날 아키텍처: https://alistair.cockburn.us/hexagonal-architecture/'
+  - '@Bean: https://docs.spring.io/spring-framework/reference/core/beans/java/bean-annotation.html'

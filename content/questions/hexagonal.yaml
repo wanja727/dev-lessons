@@ -1,0 +1,212 @@
+# 헥사고날 아키텍처 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/hexagonal.yaml의 says).
+# 동작에 관한 정답은 verification의 HexagonalTest로 확인했다 (자바 21, 스프링 부트 3.5).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 쓴 날 검수까지 마쳐 reviewed로 올린다 (2026-11-26)
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: hexagonal
+  title: 헥사고날 아키텍처
+  unit: 시스템 설계와 아키텍처
+  order: 921
+concepts:
+  - key: core
+    name: 헥사고날 아키텍처
+coreQuestions:
+  - key: q1
+    text: "헥사고날 아키텍처는 어떻게 생겼나요?"
+  - key: q2
+    text: "의존이 안쪽을 향하면 무엇이 좋은가요?"
+  - key: q3
+    text: "계층형 아키텍처와 무엇이 다른가요?"
+  - key: q4
+    text: "대가는 무엇이고 언제 쓰나요?"
+questions:
+  # ── 질문 1 ──
+  - key: hx-payment-port
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 주문하기 유스케이스가 결제를 요청할 때 쓰는 PaymentPort 인터페이스는 무엇인가요?
+    choices:
+      - 들어오는 포트
+      - 나가는 포트. 도메인이 바깥에 요청한다
+      - 들어오는 어댑터
+      - 도메인 객체
+    answer: "2"
+    explanation: |-
+      **나가는 포트예요.** 도메인이 바깥(PG)에 일을 시키는 창구이고, 도메인이 자기 말로 정해요.
+
+      - HTTP로 PG를 부르는 구현이 나가는 어댑터예요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  - key: hx-kafka-consumer
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 카프카 메시지를 받아 주문하기 유스케이스(PlaceOrder)를 부르는 컨슈머 클래스는 무엇인가요?
+    choices:
+      - 나가는 어댑터
+      - 도메인
+      - 나가는 포트
+      - 들어오는 어댑터
+    answer: "4"
+    explanation: |-
+      **들어오는 어댑터예요.** 바깥에서 들어와 유스케이스를 부르니 웹 컨트롤러와 같은 자리예요.
+
+      - 테스트에서 웹과 배치가 같은 유스케이스를 불렀어요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  # ── 질문 2 ──
+  - key: hx-swap-adapter
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: reviewed
+    difficulty: 1
+    body: PlaceOrderService는 PaymentPort와 OrderStore만 알아요. 결제 구현을 FakePayment에서 HttpPayment로 바꿀 때 PlaceOrderService는 어떻게 되나요?
+    code: |-
+      PlaceOrder useCase = new PlaceOrderService(
+          store, new HttpPayment(pgUrl));
+      useCase.place("o-1", 30_000);
+    choices:
+      - 고치지 않는다
+      - HTTP 호출 코드를 넣어 고친다
+      - 두 구현을 if로 나눠 고친다
+      - 다시 컴파일할 수 없다
+    answer: "1"
+    explanation: |-
+      **고치지 않아요.** 도메인은 포트만 알아서 어댑터를 바꿔 끼워도 그대로예요.
+
+      - 테스트에서 두 어댑터 모두 PAID였고 도메인 코드는 그대로였어요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  - key: hx-mongo
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 저장을 JPA에서 MongoDB로 바꾸기로 했어요. 도메인은 OrderStore 포트만 알아요. 무엇을 해야 하나요?
+    choices:
+      - PlaceOrderService에 MongoDB 코드를 넣는다
+      - Order에 MongoDB 애너테이션을 단다
+      - OrderStore를 구현한 MongoDB 어댑터를 만들어 끼운다
+      - 컨트롤러에서 MongoDB를 부른다
+    answer: "3"
+    explanation: |-
+      **새 어댑터 하나를 만들어요.** 바깥 기술이 바뀌면 그 어댑터만 바꿔요.
+
+      - 도메인과 유스케이스는 그대로예요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  # ── 질문 3 ──
+  - key: hx-jpa-repo
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 계층형 구조에서 OrderRepository가 JpaRepository<Order, Long>을 상속하고, 서비스가 그 리포지토리의 findById, saveAll, Page를 써요. 서비스는 무엇에 묶여 있나요?
+    choices:
+      - 아무것에도 묶이지 않았다
+      - 컨트롤러
+      - JPA. 인터페이스가 데이터 접근 계층의 것이다
+      - 도메인 포트
+    answer: "3"
+    explanation: |-
+      **JPA에 묶여 있어요.** 서비스가 기대는 인터페이스를 데이터 접근 계층(JPA)이 정해요.
+
+      - 헥사고날은 포트를 도메인이 자기 말로 정해 JPA를 어댑터 안에 가둬요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  - key: hx-port-package
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 헥사고날 구조로 짜면서 OrderStore 포트 인터페이스를 어느 패키지에 두는 것이 알맞나요?
+    choices:
+      - adapter/out/persist (JPA 어댑터 옆)
+      - adapter/in/web (컨트롤러 옆)
+      - 아무 데나 상관없다
+      - 도메인이나 애플리케이션 패키지
+    answer: "4"
+    explanation: |-
+      **도메인이나 애플리케이션 쪽에 둬요.** 포트는 도메인이 소유하고 어댑터가 그것을 구현해요.
+
+      - 그래야 화살표가 어댑터에서 안쪽을 향해요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  # ── 질문 4 ──
+  - key: hx-crud
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 관리자가 공지사항을 등록하고 조회만 하는 기능에 헥사고날을 적용하려 해요. 판단으로 맞는 것은?
+    choices:
+      - 포트, 어댑터, 변환 코드만 늘어 얻는 것이 적다. 계층형으로 충분하다
+      - 꼭 해야 한다
+      - 계층형보다 코드가 줄어든다
+      - 공지사항은 도메인이 없어 헥사고날을 쓸 수 없다
+    answer: "1"
+    explanation: |-
+      **얻는 것이 적어요.** 지킬 규칙도 바뀔 바깥 기술도 거의 없어요.
+
+      - 규칙이 많고 오래 살 핵심 도메인에 써요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  - key: hx-rest-leak
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: reviewed
+    difficulty: 2
+    body: 헥사고날로 짰다는 프로젝트의 유스케이스 코드예요. 가장 큰 문제는 무엇인가요?
+    code: |-
+      class PlaceOrderService {
+        public Order place(String id,
+            long amount) {
+          RestTemplate rest = new RestTemplate();
+          rest.postForObject(pgUrl, ...);
+          ...
+        }
+      }
+    choices:
+      - 문제없다
+      - 바깥 기술(HTTP)이 유스케이스로 새어 PG를 바꾸면 유스케이스를 고쳐야 하고 가짜로 바꿀 수 없다
+      - RestTemplate은 느리다
+      - 메서드 이름이 틀렸다
+    answer: "2"
+    explanation: |-
+      **HTTP 호출이 포트를 거치지 않아요.** 이름만 헥사고날이에요.
+
+      - PaymentPort 어댑터로 옮기고, 도메인 클래스의 참조를 테스트로 지켜요
+    source: https://alistair.cockburn.us/hexagonal-architecture/
+  # ── 네 질문을 하나로 ──
+  - key: hx-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: reviewed
+    difficulty: 2
+    body: 면접에서 "헥사고날 아키텍처는 무엇이고, 계층형과 무엇이 다른가요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **도메인을 가운데 두고 바깥 기술을 포트와 어댑터로 떼어, 의존이 늘 안쪽을 향하게 해요.**
+
+      - **모양:** 들어오는 포트(유스케이스)와 나가는 포트(저장, 결제), 그 앞뒤의 어댑터
+      - **좋은 점:** 어댑터를 바꿔도 도메인은 그대로, 가짜 어댑터로 빠르게 시험
+      - **계층형과 차이:** 포트를 도메인이 소유해 JPA 같은 기술이 어댑터 안에 갇힌다
+      - **대가:** 인터페이스와 변환이 는다. 핵심 도메인에 쓴다
+    checklist:
+      - 포트와 어댑터를 말했다
+      - 의존이 안쪽을 향한다고 말했다
+      - 어댑터를 바꿔 끼워도 도메인이 그대로라고 말했다
+      - 계층형과의 차이(포트를 누가 소유하나)를 말했다
+      - 대가와 쓸 때를 말했다
+    source: https://alistair.cockburn.us/hexagonal-architecture/
