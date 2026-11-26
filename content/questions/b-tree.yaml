@@ -1,0 +1,225 @@
+# B-트리 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/b-tree.yaml의 says).
+# 동작에 관한 정답은 verification의 BTreeTest로 확인했다 (자바 21, PostgreSQL 16).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: b-tree
+  title: B-트리
+  unit: 자료구조와 알고리즘
+  order: 67
+concepts:
+  - key: core
+    name: B-트리
+coreQuestions:
+  - key: q1
+    text: "이진 탐색 트리를 디스크에 두면 왜 느린가요?"
+  - key: q2
+    text: "B-트리는 어떻게 디스크를 덜 읽나요?"
+  - key: q3
+    text: "키를 넣을 때 B-트리는 어떻게 균형을 지키나요?"
+  - key: q4
+    text: "B+트리는 무엇이 다르고, 범위 조회에 왜 좋은가요?"
+questions:
+  # ── 질문 1 ──
+  - key: bt-bst-height
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 키 100만 개를 균형 이진 탐색 트리에 담았어요. 키 하나를 찾을 때 거치는 노드는 많아야 몇 개쯤일까요?
+    choices:
+      - 3개쯤
+      - 20개쯤
+      - 1,000개쯤
+      - 50만 개쯤
+    answer: "2"
+    explanation: |-
+      **20개쯤이에요.** 노드 하나에 키가 하나라 높이가 log₂ 100만, 약 20이에요.
+
+      - 노드가 디스크에 흩어져 있으면 한 번 찾을 때 페이지를 20번 읽어요
+      - 같은 키를 노드당 키 255개인 B+트리에 담으면 3개만 거쳐요
+    source: https://www.postgresql.org/docs/16/storage-page-layout.html
+  - key: bt-pages-decide
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 노드를 하나 읽을 때마다 디스크를 한 번 읽는 저장소에, 같은 키 1천만 개를 높이 24의 트리와 높이 3의 트리로 담았어요. 높이 3의 트리는 노드 안에서 비교를 더 많이 해요. 어느 쪽이 빨리 찾고, 무엇이 그 차이를 정할까요?
+    choices:
+      - 높이 24. 노드가 작아 비교가 적다
+      - 높이 3. 디스크 읽기가 메모리 비교보다 훨씬 느려서 읽는 노드 수가 시간을 정한다
+      - 같다. 둘 다 O(log n)이다
+      - 높이 24. 디스크는 작은 노드를 더 빨리 읽는다
+    answer: "2"
+    explanation: |-
+      **높이 3의 트리가 빨라요.** 디스크 읽기 한 번이 메모리 비교 수천 번만큼 걸려요.
+
+      - 노드 안의 비교는 이미 읽은 페이지 안의 일이라 메모리 속도예요
+      - 그래서 디스크 위의 자료구조는 읽는 페이지 수로 따져요
+    source: https://www.postgresql.org/docs/16/storage-page-layout.html
+  # ── 질문 2 ──
+  - key: bt-fanout-height
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 노드마다 자식이 300개인 B-트리에 키 2,700만 개를 담으면 높이는 얼마쯤일까요?
+    choices:
+      - 3겹
+      - 25겹
+      - 300겹
+      - 9만 겹
+    answer: "1"
+    explanation: |-
+      **3겹이에요.** 300 × 300 × 300 = 2,700만이에요. 높이가 log₂ n이 아니라 log₃₀₀ n이에요.
+
+      - 같은 키를 이진 탐색 트리에 담으면 25겹쯤이에요
+      - 네 겹이면 81억 개까지 담아요
+    source: https://www.postgresql.org/docs/16/btree.html
+  - key: bt-buffers-hit-read
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "PostgreSQL에서 explain (analyze, buffers)로 인덱스 조회를 봤더니 Buffers: shared hit=3 read=1이 나왔어요. 디스크에서 읽은 페이지는 몇 개이고, 나머지는 어디서 읽었을까요?"
+    choices:
+      - 4개 모두 디스크에서 읽었다
+      - 1개는 디스크에서, 3개는 DB의 메모리(공유 버퍼)에서 읽었다
+      - 3개는 디스크에서, 1개는 메모리에서 읽었다
+      - 디스크에서 읽은 것은 없다
+    answer: "2"
+    explanation: |-
+      **read=1이 디스크, hit=3이 메모리예요.** shared hit은 공유 버퍼에 이미 있던 페이지예요.
+
+      - B-트리의 위쪽 겹은 모든 조회가 지나가서 메모리에 남아 있기 쉬워요
+      - 그래서 큰 테이블에서도 디스크를 읽는 것은 아래쪽 한두 페이지인 경우가 많아요
+    source: https://www.postgresql.org/docs/16/sql-explain.html
+  - key: bt-long-key-index
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 같은 30만 행에서 bigint 기본 키 인덱스는 6.6MB에 세 겹이에요. 평균 176자인 url 열에 그대로 인덱스를 만들면 어떻게 될까요?
+    choices:
+      - 크기와 높이가 bigint 인덱스와 같다. 행 수가 같으니까
+      - 한 페이지에 담기는 키가 줄어 인덱스가 몇 배 커지고 겹이 늘 수 있다
+      - 문자열은 인덱스를 만들 수 없다
+      - 더 작아진다. 문자열은 압축되니까
+    answer: "2"
+    explanation: |-
+      **훨씬 커지고 깊어질 수 있어요.** 키가 길면 8KB 페이지에 담기는 키가 줄어 페이지가 더 많이 필요해요.
+
+      - 테스트에서 url 인덱스는 66MB에 네 겹(level 3)이었어요
+      - 같은지만 보면 되면 짧은 해시 값 열에 인덱스를 두고, 찾은 행에서 원래 값을 한 번 더 비교해요
+    source: https://www.postgresql.org/docs/16/pageinspect.html
+  # ── 질문 3 ──
+  - key: bt-first-split
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 노드당 키를 최대 3개 담는 B+트리에 1, 2, 3을 넣은 뒤 4를 넣어요. 무슨 일이 일어날까요?
+    choices:
+      - 잎 아래에 새 잎이 생겨 4가 들어간다
+      - 잎이 [1 2]와 [3 4]로 나뉘고 3이 새 뿌리로 올라가 높이가 2가 된다
+      - 4는 넣을 수 없다
+      - 1이 밀려나 버려진다
+    answer: "2"
+    explanation: |-
+      **잎이 둘로 나뉘고 새 뿌리가 생겨요.** 키가 4개가 되어 넘친 잎을 반으로 나누고, 둘을 가르는 키를 부모로 올려요.
+
+      - 부모가 없으니 새 뿌리가 생겨 트리가 위로 한 겹 자라요
+      - 그래서 모든 잎이 늘 같은 깊이예요
+    source: https://www.postgresql.org/docs/16/btree.html
+  - key: bt-sorted-insert
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 자동 증가 번호처럼 늘 커지는 키 100만 개를, 노드당 키 255개인 B+트리와 균형을 맞추지 않는 이진 탐색 트리에 각각 넣었어요. 두 트리의 높이는 각각 어떻게 될까요?
+    choices:
+      - 둘 다 20쯤
+      - B+트리는 세 겹, 이진 탐색 트리는 100만 겹
+      - B+트리는 100만 겹, 이진 탐색 트리는 20
+      - 둘 다 100만 겹
+    answer: "2"
+    explanation: |-
+      **B+트리는 세 겹, 이진 탐색 트리는 한 줄로 100만 겹이에요.** 이진 탐색 트리는 늘 오른쪽에만 붙어 한 줄이 돼요.
+
+      - B+트리는 가득 찬 노드를 나눠 위로 자라서 정렬된 순서로 넣어도 균형이 맞아요
+      - 테스트에서 노드당 키 3개짜리도 13겹이었어요
+    source: https://www.postgresql.org/docs/16/btree.html
+  # ── 질문 4 ──
+  - key: bt-range-nodes
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 높이 3의 B+트리에서 이어진 키 100개를 between으로 읽어요. 한 잎에 키가 300개쯤 들어 있다면 읽는 노드는 대략 몇 개일까요?
+    choices:
+      - 1개
+      - 3개나 4개
+      - 100개
+      - 300개
+    answer: "2"
+    explanation: |-
+      **3개나 4개예요.** 뿌리에서 시작 키의 잎까지 3개를 내려간 뒤, 잎의 next를 따라 옆으로 읽어요.
+
+      - 범위가 잎 경계를 넘으면 옆 잎 하나를 더 읽어요
+      - 위로 다시 올라가지 않아요
+    source: https://www.postgresql.org/docs/16/btree.html
+  - key: bt-no-leaf-links
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 잎끼리 이어져 있지 않은 트리에서 이어진 범위를 읽으면, 잎이 옆으로 이어진 B+트리보다 무엇이 더 들까요?
+    choices:
+      - 잎 하나를 다 읽을 때마다 부모로 올라가 다음 잎을 찾아 내려가야 한다
+      - 범위의 키를 다시 정렬해야 한다
+      - 더 드는 것이 없다
+      - 키마다 테이블 전체를 읽어야 한다
+    answer: "1"
+    explanation: |-
+      **위아래를 오가야 해요.** B+트리는 잎의 next로 옆 잎에 바로 가요.
+
+      - 테스트에서 균형 이진 탐색 트리로 100개 범위를 찾으면 노드를 115개 지났어요
+      - 같은 범위를 B+트리는 4개로 읽었어요
+    source: https://www.postgresql.org/docs/16/btree.html
+  # ── 네 질문을 하나로 ──
+  - key: bt-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "DB 인덱스는 왜 이진 탐색 트리가 아니라 B-트리를 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **DB는 디스크에서 페이지 단위로 읽어서, 한 페이지에 키를 수백 개 담아 겹 수를 줄인 B-트리가 읽는 페이지가 훨씬 적기 때문이에요.**
+
+      - **디스크:** 시간은 비교 횟수가 아니라 읽는 페이지 수가 정한다. 이진 탐색 트리는 100만 개에 20겹
+      - **B-트리:** 노드당 키 수백 개, 높이 log_m n. 100만 개에 세 겹, 위쪽 겹은 메모리에 남는다
+      - **균형:** 가득 찬 노드를 나눠 위로 자라서 모든 잎이 같은 깊이
+      - **B+트리:** 값은 잎에만, 잎끼리 이어져 범위 조회와 정렬에 강하다
+    checklist:
+      - DB는 디스크에서 페이지 단위로 읽어 읽는 페이지 수가 시간을 정한다고 말했다
+      - 이진 탐색 트리는 노드당 키가 하나라 깊다고 말했다
+      - B-트리는 노드당 키를 수백 개 담아 높이가 낮다고 말했다
+      - 가득 찬 노드를 나눠 위로 자라며 균형을 지킨다고 말했다
+      - B+트리는 잎이 이어져 범위 조회에 좋다고 말했다
+    source: https://www.postgresql.org/docs/16/btree.html

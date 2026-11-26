@@ -1,8 +1,9 @@
-# B-트리 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# B-트리
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/b-tree.yaml에 있다.
 title: B-트리
+description: 이진 탐색 트리를 디스크에 두면 왜 느린지, B-트리는 어떻게 디스크를 덜 읽는지, 키를 넣을 때 어떻게 균형을 지키는지, B+트리가 범위 조회에 왜 좋은지. 네 가지 질문에 스스로 답할 수 있게, 주문 번호 100만 개를 두 트리와 PostgreSQL 인덱스에 넣고 읽는 페이지를 세어 보는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 25
 roadmap: K13
 type: 자바 실행
 prerequisites:
@@ -10,7 +11,7 @@ prerequisites:
 assume: '자바 21(OpenJDK), PostgreSQL 16. 이진 탐색 트리는 정렬된 채로 넣고 찾으며, 균형이 깨지면 깊어진다는 것(이진 탐색 트리 레슨). O(log n)이 뜻하는 것(시간 복잡도 레슨). SQL의 `create index`를 써 본 것.'
 example: '주문 번호 100만 개를 담는 색인. 같은 키를 이진 탐색 트리와, 노드 하나에 키를 수백 개 담는 B-트리(자바로 만든 작은 구현)에 넣고 찾으며 거치는 노드 수를 세요. 그다음 PostgreSQL의 실제 인덱스를 열어 높이와 페이지 수를 봐요. 실무 구역에서는 긴 문자열 열에 만든 인덱스로 옮겨요.'
 intro:
-  - '주문 테이블이 1억 행이 되어도 `where id = ?` 조회는 여전히 1밀리초 안팎이에요. 이진 탐색 트리였다면 키 하나를 찾는 데 노드를 27개 거쳐야 하고, 그 노드들이 디스크에 흩어져 있으면 디스크를 27번 읽어요. DB는 같은 일을 디스크 서너 번 읽기로 끝내요.'
+  - '주문 테이블이 1억 행이 되어도 `where id = ?` 조회는 여전히 1밀리초 안팎이에요. 이진 탐색 트리였다면 키 하나를 찾는 데 노드를 27개 거쳐야 하고, 그 노드들이 디스크에 흩어져 있으면 디스크를 27번 읽어요. DB는 같은 일을 페이지 서너 개 읽기로 끝내요.'
   - '자바와 스프링 개발자는 인덱스를 매일 만들지만 그 안을 볼 일은 드물어요. 그래도 인덱스가 왜 몇 번만 읽고 끝나는지, 키가 길면 왜 인덱스가 커지는지, 범위 조회가 왜 빠른지는 B-트리의 모양에서 나와요. 면접에서 "DB 인덱스는 왜 이진 탐색 트리가 아니라 B-트리를 쓰나요"를 묻는 것도 이 모양을 아는지 보려는 거예요.'
   - '이 레슨에서는 같은 키를 이진 탐색 트리와 B-트리에 넣어 찾을 때 거치는 노드 수를 세고, PostgreSQL 인덱스의 높이와 한 번 찾을 때 읽는 페이지 수를 실제로 확인해요.'
 covers:
@@ -48,9 +49,9 @@ codes:
   predict: |-
     -- 주문 100만 건, id에 기본 키 인덱스
     explain (analyze, buffers)
-    select * from bt_orders
+    select id from bt_orders
     where id = 765432;
-    -- 인덱스에서 읽은 페이지는 몇 개?
+    -- 읽은 페이지는 몇 개?
   node: |-
     class Node {
       long[] keys;      // 정렬된 키 수백 개
@@ -60,28 +61,76 @@ codes:
   find: |-
     Node n = root;
     while (!n.isLeaf()) {
-      int i = upperBound(n.keys, key);
+      int i = [[upperBound(n.keys, key)]];
       n = n.children[i];
     }
     return contains(n.keys, key);
   bstFind: |-
     Node n = root;
     while (n != null && n.key != key) {
-      n = key < n.key ? n.left : n.right;
+      [[n = key < n.key ? n.left : n.right;]]
     }
+  visitsRun: |-
+    // 1부터 1,000,000까지를 두 트리에 넣고
+    // 키 천여 개를 찾으며 거친 노드를 센다
   meta: |-
     create extension pageinspect;
+    show block_size;
     select level, root
     from bt_metap('bt_orders_pkey');
+  sortedRun: |-
+    for (long k = 1; k <= 1_000_000; k++) {
+      tree.insert(k);  // 늘 커지는 키
+    }
   range: |-
-    select * from bt_orders
-    where id between 500000 and 500099;
+    explain (analyze, buffers)
+    select id from bt_orders
+    where id [[between 500000 and 500099]];
+  rangeRun: |-
+    // 자바 B+트리와 균형 이진 탐색 트리에서
+    // between 500000 and 500099를 찾는다
+  spreadRun: |-
+    explain (analyze, buffers)
+    select id from bt_orders
+    where id in (5000, 15000, ...,
+                 995000);  -- 100개
   longKey: |-
-    create index on bt_events (url);
-    -- url은 200자 남짓
+    create index on bt_events ([[url]]);
+    -- url은 평균 176자
+  hashKey: |-
+    alter table bt_events
+      add column url_hash bigint;
+    create index on bt_events ([[url_hash]]);
+
+    select * from bt_events
+    where url_hash = :hash
+      [[and url = :url]];
+  sizeRun: |-
+    select relname,
+      pg_size_pretty(pg_relation_size(oid)),
+      (select level from bt_metap(relname))
+    from pg_class
+    where relname like 'bt_events%';
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/btree/BTreeTest.java
+  btree: https://www.postgresql.org/docs/16/btree.html
+  page: https://www.postgresql.org/docs/16/storage-page-layout.html
+  pageinspect: https://www.postgresql.org/docs/16/pageinspect.html
+  explain: https://www.postgresql.org/docs/16/sql-explain.html
+  vm: https://www.postgresql.org/docs/16/storage-vm.html
 predict:
-  text: '코드 predict는 주문 100만 건에서 기본 키로 한 건을 찾아요. 이진 탐색 트리였다면 20겹을 내려가요. PostgreSQL 인덱스에서 읽은 페이지는 몇 개일까요? 보기: 1개, 3개쯤, 20개쯤, 100개 넘게.'
-  answer: '3개쯤. 한 페이지에 키가 수백 개라 100만 개도 세 겹이다. 질문 2에서 밝힌다. 정확한 수는 테스트로 본다'
+  title: 100만 건에서 한 건을 찾으려면?
+  text: '코드 predict는 주문 100만 건에서 기본 키로 한 건을 찾아요. 이진 탐색 트리였다면 20겹을 내려가요. PostgreSQL이 이 조회에서 읽은 페이지는 몇 개일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: one, label: 1개}
+    - {value: four, label: 4개쯤}
+    - {value: twenty, label: 20개쯤}
+    - {value: many, label: 100개 넘게}
+  answer: four
+  storageKey: bt-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 이진 탐색 트리를 디스크에 두면 왜 느린가요?
@@ -96,6 +145,38 @@ questions:
     asks:
       - '본문의 예시: 키 100만 개를 균형 이진 탐색 트리에 담았다. 키 하나를 찾을 때 거치는 노드는 많아야 몇 개쯤인가 (20개쯤. log₂ 100만)'
       - '옮긴 상황: 노드를 하나 읽을 때마다 디스크를 한 번 읽는 저장소에서, 같은 키 1천만 개를 높이 24의 트리와 높이 3의 트리로 담았다. 찾는 시간을 주로 정하는 것은 무엇이고 어느 쪽이 빠른가 (읽는 노드 수. 높이 3)'
+    body:
+      - p: '메모리 안에서는 이진 탐색 트리가 훌륭해요. 그런데 DB의 데이터는 **디스크**에 있어요. 디스크는 바이트 하나씩이 아니라 **페이지**라는 덩어리로 읽어요. PostgreSQL의 페이지는 8KB예요. 키 하나만 필요해도 그 키가 든 8KB를 통째로 읽어요.'
+      - table:
+          head: [어디서 읽나, 한 번에 걸리는 시간(자릿수)]
+          rows:
+            - ['메모리', '수십 나노초']
+            - ['SSD', '수십에서 수백 마이크로초']
+            - ['하드디스크', '수 밀리초']
+      - p: '디스크를 한 번 읽는 동안 메모리에서는 비교를 수천 번 할 수 있어요. 그래서 디스크 위의 자료구조는 **비교 횟수가 아니라 읽는 페이지 수**로 따져요. 숫자는 장비마다 달라서 자릿수로만 보세요.'
+      - h3: 이진 탐색 트리는 깊어요
+      - code: bstFind
+        notes:
+          - mark: 'n = key < n.key ? n.left : n.right;'
+            as: code
+            text: '한 겹 내려갈 때마다 노드 하나를 읽어요. 노드가 디스크에 흩어져 있으면 그때마다 페이지 하나를 읽어요.'
+      - p: '노드 하나에 키가 하나라서, 키 100만 개를 **균형 있게** 담아도 높이가 log₂ 100만 = **20**이에요. 1억 개면 27이에요. 자바로 균형 이진 탐색 트리를 만들어 찾을 때 거친 노드를 셌어요.'
+      - ci:
+          key: visits
+          label: 거친 노드 수 보기
+          source: BTreeTest.heightAndVisits
+          code: visitsRun
+      - p: '이진 탐색 트리는 20개를 거쳐요. 디스크라면 페이지 20번이에요. 아래 줄의 B+트리는 같은 키를 **3개**만 거쳐 찾았어요. 한 페이지에 키를 하나만 담는 대신 수백 개를 담았기 때문이에요. 8바이트 키와 자식의 위치는 8KB에 수백 쌍이 들어가요. 그것이 다음 질문의 B-트리예요.'
+      - quiz:
+          q: '노드를 하나 읽을 때마다 디스크를 한 번 읽는 저장소에, 같은 키 1천만 개를 높이 24의 트리와 높이 3의 트리로 담았어요. 어느 쪽이 빨리 찾을까요?'
+          options:
+            - '높이 24. 노드가 작아서 비교가 적다'
+            - '높이 3. 시간은 주로 읽는 노드(페이지) 수가 정한다'
+            - '같다. 둘 다 O(log n)이다'
+          answer: 2
+          explain: '디스크 읽기 한 번이 메모리 비교 수천 번만큼 느려요. 높이 3의 트리는 노드 안에서 비교를 더 하지만 디스크는 3번만 읽어요.'
+      - next: '노드 하나에 키를 수백 개 담으면 정말 몇 겹이면 될까요? 실제 DB에서 확인해 봐요.'
+    recall: 'DB는 디스크에서 페이지(PostgreSQL은 8KB) 단위로 읽고, 이진 탐색 트리는 노드 하나에 키가 하나라 깊기 때문이에요. 균형을 맞춰도 키 100만 개면 20겹, 1억 개면 27겹이고 겹마다 페이지를 하나씩 읽어요. 디스크 읽기는 메모리보다 천 배 넘게 느려서 비교 횟수가 아니라 읽는 페이지 수가 시간을 정해요.'
   - id: q2
     title: B-트리는 어떻게 디스크를 덜 읽나요?
     conclusion:
@@ -105,7 +186,7 @@ questions:
       - '코드 node. B-트리의 노드는 정렬된 키 배열과, 키 수보다 하나 많은 자식을 가진다. 키 k1, k2 사이의 자식에는 그 사이 값만 있다. 이진 탐색 트리의 왼쪽과 오른쪽을 수백 갈래로 넓힌 것이다'
       - '코드 find. 뿌리에서 시작해 노드 안의 키를 이진 탐색으로 보고 들어갈 자식을 고른다. 노드 안의 탐색은 이미 읽은 페이지 안의 일이라 메모리 속도다. 디스크 읽기는 겹마다 한 번이다'
       - '높이. 노드마다 자식이 m개면 높이 h의 트리는 m^h개의 키를 담는다. m이 300이면 두 겹이 9만, 세 겹이 2700만, 네 겹이 81억이다. 자바로 만든 B-트리(노드당 키 최대 255개)에 키 100만 개를 넣고 높이와 찾을 때 거친 노드 수를 이진 탐색 트리와 나란히 보인다'
-      - '실제 DB. PostgreSQL에 주문 100만 건을 넣고 pageinspect의 `bt_metap`으로 기본 키 인덱스의 높이(level)를 본다. 예측의 답을 밝힌다: `EXPLAIN (ANALYZE, BUFFERS)`의 인덱스 노드에서 읽은 페이지 수가 겹 수만큼이다. 실제 출력을 보인다'
+      - '실제 DB. PostgreSQL에 주문 100만 건을 넣고 pageinspect의 `bt_metap`으로 기본 키 인덱스의 높이(level)를 본다. 예측의 답을 밝힌다: 인덱스 세 겹과 가시성 맵 한 페이지로 4페이지다. 실제 출력을 보인다 (설계서는 "겹 수만큼 3개"였는데, 인덱스만 읽는 조회는 가시성 맵 한 페이지를 더 읽어서 4로 고쳤다)'
       - '위쪽 겹은 모든 조회가 지나가서 DB의 버퍼(메모리)에 남아 있다. `shared hit`은 메모리에서, `read`는 디스크에서 읽은 페이지다. 그래서 큰 테이블에서도 디스크를 읽는 것은 아래쪽 한두 페이지인 경우가 많다'
     widget:
       kind: toggle
@@ -113,6 +194,92 @@ questions:
     asks:
       - '본문의 예시: 노드마다 자식이 300개인 B-트리에 키 2700만 개를 담으면 높이는 얼마쯤인가 (3겹. 300³ = 2700만)'
       - '옮긴 상황: `EXPLAIN (ANALYZE, BUFFERS)`의 인덱스 조회에 `Buffers: shared hit=3 read=1`이 나왔다. 디스크에서 읽은 페이지는 몇 개이고 나머지는 어디서 읽었나 (1개. 3개는 메모리의 버퍼에서)'
+    body:
+      - p: '**B-트리**는 노드 하나에 키를 하나가 아니라 **정렬된 키 수백 개**를 담아요. 노드 하나가 디스크의 페이지 하나예요.'
+      - code: node
+      - p: '자식은 키 수보다 하나 많아요. 키 k1과 k2 사이의 자식에는 그 사이 값만 있어요. 이진 탐색 트리의 "왼쪽, 오른쪽" 두 갈래를 **수백 갈래**로 넓힌 거예요. 찾을 때는 노드 안의 키를 보고 들어갈 자식을 골라요.'
+      - code: find
+        notes:
+          - mark: upperBound(n.keys, key)
+            as: code
+            text: '노드 안의 정렬된 키에서 들어갈 자리를 이진 탐색으로 찾아요. 이미 읽은 페이지 안의 일이라 메모리 속도예요.'
+      - h3: 그래서 낮아요
+      - p: '노드마다 자식이 m개면 높이 h의 트리에는 키가 m^h개쯤 들어가요. m이 300이면 두 겹에 9만, 세 겹에 2700만, 네 겹에 81억이에요. 높이가 log₂ n이 아니라 **log_m n**이에요. 키의 수를 바꿔 가며 두 트리가 한 번 찾을 때 읽는 페이지를 견줘 보세요.'
+      - widget:
+          kind: toggle
+          layout: [selector, gantt, duo, verdict]
+          selector:
+            label: 키의 수
+            options:
+              - {value: k1, label: '1천'}
+              - {value: m1, label: '100만'}
+              - {value: e1, label: '1억'}
+          scenes:
+            k1:
+              gantt:
+                total: 30
+                axis: ['0', '15', '30페이지']
+                rows:
+                  - {label: '이진', bars: [{kind: fail, from: 0, to: 10}]}
+                  - {label: 'B-트리', bars: [{kind: hold, from: 0, to: 2}]}
+              duo:
+                - label: 이진 탐색 트리
+                  rows: [{k: 높이, v: '10'}, {k: 읽는 페이지, v: '10', mark: bad}]
+                - label: B-트리 (자식 300개)
+                  rows: [{k: 높이, v: '2'}, {k: 읽는 페이지, v: '2', mark: changed}]
+              verdict: '키 1천 개에서도 5배 차이예요.'
+            m1:
+              gantt:
+                total: 30
+                axis: ['0', '15', '30페이지']
+                rows:
+                  - {label: '이진', bars: [{kind: fail, from: 0, to: 20}]}
+                  - {label: 'B-트리', bars: [{kind: hold, from: 0, to: 3}]}
+              duo:
+                - label: 이진 탐색 트리
+                  rows: [{k: 높이, v: '20'}, {k: 읽는 페이지, v: '20', mark: bad}]
+                - label: B-트리 (자식 300개)
+                  rows: [{k: 높이, v: '3'}, {k: 읽는 페이지, v: '3', mark: changed}]
+              verdict: '키가 천 배 늘었는데 B-트리는 한 겹만 늘었어요. PostgreSQL에서도 세 겹이었어요.'
+            e1:
+              gantt:
+                total: 30
+                axis: ['0', '15', '30페이지']
+                rows:
+                  - {label: '이진', bars: [{kind: fail, from: 0, to: 27}]}
+                  - {label: 'B-트리', bars: [{kind: hold, from: 0, to: 4}]}
+              duo:
+                - label: 이진 탐색 트리
+                  rows: [{k: 높이, v: '27'}, {k: 읽는 페이지, v: '27', mark: bad}]
+                - label: B-트리 (자식 300개)
+                  rows: [{k: 높이, v: '4'}, {k: 읽는 페이지, v: '4', mark: changed}]
+              verdict: '1억 개도 네 겹이에요. 도입부의 1억 행 테이블이 빠른 이유예요.'
+      - h3: PostgreSQL에서 확인해 봐요
+      - p: 'PostgreSQL에 주문 100만 건을 넣고, 기본 키 인덱스의 높이를 pageinspect 확장의 `bt_metap`으로 읽었어요. `level`은 뿌리가 잎에서 몇 겹 위에 있는지예요(잎이 0).'
+      - ci:
+          key: pg-meta
+          label: 실제 높이 보기
+          source: BTreeTest.postgresHeightAndPointLookup
+          code: meta
+      - p: 'level 2, 곧 **뿌리, 중간, 잎의 세 겹**이에요. 이제 코드 predict를 돌려 실제로 읽은 페이지를 봐요. 처음 예측의 답은 **4개쯤**이에요. {{predict-result}}'
+      - ci:
+          key: predict
+          label: 실제 실행계획 보기
+          source: BTreeTest.postgresHeightAndPointLookup
+          code: predict
+      - p: '`Buffers: shared hit=4`예요. 인덱스 세 겹을 하나씩 읽었고, 하나는 **가시성 맵** 페이지예요. 인덱스만으로 답하는 조회(`Index Only Scan`)는 테이블 페이지를 볼 필요가 없는지 이 작은 지도로 확인해요. `select *`로 바꾸면 가시성 맵 대신 테이블 페이지 하나를 읽어서 역시 4페이지였어요(테스트로 확인). 어느 쪽이든 100만 건에서 한 건을 찾는 데 **인덱스는 세 페이지**예요.'
+      - h3: 위쪽 겹은 메모리에 있어요
+      - p: '`shared hit`은 DB의 메모리(공유 버퍼)에서 읽은 페이지, `read`는 디스크에서 읽은 페이지예요. 뿌리와 중간 겹은 **모든 조회가 지나가서** 거의 늘 메모리에 남아 있어요. 그래서 큰 테이블에서도 실제로 디스크를 읽는 것은 아래쪽 잎 한두 페이지인 경우가 많아요.'
+      - quiz:
+          q: '노드마다 자식이 300개인 B-트리에 키 2700만 개를 담으면 높이는 얼마쯤일까요?'
+          options:
+            - '3겹'
+            - '25겹'
+            - '300겹'
+          answer: 1
+          explain: '300 × 300 × 300 = 2700만이라 세 겹이면 돼요. 같은 키를 이진 탐색 트리에 담으면 25겹쯤이에요.'
+      - next: 'B-트리는 이렇게 낮게 유지되어야 빨라요. 그런데 이진 탐색 트리는 정렬된 순서로 넣으면 한쪽으로 길어졌어요. B-트리는 키를 넣을 때 어떻게 균형을 지킬까요?'
+    recall: '노드 하나(페이지 하나)에 정렬된 키를 수백 개 담아 한 번 읽을 때 갈 길을 수백 갈래로 나눠요. 그래서 높이가 log_m n이라 자식이 300개면 2700만 개도 세 겹이에요. 노드 안은 이진 탐색으로 메모리에서 찾아요. PostgreSQL의 100만 행 기본 키 인덱스도 세 겹이라 한 건을 찾는 데 인덱스 페이지 세 개를 읽었고, 위쪽 겹은 메모리에 남아 있어 디스크 읽기는 더 적어요.'
   - id: q3
     title: 키를 넣을 때 B-트리는 어떻게 균형을 지키나요?
     conclusion:
@@ -122,7 +289,7 @@ questions:
       - '넣기는 찾기와 같은 길로 잎까지 내려가 그 잎의 정렬된 자리에 키를 끼운다'
       - '잎이 가득 차면 나눈다. 키를 반씩 두 노드로 나누고, 가운데 키(B+트리에서는 오른쪽 노드의 첫 키)를 부모에 끼운다. 부모도 가득 차면 같은 일을 위로 되풀이한다'
       - '뿌리가 나뉘면 새 뿌리가 생겨 높이가 하나 는다. 트리는 아래로가 아니라 위로 자란다. 그래서 모든 잎은 언제나 같은 깊이다'
-      - '노드당 키 3개인 작은 B-트리에 1부터 10까지 차례로 넣으며 나뉘는 순간을 한 단계씩 본다. 위젯으로 보인다'
+      - '노드당 키 3개인 작은 B-트리에 1부터 7까지 차례로 넣으며 나뉘는 순간을 한 단계씩 본다. 위젯으로 보인다'
       - '이진 탐색 트리에 1부터 차례로 넣으면 한 줄로 길어져 높이가 n이 된다(K8). 같은 순서로 B-트리에 100만 개를 넣어도 높이가 3인 것을 테스트로 보인다'
       - '더 알아보기: 지워서 노드가 반보다 비면 이웃 노드에서 키를 빌려 오거나 이웃과 합친다. 합쳐서 뿌리의 자식이 하나가 되면 높이가 준다. PostgreSQL은 비어 버린 페이지를 나중에 VACUUM이 정리한다'
     widget:
@@ -131,6 +298,83 @@ questions:
     asks:
       - '본문의 예시: 노드당 키 최대 3개인 B+트리에 1, 2, 3을 넣은 뒤 4를 넣으면 무슨 일이 일어나나 (잎이 둘로 나뉘고 키 하나가 새 뿌리로 올라가 높이가 2가 된다)'
       - '옮긴 상황: 자동 증가 번호처럼 늘 커지는 키를 B-트리와 균형을 맞추지 않는 이진 탐색 트리에 각각 100만 개 넣었다. 두 트리의 높이는 각각 어떻게 되나 (B-트리는 서너 겹, 이진 탐색 트리는 100만 겹)'
+    body:
+      - p: '넣기는 찾기와 같은 길로 **잎까지 내려가**, 그 잎의 정렬된 자리에 키를 끼우는 일이에요. 문제는 잎이 가득 찼을 때예요. 노드당 키를 최대 3개만 담는 작은 B+트리로 1부터 7까지 넣어 보세요. 실제 DB는 수백 개를 담지만 하는 일은 같아요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - {label: 트리 (위가 뿌리), state: dim, text: '빈 잎 하나'}
+              - label: 센 것
+                rows: [{k: 높이, v: '1'}, {k: 나뉜 횟수, v: '0'}]
+          scenarios:
+            default:
+              - log: 'insert 1, 2, 3 → 잎 하나에 차례로 들어가요'
+                duo:
+                  - label: 트리 (위가 뿌리)
+                    rows: [{k: 잎, v: '[1 2 3]', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 높이, v: '1'}, {k: 나뉜 횟수, v: '0'}]
+                verdict: '잎이 가득 찼어요(키 3개).'
+              - log: 'insert 4 → 잎에 키가 4개라 넘쳐요. [1 2]와 [3 4]로 나누고 3을 위로 올려요'
+                duo:
+                  - label: 트리 (위가 뿌리)
+                    rows: [{k: 뿌리, v: '[3]', mark: changed}, {k: 잎, v: '[1 2] [3 4]', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 높이, v: '2', mark: changed}, {k: 나뉜 횟수, v: '1'}]
+                verdict: '올릴 부모가 없어서 새 뿌리가 생겼어요. 트리가 위로 한 겹 자랐어요. 두 잎은 같은 깊이예요.'
+              - log: 'insert 5 → 뿌리의 3보다 크니 오른쪽 잎으로 가요'
+                duo:
+                  - label: 트리 (위가 뿌리)
+                    rows: [{k: 뿌리, v: '[3]'}, {k: 잎, v: '[1 2] [3 4 5]', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 높이, v: '2'}, {k: 나뉜 횟수, v: '1'}]
+              - log: 'insert 6 → 오른쪽 잎이 넘쳐요. [3 4]와 [5 6]으로 나누고 5를 뿌리에 끼워요'
+                duo:
+                  - label: 트리 (위가 뿌리)
+                    rows: [{k: 뿌리, v: '[3 5]', mark: changed}, {k: 잎, v: '[1 2] [3 4] [5 6]', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 높이, v: '2'}, {k: 나뉜 횟수, v: '2'}]
+                verdict: '이번에는 부모(뿌리)에 자리가 있어서 높이가 그대로예요.'
+              - log: 'insert 7 → 오른쪽 잎에 들어가요'
+                duo:
+                  - label: 트리 (위가 뿌리)
+                    rows: [{k: 뿌리, v: '[3 5]'}, {k: 잎, v: '[1 2] [3 4] [5 6 7]', mark: changed}]
+                  - label: 센 것
+                    rows: [{k: 높이, v: '2'}, {k: 나뉜 횟수, v: '2'}]
+                verdict: '키를 차례로 넣었는데도 모든 잎이 같은 깊이예요. 뿌리가 또 넘치면 그때 높이가 3이 돼요.'
+      - p: '위젯의 단계는 자바로 만든 B+트리가 실제로 낸 모양과 같아요.'
+      - ci:
+          key: splits
+          label: 단계마다의 실제 트리 보기
+          source: BTreeTest.splitsKeepBalance
+      - ul:
+          - '**가득 찬 노드는 가운데에서 둘로 나눠요.** 왼쪽과 오른쪽에 반씩 두고, 둘을 가를 키를 부모에 끼워요.'
+          - '**부모도 넘치면 같은 일을 위로 되풀이해요.** 뿌리까지 넘치면 새 뿌리가 생겨요.'
+          - '**그래서 트리는 위로 자라요.** 잎이 아래로 하나만 길어지는 일이 없어서 **모든 잎이 늘 같은 깊이**예요.'
+      - h3: 늘 커지는 키를 넣어도
+      - p: '균형을 맞추지 않는 이진 탐색 트리에 1부터 차례로 넣으면 오른쪽으로만 이어져 한 줄이 돼요([이진 탐색 트리](lesson:binary-search-tree)에서 봤어요). 자동 증가 번호가 바로 그런 키예요. 같은 순서로 B+트리에 100만 개를 넣었어요.'
+      - ci:
+          key: sorted
+          label: 실제 높이 보기
+          source: BTreeTest.splitsKeepBalance
+          code: sortedRun
+      - p: '노드당 키 3개짜리도 13겹, 255개짜리는 3겹이에요. 나누기가 저절로 균형을 지켜요.'
+      - more:
+          summary: '더 알아보기: 지울 때'
+          body:
+            - p: '지워서 노드가 반보다 비면 이웃 노드에서 키를 빌려 오거나 이웃과 합쳐요. 합치다가 뿌리의 자식이 하나만 남으면 높이가 줄어요. PostgreSQL은 지운 행의 자리를 바로 정리하지 않고, 나중에 VACUUM이 비어 버린 페이지를 정리해요.'
+      - quiz:
+          q: '노드당 키 최대 3개인 B+트리에 1, 2, 3을 넣은 뒤 4를 넣으면 무슨 일이 일어날까요?'
+          options:
+            - '잎 아래에 새 잎이 생겨 4가 들어간다'
+            - '잎이 [1 2]와 [3 4]로 나뉘고 3이 새 뿌리로 올라가 높이가 2가 된다'
+            - '4는 넣을 수 없다'
+          answer: 2
+          explain: '잎에 키가 4개가 되어 넘쳐요. 둘로 나누고 가를 키를 부모로 올리는데, 부모가 없으니 새 뿌리가 생겨요. B-트리는 아래가 아니라 위로 자라요.'
+      - next: '지금까지 키를 찾고 넣는 것을 봤어요. DB에서는 `between`이나 `order by`처럼 이어진 범위도 자주 읽어요. 이때는 무엇이 좋을까요?'
+    recall: '노드가 가득 차면 가운데에서 둘로 나누고 둘을 가르는 키를 부모로 올려요. 부모도 넘치면 위로 되풀이하고, 뿌리가 나뉘면 새 뿌리가 생겨 트리가 위로 한 겹 자라요. 그래서 모든 잎이 늘 같은 깊이에 있어요. 자동 증가 번호처럼 정렬된 순서로 100만 개를 넣어도 노드당 키 255개면 세 겹이에요.'
   - id: q4
     title: B+트리는 무엇이 다르고, 범위 조회에 왜 좋은가요?
     conclusion:
@@ -140,36 +384,132 @@ questions:
       - 'B-트리는 안쪽 노드에도 값(행의 위치)을 둔다. B+트리는 값을 잎에만 두고 안쪽 노드에는 어느 자식으로 갈지 정하는 키만 둔다. 같은 페이지에 길잡이를 더 많이 담을 수 있다'
       - '잎은 정렬된 순서로 옆 잎을 가리킨다(코드 node의 `next`). `between 500000 and 500099`는 500000이 든 잎을 찾은 뒤 `next`를 따라가며 500099를 넘을 때 멈춘다. 위로 다시 올라가지 않는다'
       - '자바 구현에서 범위 조회가 거친 노드 수를 센다: 뿌리에서 잎까지 겹 수만큼, 그다음 옆 잎 몇 개다. 이진 탐색 트리로 같은 범위를 중위 순회하면 위아래를 오가며 훨씬 많은 노드를 지난다'
-      - 'PostgreSQL에서 같은 범위 조회의 `EXPLAIN (ANALYZE, BUFFERS)`를 본다. 100행을 읽는데 인덱스에서 읽은 페이지는 겹 수에 잎 한두 개를 더한 정도다. 실제 출력을 보인다'
+      - 'PostgreSQL에서 같은 범위 조회의 `EXPLAIN (ANALYZE, BUFFERS)`를 본다. 100행을 읽는데 7페이지다. 흩어진 id 100개를 하나씩 찾으면 304페이지다. 실제 출력을 보인다 (설계서는 "겹 수에 잎 한두 개"였다. 가시성 맵과 잎 경계를 더해 7이었다)'
       - '`ORDER BY id`를 인덱스가 따로 정렬하지 않고 처리할 수 있는 것도 잎이 이미 정렬된 채 이어져 있어서다. 언제 그렇게 되는지는 인덱스와 실행계획(D7)에서 다룬다'
       - 'PostgreSQL의 btree는 Lehman과 Yao의 B-트리 변형으로, 값은 잎에 있고 잎과 안쪽 노드 모두 오른쪽 이웃을 가리킨다(PostgreSQL 문서 근거)'
     asks:
       - '본문의 예시: 높이 3의 B+트리에서 이어진 키 100개를 범위로 읽는다. 한 잎에 키가 300개쯤 든다면 읽는 노드는 대략 몇 개인가 (3개나 4개. 뿌리에서 잎까지 3개, 범위가 잎 경계를 넘으면 옆 잎 하나 더)'
       - '옮긴 상황: 잎끼리 이어져 있지 않은 B-트리에서 범위 조회를 하면 무엇이 더 드나 (잎 하나를 다 읽을 때마다 부모로 올라가 다음 잎을 찾아 내려가야 한다)'
+    body:
+      - p: '지금까지 쓴 자바 구현은 사실 **B+트리**예요. B-트리를 조금 바꾼 모양이고, DB 인덱스는 대개 이 모양이에요. 다른 점은 둘이에요.'
+      - table:
+          head: ['', B-트리, B+트리]
+          rows:
+            - ['값(행의 위치)', '안쪽 노드에도 있어요', '**잎에만** 있어요. 안쪽 노드는 길잡이 키만 가져요']
+            - ['잎끼리', '이어져 있지 않아요', '**정렬된 순서로 옆 잎을 가리켜요** (코드 node의 `next`)']
+      - p: '안쪽 노드에 값이 없으니 한 페이지에 길잡이를 더 많이 담아 트리가 더 낮아져요. 그리고 잎이 이어져 있어서 **범위 조회**가 쉬워요.'
+      - h3: 시작 잎을 찾고, 옆으로 읽어요
+      - p: '`between 500000 and 500099`는 500000이 든 잎까지 한 번 내려간 뒤, 잎의 `next`를 따라 옆으로 읽다가 500099를 넘으면 멈춰요. 위로 다시 올라가지 않아요. 같은 범위를 자바의 B+트리와 균형 이진 탐색 트리에서 찾아 거친 노드를 셌어요.'
+      - ci:
+          key: range
+          label: 거친 노드 수 보기
+          source: BTreeTest.rangeScan
+          code: rangeRun
+      - p: 'B+트리는 뿌리에서 잎까지 3개, 옆 잎 1개로 **4개**예요. 이진 탐색 트리는 키마다 노드가 따로라 위아래를 오가며 100개 넘게 지났어요.'
+      - h3: PostgreSQL에서는
+      - code: range
+        notes:
+          - mark: between 500000 and 500099
+            as: code
+            text: '이어진 id 100개를 읽어요.'
+      - ci:
+          key: pg-range
+          label: 실제 실행계획 보기
+          source: BTreeTest.postgresRange
+      - p: '100행을 읽는 데 **7페이지**예요. 한 건을 찾을 때(4페이지)와 크게 다르지 않아요. 내려가는 세 겹에, 옆 잎과 가시성 맵이 더해졌어요. 같은 100행이라도 **흩어진 id**를 하나씩 찾으면 어떨까요?'
+      - ci:
+          key: pg-spread
+          label: 흩어진 100행의 실행계획 보기
+          source: BTreeTest.postgresRange
+          code: spreadRun
+      - p: '304페이지예요. id마다 뿌리에서 잎까지 따로 내려가서요. 이어진 범위는 **한 번 내려가 옆으로 읽기**라 이렇게 싸요. `order by id`를 따로 정렬하지 않고 인덱스의 잎 순서대로 읽어 끝낼 수 있는 것도 잎이 정렬된 채 이어져 있어서예요. 언제 그렇게 되는지는 [인덱스와 실행계획](lesson:index-explain)에서 다뤄요.'
+      - muted: 'PostgreSQL의 btree는 Lehman과 Yao가 낸 B-트리의 변형이에요. 값은 잎에 있고, 잎과 안쪽 노드 모두 오른쪽 이웃을 가리켜요. [PostgreSQL 문서](link:btree)에 적혀 있어요.'
+      - quiz:
+          q: '잎끼리 이어져 있지 않은 B-트리에서 이어진 범위를 읽으면, 잎이 이어진 B+트리보다 무엇이 더 들까요?'
+          options:
+            - '잎 하나를 다 읽을 때마다 부모로 올라가 다음 잎을 찾아 내려가야 한다'
+            - '범위의 키마다 정렬을 다시 해야 한다'
+            - '더 드는 것이 없다'
+          answer: 1
+          explain: 'B+트리는 잎의 `next`로 옆 잎에 바로 가요. 이어져 있지 않으면 다음 잎이 어디인지 부모에게 다시 물어야 해서 위아래를 오가요.'
+    recall: 'B+트리는 값을 잎에만 두고 안쪽 노드에는 길잡이 키만 둬서 더 낮고, 잎끼리 정렬된 순서로 옆을 가리켜요. 그래서 범위 조회는 시작 키의 잎까지 한 번 내려간 뒤 옆 잎을 따라 읽어요. PostgreSQL에서 이어진 100행은 7페이지, 흩어진 100행을 하나씩 찾으면 304페이지였어요. DB 인덱스는 대개 이 모양이에요.'
 practice:
+  title: PostgreSQL에서는 이렇게 만나요
   says:
     - '인덱스의 크기와 높이를 보는 법. `pg_relation_size(''인덱스이름'')`은 바이트, `bt_metap(''인덱스이름'')`의 `level`은 뿌리의 높이(잎이 0)다. 한 건을 찾을 때 읽은 페이지는 `EXPLAIN (ANALYZE, BUFFERS)`의 `Buffers`에서 본다. pageinspect는 확장이라 `create extension`이 필요하고 운영 DB에서는 권한을 확인한다 (PostgreSQL 문서 근거, 테스트로 출력 확인)'
-    - '흔한 실수: 200자 남짓의 URL 같은 긴 문자열 열에 그대로 인덱스를 만든다. 키가 길면 한 페이지에 담기는 키가 줄어 같은 행 수에서 인덱스가 몇 배 커지고 겹이 늘 수 있다. 같은 100만 행으로 `bigint` 키 인덱스와 긴 문자열 인덱스의 크기와 높이를 테스트로 비교한다. 고친 방법: 같은지만 보면 되는 긴 값은 짧은 해시 값(예: `bigint`로 만든 해시)을 따로 열로 두고 그 열에 인덱스를 만든 뒤, 찾은 행에서 원래 값을 한 번 더 비교한다. 두 인덱스의 크기를 나란히 보인다'
+    - '흔한 실수: 200자 남짓의 URL 같은 긴 문자열 열에 그대로 인덱스를 만든다. 키가 길면 한 페이지에 담기는 키가 줄어 같은 행 수에서 인덱스가 몇 배 커지고 겹이 늘 수 있다. 같은 30만 행으로 `bigint` 키 인덱스와 긴 문자열 인덱스의 크기와 높이를 테스트로 비교한다(설계서는 100만 행이었는데 CI 시간을 줄이려고 30만 행으로 했다). 고친 방법: 같은지만 보면 되는 긴 값은 짧은 해시 값(`bigint`로 만든 해시)을 따로 열로 두고 그 열에 인덱스를 만든 뒤, 찾은 행에서 원래 값을 한 번 더 비교한다. 세 인덱스의 크기를 나란히 보인다'
     - '스프링 데이터 JPA에서 인덱스는 보통 마이그레이션 SQL(Flyway)로 만들고, 엔티티의 `@Table(indexes = @Index(columnList = "url_hash"))`는 스키마를 자동으로 만들 때만 쓰인다 (자카르타 퍼시스턴스 문서 근거)'
     - '무작위 UUID 기본 키는 B-트리의 아무 잎에나 들어가 페이지를 자주 나눈다. 유일한 ID 만들기(A17)에서 다룬다'
+  body:
+    - p: '스프링 서버 개발자가 B-트리를 직접 만들 일은 없어요. 대신 인덱스가 얼마나 크고 깊은지 볼 줄 알면, 인덱스를 만들 열을 고를 때와 느린 조회를 볼 때 도움이 돼요.'
+    - h3: 인덱스의 크기와 높이 보기
+    - ul:
+        - '**크기:** `pg_relation_size(''인덱스이름'')`은 바이트, `pg_size_pretty`로 감싸면 읽기 쉬워요.'
+        - '**높이:** pageinspect 확장의 `bt_metap(''인덱스이름'')`의 `level`이에요. 잎이 0이라 2면 세 겹이에요. 확장을 만들려면 권한이 필요하니 운영 DB에서는 DBA와 상의해요.'
+        - '**한 번에 읽은 페이지:** `explain (analyze, buffers)`의 `Buffers`예요.'
+    - h3: '흔한 실수: 긴 문자열 열에 그대로 인덱스'
+    - p: '이벤트 로그 30만 행의 `url` 열(평균 176자)로 이벤트를 찾으려고 그 열에 인덱스를 만들었어요.'
+    - code: longKey
+      notes:
+        - mark: url
+          as: code
+          text: '키가 길면 한 페이지(8KB)에 담기는 키가 줄어요. 같은 행 수에 페이지가 더 많이 필요해요.'
+    - p: '고친 방법은 같은지만 비교하면 되는 긴 값의 **짧은 해시 값**을 `bigint` 열로 따로 두고, 그 열에 인덱스를 만드는 거예요. 해시는 드물게 겹칠 수 있으니 찾은 행에서 원래 값을 한 번 더 비교해요.'
+    - code: hashKey
+      notes:
+        - mark: url_hash
+          as: code
+          text: '8바이트 키라 한 페이지에 수백 개가 들어가요.'
+        - mark: and url = :url
+          as: code
+          text: '해시가 같은 다른 url을 걸러요. 해시 인덱스로 몇 행만 남긴 뒤라 싸요.'
+    - p: '같은 30만 행에 기본 키(`bigint`), `url`, `url_hash` 인덱스를 만들어 크기와 높이를 비교했어요.'
+    - ci:
+        key: long-key
+        label: 세 인덱스의 실제 크기와 높이 보기
+        source: BTreeTest.longKeyIndex
+        code: sizeRun
+    - p: '`url` 인덱스는 66MB로 `bigint` 인덱스(6.6MB)의 **열 배**이고 한 겹 더 깊어요. 메모리에 다 올라가기 어렵고, 찾을 때 페이지도 하나 더 읽어요. `url_hash` 인덱스는 `bigint` 기본 키와 같은 크기예요.'
+    - muted: '스프링 데이터 JPA를 쓸 때 인덱스는 보통 Flyway 같은 마이그레이션 SQL로 만들어요. 엔티티의 `@Table(indexes = @Index(columnList = "url_hash"))`는 스키마를 자동으로 만들 때만 쓰여요. 무작위 UUID 기본 키가 B-트리의 아무 잎에나 들어가 페이지를 자주 나누는 문제는 유일한 ID 만들기 레슨에서 다뤄요. 근거: [pageinspect 문서](link:pageinspect), [EXPLAIN 문서](link:explain). 크기와 높이는 테스트로 확인했어요.'
+interview:
+  question: DB 인덱스는 왜 이진 탐색 트리가 아니라 B-트리를 쓰나요?
+  model:
+    - label: 정의
+      text: B-트리는 노드 하나에 정렬된 키를 수백 개 담고 자식을 수백 개 가지는 균형 트리입니다. DB 인덱스는 대개 값을 잎에만 두고 잎끼리 이은 B+트리 모양입니다.
+    - label: 원리
+      text: DB는 디스크에서 페이지 단위로 읽어서, 시간은 비교 횟수가 아니라 읽는 페이지 수가 정합니다. 이진 탐색 트리는 노드에 키가 하나라 100만 개면 20겹을 읽지만, B-트리는 한 페이지에 키 수백 개를 담아 높이가 log_m n이라 세 겹이면 됩니다. 넣을 때 가득 찬 노드를 나눠 위로 자라서 늘 균형이 맞습니다.
+    - label: 주의할 점
+      text: 잎이 이어져 있어 범위 조회와 정렬에 강하지만 흩어진 값을 하나씩 찾으면 그만큼 내려갑니다. 키가 길면 한 페이지에 담기는 키가 줄어 인덱스가 커지고 깊어지니, 긴 값은 짧은 해시 열에 인덱스를 두기도 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: URL 열의 인덱스가 테이블보다 커져서, 해시 값 열을 두고 그 열에 인덱스를 만들어 크기를 열 배 줄였습니다.'
+verified: 이 레슨의 숫자는 짐작이 아니라 자바 21에서 직접 만든 트리로 센 값과, PostgreSQL 16 컨테이너의 실제 인덱스를 pageinspect와 `EXPLAIN (ANALYZE, BUFFERS)`로 읽은 값이에요. 코드가 바뀔 때마다 테스트([BTreeTest](link:test))가 다시 돌아요.
+footer: '근거: PostgreSQL의 btree 구현은 [btree 문서](link:btree), 8KB 페이지는 [페이지 구조 문서](link:page), 가시성 맵은 [문서](link:vm), `bt_metap`은 [pageinspect 문서](link:pageinspect), `BUFFERS`는 [EXPLAIN 문서](link:explain). 결과는 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '키 100만 개를 균형 이진 탐색 트리에 담으면 높이가 20이고, 찾을 때 거치는 노드가 20개 이하다'
     how: '정렬된 키로 균형 이진 탐색 트리를 만들고 여러 키를 찾으며 거친 노드 수의 최댓값을 센다'
+    test: BTreeTest.heightAndVisits
   - claim: '노드당 키 최대 255개인 B+트리에 키 100만 개를 넣으면 높이가 3이고, 찾을 때 거치는 노드가 3개다'
     how: '자바로 만든 B+트리에 넣고 찾으며 노드 수를 센다'
+    test: BTreeTest.heightAndVisits
   - claim: '노드당 키 최대 3개인 B+트리에 1부터 넣으면 4에서 첫 분할과 함께 높이가 2가 되고, 정렬된 순서로 100만 개를 넣어도 높이가 log만큼만 자란다'
-    how: '분할 횟수와 높이를 넣을 때마다 기록해 위젯의 단계와 맞춘다'
+    how: '분할 횟수와 높이를 넣을 때마다 기록해 위젯의 단계와 맞춘다. 100만 개에서 노드당 키 3개는 13겹, 255개는 3겹이었다'
+    test: BTreeTest.splitsKeepBalance
   - claim: 'B+트리의 범위 조회는 뿌리에서 잎까지 겹 수와 옆 잎 몇 개만 거친다'
-    how: '`between` 범위를 찾으며 거친 노드 수를 센다'
-  - claim: 'PostgreSQL 16에서 100만 행 기본 키 인덱스의 `bt_metap` level은 2(세 겹)이고, 한 건 조회의 인덱스 노드에서 읽은 페이지는 세 개다'
-    how: 'Testcontainers PostgreSQL에 넣고 pageinspect와 `EXPLAIN (ANALYZE, BUFFERS)`를 본다. 값이 다르면 레슨의 숫자를 고친다'
-  - claim: '100행 범위 조회의 인덱스 페이지 읽기는 겹 수에 잎 한두 개를 더한 정도다'
-    how: '같은 방법으로 `Buffers`를 본다'
-  - claim: '같은 100만 행에서 긴 문자열 키 인덱스가 `bigint` 키 인덱스보다 몇 배 크고 level이 같거나 높다'
-    how: '`pg_relation_size`와 `bt_metap`을 비교한다'
+    how: '`between` 범위를 찾으며 거친 노드 수를 센다(4개). 균형 이진 탐색 트리는 115개였다'
+    test: BTreeTest.rangeScan
+  - claim: 'PostgreSQL 16에서 100만 행 기본 키 인덱스의 `bt_metap` level은 2(세 겹)이고, 한 건 조회는 인덱스 세 겹과 가시성 맵(또는 테이블) 한 페이지로 4페이지를 읽는다'
+    how: 'Testcontainers PostgreSQL에 넣고 pageinspect와 `EXPLAIN (ANALYZE, BUFFERS)`를 본다. 설계서는 "인덱스 노드에서 읽은 페이지 3개"였는데 Index Only Scan의 Buffers는 가시성 맵 한 페이지를 포함해 4였다'
+    test: BTreeTest.postgresHeightAndPointLookup
+  - claim: '100행 범위 조회는 한 자릿수 페이지를 읽고, 흩어진 id 100개를 하나씩 찾으면 열 배 넘게 읽는다'
+    how: '같은 방법으로 `Buffers`를 본다. 로컬에서 7페이지와 304페이지였다'
+    test: BTreeTest.postgresRange
+  - claim: '같은 30만 행에서 긴 문자열 키 인덱스가 `bigint` 키 인덱스보다 몇 배 크고 level이 같거나 높으며, 해시 값 열의 인덱스는 `bigint` 키만큼 작다'
+    how: '`pg_relation_size`와 `bt_metap`을 비교한다. 로컬에서 66MB와 6.6MB, level 3과 2였다'
+    test: BTreeTest.longKeyIndex
 sources:
   - 'PostgreSQL의 btree 구현(Lehman과 Yao의 변형, 잎과 오른쪽 이웃): PostgreSQL 문서 https://www.postgresql.org/docs/16/btree.html'
   - '페이지 크기 8KB와 페이지 구조: PostgreSQL 문서 https://www.postgresql.org/docs/16/storage-page-layout.html'
   - 'pageinspect의 bt_metap: PostgreSQL 문서 https://www.postgresql.org/docs/16/pageinspect.html'
   - 'EXPLAIN의 BUFFERS: PostgreSQL 문서 https://www.postgresql.org/docs/16/sql-explain.html'
-  - '`@Index`: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/index'
+  - '가시성 맵: PostgreSQL 문서 https://www.postgresql.org/docs/16/storage-vm.html'
+  - '`@Index`: 자카르타 퍼시스턴스 API 문서 https://jakarta.ee/specifications/persistence/3.1/apidocs/jakarta.persistence/jakarta/persistence/Index.html'
