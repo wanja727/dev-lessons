@@ -96,20 +96,49 @@ questions:
       - ==는 두 변수가 같은 객체를 가리키는지 봐요. a와 b는 따로 만든 두 객체예요
       - 재정의한 equals는 이메일을 비교해요. 둘 다 kim@a.com이라 true예요
     source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#equals(java.lang.Object)
-  - key: eqh-default-equals-fields
+  - key: eqh-overload-equals
     concept: core
     coreQuestion: q1
-    type: ox
-    status: reviewed
-    difficulty: 1
-    body: 재정의하지 않은 equals는 두 객체의 필드 값이 모두 같으면 true를 돌려준다.
-    answer: X
-    explanation: |-
-      **X. 필드 값은 보지 않아요.**
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: Member의 equals를 아래처럼 인자를 Member로 받게 썼어요. hashCode는 이메일로 재정의했어요. 아래 코드의 세 줄은 차례로 무엇을 출력할까요?
+    code: |-
+      class Member {
+          String email;
+          Member(String email) {
+              this.email = email;
+          }
+          public boolean equals(Member m) {
+              return email.equals(m.email);
+          }
+          @Override
+          public int hashCode() {
+              return email.hashCode();
+          }
+      }
 
-      - Object의 equals는 두 변수가 같은 객체를 가리킬 때만 true를 돌려줘요
-      - 필드 값이 같으면 같다고 판정하게 하려면 equals를 재정의해야 해요
-    source: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#equals(java.lang.Object)
+      Member a = new Member("kim@a.com");
+      Member b = new Member("kim@a.com");
+      Set<Member> set = new HashSet<>();
+      set.add(a);
+      System.out.println(a.equals(b));
+      System.out.println(set.contains(b));
+      System.out.println(set.size());
+    choices:
+      - true, true, 1
+      - true, false, 1
+      - false, false, 1
+      - true, false, 2
+    answer: "2"
+    explanation: |-
+      **true, false, 1이에요.** equals(Member)는 재정의가 아니라 이름만 같은 새 메서드예요.
+
+      - a.equals(b)는 b가 Member라서 새로 만든 equals(Member)가 불려 true예요
+      - HashSet은 Object로 받아 equals(Object)를 불러요. 재정의하지 않은 그 equals는 같은 객체일 때만 true라서 contains는 false예요
+      - set에는 a만 넣었으니 size()는 1이에요
+      - equals 위에 @Override를 붙이면 컴파일러가 "does not override" 오류로 이 실수를 잡아요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/equalshashcode/EqualsHashCodePracticeTest.java
 
   # ── 질문 2. equals를 재정의했는데 HashSet은 왜 같은 회원을 찾지 못하나요? ──
   - key: eqh-equals-only-size

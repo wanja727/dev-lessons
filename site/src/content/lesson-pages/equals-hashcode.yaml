@@ -15,6 +15,33 @@ assume: >-
   자바 21(OpenJDK). `==`는 두 변수가 같은 객체를 가리키는지 본다는 것, `ArrayList`와 `HashSet`과 `HashMap`에
   넣고 꺼내는 방법. `HashMap`이 안에서 어떻게 저장하는지는 몰라도 돼요. 예제는 이메일 하나를 가진 회원 클래스 `Member` 하나만 써요.
 example: 회원 가입. 이메일이 같은 `Member`는 같은 회원으로 본다. 이미 가입한 이메일인지 `HashSet`으로 확인하고, 회원의 등급을 `HashMap`에 담는다
+intro:
+  - '회원 가입에서 이미 쓰는 이메일인지 `HashSet`으로 확인했는데, 같은 이메일로 두 번 가입이 돼요. `equals`는 분명히 이메일을 비교하게 고쳐 썼고, 리스트로 바꾸면 잘 찾아요. 컴파일 오류도 예외도 없어요.'
+  - '자바 개발자는 값 객체, 캐시의 키, 중복을 거르는 `Set`처럼 "값이 같으면 같은 것"으로 다뤄야 하는 객체를 날마다 만들어요. 그때 `equals`와 `hashCode`를 어떻게 재정의하느냐에 따라 컬렉션이 찾기도 하고 못 찾기도 해요. 면접에서는 "왜 둘을 함께 재정의하나요"를 물어요.'
+  - '이 레슨에서는 이메일 하나를 가진 `Member`로 `equals`와 `hashCode`를 하나씩 재정의해 가며, `ArrayList`와 `HashSet`과 `HashMap`이 무엇을 돌려주는지, `equals`가 몇 번 불리는지 자바 21에서 돌려 확인해요.'
+covers:
+  - topic: '`==`는 같은 객체인지 본다. `Object`의 `equals`도 같은 객체일 때만 true다'
+    where: '질문 1'
+  - topic: '`equals`를 재정의하면 같다고 볼 기준을 정한다. 인자는 `Object`이고 `instanceof`로 먼저 확인한다'
+    where: '질문 1'
+  - topic: '`ArrayList.contains`는 `equals`만 부른다'
+    where: '질문 1'
+  - topic: '`HashSet`과 `HashMap`은 `hashCode`로 후보를 좁히고 후보에만 `equals`를 부른다. 저장 구조는 K4가 맡는다'
+    where: '질문 2'
+  - topic: '`equals`만 재정의하면 `contains`가 false, 같은 회원이 두 번 들어가고, `get`이 null이다. 재정의하지 않은 `hashCode`가 우연히 같으면 결과가 달라진다'
+    where: '질문 2'
+  - topic: 'hashCode의 규약: `equals`로 같으면 `hashCode`도 같다. 컴파일러는 검사하지 않는다. `equals`에서 비교한 필드로 만든다(`Objects.hash`)'
+    where: '질문 3'
+  - topic: '규약은 한 방향이다. `"Aa"`와 `"BB"`처럼 `hashCode`가 겹쳐도 결과는 맞고, 겹칠수록 `equals` 호출이 늘어 느려진다'
+    where: '질문 4'
+  - topic: '키로 넣은 뒤 `hashCode`에 쓰인 필드를 바꾸면 찾지 못한다. 필드를 `final`로 둔다'
+    where: '질문 5'
+  - topic: '`record`는 구성 요소로 `equals`와 `hashCode`를 함께 만든다. 값 객체는 record로 만든다'
+    where: '질문 3의 더 알아보기, 실무에서는'
+  - topic: '흔한 실수: `equals(Member m)`처럼 인자를 바꿔 쓰면 재정의가 아니라 오버로딩이 되어 컬렉션이 쓰지 않는다. `@Override`를 붙이면 컴파일러가 잡는다'
+    where: '실무에서는'
+  - topic: 'JPA 엔티티의 `equals`와 `hashCode`(저장 전에는 id가 없다)'
+    where: '다루지 않음 (JPA 과정)'
 links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/equalshashcode/EqualsHashCodeTest.java
   equals: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#equals(java.lang.Object)
@@ -23,6 +50,8 @@ links:
   collection: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Collection.html
   record: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Record.html
   string: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html#hashCode()
+  override: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Override.html
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/equalshashcode/EqualsHashCodePracticeTest.java
 codes:
   plain: |-
     class Member {
@@ -223,6 +252,43 @@ codes:
         }
         // equals와 hashCode는 그대로
     }
+  aabb: |-
+    // 두 Member 모두 equals와 hashCode를
+    // 이메일로 재정의했어요
+    Member aa = new Member("Aa");
+    Member bb = new Member("BB");
+    Set<Member> set = new HashSet<>();
+    set.add(aa);
+    set.add(bb);
+
+    set.size();
+    set.contains(aa);
+    set.contains(bb);
+  overload: |-
+    class Member {
+        String email;
+        // @Override 없이 인자를 Member로
+        public boolean [[equals(Member m)]] {
+            return email.equals(m.email);
+        }
+        @Override
+        public int hashCode() {
+            return email.hashCode();
+        }
+    }
+  overrideFixed: |-
+    [[@Override]]
+    public boolean equals([[Object o]]) {
+        return o instanceof Member m
+            && email.equals(m.email);
+    }
+  recordEmail: |-
+    [[record Email(String value)]] {}
+
+    Set<Email> set = new HashSet<>();
+    set.add(new Email("kim@a.com"));
+    set.add(new Email("kim@a.com"));
+    set.size();
 predict:
   title: 두 줄에 무엇이 출력될까요?
   text: >-
@@ -430,37 +496,7 @@ questions:
                 v: '198098993'
                 mark: bad
           - log: equals를 부를 후보가 없어요  → equals 호출 0번
-            duo:
-            - label: set에 든 a
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '553672556'
-                mark: bad
-            - label: 찾는 b
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '198098993'
-                mark: bad
           - log: set.contains(b)  → false
-            duo:
-            - label: set에 든 a
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '553672556'
-                mark: bad
-            - label: 찾는 b
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '198098993'
-                mark: bad
             verdict: 'equals만 재정의: 이메일은 같은데 hashCode가 달라서 equals까지 가지 못했어요. equals 호출은 0번이에요.'
           both:
           - log: b.hashCode()를 구해요  → -1935638077
@@ -495,42 +531,13 @@ questions:
                 v: '-1935638077'
                 mark: changed
           - log: b.equals(a)를 불러요  → true (equals 호출 1번)
-            duo:
-            - label: set에 든 a
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '-1935638077'
-                mark: changed
-            - label: 찾는 b
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '-1935638077'
-                mark: changed
           - log: set.contains(b)  → true
-            duo:
-            - label: set에 든 a
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '-1935638077'
-                mark: changed
-            - label: 찾는 b
-              rows:
-              - k: 이메일
-                v: kim@a.com
-              - k: hashCode
-                v: '-1935638077'
-                mark: changed
             verdict: 'equals와 hashCode 재정의: hashCode가 같아서 a가 후보가 됐고, equals 1번으로 같은 회원인 것을 확인했어요.'
     - ci:
         key: equalsOnly
         label: 실제로 돌린 출력 보기
         source: EqualsHashCodeTest.equalsOnlyNotFoundInSet
+        code: predict
     - p: '`equals`만 재정의했을 때 `equals`는 **0번** 불렸어요. `hashCode`가 같은 객체가 없어서 `equals`까지 가지 못했어요. `equals`를 아무리 맞게 써도 불리지 않으면 소용이 없어요.'
     - p: 같은 이유로 생기는 일이 더 있어요.
     - ul:
@@ -673,7 +680,8 @@ questions:
         key: both
         label: 둘 다 재정의하고 실제로 돌린 출력 보기
         source: EqualsHashCodeTest.bothFoundInHashSet
-    - p: 둘 다 재정의하면 `set.contains(b)`가 true이고, 그동안 `equals`는 **1번** 불려요. `hashCode`가 같은 `a`가 후보가 됐고, `equals`로 확인했어요. `set.add(b)`는 false를 돌려줘서 `set.size()`는 1이에요. `map.get(b)`는 VIP예요.
+        code: three
+    - p: 둘 다 재정의하면 `hashCode`가 같은 `a`가 후보가 되고, `equals` **1번**으로 같은 회원인 것을 확인해요.
     - p: '`HashMap`에 `map.put(b, "GOLD")`를 하면 새로 들어가지 않고 `a`로 넣은 값이 바뀌어요. `map.size()`는 1이고 `map.get(a)`는 GOLD예요.'
     - callout: '**규약은 컴파일러가 검사하지 않아요.** 하나만 재정의해도 컴파일되고 예외도 나지 않아요. 결과만 틀려요. 그래서 `equals`를 재정의하면 `hashCode`도 함께 재정의해요.'
     - h3: 필드가 여럿일 때
@@ -726,6 +734,7 @@ questions:
         key: collision
         label: 실제로 돌린 출력 보기
         source: EqualsHashCodeTest.sameHashCodeDifferentEquals
+        code: aabb
     - p: '`hashCode`가 같으면 `HashSet`은 `equals`로 마지막 확인을 해요. 그래서 `hashCode`가 겹쳐도 결과는 틀리지 않아요.'
     - h3: hashCode가 항상 같은 값이면
     - p: 끝까지 가 볼게요. `hashCode`가 항상 1을 돌려줘도 규약은 지켜요. 같은 객체는 같은 값(1)을 받으니까요.
@@ -796,7 +805,7 @@ questions:
         key: count
         label: 실제로 돌린 출력 보기
         source: EqualsHashCodeTest.equalsCallsWhileSearchingMissing
-    - p: '`hashCode`가 항상 1이면 들어 있는 회원 모두가 후보가 돼요. 그래서 5명 전부와 `equals`로 비교해요. 결과는 양쪽 다 false로 같아요.'
+        code: five
     - p: 회원 5명을 넣는 동안에도 차이가 나요. `email.hashCode()`는 `equals`를 0번, 항상 1은 10번 불러요. 넣을 때마다 먼저 들어 있는 회원 모두와 비교하기 때문이에요(0 + 1 + 2 + 3 + 4).
     - p: 회원이 늘수록 비교하는 횟수도 늘어요. 그래서 `hashCode`는 다른 객체에 되도록 다른 값을 주게 만들어요. 왜 그런 차이가 나는지와 얼마나 빨라지는지는 해시 테이블 레슨에서 다뤄요.
     - quiz:
@@ -903,22 +912,6 @@ questions:
               - k: 이메일
                 v: lee@a.com
           - log: map.size()  → 1
-            duo:
-            - label: 맵이 기억하는 것
-              state: active
-              rows:
-              - k: 넣을 때의 hashCode
-                v: '-1935638077'
-              - k: 키의 이메일
-                v: lee@a.com
-            - label: 지금 찾는 키
-              state: active
-              rows:
-              - k: hashCode
-                v: '-634494144'
-                mark: bad
-              - k: 이메일
-                v: lee@a.com
           - log: map.get(new Member("kim@a.com"))  → null
             duo:
             - label: 맵이 기억하는 것
@@ -972,6 +965,47 @@ questions:
         answer: 2
         explain: 값은 맵 안에 그대로 남아 있어요. 그 키로 찾을 길만 없어져요.
     recall: 아니요. 키로 넣은 뒤에 `hashCode`에 쓰인 필드를 바꾸면 그 키로 찾지 못해요. `HashMap`은 넣을 때의 `hashCode`로 둘 곳을 정하고 다시 옮기지 않는데, 찾을 때는 바뀐 `hashCode`로 찾기 때문이에요. 값은 맵 안에 남아 `size()`는 그대로예요. 막으려면 `equals`와 `hashCode`에 쓰는 필드를 `final`로 선언해 바꾸지 못하게 해요.
+practice:
+  title: 실무에서는 이렇게 해요
+  body:
+    - h3: '흔한 실수: equals의 인자를 Member로 받기'
+    - p: '`equals`를 처음 쓸 때 인자를 `Member`로 받는 일이 많아요. 이메일을 바로 꺼낼 수 있어 편해 보이지만, 이건 `Object`의 `equals`를 **재정의한 것이 아니라 이름만 같은 메서드를 하나 더 만든 것**(오버로딩)이에요.'
+    - code: overload
+      notes:
+        - mark: equals(Member m)
+          as: code
+          text: '`Object`의 `equals(Object)`와 인자 타입이 달라서 새 메서드가 돼요. 컬렉션은 이 메서드를 부르지 않아요.'
+    - ci:
+        key: overload
+        label: 실제로 돌린 출력 보기
+        source: EqualsHashCodePracticeTest.overloadedEqualsIsNotUsedByCollections
+    - p: '`a.equals(b)`처럼 `Member`로 부르면 true라서 단위 테스트로는 놓치기 쉬워요. 컬렉션은 `Object`로 받아 `equals(Object)`를 부르니, 재정의하지 않은 `equals`가 불려 false예요.'
+    - h3: '고친 코드: @Override를 붙여요'
+    - code: overrideFixed
+      notes:
+        - mark: '@Override'
+          as: code
+          text: 부모의 메서드를 재정의한다는 표시예요. 재정의가 아니면 컴파일러가 오류를 내요.
+        - mark: Object o
+          as: code
+          text: 인자는 `Object`로 받고 `instanceof`로 확인해요.
+    - ci:
+        key: override
+        label: 컴파일러가 낸 오류 보기
+        source: EqualsHashCodePracticeTest.overrideAnnotationCatchesOverload
+    - p: '`equals`, `hashCode`, `toString`을 재정의할 때는 언제나 `@Override`를 붙여요([Override](link:override)). IDE의 "equals와 hashCode 만들기"도 이 모양으로 둘을 함께 만들어 줘요. 필드를 더하면 다시 만들어요.'
+    - h3: 값 객체는 record로 만들어요
+    - p: '이메일, 금액, 주문 번호처럼 값으로만 구별하는 객체는 `record`로 선언하면 `equals`와 `hashCode`를 직접 쓰지 않아도 돼요. 구성 요소가 바뀌지 않으니 질문 5의 문제도 생기지 않아요.'
+    - ci:
+        key: record
+        label: 실제로 돌린 출력 보기
+        source: EqualsHashCodePracticeTest.recordValueObject
+        code: recordEmail
+    - muted: 'JPA 엔티티의 `equals`와 `hashCode`는 저장하기 전에 id가 없어서 따로 생각할 것이 있어요. JPA 과정에서 다뤄요. 근거: [Override (자바 21 API)](link:override), [Record (자바 21 API)](link:record). 결과는 테스트([EqualsHashCodePracticeTest](link:practiceTest))로 확인했어요.'
+  says:
+    - '흔한 실수: `equals(Member m)`로 쓰면 오버로딩이다. `a.equals(b)`는 true지만 `list.contains(b)`와 `set.contains(b)`는 false다(테스트)'
+    - '고친 코드: `@Override`를 붙이고 인자를 `Object`로 받는다. `equals(Member)`에 `@Override`를 붙이면 "does not override" 컴파일 오류(테스트)'
+    - '값 객체는 `record`로 만든다. 값이 같으면 `HashSet`에 한 번만 들어간다(테스트)'
 interview:
   question: equals와 hashCode는 왜 함께 재정의해야 하나요?
   model:
@@ -983,7 +1017,7 @@ interview:
     text: 규약은 한 방향이라 다른 객체가 같은 hashCode를 가져도 결과는 맞지만, 겹칠수록 equals 비교가 늘어 느려집니다. 또 키로 넣은 뒤에 hashCode에 쓰인 필드를 바꾸면 그 키로 찾지 못하므로, 그 필드는 final로 둡니다. 컴파일러는 규약을 검사하지 않습니다.
   - label: 경험
     text: '(내 프로젝트로 채우기) 예: 값 객체를 HashSet에 넣어 중복을 걸러야 해서 equals와 hashCode를 함께 재정의하고, 값이 같은 두 객체가 한 번만 들어가는지 테스트로 확인했습니다.'
-verified: "이 레슨에 나온 true와 false, 호출 횟수는 짐작이 아니라 자바 21(OpenJDK)에서 코드를 돌려 확인한 값이에요. 코드가 바뀔 때마다 테스트([EqualsHashCodeTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
+verified: "이 레슨에 나온 true와 false, 호출 횟수는 짐작이 아니라 자바 21(OpenJDK)에서 코드를 돌려 확인한 값이에요. 코드가 바뀔 때마다 테스트([EqualsHashCodeTest](link:test), [EqualsHashCodePracticeTest](link:practiceTest))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
 footer: '근거: 자바 21 API 문서의 [Object.equals](link:equals), [Object.hashCode](link:hashCode), [Collection](link:collection), [Map](link:map), [Record](link:record), [String.hashCode](link:string). true와 false, `equals` 호출 횟수는 자바 21(OpenJDK)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: 코드 plain. 이메일이 같은 두 객체에서 `a.equals(b)`는 false, `a.equals(a)`는 true, `list.contains(b)`는 false다
@@ -1016,6 +1050,12 @@ claims:
     how: 테스트 안에서 자바 컴파일러(`javax.tools.JavaCompiler`)로 소스를 컴파일해 오류가 난 줄을 본다. `javac`로 돌려 봤다 (cannot assign a value to final variable email)
   - claim: '`record Member(String email)`은 이메일이 같으면 `equals`가 true이고 `hashCode`가 같고 `set.contains`가 true다'
     how: 코드를 돌려 본다. 돌려 봤다 (true, 같음, true)
+  - claim: '`equals(Member m)`로 쓴 `Member`는 `a.equals(b)`가 true여도 `list.contains(b)`와 `set.contains(b)`가 false다. `@Override`를 붙이면 컴파일 오류다'
+    how: 코드를 돌리고, 테스트 안에서 컴파일해 본다
+    test: 'EqualsHashCodePracticeTest.overloadedEqualsIsNotUsedByCollections, EqualsHashCodePracticeTest.overrideAnnotationCatchesOverload'
+  - claim: '`record Email`은 값이 같으면 `HashSet`에 한 번만 들어간다'
+    how: 코드를 돌려 본다
+    test: 'EqualsHashCodePracticeTest.recordValueObject'
 sources:
   - '재정의하지 않은 `equals`는 `x == y`일 때만 true라는 것, `equals`를 재정의하면 `hashCode`도 재정의해야 한다는 것: [Object.equals (자바 21 API)](link:equals)'
   - '`hashCode`의 규약 세 가지(같은 객체는 같은 값, 다른 객체가 같은 값이어도 된다, 비교에 쓰는 정보가 바뀌지 않으면 같은 값)와 `Object`의 `hashCode`가 서로 다른 객체에 "되도록" 다른 값을 준다는 것: [Object.hashCode (자바 21 API)](link:hashCode)'
