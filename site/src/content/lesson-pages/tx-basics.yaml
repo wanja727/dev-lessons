@@ -6,8 +6,45 @@ unit: DB
 minutes: 20
 prerequisites: []
 assume: SQL의 SELECT와 UPDATE, 자바의 예외(try-catch). 예제는 계좌 이체 하나만 써요. kim의 잔액은 50, lee의 잔액은 0이에요.
+roadmap: D5
+type: 동작 확인
+example: '계좌 이체 하나. kim이 lee에게 100을 보내는데 kim의 잔액은 50이라 출금 문장이 실패해요. 자동 커밋, 트랜잭션, 다른 연결, 스프링의 @Transactional로 같은 이체를 해 봐요.'
+intro:
+  - '이체 API에 버그가 있어서 출금은 실패했는데 입금만 반영됐어요. 합계가 맞지 않는 장부를 맞추느라 하루를 보내요. 코드에는 입금 한 줄, 출금 한 줄뿐이었어요.'
+  - 'DB에 보내는 SQL은 따로 두면 한 문장씩 따로 확정돼요. 함께 성공하거나 함께 실패해야 하는 일을 묶는 것이 트랜잭션이고, 스프링 개발자는 서비스 메서드에 `@Transactional`을 붙여서 그 범위를 정해요. 어디까지 묶을지, 묶음 안에 무엇을 넣지 않을지가 개발자가 정할 일이에요.'
+  - '이 레슨에서는 실제 PostgreSQL에서 같은 이체를 자동 커밋으로, 트랜잭션으로, 두 연결로 돌려 잔액이 어떻게 남는지 확인해요. 스프링에서 트랜잭션이 정말 열렸는지 로그로 보는 법과, 롤백돼도 나가 버리는 메일도 확인해요.'
+covers:
+  - topic: '트랜잭션은 여러 SQL을 하나로 묶어 전부 반영하거나 전부 취소하는 작업 단위다'
+    where: '질문 1'
+  - topic: '묶지 않으면 문장마다 자동 커밋으로 따로 확정된다. 중간에 실패하면 앞 문장만 남는다. DB 툴도 대개 자동 커밋이다'
+    where: '질문 1'
+  - topic: 'BEGIN, COMMIT, ROLLBACK. 롤백은 INSERT, UPDATE, DELETE를 모두 되돌린다'
+    where: '질문 2'
+  - topic: 'PostgreSQL은 트랜잭션 안에서 문장 하나가 실패하면 롤백할 때까지 다음 문장을 받지 않는다'
+    where: '질문 2의 더 알아보기'
+  - topic: '커밋 전의 변경은 다른 연결에 보이지 않고, 커밋한 순간부터 보인다. 롤백한 변경은 끝까지 보이지 않는다'
+    where: '질문 3'
+  - topic: '여러 트랜잭션이 서로의 변경을 얼마나 보는지(격리 수준)'
+    where: '다루지 않음: 격리 수준과 이상 현상(D9)'
+  - topic: 'JDBC는 기본이 자동 커밋이다. setAutoCommit(false), commit, rollback'
+    where: '질문 4'
+  - topic: '스프링의 @Transactional은 메서드 시작에 트랜잭션을 열고, 정상 종료에 커밋, 런타임 예외에 롤백한다'
+    where: '질문 4'
+  - topic: '롤백은 DB 변경만 되돌린다. 메일과 외부 호출은 커밋 뒤에 한다'
+    where: '질문 4, 실무에서는'
+  - topic: '트랜잭션은 연결과 바꾼 행을 붙잡으니 짧게 둔다'
+    where: '질문 4. 연결은 DB 커넥션과 커넥션 풀(D6)'
+  - topic: '트랜잭션이 정말 열리고 닫혔는지 트랜잭션 매니저의 debug 로그로 본다'
+    where: '실무에서는'
+  - topic: '프록시와 내부 호출, 체크 예외의 롤백 규칙'
+    where: '다루지 않음: @Transactional 동작 원리(S10), 트랜잭션 전파와 롤백 규칙(S11)'
+  - topic: 'ACID: 원자성, 일관성, 격리성, 지속성'
+    where: '질문 5'
 links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/txbasics/TransactionBasicsTest.java
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/txbasics/TxBasicsPracticeTest.java
+  txEvent: https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html
+  bootLogging: https://docs.spring.io/spring-boot/reference/features/logging.html
 codes:
   predict: |-
     -- kim의 잔액 50, lee의 잔액 0
@@ -57,6 +94,42 @@ codes:
     void transfer(long from, long to, int n) {
         deposit(to, n);
         withdraw(from, n);
+    }
+  visibility: |-
+    -- 연결 A
+    begin;
+    update account⤶
+    set balance = 999⤶
+    where owner = 'kim';
+
+    -- 연결 B (A가 커밋하기 전)
+    select balance from account⤶
+    where owner = 'kim';
+  logYml: |-
+    # application.yml (개발 환경)
+    logging:
+      level:
+        org.springframework.orm.jpa⤷
+        .JpaTransactionManager: debug
+  mailBad: |-
+    @Transactional
+    public void order(OrderRequest r) {
+      orderRepository.save(r.toOrder());
+      [[mailSender.send(confirm(r));]]
+      stockService.decrease(r);
+    }
+  mailFixed: |-
+    @Transactional
+    public void order(OrderRequest r) {
+      orderRepository.save(r.toOrder());
+      [[TransactionSynchronizationManager]]
+        .registerSynchronization(
+          new TransactionSynchronization() {
+            public void afterCommit() {
+              mailSender.send(confirm(r));
+            }
+          });
+      stockService.decrease(r);
     }
 predict:
   title: 둘째 문장이 실패하면 잔액은 어떻게 될까요?
@@ -114,6 +187,7 @@ questions:
           key: autocommit
           label: 실제 PostgreSQL에서 돌린 결과 보기
           source: TransactionBasicsTest.autoCommitLeavesHalfDone
+          code: predict
       - p: 이체는 두 문장이 **함께 성공해야만** 뜻이 있는 작업이에요. 한 문장만 반영되면 돈이 생기거나 사라져요. 이렇게 함께 성공하거나 함께 실패해야 하는 SQL들을 하나로 묶은 것이 **트랜잭션**이에요.
       - callout: '**DB 툴도 같아요.** SQL을 직접 실행하는 DB 툴도 자동 커밋으로 설정돼 있는 경우가 많아요. 그 상태에서 실행한 UPDATE는 바로 확정돼요.'
       - quiz:
@@ -188,6 +262,7 @@ questions:
           key: transaction
           label: 실제 PostgreSQL에서 돌린 결과 보기
           source: TransactionBasicsTest.transactionRollsBackAll
+          code: tx
       - p: 100을 보내면 둘째 문장이 실패하고, 롤백이 첫 문장의 +100까지 취소해요. 결과는 **kim 50, lee 0**으로 처음 그대로예요. 30을 보내면 두 문장이 함께 확정돼서 **kim 20, lee 30**이 돼요. 어느 쪽이든 합계는 50이에요.
       - p: 롤백은 UPDATE만 되돌리는 게 아니에요. 트랜잭션 안에서 한 INSERT, UPDATE, DELETE를 모두 되돌려요.
       - table:
@@ -228,6 +303,7 @@ questions:
           key: visibility
           label: 두 연결로 실험한 실제 결과 보기
           source: TransactionBasicsTest.uncommittedChangesAreInvisible
+          code: visibility
       - p: A가 바꾼 직후에 A는 999를 읽지만 B는 여전히 50을 읽어요. B는 기다리지 않고 확정된 값을 바로 받아요. A가 커밋해야 B도 999를 읽어요. A가 롤백하면 B는 그 변경이 있었는지도 알 수 없어요.
       - p: 덕분에 다른 연결은 "lee에게는 더했는데 kim에게서는 아직 안 뺀" 중간 상태를 보지 않아요.
       - more:
@@ -386,6 +462,37 @@ questions:
           answer: 1
           explain: 전부 반영되거나 하나도 반영되지 않는 성질이 원자성이에요.
     recall: 트랜잭션이 지켜 주는 네 가지 성질이에요. 원자성은 전부 아니면 전무, 일관성은 전후로 데이터의 규칙이 지켜지는 것, 격리성은 동시에 도는 트랜잭션이 서로의 중간 상태를 보지 않는 것, 지속성은 커밋된 변경이 장애 뒤에도 남는 것이에요.
+practice:
+  title: 스프링에서는 이렇게 확인하고 피해요
+  says:
+    - '트랜잭션 매니저의 debug 로그를 켜면 트랜잭션 시작, 커밋, 롤백이 한 줄씩 남는다. @Transactional이 정말 걸렸는지 로그로 본다(테스트로 로그를 잡아 확인)'
+    - '흔한 실수: @Transactional 메서드 안에서 확인 메일을 보내고, 그 뒤 재고 차감이 실패해 롤백된다. 주문은 없는데 메일은 나간다. 고친 코드: 커밋 뒤에 보내도록 등록한다(TransactionSynchronization의 afterCommit, 또는 @TransactionalEventListener). 테스트로 세 경우를 비교한다'
+  body:
+    - h3: 트랜잭션이 정말 열렸는지 로그로 봐요
+    - p: '`@Transactional`을 붙였는데 이상하게 롤백이 안 될 때가 있어요. 그럴 때 짐작하지 말고, 트랜잭션 매니저의 로그를 켜서 확인해요. 스프링 부트에서 JPA를 쓰면 트랜잭션 매니저는 `JpaTransactionManager`예요.'
+    - code: logYml
+    - ci:
+        key: tx-log
+        label: 한 번은 정상으로, 한 번은 예외로 끝낸 실제 로그
+        source: TxBasicsPracticeTest.transactionLog
+    - p: '`Creating new transaction`이 시작, `Committing`이 커밋, `Rolling back`이 롤백이에요. 메서드를 불렀는데 이 줄이 없으면 트랜잭션이 걸리지 않은 거예요. 왜 안 걸리는지는 [@Transactional 동작 원리](lesson:transactional-proxy)에서 다뤄요. 운영에서는 로그가 많아지니 개발 환경에서만 켜요.'
+    - h3: '흔한 실수: 트랜잭션 안에서 메일 보내기'
+    - code: mailBad
+      notes:
+        - mark: mailSender.send(confirm(r));
+          as: code
+          text: '메일은 바로 나가요. 다음 줄의 재고 차감이 실패하면 주문 저장은 롤백되지만, 나간 메일은 돌아오지 않아요. 고객은 없는 주문의 확인 메일을 받아요.'
+    - code: mailFixed
+      notes:
+        - mark: TransactionSynchronizationManager
+          as: code
+          text: '지금 트랜잭션이 커밋된 뒤에 할 일을 등록해요. 롤백되면 불리지 않아요.'
+    - ci:
+        key: after-commit
+        label: 세 주문을 실제로 돌린 결과
+        source: TxBasicsPracticeTest.mailAfterCommit
+    - p: '주문 1은 롤백됐는데 메일이 나갔어요. 주문 2는 롤백돼서 메일도 나가지 않았고, 주문 3은 커밋된 뒤에 나갔어요. 실무에서는 같은 장치 위에 만든 `@TransactionalEventListener(phase = AFTER_COMMIT)`로 이벤트를 받아 보내는 경우가 많아요. 스프링 이벤트(S13)에서 다뤄요.'
+    - muted: '근거: 로그 설정은 [스프링 부트 문서](link:bootLogging), 커밋 뒤에 실행하기는 [스프링 문서](link:txEvent). 로그와 메일 결과는 테스트([TxBasicsPracticeTest](link:practiceTest))로 확인했어요.'
 interview:
   question: 트랜잭션이 무엇이고 왜 필요한가요?
   model:
@@ -397,5 +504,24 @@ interview:
       text: 롤백은 DB 변경만 되돌리므로 메일 발송이나 외부 API 호출은 커밋 뒤에 둡니다. 트랜잭션이 길면 연결과 바꾼 행을 오래 붙잡으므로 필요한 SQL만 짧게 묶습니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 이체 로직에 @Transactional을 두고, 출금이 실패하면 입금까지 롤백되는 것을 테스트로 확인했습니다.'
-verified: "이 레슨의 잔액은 짐작이 아니라, 실제 PostgreSQL 16에서 코드를 돌려 확인한 값이에요. 코드가 바뀔 때마다 테스트([TransactionBasicsTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
+verified: "이 레슨의 잔액은 짐작이 아니라, 실제 PostgreSQL 16에서 코드를 돌려 확인한 값이에요. 코드가 바뀔 때마다 테스트([TransactionBasicsTest](link:test), [TxBasicsPracticeTest](link:practiceTest))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
 footer: '근거: PostgreSQL 16 문서의 Transactions 튜토리얼, Oracle 자바 튜토리얼의 Using Transactions(JDBC), Spring Framework 참조 문서의 Using @Transactional. 잔액은 PostgreSQL 16과 Spring Boot 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '트랜잭션 없이 이체하다 둘째 문장이 실패하면 첫 문장만 남아 합계가 150이 된다'
+    how: 'PostgreSQL 16 컨테이너에서 실행한다'
+    test: 'TransactionBasicsTest.autoCommitLeavesHalfDone'
+  - claim: '한 트랜잭션으로 이체하다 실패하면 첫 문장까지 롤백된다'
+    how: '같은 방법'
+    test: 'TransactionBasicsTest.transactionRollsBackAll'
+  - claim: '커밋 전 변경은 다른 연결에 보이지 않고, 롤백하면 끝까지 보이지 않는다'
+    how: '연결 두 개'
+    test: 'TransactionBasicsTest.uncommittedChangesAreInvisible'
+  - claim: 'JDBC 연결은 기본이 자동 커밋이다'
+    how: 'getAutoCommit'
+    test: 'TransactionBasicsTest.autoCommitIsDefault'
+  - claim: 'JpaTransactionManager의 debug 로그에 시작, 커밋, 롤백이 남는다'
+    how: 'Logback ListAppender로 잡는다'
+    test: 'TxBasicsPracticeTest.transactionLog'
+  - claim: '트랜잭션 안에서 보낸 메일은 롤백돼도 나가고, afterCommit에 등록한 메일은 커밋됐을 때만 나간다'
+    how: 'TransactionTemplate으로 세 경우를 돌린다'
+    test: 'TxBasicsPracticeTest.mailAfterCommit'

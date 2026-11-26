@@ -8,12 +8,14 @@ minutes: 20
 page: tx-basics
 verifiedBy:
   - verification/src/test/java/lab/devlessons/txbasics/TransactionBasicsTest.java
+  - verification/src/test/java/lab/devlessons/txbasics/TxBasicsPracticeTest.java
 sources:
   - https://www.postgresql.org/docs/16/tutorial-transactions.html
   - https://docs.oracle.com/javase/tutorial/jdbc/basics/transactions.html
   - https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/annotations.html
   - https://www.postgresql.org/docs/16/explicit-locking.html
-updated: 2026-11-22
+  - https://docs.spring.io/spring-framework/reference/data-access/transaction/event.html
+updated: 2026-11-26
 ---
 
 선수 레슨 없음. 자바 기초와 SQL(SELECT, UPDATE)만 알면 돼요.

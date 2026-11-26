@@ -222,6 +222,25 @@ questions:
       - 롤백은 DB의 변경만 되돌려요. 이미 보낸 문자는 취소되지 않아요
       - 그래서 문자나 메일을 보내는 일은 커밋한 뒤에 해요
     source: https://www.postgresql.org/docs/16/tutorial-transactions.html
+  - key: txb-tx-log
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "개발 환경에서 `JpaTransactionManager`의 로그를 debug로 켜고, `@Transactional`을 붙인 이체 메서드를 불렀어요. 그런데 로그에 `Creating new transaction`도 `Committing`도 나오지 않았어요. 무엇을 뜻하나요?"
+    choices:
+      - 트랜잭션이 정상으로 열리고 커밋됐다
+      - 이 호출에는 트랜잭션이 걸리지 않았다. 두 UPDATE가 각각 자동 커밋됐을 수 있다
+      - 트랜잭션이 롤백됐다
+      - 로그 설정과 트랜잭션은 상관없다
+    answer: "2"
+    explanation: |-
+      **트랜잭션이 걸리지 않았어요.** 트랜잭션 매니저는 트랜잭션을 열 때 `Creating new transaction`, 커밋할 때 `Committing`, 롤백할 때 `Rolling back`을 남겨요.
+
+      - 어노테이션을 붙였어도 이 줄이 없으면 트랜잭션 없이 실행된 거예요
+      - 짐작하지 말고 로그로 확인해요. 왜 안 걸리는지(프록시, 내부 호출)는 @Transactional 동작 원리에서 다뤄요
+    source: https://docs.spring.io/spring-boot/reference/features/logging.html
   # ── 질문 5. ACID는 무엇인가요? ──
   - key: txb-acid-atomicity
     concept: core
