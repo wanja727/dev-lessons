@@ -166,6 +166,8 @@
       clearEvents: clearEvents,
       appendEvent: addEvent,
       show: function (scene) {
+        /* 처음 장면(initial)을 적지 않은 위젯은 빈 장면에서 시작한다 */
+        scene = scene || {};
         if (scene.duo && slots.duo) showDuo(scene.duo);
         if (slots.sides) showSides(scene.sides);
         if (scene.phases && slots.phases) { count.n = 0; showPhases(scene.phases); }

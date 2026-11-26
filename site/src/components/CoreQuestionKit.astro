@@ -43,6 +43,17 @@ window.Lesson = (function () {
   /* 글 안의 `코드`만 코드 조각으로 바꾼다. 나머지는 글자 그대로 보여 준다 */
   function inline(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>'); }
 
+  /* 보기를 보여 줄 순서. 열 때마다 섞어서 정답의 자리를 외우지 못하게 한다 (자료 파일의 정답은 2번에 몰려 있다).
+     보기가 모두 "3번", "250ms" 같은 수이면 적힌 순서가 크기 순서라서 그대로 둔다 */
+  function choiceOrder(options) {
+    var order = options.map(function (_, i) { return i; });
+    if (options.every(function (o) { return /^\d[\d.,]*\s*[^\s\d]{0,4}$/.test(String(o).trim()); })) return order;
+    for (var i = order.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1)), t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    return order;
+  }
+
   /* 장마다 확인 문제 하나. 기록하지 않는 연습이다. 질문, 보기, 해설의 `코드`는 코드 조각이 된다 */
   function quizzes(map) {
     document.querySelectorAll('[data-quiz]').forEach(function (box) {
@@ -50,8 +61,8 @@ window.Lesson = (function () {
       box.innerHTML = '<span class="label">확인</span><p></p><div class="opts"></div><div class="feedback" hidden></div>';
       box.querySelector('p').innerHTML = inline(item.q);
       var opts = box.querySelector('.opts'), fb = box.querySelector('.feedback');
-      item.o.forEach(function (o, oi) {
-        var b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.innerHTML = inline(o); b.setAttribute('aria-pressed', 'false');
+      choiceOrder(item.o).forEach(function (oi) {
+        var o = item.o[oi], b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.innerHTML = inline(o); b.setAttribute('aria-pressed', 'false');
         b.addEventListener('click', function () {
           opts.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
           var right = oi === item.a;
