@@ -226,7 +226,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "개발 환경에서 `JpaTransactionManager`의 로그를 debug로 켜고, `@Transactional`을 붙인 이체 메서드를 불렀어요. 그런데 로그에 `Creating new transaction`도 `Committing`도 나오지 않았어요. 무엇을 뜻하나요?"
     choices:

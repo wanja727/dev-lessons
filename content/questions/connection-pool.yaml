@@ -115,7 +115,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "운영 로그에 \"Connection is not available\" 실패가 늘어서 `spring.datasource.hikari.leak-detection-threshold: 2000`을 켰어요. 얼마 뒤 \"Connection leak detection triggered ...\" 경고가 스택과 함께 찍혔어요. 이 경고가 알려 주는 것은?"
     choices:
