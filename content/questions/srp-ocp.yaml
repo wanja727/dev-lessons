@@ -7,7 +7,8 @@
 # 품질 계획 3단계에서 써 둔 초안(docs/type-trials)을 2026-11-23에 레슨을 쓰며 옮기고 본문과 맞췄다.
 # 같은 날 판정 문제 17개의 정답을 테스트 결과와 본문(says)에 하나씩 맞춰 보고 reviewed로 바꿨다.
 # 2026-11-26에 레슨을 표준에 맞추며 so-ocp-compile(so-ocp-add-method와 같은 것을 묻는다)을 지우고,
-# "실무에서는"으로 묻는 so-spring-component를 질문 4의 셋째로 더했다(draft). 판정 12개를 넘지 않는다.
+# "실무에서는"으로 묻는 so-spring-component를 질문 4의 셋째로 더했다. 판정 12개를 넘지 않는다.
+# 같은 날 정답(@Component를 붙인 SilverDiscount만 만든다)을 SrpOcpSpringTest와 ForgotComponentTest의 결과에 맞춰 보고 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -348,7 +349,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 스프링 프로젝트에서 VipDiscount와 GoldDiscount는 @Component 빈이고, DiscountCalculator는 생성자로 List<DiscountPolicy>를 받아요. 정책 목록을 만드는 조립 코드는 따로 없어요. SILVER 등급 3% 할인을 더하려면 무엇을 해야 하나요? (Grade에 SILVER를 더하는 것은 이미 했어요)
     choices:
