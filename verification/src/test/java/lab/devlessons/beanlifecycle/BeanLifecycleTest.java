@@ -296,25 +296,33 @@ class BeanLifecycleTest {
     @Test
     @DisplayName("싱글톤 빈의 int 필드를 두 스레드가 1만 번씩 ++하면 20000보다 작게 나오곤 하고, AtomicLong은 늘 20000이다")
     void singletonStateLosesUpdates() throws Exception {
+        // 경쟁 상태는 늘 나타나지 않는다. 다섯 판을 한 묶음으로 돌리고, 20000보다 작은 판이 나올 때까지 묶음을 다시 돌린다(최대 20묶음).
+        // 두 스레드는 CountDownLatch로 함께 출발시킨다. 늦게 뜬 스레드가 앞 스레드가 끝난 뒤에 돌아 겹치지 않는 일을 줄인다
         List<Integer> plain = new ArrayList<>();
         List<Long> atomic = new ArrayList<>();
-        for (int round = 0; round < 5; round++) {
-            try (var ctx = new AnnotationConfigApplicationContext(OrderCounter.class, AtomicOrderCounter.class)) {
-                OrderCounter counter = ctx.getBean(OrderCounter.class);
-                AtomicOrderCounter atomicCounter = ctx.getBean(AtomicOrderCounter.class);
-                runTwice(() -> {
-                    for (int i = 0; i < 10_000; i++) {
-                        counter.increase();
-                        atomicCounter.increase();
-                    }
-                });
-                plain.add(counter.count());
-                atomic.add(atomicCounter.count());
+        int batches = 0;
+        while (batches < 20 && (plain.isEmpty() || plain.stream().allMatch(n -> n == 20_000))) {
+            batches++;
+            plain.clear();
+            atomic.clear();
+            for (int round = 0; round < 5; round++) {
+                try (var ctx = new AnnotationConfigApplicationContext(OrderCounter.class, AtomicOrderCounter.class)) {
+                    OrderCounter counter = ctx.getBean(OrderCounter.class);
+                    AtomicOrderCounter atomicCounter = ctx.getBean(AtomicOrderCounter.class);
+                    runTwice(() -> {
+                        for (int i = 0; i < 10_000; i++) {
+                            counter.increase();
+                            atomicCounter.increase();
+                        }
+                    });
+                    plain.add(counter.count());
+                    atomic.add(atomicCounter.count());
+                }
             }
+            assertThat(atomic).containsOnly(20_000L);
         }
 
         assertThat(plain).anyMatch(n -> n < 20_000);
-        assertThat(atomic).containsOnly(20_000L);
         CiOutput.record(LESSON, "counter", "int count++ 다섯 번: " + plain + "\nAtomicLong 다섯 번: " + atomic);
     }
 
@@ -397,10 +405,21 @@ class BeanLifecycleTest {
     }
 
     private static void runTwice(Runnable work) throws InterruptedException {
-        Thread a = new Thread(work);
-        Thread b = new Thread(work);
+        CountDownLatch go = new CountDownLatch(1);
+        Runnable together = () -> {
+            try {
+                go.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            work.run();
+        };
+        Thread a = new Thread(together);
+        Thread b = new Thread(together);
         a.start();
         b.start();
+        go.countDown();
         a.join();
         b.join();
     }
