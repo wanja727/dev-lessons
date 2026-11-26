@@ -66,6 +66,10 @@ dependencies {
     // 스프링 과정 S12: 스프링 시큐리티. 저장소 전체를 띄우는 @SpringBootTest에는 켜지지 않게
     // src/main/resources/application.yml에서 시큐리티 자동 설정을 끄고, S12 테스트만 @EnableWebSecurity로 직접 켠다
     testImplementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // 스프링 과정 S16: 웹플럭스. MVC와 함께 있으면 스프링 부트는 MVC(서블릿)로 띄우므로 다른 테스트는 그대로다.
+    // S16 테스트만 리액티브 앱을 직접 띄운다
+    testImplementation 'org.springframework.boot:spring-boot-starter-webflux'
 }
 
 tasks.named('test') {

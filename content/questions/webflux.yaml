@@ -1,0 +1,224 @@
+# 웹플럭스 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/webflux.yaml의 says).
+# 동작에 관한 정답은 verification의 WebFluxLessonTest로 확인했다 (스프링 부트 3.5, 네티).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: webflux
+  title: 웹플럭스
+  unit: 스프링
+  order: 716
+concepts:
+  - key: core
+    name: 웹플럭스
+coreQuestions:
+  - key: q1
+    text: "웹플럭스는 요청을 어떤 스레드로 처리하나요?"
+  - key: q2
+    text: "적은 스레드로 어떻게 많은 요청을 기다리나요?"
+  - key: q3
+    text: "웹플럭스에서 블로킹 코드를 부르면 어떻게 되나요?"
+  - key: q4
+    text: "MVC와 웹플럭스는 언제 무엇을 고르나요?"
+questions:
+  # ── 질문 1 ──
+  - key: flux-thread-name
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 웹플럭스(네티) 컨트롤러에서 Thread.currentThread().getName()을 찍었어요. 어떤 모양의 이름이 나올까요?
+    choices:
+      - http-nio-8080-exec-1
+      - reactor-http-nio-1
+      - main
+      - ForkJoinPool.commonPool-worker-1
+    answer: "2"
+    explanation: |-
+      **reactor-http-nio-N이에요.** 네티의 이벤트 루프 스레드예요. CPU 수만큼의 이 스레드들이 모든 요청을 번갈아 처리해요.
+
+      - http-nio-8080-exec-N은 톰캣(MVC)의 요청 스레드예요
+    source: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+  - key: flux-lazy
+    concept: core
+    coreQuestion: q1
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 서비스 메서드가 아래처럼 알림 요청을 만들고 끝나요. m을 돌려주지도 구독하지도 않아요. 알림 요청은 외부로 나갈까요?
+    code: |-
+      void notifyUser(long id) {
+        Mono<Void> m = webClient.post()
+            .uri("/notify/" + id)
+            .retrieve()
+            .bodyToMono(Void.class);
+      }
+    choices:
+      - 나간다
+      - 나가지 않는다. 구독해야 실행된다
+      - 메서드가 끝날 때 나간다
+      - 예외가 난다
+    answer: "2"
+    explanation: |-
+      **나가지 않아요.** Mono는 구독할 때 실행되는 계획이에요. 아무도 구독하지 않으면 요청이 나가지 않아요.
+
+      - 컨트롤러가 돌려준 Mono는 웹플럭스가 구독해요. 직접 만든 Mono는 돌려주거나 이어 붙여야 해요
+    source: https://docs.spring.io/spring-framework/reference/web/webflux.html
+  # ── 질문 2 ──
+  - key: flux-mvc-time
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 외부 재고 서버가 1초 걸려요. MVC(톰캣 스레드 2개, RestClient)로 만든 상품 API에 요청 10개를 동시에 보내면 대략 얼마 걸릴까요? 같은 조건의 웹플럭스(이벤트 루프 2개, WebClient)는 약 1초였어요.
+    choices:
+      - 약 1초
+      - 약 2초
+      - 약 5초
+      - 약 10초
+    answer: "3"
+    explanation: |-
+      **약 5초예요.** RestClient는 응답을 받을 때까지 스레드를 붙잡아요. 스레드 2개가 1초씩 2개씩 처리해 10개에 약 5초예요.
+
+      - 웹플럭스는 기다리는 동안 스레드를 놓아줘서 10개가 함께 1초를 기다려요
+    source: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+  - key: flux-cpu-bound
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 외부 호출 없이 CPU로 0.1초씩 계산만 하는 요청이 많아요. 이벤트 루프 2개인 웹플럭스로 바꾸면 훨씬 빨라질까요?
+    choices:
+      - 훨씬 빨라진다. 스레드를 놓아주기 때문이다
+      - 빨라지지 않는다. 기다림이 없어 놓아줄 시간이 없다
+      - 모든 요청이 0.1초에 끝난다
+      - 계산이 자동으로 다른 스레드로 나뉜다
+    answer: "2"
+    explanation: |-
+      **빨라지지 않아요.** 웹플럭스는 기다리는 동안 스레드를 놓아줘서 빨라요. 계산만 하는 요청은 스레드를 계속 써서 이벤트 루프 2개로는 2개씩만 처리해요.
+    source: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+  # ── 질문 3 ──
+  - key: flux-sleep
+    concept: core
+    coreQuestion: q3
+    type: code_predict
+    status: draft
+    difficulty: 1
+    body: 이벤트 루프 스레드가 2개인 웹플럭스 앱이에요. 아래 엔드포인트에 요청 10개를 동시에 보내면 대략 얼마 걸릴까요?
+    code: |-
+      @GetMapping("/blocking")
+      Mono<String> blocking()
+          throws InterruptedException {
+        Thread.sleep(1000);
+        return Mono.just("done");
+      }
+    choices:
+      - 약 1초
+      - 약 5초
+      - 약 10초
+      - 요청이 거절된다
+    answer: "2"
+    explanation: |-
+      **약 5초예요.** 이벤트 루프 2개가 각각 1초씩 멈추며 2개씩 처리해요. 그동안 그 스레드가 맡은 다른 요청도 모두 멈춰요.
+
+      - subscribeOn(Schedulers.boundedElastic())으로 옮기면 약 1초였어요
+    source: https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+  - key: flux-jpa
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 웹플럭스 컨트롤러에서 Mono.just(orderRepository.findById(id).orElseThrow())로 JPA 조회 결과를 돌려줘요. 요청이 몰리면 어떤 문제가 생길까요?
+    choices:
+      - 문제없다. Mono로 감쌌으니 논블로킹이다
+      - 이벤트 루프가 DB 응답을 기다리며 멈춰, 그 스레드의 다른 요청도 함께 느려진다
+      - JPA가 자동으로 R2DBC로 바뀐다
+      - 컴파일 오류가 난다
+    answer: "2"
+    explanation: |-
+      **이벤트 루프가 멈춰요.** JPA와 JDBC는 블로킹 API라 Mono.just로 감싸도 조회는 이벤트 루프에서 바로 실행돼요.
+
+      - 블로킹 호출은 Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())으로 옮기거나, R2DBC를 쓰거나, MVC를 써요
+    source: https://projectreactor.io/docs/core/release/reference/coreFeatures/schedulers.html
+  # ── 질문 4 ──
+  - key: flux-choose-shop
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: JPA로 주문을 저장하고 조회하는 일반 쇼핑몰 API를 새로 만들어요. MVC와 웹플럭스 중 무엇이 맞는 편일까요?
+    choices:
+      - MVC. 라이브러리가 대부분 블로킹이라 웹플럭스의 이점이 없다
+      - 웹플럭스. 항상 더 빠르다
+      - 웹플럭스. JPA가 논블로킹이다
+      - 둘 다 같다
+    answer: "1"
+    explanation: |-
+      **MVC예요.** JPA와 JDBC가 블로킹이라 웹플럭스로 만들면 이벤트 루프를 멈출 위험만 생겨요. 일반 서비스는 MVC가 기본이에요.
+    source: https://docs.spring.io/spring-framework/reference/web/webflux.html
+  - key: flux-choose-gateway
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: DB 없이 여러 외부 서비스를 동시에 부르고 결과를 합쳐 돌려주는 API 게이트웨이를 만들어요. 무엇이 맞는 편일까요?
+    choices:
+      - MVC. 블로킹이 더 단순하다
+      - 웹플럭스. 하는 일이 대부분 외부 응답을 기다리는 것이다
+      - 어느 쪽이든 스레드 수가 같으면 같다
+      - 배치로 만든다
+    answer: "2"
+    explanation: |-
+      **웹플럭스가 맞는 편이에요.** 기다림이 대부분이라, 기다리는 동안 스레드를 놓아주는 웹플럭스가 적은 스레드로 많은 요청을 기다려요.
+
+      - 코드를 블로킹 방식으로 두고 싶다면 MVC에 가상 스레드를 켜는 길도 있어요
+    source: https://docs.spring.io/spring-framework/reference/web/webflux.html
+  # ── 실무 ──
+  - key: flux-both-starters
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: MVC 앱에서 WebClient만 쓰려고 spring-boot-starter-webflux를 함께 넣었어요. 앱은 어떻게 뜰까요?
+    choices:
+      - 웹플럭스(네티)로 바뀐다
+      - 그대로 MVC(서블릿)로 뜬다
+      - 두 서버가 함께 뜬다
+      - 시작할 때 오류가 난다
+    answer: "2"
+    explanation: |-
+      **MVC로 떠요.** 두 스타터가 함께 있으면 스프링 부트는 서블릿 앱으로 띄워요. WebClient만 쓰려고 웹플럭스 스타터를 넣는 일이 흔해서예요.
+    source: https://docs.spring.io/spring-boot/reference/web/reactive.html
+  # ── 전체 ──
+  - key: flux-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "스프링 MVC와 웹플럭스의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **요청마다 스레드를 쓰느냐, 적은 이벤트 루프가 번갈아 처리하느냐의 차이예요.**
+
+      - **MVC:** 요청 하나를 톰캣 스레드 하나가 맡고, 외부 응답을 기다리는 동안 스레드를 붙잡는다
+      - **웹플럭스:** 네티 위의 적은 이벤트 루프 스레드가 Mono와 Flux로 여러 요청을 번갈아 처리하고, 기다리는 동안 스레드를 놓아준다
+      - **주의:** 이벤트 루프에서 JDBC, JPA, Thread.sleep 같은 블로킹을 하면 그 스레드의 모든 요청이 멈춘다. boundedElastic으로 옮기거나 R2DBC를 쓴다
+      - **고르기:** JPA 중심 일반 서비스는 MVC, 외부 호출이 많은 게이트웨이와 스트리밍은 웹플럭스
+    checklist:
+      - MVC는 요청마다 스레드를 쓰고 기다리는 동안 붙잡는다고 말했다
+      - 웹플럭스는 적은 이벤트 루프가 기다리는 동안 스레드를 놓아준다고 말했다
+      - 이벤트 루프에서 블로킹하면 생기는 문제를 말했다
+      - 일의 성격에 따라 고르는 기준을 말했다
+    source: https://docs.spring.io/spring-framework/reference/web/webflux.html
