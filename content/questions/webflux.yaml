@@ -33,15 +33,15 @@ questions:
     type: multiple_choice
     status: reviewed
     difficulty: 1
-    body: 웹플럭스(네티) 컨트롤러에서 Thread.currentThread().getName()을 찍었어요. 어떤 모양의 이름이 나올까요?
+    body: 리눅스 서버에 띄운 웹플럭스(네티) 컨트롤러에서 Thread.currentThread().getName()을 찍었어요. 어떤 모양의 이름이 나올까요?
     choices:
       - http-nio-8080-exec-1
-      - reactor-http-nio-1
+      - reactor-http-epoll-1
       - main
       - ForkJoinPool.commonPool-worker-1
     answer: "2"
     explanation: |-
-      **reactor-http-nio-N이에요.** 네티의 이벤트 루프 스레드예요. CPU 수만큼의 이 스레드들이 모든 요청을 번갈아 처리해요.
+      **reactor-http-epoll-N이에요.** 네티의 이벤트 루프 스레드예요. 리눅스에서는 네이티브 전송(epoll)을 써서 이 이름이 되고, 맥과 윈도에서는 reactor-http-nio-N이에요. CPU 수만큼의 이 스레드들이 모든 요청을 번갈아 처리해요.
 
       - http-nio-8080-exec-N은 톰캣(MVC)의 요청 스레드예요
     source: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html

@@ -114,10 +114,10 @@ questions:
       lead: '요청마다 스레드를 쓰지 않고, 적은 수의 이벤트 루프 스레드가 여러 요청을 번갈아 처리해요.'
       sub: '`Mono`와 `Flux`로 "나중에 올 값"을 돌려주고, 값이 오면 이어서 처리해요. 값이 오기를 기다리는 동안 스레드는 다른 요청을 맡아요.'
     says:
-      - '같은 컨트롤러를 웹플럭스로 띄워 처리한 스레드 이름을 보인다(`reactor-http-nio-N`). MVC는 `http-nio-...-exec-N`이었다(S1)'
+      - '같은 컨트롤러를 웹플럭스로 띄워 처리한 스레드 이름을 보인다(리눅스에서 `reactor-http-epoll-N`, 맥과 윈도에서 `reactor-http-nio-N`). MVC는 `http-nio-...-exec-N`이었다(S1)'
       - '`Mono`, `Flux`의 뜻과 구독할 때 실행된다는 것'
     asks:
-      - '본문의 예시: 웹플럭스 컨트롤러가 찍은 스레드 이름은 어떤 모양인가 (reactor-http-nio-N)'
+      - '본문의 예시: 웹플럭스 컨트롤러가 찍은 스레드 이름은 어떤 모양인가 (리눅스에서 reactor-http-epoll-N)'
       - '옮긴 상황: `Mono`를 만들기만 하고 구독하지 않으면 안의 외부 호출이 실행되나 (실행되지 않는다)'
     body:
       - p: '[서블릿과 톰캣](lesson:servlet-tomcat)에서 MVC는 요청 하나를 스레드 하나가 응답까지 맡는다고 했어요. 외부 응답을 기다리는 동안에도 그 스레드는 묶여 있어요. 웹플럭스는 다르게 해요. 네티(Netty)라는 서버 위에서, CPU 수만큼의 **이벤트 루프** 스레드가 모든 요청을 번갈아 처리해요([근거](link:concurrency)).'
@@ -139,7 +139,7 @@ questions:
           answer: 2
           explain: '`Mono`는 구독할 때 실행되는 계획이에요. 아무도 구독하지 않으면 요청이 나가지 않아요.'
       - next: '스레드를 놓아준다면, 스레드 2개로 요청을 몇 개나 함께 기다릴 수 있을까요?'
-    recall: '웹플럭스는 요청마다 스레드를 쓰지 않고, 네티 위의 적은 수(CPU 수)의 이벤트 루프 스레드(reactor-http-nio-N)가 여러 요청을 번갈아 처리해요. 컨트롤러는 나중에 올 값인 Mono(0~1개)나 Flux(0~N개)를 돌려주고 끝나며, 값이 오면 이벤트 루프가 이어서 처리해요. Mono와 Flux는 구독해야 실행돼요.'
+    recall: '웹플럭스는 요청마다 스레드를 쓰지 않고, 네티 위의 적은 수(CPU 수)의 이벤트 루프 스레드(리눅스에서 reactor-http-epoll-N)가 여러 요청을 번갈아 처리해요. 컨트롤러는 나중에 올 값인 Mono(0~1개)나 Flux(0~N개)를 돌려주고 끝나며, 값이 오면 이벤트 루프가 이어서 처리해요. Mono와 Flux는 구독해야 실행돼요.'
   - id: q2
     title: 적은 스레드로 어떻게 많은 요청을 기다리나요?
     conclusion:
@@ -282,7 +282,7 @@ interview:
 verified: 이 레슨의 시간과 스레드 이름은 짐작이 아니라 스프링 부트 3.5의 네티 앱과 톰캣 앱을 띄워 잰 값이에요. 코드가 바뀔 때마다 테스트([WebFluxLessonTest](link:test))가 다시 돌아요.
 footer: '근거: 스프링 웹플럭스는 스프링 프레임워크 문서([링크](link:webflux)), 동시성 모델은 [링크](link:concurrency), 스프링 부트의 웹 앱 종류는 [링크](link:bootReactive), 리액터 스케줄러는 [링크](link:schedulers). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '웹플럭스 컨트롤러는 reactor-http-nio 스레드에서 돌고, 이벤트 루프 2개로 1초 걸리는 외부 호출 요청 100개가 약 1초에 끝난다'
+  - claim: '웹플럭스 컨트롤러는 reactor-http 이벤트 루프 스레드(리눅스에서 reactor-http-epoll-N)에서 돌고, 이벤트 루프 2개로 1초 걸리는 외부 호출 요청 100개가 약 1초에 끝난다'
     how: '`spring-boot-starter-webflux`를 testImplementation으로 넣고 네티 리액티브 앱을 띄운다. 이 저장소에 톰캣이 있어 그대로면 톰캣 위에 떠서 `NettyReactiveWebServerFactory`를 직접 넣었다. 이벤트 루프는 `ReactorResourceFactory`로 2개'
     test: WebFluxLessonTest.manyRequestsFewThreads
   - claim: '같은 일을 MVC(톰캣 스레드 2개, RestClient)로 하면 요청 10개에 약 5초, 웹플럭스는 약 1초'

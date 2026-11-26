@@ -163,7 +163,7 @@ class WebFluxLessonTest {
     }
 
     @Test
-    @DisplayName("이벤트 루프 2개로 1초 걸리는 외부 호출 요청 100개가 약 1초에 끝나고, 처리한 스레드는 reactor-http-nio 둘이다")
+    @DisplayName("이벤트 루프 2개로 1초 걸리는 외부 호출 요청 100개가 약 1초에 끝나고, 처리한 스레드는 reactor-http 이벤트 루프 둘이다")
     void manyRequestsFewThreads() throws Exception {
         THREADS.clear();
         try (var ctx = startReactive()) {
@@ -172,7 +172,8 @@ class WebFluxLessonTest {
             double seconds = fire(port, "/products?id={i}", 100);
 
             assertThat(seconds).isLessThan(3.5);
-            assertThat(THREADS).allMatch(t -> t.startsWith("reactor-http-nio"));
+            assertThat(THREADS).allMatch(t -> t.startsWith("reactor-http-"));
+            // 리눅스(CI)는 네이티브 전송을 써서 reactor-http-epoll-N, 맥과 윈도는 reactor-http-nio-N
             assertThat(THREADS.size()).isLessThanOrEqualTo(2);
             CiOutput.record(LESSON, "many", String.format("이벤트 루프 스레드 2개, 외부 재고 서버 1초\n요청 100개를 동시에 보냄\n"
                     + "모두 끝난 시간: %.1f초\n요청을 처리한 스레드: %s", seconds, new TreeSet<>(THREADS)));
