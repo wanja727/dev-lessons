@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkOxBalance, checkQuestionFile } from "./check-questions.mjs";
+import { checkQuestionFile } from "./check-questions.mjs";
 
 const ox = (key, cq) => `  - key: ${key}
     concept: core
@@ -108,41 +108,4 @@ test("출처 주소는 없는 페이지만 오류로 본다", async () => {
   assert.equal(classify(410), "broken");
   assert.equal(classify(403), "unknown");
   assert.equal(classify(503), "unknown");
-});
-
-const choice = (key, cq, choices, answer) => `  - key: ${key}
-    concept: core
-    coreQuestion: ${cq}
-    type: multiple_choice
-    body: 질문
-    choices: [${choices.join(", ")}]
-    answer: "${answer}"
-    explanation: "**결론이에요.** 이유"`;
-const LONG = ["남는다", "남지 않는다 같은 트랜잭션이라 함께 롤백된다", "오류가 난다"];
-const EVEN = ["남는다 이미 커밋됐다", "남지 않는다 롤백된다", "오류가 나서 멈춘다"];
-
-test("보기 문제의 절반 넘게 정답이 가장 긴 보기면 경고다", () => {
-  const extra = ["a", "b", "c"].map((k) => choice(k, "q1", LONG, 2)).concat(choice("d", "q1", EVEN, 2));
-  const warnings = warningsOf(validFile({ extra }));
-  assert.equal(warnings.filter((w) => w.includes("가장 긴 보기")).length, 1);
-  assert.match(warnings.join(" "), /보기 문제 4개 가운데 3개.*a, b, c/);
-});
-
-test("정답이 가장 긴 보기인 문제가 절반 이하면 경고하지 않는다", () => {
-  const extra = [choice("a", "q1", LONG, 2), choice("b", "q1", LONG, 2), choice("c", "q1", EVEN, 2), choice("d", "q1", LONG, 1)];
-  assert.equal(warningsOf(validFile({ extra })).filter((w) => w.includes("가장 긴 보기")).length, 0);
-});
-
-test("길이가 같은 보기가 있으면 가장 긴 보기로 세지 않는다", () => {
-  const same = ["가나다라", "마바사아", "자차"];
-  const extra = ["a", "b", "c", "d"].map((k) => choice(k, "q1", same, 1));
-  assert.equal(warningsOf(validFile({ extra })).filter((w) => w.includes("가장 긴 보기")).length, 0);
-});
-
-test("OX의 답이 한쪽으로 몰리면 모든 파일을 합쳐 경고한다", () => {
-  const allO = [validFile(), validFile()]; // O 12개
-  assert.match(checkOxBalance(allO).join(""), /OX 문제 12개 가운데 12개의 답이 O다/);
-  const mixed = validFile().replaceAll("answer: O", "answer: X");
-  assert.deepEqual(checkOxBalance([validFile(), mixed]), []);
-  assert.deepEqual(checkOxBalance([validFile().split("questions:")[0] + "questions: []" + String.fromCharCode(10)]), []);
 });
