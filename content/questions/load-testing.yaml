@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/load-testing.yaml의 says).
 # 동작에 관한 정답은 verification의 LoadTestingTest로 확인했다 (스프링 부트 3.5, 내장 톰캣).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-26에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 이벤트를 앞두고 주문 API의 부하 테스트를 하려고 해요. 목표로 가장 알맞은 것은?
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 단위 테스트와 통합 테스트가 모두 통과한 서버가 오픈 이벤트 날 응답이 5초씩 걸렸어요. 미리 무엇을 했으면 알 수 있었을까요?
     choices:
@@ -66,7 +67,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 톰캣 스레드 최대 10개, 요청마다 100ms가 걸리는 API에 동시 사용자를 20명에서 50명으로 늘렸어요. 처리량과 응답 시간은 어떻게 될까요?
     choices:
@@ -85,7 +86,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 리틀의 법칙(서버 안의 요청 수 = 처리량 × 응답 시간)으로 계산해 보세요. 응답 시간이 0.2초인 API가 초당 300건을 처리하려면 서버 안에서 동시에 몇 건을 처리하고 있어야 할까요?
     choices:
@@ -103,7 +104,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: k6 결과에서 평균 응답 시간은 150ms로 목표(200ms)를 지켰는데, p99는 2초였어요. 이 부하 테스트를 통과로 봐도 될까요?
     choices:
@@ -122,7 +123,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 부하 테스트 중 처리량이 멈췄어요. CPU는 20%이고, 톰캣의 바쁜 스레드 수가 최대치에 붙어 있어요. 병목은 무엇일까요?
     choices:
@@ -140,7 +141,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 주문 API가 느려서 톰캣 스레드를 50개에서 200개로 늘렸어요. 처리량은 그대로이고 커넥션 풀의 대기 수(hikaricp.connections.pending)가 치솟았어요. 무슨 일일까요?
     choices:
@@ -159,7 +160,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서버를 띄운 직후부터 10초 동안 잰 응답 시간이, 1분 뒤부터 잰 값보다 컸어요. 이유로 맞는 것은?
     choices:
@@ -177,7 +178,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 노트북 한 대로 부하를 보냈더니 노트북의 CPU가 100%였고 서버의 CPU는 30%였어요. 처리량은 초당 400건에서 멈췄어요. 이것을 서버의 한계로 봐도 될까요?
     choices:
@@ -196,7 +197,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "부하 테스트를 어떻게 하고, 결과로 무엇을 알아내는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

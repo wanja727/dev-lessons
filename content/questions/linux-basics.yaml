@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/linux-basics.yaml의 says).
 # 동작에 관한 정답은 verification의 LinuxBasicsTest로 확인했다 (eclipse-temurin:21-jdk 컨테이너).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-26에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 서버에서 ps aux | grep order-api를 쳤더니 줄이 두 개 나왔어요. 한 줄은 grep order-api예요. 다른 한 줄은 무엇일까요?
     choices:
@@ -49,7 +50,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 배포 스크립트가 옛 서버를 껐다고 했는데 새 서버가 뜨지 않아요. 옛 서버가 아직 살아 있는지 확인하는 명령으로 맞는 것은?
     choices:
@@ -68,7 +69,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 끝날 때 종료 훅(Runtime.addShutdownHook)에서 파일에 "정리 완료"를 쓰는 자바 서버에 kill -9를 보냈어요. 결과로 맞는 것은?
     choices:
@@ -86,7 +87,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 배포 스크립트가 옛 스프링 부트 서버를 kill -9 $(pgrep -f order-api)로 꺼요. 결제를 처리하던 요청은 어떻게 될까요?
     choices:
@@ -105,7 +106,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 새 서버가 java.net.BindException Address already in use로 뜨지 않아요. 8080 포트를 어느 프로세스가 잡고 있는지 찾는 명령은?
     choices:
@@ -123,7 +124,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서버 안에서 curl localhost:8080/health는 up을 돌려주는데, 다른 서버에서는 닿지 않아요. ss -ltn에 127.0.0.1:8080이 보여요. 이유로 맞는 것은?
     choices:
@@ -142,7 +143,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 로그에서 예외가 난 줄과 그 아래 스택 트레이스 다섯 줄을 함께 보려고 해요. 맞는 명령은?
     choices:
@@ -160,7 +161,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서버가 갑자기 로그를 쓰지 못하고 같은 서버의 DB도 멈췄어요. df -h /에 사용률 100%가 보여요. 다음에 할 일로 가장 맞는 것은?
     choices:
@@ -178,7 +179,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 배포 스크립트를 돌렸더니 아래처럼 나왔어요. 원인과 고치는 방법으로 맞는 것은?
     code: |-
@@ -202,7 +203,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "운영 중인 리눅스 서버에서 자바 서버가 응답하지 않을 때 무엇을 어떤 순서로 확인하는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
