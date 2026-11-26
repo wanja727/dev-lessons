@@ -8,8 +8,41 @@ prerequisites:
   - slug: tx-basics
     title: 트랜잭션 기초
 assume: SQL 기초, 트랜잭션의 커밋과 롤백([트랜잭션 기초](lesson:tx-basics)), 자바의 try-with-resources. 풀은 스프링 부트가 기본으로 쓰는 HikariCP, DB는 PostgreSQL 16이에요.
+roadmap: D6
+type: 동작 확인
+example: '스프링 부트의 HikariCP 풀에서 PostgreSQL 연결을 빌리고 돌려줘요. 연결을 새로 만들 때와 빌릴 때의 시간, 반납한 연결을 다시 쓰는 것, 풀이 비었을 때의 기다림, 트랜잭션이 연결을 쥐는 시간을 차례로 봐요.'
+intro:
+  - '평소에는 멀쩡하던 주문 API가 이벤트 시작 직후 줄줄이 실패해요. 로그에는 "Connection is not available, request timed out after 30000ms"가 가득해요. DB 서버의 CPU는 한가한데요.'
+  - '스프링 부트 앱은 DB와 이야기할 때마다 커넥션 풀에서 연결을 빌려요. 풀의 크기, 연결을 쥐는 시간, 빌린 연결을 돌려주는지가 모두 개발자의 코드와 설정에 달려 있어서, 풀이 모자라면 DB가 아니라 앱이 먼저 멈춰요.'
+  - '이 레슨에서는 실제 HikariCP와 PostgreSQL로 연결을 새로 만드는 시간과 빌리는 시간을 재고, 풀이 비었을 때의 기다림과 실패를 재현해요. 실무 구역에서는 스프링 부트의 풀 설정과 상태를 읽고, 닫지 않은 연결이 풀을 말리는 것과 그것을 잡는 누수 감지를 확인해요.'
+covers:
+  - topic: '커넥션은 프로그램과 DB 서버 사이의 통신 통로다. 만들 때 접속, 인증, 서버 준비(PostgreSQL은 연결마다 프로세스)가 든다'
+    where: '질문 1'
+  - topic: 'DB 서버가 동시에 받는 연결 수에는 한계가 있다(PostgreSQL 기본 max_connections 100)'
+    where: '질문 1'
+  - topic: '커넥션 풀은 연결을 미리 만들어 두고 빌려주고 돌려받는다. 풀에서 빌린 연결의 close()는 반납이다'
+    where: '질문 2'
+  - topic: '빌린 연결은 꼭 close()한다. try-with-resources, JdbcTemplate과 JPA가 대신 해 준다'
+    where: '질문 2, 실무에서는'
+  - topic: '풀이 비면 다음 요청은 기다리고, connection-timeout 안에 못 받으면 SQLTransientConnectionException이다. 풀은 최대 크기를 넘겨 만들지 않는다'
+    where: '질문 3'
+  - topic: 'HikariCP의 설정 maximum-pool-size와 connection-timeout, 스프링 부트의 기본값'
+    where: '질문 3, 실무에서는'
+  - topic: '풀 크기를 정하는 법'
+    where: '다루지 않음: 스레드 풀과 커넥션 풀 크기(A11)'
+  - topic: '트랜잭션은 끝날 때까지 연결 하나를 쥔다. 트랜잭션 안의 느린 외부 호출은 풀을 말린다'
+    where: '질문 4'
+  - topic: '요청 끝까지 연결을 쥐게 하는 OSIV'
+    where: '다루지 않음: OSIV(P6)'
+  - topic: '풀의 상태(쓰는 연결, 남은 연결, 기다리는 스레드)를 읽는 법'
+    where: '실무에서는'
+  - topic: '닫지 않은 연결(누수)은 풀을 말린다. leak-detection-threshold로 빌린 곳을 로그에 남긴다'
+    where: '실무에서는. 예외와 자원 정리는 예외(J10)'
 links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/connpool/ConnectionPoolTest.java
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/connpool/ConnectionPoolPracticeTest.java
+  hikari: https://github.com/brettwooldridge/HikariCP
+  bootSql: https://docs.spring.io/spring-boot/reference/data/sql.html
 codes:
   predict: |-
     // 풀이 가진 연결은 2개
@@ -53,6 +86,57 @@ codes:
         Receipt r = paymentApi.pay(o);
         [[orderService.markPaid(id, r)]];
     }
+  timingRun: |-
+    // 20번씩 재서 평균
+    // ① 새 연결
+    try (Connection c = DriverManager⤷
+        .getConnection(url, user, pw)) {
+      select(c, "select pg_backend_pid()");
+    }
+    // ② 풀에서 빌리기
+    try (Connection c =
+        pool.getConnection()) {
+      select(c, "select pg_backend_pid()");
+    }
+  reuseRun: |-
+    // 연결 1개짜리 풀
+    try (Connection c =
+        pool.getConnection()) {
+      select(c, "select pg_backend_pid()");
+    } // close()
+    try (Connection c =
+        pool.getConnection()) {
+      select(c, "select pg_backend_pid()");
+    }
+  bootYml: |-
+    # application.yml
+    spring:
+      datasource:
+        hikari:
+          maximum-pool-size: 10
+          connection-timeout: 3000
+          [[leak-detection-threshold: 2000]]
+  poolState: |-
+    HikariPoolMXBean pool = dataSource
+        .unwrap(HikariDataSource.class)
+        .getHikariPoolMXBean();
+    pool.getActiveConnections();
+    pool.getIdleConnections();
+    pool.[[getThreadsAwaitingConnection()]];
+  leakBad: |-
+    public int countOrders() {
+      Connection c =
+          dataSource.getConnection();
+      [[// close()가 없다]]
+      return count(c, "select count(*)"
+          + " from orders");
+    }
+  leakFixed: |-
+    public int countOrders() {
+      return jdbcTemplate.queryForObject(
+          "select count(*) from orders",
+          Integer.class);
+    }
 predict:
   title: 연결이 남아 있지 않으면 세 번째 요청은 어떻게 될까요?
   text: 아래 코드는 풀에서 DB 연결을 하나 빌려 SQL을 실행해요. 풀이 가진 연결은 2개뿐이에요. 요청 두 개가 연결을 하나씩 빌려 오래 걸리는 SQL을 실행하는 중에, 세 번째 요청이 같은 코드를 실행했어요. 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 3에서 확인해요.
@@ -93,6 +177,7 @@ questions:
           key: timing
           label: 실제로 잰 시간 보기
           source: ConnectionPoolTest.newConnectionIsSlowerThanPooled
+          code: timingRun
       - p: 연결을 무한정 만들 수도 없어요. DB 서버가 동시에 받을 수 있는 연결 수에는 한계가 있고, PostgreSQL의 기본값은 100개예요.
       - quiz:
           q: 풀을 쓰지 않고 요청마다 연결을 새로 만들어요. 요청 100개를 차례로 처리하면 DB 서버에 접속하고 인증하는 일은 몇 번 일어날까요?
@@ -125,6 +210,7 @@ questions:
           key: reuse
           label: 반납한 뒤 다시 빌린 실제 결과 보기
           source: ConnectionPoolTest.closeReturnsToPool
+          code: reuseRun
       - p: 그래서 빌린 연결은 꼭 `close()`해야 해요. 반납하지 않은 연결은 다른 요청이 쓸 수 없어요. try-with-resources를 쓰거나, 스프링의 `JdbcTemplate`이나 JPA처럼 빌리고 반납하는 일을 대신 해 주는 도구를 써요.
       - quiz:
           q: 연결이 1개뿐인 풀에서 연결을 빌려 쓰고 close()한 다음, 다시 빌렸어요. 두 번째로 빌린 연결은?
@@ -161,6 +247,7 @@ questions:
           key: timeout
           label: 세 번째 요청의 실제 결과 보기
           source: ConnectionPoolTest.exhaustedPoolTimesOut
+          code: wait
       - p: 실패한 요청이 받는 예외는 `SQLTransientConnectionException`이에요. 메시지는 "Connection is not available, request timed out"으로 시작해요. 이 메시지를 봤다면 DB가 느린 것이 아니라 **풀에 빌려줄 연결이 없었다**는 뜻이에요.
       - more:
           summary: '더 알아보기: 풀을 크게 잡으면 되지 않나요?'
@@ -249,6 +336,49 @@ questions:
           answer: 3
           explain: 트랜잭션이 끝날 때까지 연결을 쥐어요. 결제 서버를 기다리는 3초도 포함돼요.
     recall: 트랜잭션이 끝날 때까지 연결 하나를 쥐고, 커밋이나 롤백을 해야 풀로 돌려줘요. 트랜잭션 안에서 외부 서버 호출처럼 느린 작업을 하면 그동안 연결을 붙잡아서 풀이 모자라요. 느린 작업은 트랜잭션 밖으로 빼고 트랜잭션을 짧게 둬요.
+practice:
+  title: 스프링 부트에서는 이렇게 설정하고 확인해요
+  says:
+    - '스프링 부트는 DataSource로 HikariDataSource를 만들고 기본값은 최대 10개, 기다리는 최대 시간 30초다. spring.datasource.hikari.*로 바꾼다. 실제 값을 테스트로 읽는다'
+    - '풀의 상태(쓰는 연결, 남은 연결, 기다리는 스레드)는 HikariPoolMXBean으로 읽는다. 액추에이터를 쓰면 hikaricp.connections.* 지표로 나온다(문서 근거)'
+    - '흔한 실수: JDBC로 연결을 빌리고 close()를 빠뜨린다. 요청마다 연결이 하나씩 새어 풀이 마르고, 결국 모든 요청이 시간 초과로 실패한다. 고친 코드: JdbcTemplate이나 try-with-resources. leak-detection-threshold로 빌린 곳을 로그에서 찾는다. 테스트로 누수와 경고를 재현한다'
+  body:
+    - h3: 풀 설정과 지금 상태
+    - p: '스프링 부트는 `spring-boot-starter-jdbc`나 JPA 스타터만 넣으면 HikariCP 풀을 `DataSource`로 만들어 줘요. 설정은 `spring.datasource.hikari` 아래에 둬요.'
+    - code: bootYml
+      notes:
+        - mark: 'leak-detection-threshold: 2000'
+          as: code
+          text: '연결을 빌린 뒤 2초가 지나도 돌려주지 않으면 경고와 빌린 곳의 스택을 로그에 남겨요. 0이면 꺼져 있어요(기본값).'
+    - p: '`connection-timeout`의 기본값 30초는 사용자가 기다리기에 길어요. 응답을 오래 붙잡느니 빨리 실패하는 편이 나은 서비스는 몇 초로 줄이기도 해요. 지금 풀이 어떤 상태인지는 코드로 읽을 수 있어요.'
+    - code: poolState
+      notes:
+        - mark: getThreadsAwaitingConnection()
+          as: code
+          text: '연결을 기다리고 있는 스레드 수예요. 0보다 크면 질문 3의 기다림이 일어나는 중이에요.'
+    - ci:
+        key: boot-pool
+        label: 아무 설정 없는 스프링 부트의 풀을 실제로 읽은 결과
+        source: ConnectionPoolPracticeTest.bootDefaultsAndState
+    - p: '운영에서는 액추에이터를 켜면 같은 값이 `hikaricp.connections.active`, `hikaricp.connections.pending` 같은 지표로 나와요. 기다리는 수가 자주 0보다 크면 풀이 모자라거나 연결을 오래 쥐는 코드가 있다는 신호예요.'
+    - h3: '흔한 실수: 빌린 연결을 닫지 않기'
+    - code: leakBad
+      notes:
+        - mark: // close()가 없다
+          as: code
+          text: '이 메서드를 부를 때마다 연결 하나가 풀로 돌아가지 않아요. 열 번 부르면 기본 풀의 연결 10개가 모두 사라져요.'
+    - p: '연결 2개짜리 풀에서 연결을 두 번 빌리고 닫지 않았어요. `leak-detection-threshold`는 2초로 뒀어요.'
+    - ci:
+        key: leak
+        label: 실제로 돌린 결과
+        source: ConnectionPoolPracticeTest.leakDetection
+    - p: '세 번째 요청은 DB가 한가한데도 시간 초과로 실패했어요. 메시지의 `active=2, idle=0`이 "빌려 간 연결이 돌아오지 않았다"는 뜻이에요. 2초 뒤 HikariCP가 누수 경고와 함께 **연결을 빌린 줄**을 스택으로 남겼어요. 이 줄을 따라가면 닫지 않은 코드를 찾아요.'
+    - code: leakFixed
+      notes:
+        - mark: jdbcTemplate.queryForObject(
+          as: code
+          text: '`JdbcTemplate`은 연결을 빌리고, 예외가 나도 반드시 돌려줘요. 직접 쓸 때는 try-with-resources로 감싸요.'
+    - muted: '근거: 설정 이름과 기본값은 [HikariCP 문서](link:hikari)와 [스프링 부트 문서](link:bootSql)예요. 기본값, 상태 값, 누수 경고는 테스트([ConnectionPoolPracticeTest](link:practiceTest))로 확인했어요.'
 interview:
   question: 커넥션 풀을 왜 쓰나요?
   model:
@@ -260,5 +390,24 @@ interview:
       text: 트랜잭션은 끝날 때까지 연결 하나를 쥐고 있습니다. 트랜잭션 안에서 외부 API처럼 느린 작업을 하면 DB는 한가해도 풀이 모자라므로, 느린 작업은 트랜잭션 밖으로 빼고 트랜잭션을 짧게 둡니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 연결 대기 타임아웃의 원인이 트랜잭션 안의 외부 API 호출인 것을 찾아, 호출을 트랜잭션 밖으로 옮겼습니다.'
-verified: "이 레슨의 동작은 짐작이 아니라, 실제 PostgreSQL 16과 HikariCP에서 코드를 돌려 확인했어요. 코드가 바뀔 때마다 테스트([ConnectionPoolTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요. 질문 4의 3초와 0.05초는 설명하려고 정한 숫자이고, 잰 값이 아니에요."
+verified: "이 레슨의 동작은 짐작이 아니라, 실제 PostgreSQL 16과 HikariCP에서 코드를 돌려 확인했어요. 코드가 바뀔 때마다 테스트([ConnectionPoolTest](link:test), [ConnectionPoolPracticeTest](link:practiceTest))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요. 질문 4의 3초와 0.05초는 설명하려고 정한 숫자이고, 잰 값이 아니에요."
 footer: '근거: HikariCP 문서의 maximumPoolSize와 connectionTimeout, Spring Boot 참조 문서의 SQL Databases, PostgreSQL 16 문서의 How Connections Are Established와 max_connections. 동작은 PostgreSQL 16과 Spring Boot 3.5(HikariCP)에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '연결을 새로 만들고 SELECT 한 번이 풀에서 빌리고 SELECT 한 번보다 훨씬 느리다'
+    how: 'PostgreSQL 16 컨테이너와 HikariCP로 20번씩 잰다'
+    test: 'ConnectionPoolTest.newConnectionIsSlowerThanPooled'
+  - claim: 'close()한 연결은 끊기지 않고 풀로 돌아가 같은 서버 프로세스가 다시 쓰인다'
+    how: 'pg_backend_pid()'
+    test: 'ConnectionPoolTest.closeReturnsToPool'
+  - claim: '풀이 비면 다음 요청은 기다리고 시간 안에 못 받으면 SQLTransientConnectionException이다'
+    how: '풀 크기 2, 기다리는 최대 시간 500ms'
+    test: 'ConnectionPoolTest.exhaustedPoolTimesOut'
+  - claim: '스프링 트랜잭션은 끝날 때까지 연결 하나를 쥐고 끝나면 돌려준다'
+    how: 'HikariPoolMXBean의 active 수'
+    test: 'ConnectionPoolTest'
+  - claim: '스프링 부트의 기본 풀은 HikariDataSource, 최대 10개, 30초다'
+    how: '설정 값을 읽는다'
+    test: 'ConnectionPoolPracticeTest.bootDefaultsAndState'
+  - claim: '닫지 않은 연결 두 개로 크기 2의 풀이 말라 세 번째 요청이 실패하고, leakDetectionThreshold가 지나면 빌린 곳과 함께 누수 경고가 남는다'
+    how: 'ProxyLeakTask 로그를 ListAppender로 잡는다'
+    test: 'ConnectionPoolPracticeTest.leakDetection'

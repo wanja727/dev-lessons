@@ -8,12 +8,13 @@ minutes: 20
 page: connection-pool
 verifiedBy:
   - verification/src/test/java/lab/devlessons/connpool/ConnectionPoolTest.java
+  - verification/src/test/java/lab/devlessons/connpool/ConnectionPoolPracticeTest.java
 sources:
   - https://github.com/brettwooldridge/HikariCP
   - https://docs.spring.io/spring-boot/reference/data/sql.html
   - https://www.postgresql.org/docs/16/connect-estab.html
   - https://www.postgresql.org/docs/16/runtime-config-connection.html
-updated: 2026-11-22
+updated: 2026-11-26
 ---
 
 선수 레슨: 트랜잭션 기초.
