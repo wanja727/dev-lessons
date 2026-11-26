@@ -1,8 +1,9 @@
-# 최단 경로 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 최단 경로
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/shortest-path.yaml에 있다.
 title: 최단 경로
+description: 가중치가 있으면 왜 너비 우선 탐색으로 최단 경로를 못 구하는지, 다익스트라는 어떤 순서로 최단 거리를 구하는지, 가장 가까운 점부터 확정해도 되는 이유와 음수 가중치에서 틀리는 이유, 우선순위 큐로 어떻게 빠르게 만드는지. 네 가지 질문에 스스로 답할 수 있게, 물류 센터 다섯 곳의 도로망에서 가장 빠른 길을 찾으며 배우는 대화형 레슨.
 unit: 자료구조와 알고리즘
+minutes: 25
 roadmap: K14
 type: 자바 실행
 prerequisites:
@@ -49,18 +50,26 @@ codes:
     // A에서 D까지 가장 빠른 시간은?
   bfsDistance: |-
     // 선의 수로 센 거리 (그래프와 탐색 레슨)
-    dist.put(next, dist.get(cur) + 1);
+    dist.put(next, [[dist.get(cur) + 1]]);
+  graph: |-
+    record Edge(String to, int minutes) {}
+
+    Map<String, List<Edge>> graph =
+        Map.of("A", List.of(
+                   new Edge("B", 4),
+                   new Edge("C", 1)),
+               "C", List.of(...), ...);
   dijkstra: |-
     dist.put(start, 0);
     pq.add(new Entry(start, 0));
     while (!pq.isEmpty()) {
       Entry e = pq.poll();
-      if (!done.add(e.node())) continue;
+      if ([[!done.add(e.node())]]) continue;
       for (Edge ed : graph.get(e.node())) {
         int nd = e.dist() + ed.minutes();
-        if (nd < dist.getOrDefault(
+        if (nd < dist.getOrDefault(⤶
             ed.to(), Integer.MAX_VALUE)) {
-          dist.put(ed.to(), nd);
+          [[dist.put(ed.to(), nd)]];
           prev.put(ed.to(), e.node());
           pq.add(new Entry(ed.to(), nd));
         }
@@ -69,19 +78,67 @@ codes:
   path: |-
     List<String> path = new ArrayList<>();
     for (String at = "D"; at != null;
-         at = prev.get(at)) {
+         at = [[prev.get(at)]]) {
       path.add(0, at);
     }
+  orderRun: |-
+    // 코드 predict의 도로망, 시작은 A
+    dijkstra(graph, "A");
+    // 확정할 때마다 기록한다
   negative: |-
     // 방향이 있는 도로
-    A→B 2   A→C 3   C→B -2
+    A→B 2   B→D 1
+    A→C 3   C→B [[-2]]
+  negativeRun: |-
+    dijkstra(graph, "A");
+    bellmanFord(graph, "A");
+  speedRun: |-
+    // 점 20,000개, 선 100,000개의 무작위 도로망
+    arrayDijkstra(graph, 0);
+    heapDijkstra(graph, 0);
   markOnPush: |-
-    if (done.add(ed.to())) {
-      pq.add(new Entry(ed.to(), nd));
+    if (nd < dist.getOrDefault(⤶
+        ed.to(), Integer.MAX_VALUE)) {
+      dist.put(ed.to(), nd);
+      if ([[done.add(ed.to())]]) {
+        pq.add(new Entry(ed.to(), nd));
+      }
     }
+  service: |-
+    @Service
+    class DeliveryRouteService {
+      private final Map<String, List<Edge>>
+          graph;
+
+      DeliveryRouteService(RouteRepository r) {
+        this.graph = toGraph(r.findAll());
+      }
+
+      int fastestMinutes(String from,
+                         String to) {
+        return dijkstra(graph, from).get(to);
+      }
+    }
+  markRun: |-
+    // 같은 도로망에 두 코드를 돌린다
+    dijkstraMarkOnPush(graph, "A");
+    dijkstra(graph, "A");
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/shortestpath/ShortestPathTest.java
+  pq: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html
 predict:
-  text: '코드 predict의 도로망에서 A에서 D까지 가장 빨리 가는 시간은 몇 분일까요? 보기: 5분(A-B-D), 6분(A-C-D), 4분, 3분.'
-  answer: '4분. A-C-B-D로 1 + 2 + 1이다. 도로 수가 가장 적은 길(두 개)은 5분이라 더 느리다. 질문 1에서 밝힌다'
+  title: 가장 빨리 가는 길은?
+  text: '코드 predict의 도로망에서 A에서 D까지 가장 빨리 가는 시간은 몇 분일까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: '5', label: '5분 (A-B-D)'}
+    - {value: '6', label: '6분 (A-C-D)'}
+    - {value: '4', label: '4분'}
+    - {value: '3', label: '3분'}
+  answer: '4'
+  storageKey: sp-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 가중치가 있으면 왜 너비 우선 탐색으로 최단 경로를 못 구하나요?
@@ -96,6 +153,33 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 도로망에서 너비 우선 탐색이 처음 D에 닿는 길은 선 몇 개이고, 그 길의 이동 시간은 가장 짧은가 (선 2개. 아니다. 5분이나 6분이고 가장 짧은 것은 4분)'
       - '옮긴 상황: 지하철 노선도에서 "환승이 가장 적은 길"과 "시간이 가장 짧은 길"을 구하려 한다. 각각 무엇으로 구하나 (환승은 모든 선의 비용이 같으니 너비 우선 탐색, 시간은 역 사이 시간이 다르니 다익스트라)'
+    body:
+      - p: '코드 predict처럼 선마다 비용이 붙은 그래프를 **가중치 그래프**라고 해요. 여기서 비용은 도로의 이동 시간이에요. 인접 리스트에 이웃과 함께 비용을 담아요.'
+      - code: graph
+      - p: '[그래프와 탐색](lesson:graph-search)에서 가중치 없는 최단 거리는 너비 우선 탐색으로 구했어요. 가까운 겹부터 보니 처음 닿은 순간의 겹 수가 최단이었죠.'
+      - code: bfsDistance
+        notes:
+          - mark: dist.get(cur) + 1
+            as: code
+            text: '선 하나를 지날 때마다 1을 더해요. 모든 선의 비용이 같다고 보는 거예요.'
+      - p: '같은 일을 이 도로망에 시켜 봤어요. 너비 우선 탐색이 찾은 D까지의 길과, 이 레슨의 다익스트라가 찾은 길이에요.'
+      - ci:
+          key: predict
+          label: 두 탐색의 실제 결과 보기
+          source: ShortestPathTest.bfsVersusDijkstra
+          code: predict
+      - p: '처음 예측의 답은 **4분**이에요. {{predict-result}} 너비 우선 탐색은 선 2개인 A-B-D를 찾았는데 5분이에요. A-C-D도 선 2개지만 6분이에요. 선 3개를 거치는 A-C-B-D가 1 + 2 + 1 = 4분으로 가장 빨라요.'
+      - p: '너비 우선 탐색은 **선의 수가 가장 적은 길**을 찾아요. 모든 선의 비용이 같을 때는 그것이 가장 싼 길이지만, 비용이 다르면 아니에요. 비용이 다르면 겹 순서가 아니라 **"지금까지 가장 싸게 닿은 곳"부터** 넓혀 가야 해요. 그것이 다익스트라예요.'
+      - quiz:
+          q: '지하철 노선도에서 "환승이 가장 적은 길"과 "시간이 가장 짧은 길"을 구하려 해요. 각각 무엇으로 구할까요?'
+          options:
+            - '둘 다 너비 우선 탐색'
+            - '환승은 너비 우선 탐색, 시간은 다익스트라'
+            - '환승은 다익스트라, 시간은 너비 우선 탐색'
+          answer: 2
+          explain: '환승 횟수는 노선을 갈아탈 때마다 1씩 세니 모든 선의 비용이 같아서 너비 우선 탐색이 맞아요. 역 사이 시간은 구간마다 달라서 다익스트라가 필요해요.'
+      - next: '그러면 다익스트라는 어떤 순서로 둘러볼까요?'
+    recall: '너비 우선 탐색은 거치는 선의 수가 가장 적은 길을 찾는데, 선마다 비용이 다르면 그 길이 가장 싸지 않을 수 있기 때문이에요. 예제에서 선 2개인 A-B-D는 5분이고 선 3개인 A-C-B-D가 4분이었어요. 가중치 그래프의 최단 경로는 비용의 합이 가장 작은 길이고, 모든 비용이 같을 때만 너비 우선 탐색이 맞아요.'
   - id: q2
     title: 다익스트라는 어떤 순서로 최단 거리를 구하나요?
     conclusion:
@@ -113,6 +197,85 @@ questions:
     asks:
       - '본문의 예시: 코드 predict의 도로망에서 다익스트라가 점을 확정하는 순서는 무엇인가 (A, C, B, D, E)'
       - '옮긴 상황: 다익스트라를 돌린 뒤 prev가 {B: C, C: A, D: B, E: D}였다. A에서 E까지의 최단 경로는 무엇인가 (A-C-B-D-E)'
+    body:
+      - p: '다익스트라는 **거리표** 하나로 시작해요. 시작점 A는 0이고, 나머지는 아직 모르니 무한대(∞)예요. 그다음 두 가지를 되풀이해요.'
+      - ol:
+          - '**확정:** 아직 확정하지 않은 점 가운데 거리가 가장 작은 점을 골라 그 거리를 확정해요.'
+          - '**완화:** 그 점을 거쳐 이웃으로 가는 길이 이웃의 지금 거리보다 짧으면, 이웃의 거리를 줄여요.'
+      - p: '한 단계씩 따라가 보세요.'
+      - widget:
+          kind: steps
+          layout: [duo, log, buttons, verdict]
+          initial:
+            duo:
+              - label: 거리표 (A에서)
+                rows: [{k: A, v: '0'}, {k: B, v: '∞'}, {k: C, v: '∞'}, {k: D, v: '∞'}, {k: E, v: '∞'}]
+              - {label: 이번 단계, state: dim, text: '시작 전'}
+          scenarios:
+            default:
+              - log: 'A(0) 확정 → 이웃 B를 0 + 4 = 4, C를 0 + 1 = 1로 적어요'
+                duo:
+                  - label: 거리표 (A에서)
+                    rows: [{k: A, v: '0 (확정)'}, {k: B, v: '4', mark: changed}, {k: C, v: '1', mark: changed}, {k: D, v: '∞'}, {k: E, v: '∞'}]
+                  - label: 이번 단계
+                    rows: [{k: 확정, v: 'A'}, {k: 줄인 이웃, v: 'B ∞→4, C ∞→1'}]
+              - log: 'C(1) 확정 → B는 1 + 2 = 3이라 4보다 짧아요. D는 1 + 5 = 6'
+                duo:
+                  - label: 거리표 (A에서)
+                    rows: [{k: A, v: '0 (확정)'}, {k: B, v: '3', mark: changed}, {k: C, v: '1 (확정)'}, {k: D, v: '6', mark: changed}, {k: E, v: '∞'}]
+                  - label: 이번 단계
+                    rows: [{k: 확정, v: 'C'}, {k: 줄인 이웃, v: 'B 4→3, D ∞→6'}]
+                verdict: '직접 가면 4분이던 B가, C를 거치니 3분이 됐어요. 이것이 완화예요.'
+              - log: 'B(3) 확정 → D는 3 + 1 = 4라 6보다 짧아요'
+                duo:
+                  - label: 거리표 (A에서)
+                    rows: [{k: A, v: '0 (확정)'}, {k: B, v: '3 (확정)'}, {k: C, v: '1 (확정)'}, {k: D, v: '4', mark: changed}, {k: E, v: '∞'}]
+                  - label: 이번 단계
+                    rows: [{k: 확정, v: 'B'}, {k: 줄인 이웃, v: 'D 6→4'}]
+              - log: 'D(4) 확정 → E를 4 + 3 = 7로 적어요'
+                duo:
+                  - label: 거리표 (A에서)
+                    rows: [{k: A, v: '0 (확정)'}, {k: B, v: '3 (확정)'}, {k: C, v: '1 (확정)'}, {k: D, v: '4 (확정)'}, {k: E, v: '7', mark: changed}]
+                  - label: 이번 단계
+                    rows: [{k: 확정, v: 'D'}, {k: 줄인 이웃, v: 'E ∞→7'}]
+              - log: 'E(7) 확정 → 모든 점을 확정했어요'
+                duo:
+                  - label: 거리표 (A에서)
+                    rows: [{k: A, v: '0'}, {k: B, v: '3'}, {k: C, v: '1'}, {k: D, v: '4'}, {k: E, v: '7'}]
+                  - label: prev로 복원한 길
+                    rows: [{k: D까지, v: 'A-C-B-D', mark: changed}, {k: E까지, v: 'A-C-B-D-E'}]
+                verdict: '확정 순서는 A, C, B, D, E예요. 거리가 작은 순서와 같아요.'
+      - p: '자바 코드로는 이래요. 거리표는 `dist`, 아직 볼 점은 우선순위 큐 `pq`, 확정한 점은 `done`이에요. 큐에서 꺼내는 일이 "가장 작은 점 고르기"예요.'
+      - code: dijkstra
+        notes:
+          - mark: '!done.add(e.node())'
+            as: code
+            text: '꺼낸 점을 확정해요. 이미 확정한 점이면 건너뛰어요. 질문 4에서 왜 이런 줄이 필요한지 봐요.'
+          - mark: 'dist.put(ed.to(), nd)'
+            as: code
+            text: '완화예요. 꺼낸 점을 거쳐 가는 길(`nd`)이 더 짧으면 거리를 줄이고, 어디서 왔는지 `prev`에 적고, 큐에 넣어요.'
+      - ci:
+          key: order
+          label: 실제로 확정한 순서와 거리 보기
+          source: ShortestPathTest.dijkstraOrder
+          code: orderRun
+      - h3: 길 자체는 prev로
+      - p: '거리만으로는 어느 길인지 몰라요. 그래서 거리를 줄일 때마다 `prev`에 **어디서 왔는지** 적어 뒀어요. D에서 거꾸로 따라가면 D ← B ← C ← A이고, 뒤집으면 A-C-B-D예요.'
+      - code: path
+        notes:
+          - mark: prev.get(at)
+            as: code
+            text: '한 칸씩 거꾸로 가요. 시작점 A에는 prev가 없어서 null이 되면 멈춰요.'
+      - quiz:
+          q: '다익스트라를 돌린 뒤 prev가 {B: C, C: A, D: B, E: D}였어요. A에서 E까지의 최단 경로는 무엇일까요?'
+          options:
+            - 'A-C-B-D-E'
+            - 'A-B-D-E'
+            - 'E-D-B-C-A'
+          answer: 1
+          explain: 'E의 prev는 D, D의 prev는 B, B의 prev는 C, C의 prev는 A예요. 거꾸로 모은 E, D, B, C, A를 뒤집으면 A-C-B-D-E예요.'
+      - next: '가장 가까운 점부터 확정하고 다시는 고치지 않았어요. 나중에 더 짧은 길이 나타나지는 않을까요?'
+    recall: '거리표를 두고, 확정하지 않은 점 가운데 거리가 가장 작은 점을 확정한 뒤 그 점을 거쳐 가는 길로 이웃의 거리를 줄여요(완화). 예제에서는 A, C, B, D, E 순서로 확정했고, C를 확정할 때 B가 4에서 3으로 줄었어요. 줄일 때 어디서 왔는지 prev에 적어 두면 D에서 거꾸로 따라가 A-C-B-D를 복원해요.'
   - id: q3
     title: 가장 가까운 점부터 확정해도 되는 이유는 무엇이고, 음수 가중치에서는 왜 틀리나요?
     conclusion:
@@ -121,12 +284,44 @@ questions:
     says:
       - '확정하는 순간을 본다. 확정하지 않은 점 가운데 가장 작은 거리가 d인 점 X를 고른다. X로 가는 다른 길은 확정하지 않은 어떤 점 Y를 거쳐야 한다. Y의 거리는 이미 d 이상이고 비용은 음수가 아니니 Y에서 X로 오는 길은 d보다 작을 수 없다. 그래서 X의 거리는 d로 끝이다'
       - '지금 가장 좋아 보이는 것을 고르고 되돌아보지 않는 방식이라 그리디다. 그리디가 맞으려면 이런 근거가 있어야 한다(K12)'
-      - '음수 가중치의 반례(코드 negative). 방향이 있는 도로 A→B 2, A→C 3, C→B -2. 다익스트라는 B(2)를 C(3)보다 먼저 확정한다. 하지만 A→C→B는 3 - 2 = 1로 더 짧다. 테스트로 다익스트라가 2를 내는 것을 보인다'
-      - '돈을 돌려받는 구간처럼 음수 비용이 있는 문제에는 벨만 포드를 쓴다. 모든 선의 완화를 점의 수 - 1번 되풀이해서 O(V × E)다. 같은 반례에서 1을 낸다. 더 알아보기로 둔다'
+      - '음수 가중치의 반례(코드 negative). 방향이 있는 도로 A→B 2, B→D 1, A→C 3, C→B -2. 다익스트라는 B(2)를 C(3)보다 먼저 확정하고 B를 거쳐 D를 3으로 정한다. 하지만 A→C→B→D는 3 - 2 + 1 = 2로 더 짧다. 테스트로 다익스트라가 D를 3으로 내는 것을 보인다 (설계서의 반례는 B 하나만 물었다. 이 레슨의 코드는 확정한 점의 거리표도 고쳐서 B 자체는 1로 고쳐지지만, B를 거친 D는 고쳐지지 않는다. 그래서 D를 더했다)'
+      - '돈을 돌려받는 구간처럼 음수 비용이 있는 문제에는 벨만 포드를 쓴다. 모든 선의 완화를 점의 수 - 1번 되풀이해서 O(V × E)다. 같은 반례에서 D를 2로 낸다. 더 알아보기로 둔다'
       - '시간, 거리, 요금처럼 서버에서 다루는 비용은 대부분 음수가 아니다. 그래서 다익스트라가 기본이다'
     asks:
-      - '본문의 예시: 코드 negative의 도로망에서 다익스트라는 B까지의 거리를 얼마로 내고, 실제 최단 거리는 얼마인가 (2, 1)'
+      - '본문의 예시: 코드 negative의 도로망에서 다익스트라는 D까지의 거리를 얼마로 내고, 실제 최단 거리는 얼마인가 (3, 2)'
       - '옮긴 상황: 모든 선의 비용이 0 이상인 그래프에서 다익스트라가 점 X를 거리 10으로 확정했다. 그 뒤에 X로 가는 9분짜리 길이 발견될 수 있나 (없다. 확정하지 않은 점의 거리가 모두 10 이상이고 비용은 음수가 아니다)'
+    body:
+      - p: '질문 2에서 B를 3으로 확정한 뒤 다시 보지 않았어요. 정말 괜찮을까요? 확정하는 순간을 들여다봐요.'
+      - p: '지금 확정하지 않은 점 가운데 거리가 가장 작은 점이 X이고, 그 거리가 d라고 해요. X로 가는 다른 길이 있다면, 그 길은 아직 확정하지 않은 어떤 점 Y를 거쳐야 해요. 그런데 Y의 거리는 이미 d 이상이에요(X가 가장 작았으니까요). 그리고 Y에서 X로 오는 도로의 비용은 **음수가 아니니**, Y를 거친 길은 d보다 작아질 수 없어요. 그래서 X의 거리는 d로 끝이에요.'
+      - p: '지금 가장 좋아 보이는 것을 고르고 되돌아보지 않는 방식을 **그리디**라고 해요. 그리디는 이렇게 "되돌아볼 필요가 없다"는 근거가 있을 때만 맞아요. [그리디와 동적 계획법](lesson:greedy-and-dp)에서 본 생각이에요.'
+      - h3: 음수 비용이 있으면
+      - p: '그 근거가 "비용은 음수가 아니다"였어요. 음수가 섞이면 무너져요. 방향이 있는 이 도로망에서 A에서 D까지를 구해요.'
+      - code: negative
+        notes:
+          - mark: '-2'
+            as: code
+            text: 'C에서 B로 가면 2분을 돌려받는다고 해요. 할인 구간이나 돌려받는 비용 같은 거예요.'
+      - ci:
+          key: negative
+          label: 두 알고리즘의 실제 결과 보기
+          source: ShortestPathTest.negativeWeight
+          code: negativeRun
+      - p: '다익스트라는 B(2)를 C(3)보다 먼저 확정하고, B를 거쳐 D를 3으로 정했어요. 하지만 A→C→B→D는 3 - 2 + 1 = **2분**이에요. C를 거쳐 B로 오는 길이 더 짧아질 수 있었는데, B는 이미 확정되어 그 아래로 퍼뜨리지 않았어요.'
+      - more:
+          summary: '더 알아보기: 음수 비용이 있을 때 쓰는 벨만 포드'
+          body:
+            - p: '벨만 포드는 가장 작은 점을 고르지 않고, **모든 선의 완화를 (점의 수 - 1)번** 되풀이해요. 어떤 최단 경로도 선을 (점의 수 - 1)개보다 많이 거치지 않아서, 그만큼 되풀이하면 모든 거리가 맞아져요. O(V × E)라 다익스트라보다 느려요. 위 출력처럼 같은 도로망에서 D를 2로 내요.'
+      - p: '다행히 서버에서 다루는 비용은 시간, 거리, 요금처럼 **대부분 음수가 아니에요.** 그래서 다익스트라가 기본이에요.'
+      - quiz:
+          q: '모든 선의 비용이 0 이상인 그래프에서 다익스트라가 점 X를 거리 10으로 확정했어요. 그 뒤에 X로 가는 9분짜리 길이 발견될 수 있을까요?'
+          options:
+            - '있다. 아직 보지 않은 점이 있으니까'
+            - '없다. 확정하지 않은 점의 거리는 모두 10 이상이고 비용은 음수가 아니다'
+            - '그래프의 크기에 따라 다르다'
+          answer: 2
+          explain: 'X를 거리 10으로 골랐다는 것은 남은 점이 모두 10 이상이라는 뜻이에요. 거기서 0 이상의 비용을 더해 X로 오는 길은 10보다 작아질 수 없어요.'
+      - next: '방법은 맞아요. 이제 "가장 작은 점 고르기"를 빠르게 하는 법을 봐요.'
+    recall: '비용이 음수가 아니면, 확정하지 않은 다른 점을 거쳐 돌아오는 길은 지금 가장 가까운 점의 거리보다 짧아질 수 없어서예요. 그래서 가장 가까운 점을 확정하고 되돌아보지 않는 그리디가 맞아요. 음수 비용이 있으면 이 근거가 무너져서, 예제에서 다익스트라는 D를 3으로 냈지만 실제로는 2였어요. 음수 비용에는 모든 선의 완화를 되풀이하는 벨만 포드를 써요.'
   - id: q4
     title: 우선순위 큐로 다익스트라를 어떻게 빠르게 만드나요?
     conclusion:
@@ -142,27 +337,98 @@ questions:
       - '본문의 예시: 코드 dijkstra에서 B의 거리가 4에서 3으로 줄어 (B, 3)을 넣었다. 나중에 큐에서 (B, 4)를 꺼내면 어떻게 되나 (B는 이미 확정했으니 건너뛴다)'
       - '옮긴 상황: 점 10만 개, 선 30만 개의 도로망에서 가장 작은 점을 배열에서 찾는 다익스트라와 우선순위 큐를 쓰는 다익스트라의 시간 복잡도는 각각 무엇인가 (O(V²)과 O((V + E) log V))'
       - '실무 구역: 코드 markOnPush처럼 넣을 때 확정 표시를 하는 다익스트라를 코드 predict의 도로망에 돌리면 D까지의 거리는 얼마로 나오나 (5. B를 처음 발견한 거리 4로 큐에 넣은 채 굳혀서, C를 거쳐 3으로 줄어든 B를 다시 넣지 못한다)'
+    body:
+      - p: '"확정하지 않은 점 가운데 거리가 가장 작은 점"을 매번 배열 전체에서 찾으면, 한 번에 점 V개를 보고 그 일을 V번 해서 **O(V²)**이에요. 점이 1만 개면 1억 번 봐요.'
+      - p: '[힙과 우선순위 큐](lesson:heap-priority-queue)에서 본 `PriorityQueue`는 가장 작은 것을 O(log V)에 꺼내요. (점, 거리)를 넣고 꺼내면, 선마다 한 번씩 넣을 수 있으니 전체가 **O((V + E) log V)**예요. 도로망처럼 선이 점의 몇 배 정도인 그래프에서 훨씬 빨라요. 점 2만 개, 선 10만 개로 견줘 봤어요.'
+      - ci:
+          key: speed
+          label: 두 방법의 실제 시간 보기
+          source: ShortestPathTest.arrayVersusHeap
+          code: speedRun
+      - p: '같은 거리표를 내는데 우선순위 큐 쪽이 수십 배 빨랐어요. 숫자는 컴퓨터마다 달라요.'
+      - h3: 줄어든 거리는 새로 넣어요
+      - p: '`PriorityQueue`에는 **들어 있는 원소의 우선순위를 줄이는 연산이 없어요.** 그래서 질문 2에서 B가 4에서 3으로 줄었을 때 (B, 3)을 **새로 넣었어요.** 큐에는 (B, 4)도 그대로 남아요. 나중에 (B, 4)를 꺼내면 B는 이미 3으로 확정했으니 건너뛰어요. 코드 dijkstra의 `if (!done.add(...)) continue;`가 그 줄이에요. 이렇게 낡은 항목을 꺼낼 때 버리는 것을 **게으른 삭제**라고 해요. 질문 2의 실제 출력에서 건너뛴 낡은 항목이 2개(B의 4, D의 6)였어요.'
+      - h3: 확정 표시는 꺼낼 때
+      - p: '너비 우선 탐색은 큐에 **넣을 때** 방문 표시를 했어요. 다익스트라에서 그렇게 하면 틀려요. 처음 발견한 거리가 가장 짧다는 보장이 없기 때문이에요. 이 실수는 실무 구역에서 코드로 봐요.'
+      - more:
+          summary: '더 알아보기: 도착점 하나만 필요할 때, 다른 알고리즘들'
+          body:
+            - ul:
+                - '도착점 하나만 필요하면 그 점을 **꺼낸 순간** 멈춰도 돼요. 꺼낸 순간이 확정한 순간이니까요.'
+                - '모든 점 쌍의 최단 거리가 필요하면 플로이드 워셜(O(V³))을 써요.'
+                - '지도처럼 목적지 방향을 어림할 수 있으면 A* 탐색이 목적지 쪽부터 둘러봐서 더 빨라요.'
+      - quiz:
+          q: '코드 dijkstra에서 B의 거리가 4에서 3으로 줄어 (B, 3)을 넣었어요. 나중에 큐에서 (B, 4)를 꺼내면 어떻게 될까요?'
+          options:
+            - 'B의 거리를 다시 4로 바꾼다'
+            - 'B는 이미 확정했으니 건너뛴다'
+            - '예외가 난다'
+          answer: 2
+          explain: '(B, 3)이 먼저 나와 B를 확정했어요. (B, 4)는 낡은 항목이라 `done.add`가 false를 돌려주고 `continue`로 건너뛰어요.'
+    recall: '가장 작은 점을 배열 전체에서 찾으면 O(V²)인데, 우선순위 큐에서 꺼내면 O(log V)라 전체가 O((V + E) log V)가 돼요. 점 2만 개에서 수십 배 빨랐어요. `PriorityQueue`는 우선순위를 줄일 수 없어서 거리가 줄면 새로 넣고, 꺼낸 점이 이미 확정한 점이면 건너뛰어요(게으른 삭제). 확정 표시는 넣을 때가 아니라 꺼낼 때 해요.'
 practice:
+  title: 서비스 코드에서는 이렇게 만나요
   says:
     - '서버 코드에서는 창고 사이 배송 시간, 결재 흐름의 단계 비용처럼 작은 그래프를 메모리에 올려 계산한다. 도로 표(`route` 테이블: from, to, minutes)를 읽어 `Map<String, List<Edge>>`를 만들고 서비스 메서드에서 다익스트라를 돌리는 코드를 보인다. 도로가 바뀌지 않으면 그래프를 한 번 만들어 빈 필드에 두고 요청마다 계산만 한다'
     - '흔한 실수: 그래프와 탐색 레슨에서 배운 "방문 표시는 넣을 때"를 다익스트라에 그대로 쓴다(코드 markOnPush). 테스트 데이터가 단순하면 답이 맞아 보이다가, 짧은 길이 나중에 발견되는 도로망에서 더 느린 경로를 낸다. 고친 코드: 꺼낼 때 확정하고 이미 확정한 점은 건너뛴다(코드 dijkstra). 두 코드를 코드 predict의 도로망에 돌려 D까지 5분과 4분을 내는 것을 테스트로 남긴다'
     - '거리를 `int`로 두고 무한대를 `Integer.MAX_VALUE`로 표시했다면, 무한대에 비용을 더하는 계산을 하지 않게 한다. 더하면 넘쳐서 음수가 된다(J19). 코드 dijkstra는 꺼낸 점(거리가 정해진 점)에서만 더해서 안전하다'
     - '도시 전체의 도로망처럼 점이 수백만 개면 직접 계산하지 않고 지도 서비스의 길 찾기 API나 그래프 DB의 최단 경로 기능을 쓴다. 이 레슨에서는 이름만 소개한다'
+  body:
+    - p: '서버에서 직접 최단 경로를 계산하는 것은 창고 사이 배송 시간, 결재 흐름의 단계 비용처럼 **작은 그래프**예요. 도로 표(`route` 테이블의 from, to, minutes)를 읽어 그래프를 만들고 서비스 메서드에서 다익스트라를 돌려요.'
+    - code: service
+    - p: '도로가 자주 바뀌지 않으면 그래프를 한 번 만들어 빈의 필드에 두고, 요청마다 계산만 해요. 빈은 싱글톤이라 모든 요청이 같은 그래프를 읽어요. 계산하는 동안 그래프를 바꾸지 않으니 여러 요청이 동시에 읽어도 괜찮아요.'
+    - h3: '흔한 실수: 넣을 때 확정 표시'
+    - p: '그래프와 탐색 레슨의 습관대로 큐에 **넣을 때** 확정 표시를 했어요.'
+    - code: markOnPush
+      notes:
+        - mark: done.add(ed.to())
+          as: code
+          text: '처음 발견했을 때만 큐에 넣어요. 그 뒤에 더 짧은 거리를 찾아도 다시 넣지 않아요.'
+    - ci:
+        key: mark
+        label: 두 코드의 실제 결과 보기
+        source: ShortestPathTest.markOnPushIsWrong
+        code: markRun
+    - p: 'D까지 5분, E까지 9분이 나왔어요. 정답은 4분과 7분이에요. A를 꺼낼 때 B를 거리 4로 넣고 확정 표시를 했어요. C를 거쳐 B가 3으로 줄었지만 B는 이미 표시되어 다시 들어가지 못했고, 큐에 남은 (B, 4)가 꺼내지며 D를 4 + 1 = 5로 퍼뜨렸어요. 단순한 테스트 데이터에서는 답이 맞아 보이다가, 짧은 길이 나중에 발견되는 도로망에서 느린 경로를 내요.'
+    - p: '고친 코드는 질문 2의 코드 dijkstra예요. **꺼낼 때 확정**하고, 이미 확정한 점은 건너뛰어요.'
+    - h3: 무한대에 더하지 않기
+    - p: '거리를 `int`로 두고 모르는 거리를 `Integer.MAX_VALUE`로 표시했다면, 그 값에 비용을 더하면 넘쳐서 음수가 돼요([숫자 타입의 한계](lesson:number-limits)의 오버플로). 코드 dijkstra는 큐에서 꺼낸 점, 곧 거리가 정해진 점에서만 비용을 더해서 이 일이 생기지 않아요. 배열로 거리표를 돌 때는 무한대인 점을 건너뛰어요.'
+    - muted: '도시 전체의 도로망처럼 점이 수백만 개면 직접 계산하지 않고 지도 서비스의 길 찾기 API나 그래프 DB의 최단 경로 기능을 써요. 이 레슨에서는 이름만 소개해요. `PriorityQueue`의 연산 비용은 [API 문서](link:pq)에 적혀 있어요.'
+interview:
+  question: 다익스트라는 어떻게 동작하고, 언제 쓸 수 없나요?
+  model:
+    - label: 정의
+      text: 선마다 비용이 있는 그래프에서 한 점으로부터 모든 점까지의 최단 거리를 구하는 알고리즘입니다. 비용이 다르면 선의 수가 적은 길이 가장 싸지 않아서 너비 우선 탐색 대신 씁니다.
+    - label: 원리
+      text: 거리표를 두고, 확정하지 않은 점 가운데 거리가 가장 작은 점을 확정한 뒤 그 점을 거치는 길로 이웃의 거리를 줄입니다. 비용이 음수가 아니면 다른 길로 돌아와도 더 짧아질 수 없어 그리디 선택이 맞습니다. 우선순위 큐로 가장 작은 점을 꺼내면 O((V + E) log V)입니다.
+    - label: 주의할 점
+      text: 음수 비용이 있으면 확정한 거리가 틀리니 벨만 포드를 씁니다. 자바의 PriorityQueue는 우선순위를 줄일 수 없어서 줄어든 거리를 새로 넣고 낡은 항목은 꺼낼 때 건너뜁니다. 확정 표시는 넣을 때가 아니라 꺼낼 때 합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 창고 사이 배송 시간을 계산하는 서비스에서 넣을 때 방문 표시를 하던 코드를 꺼낼 때 확정하게 고쳐 더 빠른 경로를 찾게 했습니다.'
+verified: 이 레슨의 순서와 거리는 짐작이 아니라 자바 21에서 코드를 돌려 출력한 값이에요. 걸린 시간은 환경마다 달라서 두 방법의 결과가 같은 것만 테스트로 확인해요. 코드가 바뀔 때마다 테스트([ShortestPathTest](link:test))가 다시 돌아요.
+footer: '근거: 알고리즘은 다익스트라의 1959년 논문의 정의를 따르고, `PriorityQueue`의 연산과 비용은 API 문서([링크](link:pq)). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
   - claim: '코드 predict의 도로망에서 너비 우선 탐색이 찾는 D까지의 길은 선 2개이고 그 길은 4분보다 길며, 다익스트라는 4분(A-C-B-D)을 낸다'
-    how: '두 탐색을 돌려 선의 수, 이동 시간, 경로를 비교한다'
+    how: '두 탐색을 돌려 선의 수, 이동 시간, 경로를 비교한다. 너비 우선 탐색은 A-B-D(5분)를 찾았다'
+    test: ShortestPathTest.bfsVersusDijkstra
   - claim: '다익스트라가 확정하는 순서는 A, C, B, D, E이고 최종 거리는 A 0, C 1, B 3, D 4, E 7이다'
     how: '확정할 때마다 기록해 위젯의 단계와 맞춘다'
+    test: ShortestPathTest.dijkstraOrder
   - claim: 'prev를 거꾸로 따라가면 A-C-B-D와 A-C-B-D-E가 나온다'
     how: '경로 복원 코드를 돌린다'
-  - claim: '코드 negative에서 다익스트라는 B를 2로, 벨만 포드는 1로 낸다'
-    how: '두 알고리즘을 같은 그래프에 돌린다'
+    test: ShortestPathTest.dijkstraOrder
+  - claim: '코드 negative(A→B 2, B→D 1, A→C 3, C→B -2)에서 다익스트라는 D를 3으로, 벨만 포드는 2로 낸다'
+    how: '두 알고리즘을 같은 그래프에 돌린다. 설계서의 반례(B를 묻는 것)는 이 코드가 확정한 점의 거리표도 고쳐서 B가 1로 맞게 나와, B를 거치는 D를 더해 물었다'
+    test: ShortestPathTest.negativeWeight
   - claim: '점 2만 개, 선 10만 개의 무작위 그래프에서 배열 다익스트라와 우선순위 큐 다익스트라의 거리표가 같고, 우선순위 큐 쪽이 훨씬 빨리 끝난다'
-    how: '두 방법의 결과를 비교하고 걸린 시간을 `CiOutput`에 남긴다. 배수는 단정하지 않는다'
+    how: '두 방법의 결과를 비교하고 걸린 시간을 `CiOutput`에 남긴다. 로컬에서 2,476ms와 66ms였다'
+    test: ShortestPathTest.arrayVersusHeap
   - claim: '거리가 줄어 다시 넣은 점은 큐에서 낡은 항목으로 한 번 더 나오고 건너뛰어진다'
-    how: '건너뛴 횟수를 센다'
+    how: '건너뛴 횟수를 센다(2개)'
+    test: ShortestPathTest.dijkstraOrder
   - claim: '넣을 때 확정 표시를 하는 코드는 코드 predict의 도로망에서 D까지 5를 낸다'
     how: '코드 markOnPush를 넣은 버전을 돌린다'
+    test: ShortestPathTest.markOnPushIsWrong
 sources:
   - 'E. W. Dijkstra, A note on two problems in connexion with graphs (1959): Numerische Mathematik 1. 원문 대신 알고리즘의 정의만 따른다'
   - '`PriorityQueue`의 연산과 비용(offer와 poll은 O(log n), remove(Object)는 O(n)): API 문서 https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/PriorityQueue.html'
