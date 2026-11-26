@@ -100,7 +100,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: Member의 equals를 아래처럼 인자를 Member로 받게 썼어요. hashCode는 이메일로 재정의했어요. 아래 코드의 세 줄은 차례로 무엇을 출력할까요?
     code: |-
