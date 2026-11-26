@@ -13,7 +13,7 @@ lesson:
   key: docker-container
   title: 도커와 컨테이너
   unit: 테스트와 운영
-  order: 905
+  order: 1005
 concepts:
   - key: core
     name: 도커와 컨테이너

@@ -13,7 +13,7 @@ lesson:
   key: hash-table
   title: 해시 테이블
   unit: 자료구조와 알고리즘
-  order: 58
+  order: 204
 concepts:
   - key: core
     name: 해시 테이블

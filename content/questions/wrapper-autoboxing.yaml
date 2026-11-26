@@ -13,7 +13,7 @@ lesson:
   key: wrapper-autoboxing
   title: 래퍼 클래스와 오토박싱
   unit: 자바 언어
-  order: 39
+  order: 103
 concepts:
   - key: core
     name: 래퍼 클래스와 오토박싱

@@ -14,7 +14,7 @@ lesson:
   key: cors
   title: CORS
   unit: 네트워크와 웹
-  order: 63
+  order: 509
 concepts:
   - key: core
     name: CORS

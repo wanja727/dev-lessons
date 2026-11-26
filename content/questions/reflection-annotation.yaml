@@ -13,7 +13,7 @@ lesson:
   key: reflection-annotation
   title: 리플렉션과 어노테이션
   unit: 자바 언어
-  order: 53
+  order: 117
 concepts:
   - key: core
     name: 리플렉션과 어노테이션

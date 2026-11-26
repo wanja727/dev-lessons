@@ -14,7 +14,7 @@ lesson:
   key: tcp-udp
   title: TCP와 UDP
   unit: 네트워크와 웹
-  order: 57
+  order: 503
 concepts:
   - key: core
     name: TCP와 UDP

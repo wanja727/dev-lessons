@@ -13,7 +13,7 @@ lesson:
   key: http-basics
   title: HTTP 요청과 응답
   unit: 네트워크와 웹
-  order: 58
+  order: 504
 concepts:
   - key: core
     name: HTTP 요청과 응답

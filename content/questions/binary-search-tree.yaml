@@ -13,7 +13,7 @@ lesson:
   key: binary-search-tree
   title: 이진 탐색 트리
   unit: 자료구조와 알고리즘
-  order: 62
+  order: 208
 concepts:
   - key: core
     name: 이진 탐색 트리

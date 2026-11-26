@@ -13,7 +13,7 @@ lesson:
   key: thread-heap-dump
   title: 스레드 덤프와 힙 덤프
   unit: 테스트와 운영
-  order: 910
+  order: 1010
 concepts:
   - key: core
     name: 스레드 덤프와 힙 덤프

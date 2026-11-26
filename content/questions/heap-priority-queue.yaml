@@ -13,7 +13,7 @@ lesson:
   key: heap-priority-queue
   title: 힙과 우선순위 큐
   unit: 자료구조와 알고리즘
-  order: 63
+  order: 209
 concepts:
   - key: core
     name: 힙과 우선순위 큐

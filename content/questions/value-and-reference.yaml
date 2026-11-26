@@ -13,7 +13,7 @@ lesson:
   key: value-and-reference
   title: 값과 참조
   unit: 자바 언어
-  order: 38
+  order: 102
 concepts:
   - key: core
     name: 값과 참조

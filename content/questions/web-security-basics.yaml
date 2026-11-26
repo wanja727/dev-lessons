@@ -14,7 +14,7 @@ lesson:
   key: web-security-basics
   title: 웹 보안 기초
   unit: 네트워크와 웹
-  order: 64
+  order: 510
 concepts:
   - key: core
     name: 웹 보안 기초

@@ -13,7 +13,7 @@ lesson:
   key: load-testing
   title: 부하 테스트
   unit: 테스트와 운영
-  order: 909
+  order: 1009
 concepts:
   - key: core
     name: 부하 테스트

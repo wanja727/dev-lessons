@@ -1,7 +1,7 @@
 ---
 title: "스프링 테스트"
 unit: 테스트와 운영
-order: 903
+order: 1003
 stage: 실무 시스템
 summary: '@SpringBootTest가 띄우는 것, @WebMvcTest와 @DataJpaTest 같은 슬라이스 테스트, 테스트에 붙인 @Transactional이 운영과 다르게 만드는 것, 테스트가 많아지면 느려지는 이유. 네 가지 질문에 스스로 답할 수 있게 회원 API로 배워요.'
 minutes: 20

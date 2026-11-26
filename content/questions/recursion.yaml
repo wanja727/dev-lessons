@@ -13,7 +13,7 @@ lesson:
   key: recursion
   title: 재귀
   unit: 자료구조와 알고리즘
-  order: 59
+  order: 205
 concepts:
   - key: core
     name: 재귀

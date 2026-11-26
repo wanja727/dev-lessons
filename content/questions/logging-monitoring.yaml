@@ -13,7 +13,7 @@ lesson:
   key: logging-monitoring
   title: 로그와 모니터링
   unit: 테스트와 운영
-  order: 907
+  order: 1007
 concepts:
   - key: core
     name: 로그와 모니터링

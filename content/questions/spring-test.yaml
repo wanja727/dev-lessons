@@ -13,7 +13,7 @@ lesson:
   key: spring-test
   title: 스프링 테스트
   unit: 테스트와 운영
-  order: 903
+  order: 1003
 concepts:
   - key: core
     name: 스프링 테스트

@@ -13,7 +13,7 @@ lesson:
   key: greedy-and-dp
   title: 그리디와 동적 계획법
   unit: 자료구조와 알고리즘
-  order: 66
+  order: 212
 concepts:
   - key: core
     name: 그리디와 동적 계획법

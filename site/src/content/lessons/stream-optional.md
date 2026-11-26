@@ -1,7 +1,7 @@
 ---
 title: "스트림과 Optional"
 unit: 자바 언어
-order: 49
+order: 113
 stage: 기초
 summary: 스트림이 어떻게 이루어지는지, 중간 연산은 언제 실행되는지, 결과를 어떻게 모으는지, Optional에서 값을 어떻게 꺼내는지, orElse와 orElseGet은 무엇이 다른지. 다섯 가지 질문에 스스로 답할 수 있게 주문 목록과 회원 조회로 배워요.
 minutes: 24

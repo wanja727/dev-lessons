@@ -1,7 +1,7 @@
 ---
 title: "자바 17과 21에서 달라진 것"
 unit: 자바 언어
-order: 54
+order: 118
 stage: 기초
 summary: sealed가 무엇을 정하는지, switch 패턴 매칭이 instanceof 사슬과 무엇이 다른지, record 패턴으로 무엇을 할 수 있는지, 셋을 함께 쓰면 무엇이 달라지는지. 네 가지 질문에 스스로 답할 수 있게 결제 결과에 종류를 하나 추가해 보며 배워요.
 minutes: 22

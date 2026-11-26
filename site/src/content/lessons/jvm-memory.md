@@ -1,7 +1,7 @@
 ---
 title: "JVM 메모리 구조"
 unit: 자바 언어
-order: 50
+order: 114
 stage: 기초
 summary: JVM이 메모리를 어떤 영역으로 나눠 쓰는지, 메서드를 부르면 스택에서 무슨 일이 생기는지, 객체는 어디에 놓이는지, OutOfMemoryError와 StackOverflowError는 무엇이 다른지. 네 가지 질문에 스스로 답할 수 있게 두 에러를 일부러 일으켜 보며 배워요.
 minutes: 22

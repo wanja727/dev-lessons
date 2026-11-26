@@ -13,7 +13,7 @@ lesson:
   key: static-initialization
   title: static과 초기화 순서
   unit: 자바 언어
-  order: 42
+  order: 105
 concepts:
   - key: core
     name: static과 초기화 순서

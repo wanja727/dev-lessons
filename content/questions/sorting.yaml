@@ -13,7 +13,7 @@ lesson:
   key: sorting
   title: 정렬
   unit: 자료구조와 알고리즘
-  order: 60
+  order: 206
 concepts:
   - key: core
     name: 정렬

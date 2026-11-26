@@ -14,7 +14,7 @@ lesson:
   key: websocket-sse
   title: 웹소켓과 SSE
   unit: 네트워크와 웹
-  order: 66
+  order: 512
 concepts:
   - key: core
     name: 웹소켓과 SSE

@@ -14,7 +14,7 @@ lesson:
   key: http-cache
   title: HTTP 캐시
   unit: 네트워크와 웹
-  order: 65
+  order: 511
 concepts:
   - key: core
     name: HTTP 캐시

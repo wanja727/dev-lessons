@@ -13,7 +13,7 @@ lesson:
   key: testcontainers
   title: 통합 테스트와 Testcontainers
   unit: 테스트와 운영
-  order: 904
+  order: 1004
 concepts:
   - key: core
     name: 통합 테스트와 Testcontainers

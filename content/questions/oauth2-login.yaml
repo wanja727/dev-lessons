@@ -14,7 +14,7 @@ lesson:
   key: oauth2-login
   title: OAuth 2.0과 소셜 로그인
   unit: 네트워크와 웹
-  order: 62
+  order: 508
 concepts:
   - key: core
     name: OAuth 2.0과 소셜 로그인

@@ -13,7 +13,7 @@ lesson:
   key: binary-search
   title: 이진 탐색
   unit: 자료구조와 알고리즘
-  order: 61
+  order: 207
 concepts:
   - key: core
     name: 이진 탐색

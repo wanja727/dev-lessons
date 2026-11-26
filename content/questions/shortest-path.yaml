@@ -13,7 +13,7 @@ lesson:
   key: shortest-path
   title: 최단 경로
   unit: 자료구조와 알고리즘
-  order: 68
+  order: 214
 concepts:
   - key: core
     name: 최단 경로

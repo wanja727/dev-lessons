@@ -1,7 +1,7 @@
 ---
 title: "프록시와 지연 로딩"
 unit: JPA
-order: 11
+order: 804
 stage: 트랜잭션과 JPA
 summary: 지연 로딩이면 연관 필드에 무엇이 들어 있는지, 프록시는 언제 SELECT를 보내는지, LazyInitializationException은 왜 나는지, 어떻게 막는지. 네 가지 질문에 스스로 답할 수 있게 선수의 팀 필드를 한 줄씩 건드리며 배워요.
 minutes: 20

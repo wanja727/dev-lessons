@@ -14,7 +14,7 @@ lesson:
   key: osiv
   title: OSIV
   unit: JPA
-  order: 16
+  order: 806
 concepts:
   - key: core
     name: OSIV

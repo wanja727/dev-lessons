@@ -14,7 +14,7 @@ lesson:
   key: ci-cd-deploy
   title: CI/CD와 무중단 배포
   unit: 테스트와 운영
-  order: 906
+  order: 1006
 concepts:
   - key: core
     name: CI/CD와 무중단 배포

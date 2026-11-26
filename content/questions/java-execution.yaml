@@ -13,7 +13,7 @@ lesson:
   key: java-execution
   title: 자바 프로그램이 실행되는 과정
   unit: 자바 언어
-  order: 37
+  order: 101
 concepts:
   - key: core
     name: 자바 프로그램이 실행되는 과정

@@ -13,7 +13,7 @@ lesson:
   key: time-complexity
   title: 시간 복잡도
   unit: 자료구조와 알고리즘
-  order: 55
+  order: 201
 concepts:
   - key: core
     name: 시간 복잡도

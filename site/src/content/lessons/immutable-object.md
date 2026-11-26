@@ -1,7 +1,7 @@
 ---
 title: "불변 객체"
 unit: 자바 언어
-order: 45
+order: 109
 stage: 기초
 summary: 불변 객체가 무엇이고 왜 쓰는지, final을 붙이면 불변이 되는지, 필드가 리스트를 가리킬 때 어떻게 지키는지, record가 해 주는 것과 해 주지 않는 것. 네 가지 질문에 스스로 답할 수 있게 setter 없는 주문 객체로 배워요.
 minutes: 20

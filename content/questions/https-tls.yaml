@@ -14,7 +14,7 @@ lesson:
   key: https-tls
   title: HTTPS와 TLS
   unit: 네트워크와 웹
-  order: 60
+  order: 506
 concepts:
   - key: core
     name: HTTPS와 TLS

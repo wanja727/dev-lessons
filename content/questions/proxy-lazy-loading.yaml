@@ -14,7 +14,7 @@ lesson:
   key: proxy-lazy-loading
   title: 프록시와 지연 로딩
   unit: JPA
-  order: 11
+  order: 804
 concepts:
   - key: core
     name: 프록시와 지연 로딩

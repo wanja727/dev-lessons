@@ -14,7 +14,7 @@ lesson:
   key: jpa-persistence-context
   title: 영속성 컨텍스트
   unit: JPA
-  order: 10
+  order: 802
 concepts:
   - key: core
     name: 영속성 컨텍스트

@@ -16,7 +16,7 @@ lesson:
   key: rest-api
   title: REST API 설계
   unit: 네트워크와 웹
-  order: 59
+  order: 505
 concepts:
   - key: core
     name: REST API 설계

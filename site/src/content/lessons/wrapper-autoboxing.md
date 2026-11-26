@@ -1,7 +1,7 @@
 ---
 title: "래퍼 클래스와 오토박싱"
 unit: 자바 언어
-order: 39
+order: 103
 stage: 기초
 summary: int가 있는데 Integer가 왜 있는지, 자바가 둘을 언제 몰래 바꿔 주는지, Integer를 ==로 비교하면 왜 어떤 때만 true인지, null인 래퍼가 어디서 예외를 내는지. 네 가지 질문에 스스로 답할 수 있게 회원 번호 127과 128을 비교하며 배워요.
 minutes: 20

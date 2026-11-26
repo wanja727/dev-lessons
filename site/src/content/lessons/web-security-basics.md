@@ -1,7 +1,7 @@
 ---
 title: "웹 보안 기초"
 unit: 네트워크와 웹
-order: 64
+order: 510
 stage: 기초
 summary: XSS, CSRF, SQL 인젝션이 어떻게 일어나고 어떻게 막는지, 로그인 쿠키와 토큰을 어떻게 지키는지. 네 가지 질문에 스스로 답할 수 있게, 스프링 서버와 PostgreSQL에 실제로 공격 입력을 보내 보며 배워요.
 minutes: 22

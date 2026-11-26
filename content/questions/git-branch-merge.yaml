@@ -13,7 +13,7 @@ lesson:
   key: git-branch-merge
   title: Git 브랜치와 병합
   unit: 테스트와 운영
-  order: 901
+  order: 1001
 concepts:
   - key: core
     name: Git 브랜치와 병합

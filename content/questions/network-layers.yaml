@@ -14,7 +14,7 @@ lesson:
   key: network-layers
   title: OSI 7계층과 TCP/IP 4계층
   unit: 네트워크와 웹
-  order: 56
+  order: 502
 concepts:
   - key: core
     name: OSI 7계층과 TCP/IP 4계층

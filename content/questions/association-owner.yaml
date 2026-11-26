@@ -14,7 +14,7 @@ lesson:
   key: association-owner
   title: 연관관계 매핑
   unit: JPA
-  order: 13
+  order: 803
 concepts:
   - key: core
     name: 연관관계 매핑

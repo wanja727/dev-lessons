@@ -13,7 +13,7 @@ lesson:
   key: linux-basics
   title: 리눅스 기초
   unit: 테스트와 운영
-  order: 908
+  order: 1008
 concepts:
   - key: core
     name: 리눅스 기초

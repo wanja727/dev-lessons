@@ -13,7 +13,7 @@ lesson:
   key: unit-test-double
   title: 단위 테스트와 테스트 더블
   unit: 테스트와 운영
-  order: 902
+  order: 1002
 concepts:
   - key: core
     name: 단위 테스트와 테스트 더블

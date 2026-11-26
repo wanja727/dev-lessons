@@ -13,7 +13,7 @@ lesson:
   key: choosing-collections
   title: 컬렉션 고르기
   unit: 자료구조와 알고리즘
-  order: 64
+  order: 210
 concepts:
   - key: core
     name: 컬렉션 고르기

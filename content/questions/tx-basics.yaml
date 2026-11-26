@@ -11,7 +11,7 @@ lesson:
   key: tx-basics
   title: 트랜잭션 기초
   unit: DB
-  order: 1
+  order: 605
 concepts:
   - key: core
     name: 트랜잭션 기초

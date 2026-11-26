@@ -1,7 +1,7 @@
 ---
 title: "HTTPS와 TLS"
 unit: 네트워크와 웹
-order: 60
+order: 506
 stage: 기초
 summary: HTTP의 무엇이 위험하고 HTTPS가 무엇을 지키는지, TLS가 내용을 암호화하는 방법, 인증서가 증명하는 것, TLS 연결을 맺는 순서. 네 가지 질문에 스스로 답할 수 있게, 오가는 바이트를 엿보고 직접 만든 인증서로 연결해 보며 배워요.
 minutes: 22

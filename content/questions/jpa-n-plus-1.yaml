@@ -11,7 +11,7 @@ lesson:
   key: jpa-n-plus-1
   title: JPA N+1 문제
   unit: JPA
-  order: 12
+  order: 805
 concepts:
   - key: core
     name: JPA N+1 문제

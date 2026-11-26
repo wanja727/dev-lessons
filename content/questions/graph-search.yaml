@@ -13,7 +13,7 @@ lesson:
   key: graph-search
   title: 그래프와 탐색
   unit: 자료구조와 알고리즘
-  order: 65
+  order: 211
 concepts:
   - key: core
     name: 그래프와 탐색

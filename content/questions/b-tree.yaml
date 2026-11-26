@@ -13,7 +13,7 @@ lesson:
   key: b-tree
   title: B-트리
   unit: 자료구조와 알고리즘
-  order: 67
+  order: 213
 concepts:
   - key: core
     name: B-트리

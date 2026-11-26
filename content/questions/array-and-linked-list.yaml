@@ -13,7 +13,7 @@ lesson:
   key: array-and-linked-list
   title: 배열과 연결 리스트
   unit: 자료구조와 알고리즘
-  order: 56
+  order: 202
 concepts:
   - key: core
     name: 배열과 연결 리스트

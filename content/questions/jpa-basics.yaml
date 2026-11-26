@@ -14,7 +14,7 @@ lesson:
   key: jpa-basics
   title: ORM과 JPA
   unit: JPA
-  order: 4
+  order: 801
 concepts:
   - key: core
     name: ORM과 JPA

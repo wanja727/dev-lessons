@@ -1,7 +1,7 @@
 ---
 title: "enum"
 unit: 자바 언어
-order: 44
+order: 108
 stage: 기초
 summary: 정해진 값들을 enum으로 만들면 무엇이 좋은지, enum 상수는 실제로 무엇인지, 값마다 다른 데이터와 동작을 어떻게 주는지, 저장할 때 name과 ordinal 가운데 무엇을 써야 하는지. 네 가지 질문에 스스로 답할 수 있게 주문 상태로 배워요.
 minutes: 20

@@ -13,7 +13,7 @@ lesson:
   key: immutable-object
   title: 불변 객체
   unit: 자바 언어
-  order: 45
+  order: 109
 concepts:
   - key: core
     name: 불변 객체

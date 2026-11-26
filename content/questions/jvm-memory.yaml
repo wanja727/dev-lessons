@@ -13,7 +13,7 @@ lesson:
   key: jvm-memory
   title: JVM 메모리 구조
   unit: 자바 언어
-  order: 50
+  order: 114
 concepts:
   - key: core
     name: JVM 메모리 구조

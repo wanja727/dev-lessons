@@ -13,7 +13,7 @@ lesson:
   key: url-to-response
   title: 브라우저에 주소를 입력하면
   unit: 네트워크와 웹
-  order: 55
+  order: 501
 concepts:
   - key: core
     name: 브라우저에 주소를 입력하면
