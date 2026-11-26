@@ -168,6 +168,7 @@ questions:
           source: SlowQueryTest.staleStatistics
           code: predict
       - p: 'ANALYZE 전에는 실제 100건을 수천 건으로 어림했어요. 플래너는 통계(값의 분포, 행 수)로 비용을 어림하는데, 통계가 빈 테이블 때 것이라 CANCELED가 얼마나 드문지 몰라요. 어림이 틀리면 Seq Scan이 나은 곳에 인덱스를, 그 반대를 고를 수 있어요. **대량으로 넣거나 지운 뒤에는 `analyze`를 해요.** autovacuum이 대개 해 주지만 바로 하지는 않아요.'
+      - muted: '`analyze`는 큰 테이블에서 행 전체가 아니라 일부(기본 3만 행)를 표본으로 읽어요. 100만 행 가운데 100건뿐인 값은 표본에 안 걸려 다시 틀리게 어림하기도 해서, 이 테스트는 그 열만 `alter table ... alter column status set statistics 10000`으로 표본을 늘려 매번 같은 결과가 나오게 했어요.'
       - h3: 메모리가 모자란 정렬
       - code: sortQuery
       - ci:

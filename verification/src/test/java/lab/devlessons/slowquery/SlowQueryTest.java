@@ -65,7 +65,8 @@ class SlowQueryTest {
     void staleStatistics() {
         load("sq_stale");
         String before = plan(ds, "explain (analyze, timing off, costs on) select * from sq_stale where status = 'CANCELED'");
-        exec(ds, "analyze sq_stale");
+        // ANALYZE는 기본으로 3만 행만 표본으로 읽어 100건뿐인 CANCELED를 놓칠 수 있다. 이 열은 전체를 읽게 한다
+        exec(ds, "alter table sq_stale alter column status set statistics 10000", "analyze sq_stale");
         String after = plan(ds, "explain (analyze, timing off, costs on) select * from sq_stale where status = 'CANCELED'");
 
         long[] b = rows(before);
