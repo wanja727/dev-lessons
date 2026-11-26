@@ -1,0 +1,222 @@
+# 리눅스 기초 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/linux-basics.yaml의 says).
+# 동작에 관한 정답은 verification의 LinuxBasicsTest로 확인했다 (eclipse-temurin:21-jdk 컨테이너).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: linux-basics
+  title: 리눅스 기초
+  unit: 테스트와 운영
+  order: 908
+concepts:
+  - key: core
+    name: 리눅스 기초
+coreQuestions:
+  - key: q1
+    text: "서버에서 내 프로그램이 떠 있는지 어떻게 보나요?"
+  - key: q2
+    text: "kill과 kill -9는 무엇이 다른가요?"
+  - key: q3
+    text: "포트를 누가 쓰고 있는지 어떻게 찾나요?"
+  - key: q4
+    text: "로그에서 오류를 어떻게 찾나요?"
+questions:
+  # ── 질문 1 ──
+  - key: lx-grep-self
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 서버에서 ps aux | grep order-api를 쳤더니 줄이 두 개 나왔어요. 한 줄은 grep order-api예요. 다른 한 줄은 무엇일까요?
+    choices:
+      - 주문 서버 프로세스
+      - 같은 서버가 두 개 떠 있다는 뜻이다
+      - ps 명령 자신
+      - 서버의 스레드 하나
+    answer: "1"
+    explanation: |-
+      **주문 서버예요.** grep 명령도 그 순간 도는 프로세스이고 명령에 order-api가 들어 있어서 목록에 나와요.
+
+      - pgrep -f order-api는 PID만 돌려줘요
+    source: https://man7.org/linux/man-pages/man1/ps.1.html
+  - key: lx-still-running
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 배포 스크립트가 옛 서버를 껐다고 했는데 새 서버가 뜨지 않아요. 옛 서버가 아직 살아 있는지 확인하는 명령으로 맞는 것은?
+    choices:
+      - pgrep -f order-api
+      - df -h
+      - chmod +x order-api.jar
+      - tail -n 100 app.log
+    answer: "1"
+    explanation: |-
+      **pgrep -f order-api예요.** 명령 줄에 order-api가 든 프로세스의 PID를 돌려줘요. 아무것도 나오지 않으면 떠 있지 않아요.
+
+      - ps aux | grep order-api로도 볼 수 있어요
+    source: https://man7.org/linux/man-pages/man1/ps.1.html
+  # ── 질문 2 ──
+  - key: lx-kill9-hook
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 끝날 때 종료 훅(Runtime.addShutdownHook)에서 파일에 "정리 완료"를 쓰는 자바 서버에 kill -9를 보냈어요. 결과로 맞는 것은?
+    choices:
+      - 파일에 "정리 완료"가 남고 종료 코드는 143이다
+      - 파일에 아무것도 남지 않고 종료 코드는 137이다
+      - 서버가 신호를 무시하고 계속 돈다
+      - 파일에 "정리 완료"가 남고 종료 코드는 137이다
+    answer: "2"
+    explanation: |-
+      **종료 훅이 돌지 않고 137로 끝나요.** SIGKILL은 커널이 바로 프로세스를 지워서 프로그램이 아무것도 하지 못해요.
+
+      - kill(SIGTERM)이면 종료 훅이 돌고 143(128 + 15)으로 끝나요
+    source: https://man7.org/linux/man-pages/man7/signal.7.html
+  - key: lx-deploy-kill9
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 배포 스크립트가 옛 스프링 부트 서버를 kill -9 $(pgrep -f order-api)로 꺼요. 결제를 처리하던 요청은 어떻게 될까요?
+    choices:
+      - 우아한 종료로 끝까지 처리된다
+      - 끊긴다. SIGKILL이라 우아한 종료가 돌 틈이 없다
+      - 새 서버로 넘어가 처리된다
+      - 30초 뒤에 끊긴다
+    answer: "2"
+    explanation: |-
+      **끊겨요.** 스프링 부트의 우아한 종료는 SIGTERM을 받은 JVM의 종료 훅에서 돌아요. SIGKILL은 그 훅을 건너뛰어요.
+
+      - kill로 SIGTERM을 먼저 보내고 기다려요
+    source: https://man7.org/linux/man-pages/man7/signal.7.html
+  # ── 질문 3 ──
+  - key: lx-address-in-use
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 새 서버가 java.net.BindException Address already in use로 뜨지 않아요. 8080 포트를 어느 프로세스가 잡고 있는지 찾는 명령은?
+    choices:
+      - ss -ltnp | grep 8080
+      - du -sh /var/log
+      - grep -c ERROR app.log
+      - chmod 644 app.jar
+    answer: "1"
+    explanation: |-
+      **ss -ltnp예요.** 듣고 있는 TCP 포트와 그 포트를 잡은 프로세스의 이름과 PID를 보여 줘요.
+
+      - 찾은 PID의 옛 서버를 끄거나 다른 포트를 써요
+    source: https://man7.org/linux/man-pages/man8/ss.8.html
+  - key: lx-localhost-only
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버 안에서 curl localhost:8080/health는 up을 돌려주는데, 다른 서버에서는 닿지 않아요. ss -ltn에 127.0.0.1:8080이 보여요. 이유로 맞는 것은?
+    choices:
+      - 서버가 떠 있지 않다
+      - 서버 안의 주소(127.0.0.1)에서만 듣고 있어 바깥에서는 닿지 않는다
+      - 포트를 두 프로세스가 함께 쓴다
+      - curl의 버전이 다르다
+    answer: "2"
+    explanation: |-
+      **127.0.0.1에서만 듣고 있어요.** 그 주소는 서버 자신만 닿는 주소예요.
+
+      - 0.0.0.0(또는 *)에서 듣게 바꾸면 바깥에서도 닿아요
+    source: https://man7.org/linux/man-pages/man8/ss.8.html
+  # ── 질문 4 ──
+  - key: lx-grep-after
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 1
+    body: 로그에서 예외가 난 줄과 그 아래 스택 트레이스 다섯 줄을 함께 보려고 해요. 맞는 명령은?
+    choices:
+      - grep -c Exception app.log
+      - grep -A 5 Exception app.log
+      - tail -n 5 app.log
+      - grep -B 5 Exception app.log
+    answer: "2"
+    explanation: |-
+      **grep -A 5예요.** 맞는 줄과 그 뒤(After) 다섯 줄을 보여 줘요.
+
+      - -B는 앞(Before)의 줄, -c는 줄 수만 세요
+    source: https://man7.org/linux/man-pages/man1/grep.1.html
+  - key: lx-disk-full
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 서버가 갑자기 로그를 쓰지 못하고 같은 서버의 DB도 멈췄어요. df -h /에 사용률 100%가 보여요. 다음에 할 일로 가장 맞는 것은?
+    choices:
+      - kill -9로 DB를 다시 띄운다
+      - du -sh로 폴더마다 크기를 재서 무엇이 디스크를 채웠는지 찾는다
+      - chmod로 로그 파일의 권한을 바꾼다
+      - ss -ltnp로 포트를 본다
+    answer: "2"
+    explanation: |-
+      **du -sh로 큰 폴더를 찾아요.** df는 디스크가 찼다는 것을, du는 어느 폴더가 채웠는지를 알려 줘요. 대개 로그예요.
+
+      - 로그는 날짜마다 나누고 오래된 것을 지우는 롤링 설정을 둬요
+    source: https://man7.org/linux/man-pages/man1/df.1.html
+  - key: lx-chmod
+    concept: core
+    coreQuestion: q4
+    type: code_predict
+    status: draft
+    difficulty: 2
+    body: 배포 스크립트를 돌렸더니 아래처럼 나왔어요. 원인과 고치는 방법으로 맞는 것은?
+    code: |-
+      $ ls -l deploy.sh
+      -rw-r--r-- deploy.sh
+      $ ./deploy.sh
+      ./deploy.sh: Permission denied
+    choices:
+      - 실행 권한(x)이 없다. chmod +x deploy.sh
+      - 파일이 비어 있다. 다시 만든다
+      - 디스크가 찼다. du로 찾는다
+      - 포트가 막혔다. ss로 찾는다
+    answer: "1"
+    explanation: |-
+      **실행 권한이 없어요.** -rw-r--r--에는 x가 없어서 실행할 수 없어요(종료 코드 126).
+
+      - chmod +x로 실행 권한을 주면 돌아요
+    source: https://man7.org/linux/man-pages/man1/chmod.1.html
+  # ── 면접 ──
+  - key: lx-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: draft
+    difficulty: 2
+    body: 면접에서 "운영 중인 리눅스 서버에서 자바 서버가 응답하지 않을 때 무엇을 어떤 순서로 확인하는지 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **프로세스, 포트, 응답, 로그, 디스크 순으로 보고, 끌 때는 SIGTERM부터 보내요.**
+
+      - **프로세스:** ps aux, pgrep -f로 떠 있는지와 PID
+      - **포트:** ss -ltnp로 듣는지와 누가 잡았는지, curl로 답하는지
+      - **로그:** grep -n ERROR, grep -A로 스택 트레이스, tail -f
+      - **디스크:** df -h, du -sh
+      - **끄기:** kill(SIGTERM) 다음 기다리고, 안 되면 kill -9
+    checklist:
+      - ps나 pgrep으로 프로세스와 PID를 확인한다고 말했다
+      - ss로 포트를 듣는지 확인한다고 말했다
+      - grep과 tail로 로그의 오류를 찾는다고 말했다
+      - 디스크가 찼는지 df로 본다고 말했다
+      - kill과 kill -9의 차이와 먼저 kill을 쓰는 이유를 말했다
+    source: https://man7.org/linux/man-pages/man7/signal.7.html

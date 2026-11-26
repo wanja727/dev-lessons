@@ -1,15 +1,16 @@
-# 리눅스 기초 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-stage: design
+# 리눅스 기초
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/linux-basics.yaml에 있다.
 title: 리눅스 기초
+description: 서버에서 내 프로그램이 떠 있는지 보는 법, kill과 kill -9의 차이, 포트를 누가 쓰는지 찾는 법, 로그에서 오류를 찾는 법. 네 가지 질문에 스스로 답할 수 있게 우분투 컨테이너에 띄운 주문 서버로 배우는 대화형 레슨.
 unit: 테스트와 운영
+minutes: 20
 roadmap: T8
 type: 동작 확인
 prerequisites:
   - {slug: process-and-thread, title: 프로세스와 스레드}
   - {slug: docker-container, title: 도커와 컨테이너}
-assume: '리눅스 셸(bash)을 열어 명령을 쳐 본 적이 있다는 것까지. 프로세스와 PID(프로세스와 스레드 레슨), 컨테이너가 격리된 리눅스 프로세스라는 것(도커와 컨테이너 레슨). 이 레슨의 명령은 테스트가 우분투 컨테이너 안에서 실제로 돌려 확인한다.'
-example: '서버에 접속해 주문 서버(`java -jar order-api.jar`)가 떠 있는지, 8080 포트를 듣고 있는지, 로그에 무슨 오류가 있는지 보고, 멈춘 서버를 끈다. 우분투 컨테이너 안에 작은 자바 서버를 띄워 같은 일을 한다.'
+assume: '리눅스 셸(bash)을 열어 명령을 쳐 본 적이 있다는 것까지. 프로세스와 PID(프로세스와 스레드 레슨), 컨테이너가 격리된 리눅스 프로세스라는 것(도커와 컨테이너 레슨). 이 레슨의 명령은 테스트가 우분투 기반 컨테이너(`eclipse-temurin:21-jdk`) 안에서 실제로 돌려 확인했어요.'
+example: '서버에 접속해 주문 서버가 떠 있는지, 8080 포트를 듣고 있는지, 로그에 무슨 오류가 있는지 보고, 서버를 끈다. 우분투 컨테이너 안에 JDK의 작은 HTTP 서버로 만든 `Server.java`를 띄워 같은 일을 한다.'
 intro:
   - '배포한 서버에서 "8080 포트가 이미 사용 중"이라며 새 서버가 뜨지 않아요. 옛 서버가 아직 떠 있는 것 같은데, 무엇이 그 포트를 잡고 있는지, 어떻게 끄는지 몰라 서버를 통째로 재시작했어요.'
   - '대부분의 자바 서버는 리눅스에서 돌아요. 장애가 나면 서버에 접속해 프로세스가 살아 있는지, 포트를 듣는지, 로그에 무엇이 남았는지, 디스크가 차지 않았는지를 직접 봐야 해요. 컨테이너 안에 들어가도 같은 명령을 써요.'
@@ -41,27 +42,72 @@ covers:
     where: '질문 4'
   - topic: '스레드 덤프를 뜨는 `jstack`, `jcmd`'
     where: '다루지 않음: 스레드 덤프와 힙 덤프(T10)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/linux/LinuxBasicsTest.java
+  signal: https://man7.org/linux/man-pages/man7/signal.7.html
+  ss: https://man7.org/linux/man-pages/man8/ss.8.html
+  ps: https://man7.org/linux/man-pages/man1/ps.1.html
+  hook: https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Runtime.html#addShutdownHook(java.lang.Thread)
+  systemdKill: https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html
 codes:
-  ps: |-
-    $ ps aux | grep order-api
-    $ pgrep -f order-api
-  kill: |-
-    $ kill 1234      # SIGTERM
-    $ kill -9 1234   # SIGKILL
-  ss: |-
+  psRun: |-
+    $ ps aux | head -1
+    $ ps aux | grep Server.java
+    $ pgrep -f '^java Server.java$'
+  hook: |-
+    Runtime.getRuntime().addShutdownHook(
+        new Thread(() -> Files.writeString(
+            hookFile, "정리 완료")));
+  killRun: |-
+    java Server.java &
+    pid=$!
+    kill $pid       # 또는 kill -9 $pid
+    wait $pid
+    echo "종료 코드 $?"
+    cat hook.txt
+  ssRun: |-
     $ ss -ltnp | grep 8080
-    LISTEN 0 100 *:8080 *:* ⤶
-    users:(("java",pid=1234,fd=9))
-  logs: |-
-    $ tail -n 100 app.log
-    $ grep -n "ERROR" app.log
-    $ grep -B 2 -A 5 "Exception" app.log
-  disk: |-
+    $ curl -s localhost:8080/health
+    $ java Server.java   # 같은 포트로 하나 더
+  grepRun: |-
+    $ grep -n ERROR app.log
+    $ grep -A 3 IllegalStateException app.log
+    $ grep -c ERROR app.log
+    $ awk '{print $3}' app.log \
+        | grep -E '^(INFO|WARN|ERROR)$' \
+        | sort | uniq -c
+    $ tail -n 2 app.log
+  diskRun: |-
     $ df -h /
-    $ du -sh /var/log/*
+    $ du -sh /var/log/order
+  tailf: |-
+    $ tail -f app.log
+    $ tail -f app.log | grep ERROR
+  chmodRun: |-
+    $ ls -l deploy.sh && ./deploy.sh
+    $ chmod +x deploy.sh && ./deploy.sh
+  ssh: |-
+    $ ssh -i ~/.ssh/id_ed25519 \
+        deploy@order-api-1
+  systemd: |-
+    $ systemctl status order-api
+    $ systemctl stop order-api
+    $ journalctl -u order-api -f
+  envRun: |-
+    $ export SPRING_PROFILES_ACTIVE=prod
+    $ java -jar order-api.jar
+    $ env | grep SPRING
 predict:
-  text: '8080 포트를 쓰는 자바 서버에 `kill -9`를 보냈어요. 서버의 종료 훅(`Runtime.addShutdownHook`)에 적어 둔 "정리 완료" 로그는 찍힐까요? 보기: 찍힌다, 찍히지 않는다.'
-  answer: '찍히지 않는다. SIGKILL은 프로세스가 아무것도 하지 못하게 커널이 바로 죽인다. `kill`(SIGTERM)이면 종료 훅이 돌아 찍힌다. 질문 2에서 밝힌다.'
+  title: kill -9로 끄면 정리 코드가 돌까요?
+  text: '주문 서버는 끝날 때 종료 훅(`Runtime.addShutdownHook`)에서 파일에 "정리 완료"를 써요. 이 서버에 `kill -9`를 보냈어요. 파일에 "정리 완료"가 남을까요? 모르는 게 정상이니 감으로 골라 보세요. 답은 질문 2에 나와요.'
+  code: hook
+  label: 내 예측
+  options:
+    - {value: 'yes', label: 남는다}
+    - {value: 'no', label: 남지 않는다}
+  answer: 'no'
+  storageKey: linux-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 서버에서 내 프로그램이 떠 있는지 어떻게 보나요?
@@ -76,6 +122,32 @@ questions:
     asks:
       - '본문의 예시: `ps aux | grep order-api`의 출력에 줄이 두 개 나왔다. 하나가 `grep order-api`라면 다른 하나는 (자바 서버. grep 명령 자신도 목록에 나온다)'
       - '옮긴 상황: 서버를 껐다고 생각했는데 새 서버가 뜨지 않는다. 옛 서버가 아직 있는지 확인하는 명령은 (`pgrep -f order-api`나 `ps aux | grep order-api`)'
+    body:
+      - p: '운영체제는 실행 중인 프로그램마다 **PID**(프로세스 번호)를 붙여 관리해요. 프로세스와 스레드 레슨의 프로세스예요. 서버에서 무엇이 도는지 보는 명령이 `ps`예요. 우분투 컨테이너에 주문 서버(`java Server.java`)를 띄우고 돌려 봤어요.'
+      - ci:
+          key: ps
+          label: 실제 출력 보기
+          source: LinuxBasicsTest.findProcess
+          code: psRun
+      - ul:
+          - '**`ps aux`**는 모든 사용자의 모든 프로세스를 보여 줘요. 열은 차례로 사용자, PID, CPU와 메모리 사용률, 가상 메모리와 실제 메모리(RSS), 상태, 시작 시각, 명령이에요. 위 출력은 줄이 길어 사용자, PID, 명령만 남겼어요.'
+          - '**`| grep Server.java`**는 그 목록에서 글자가 맞는 줄만 골라요. 줄이 둘인데, 하나는 서버이고 다른 하나는 **grep 명령 자신**이에요. grep도 그 순간 도는 프로세스이고 명령에 `Server.java`가 들어 있기 때문이에요.'
+          - '**`pgrep -f`**는 명령 줄 전체에서 찾아 **PID만** 돌려줘요. 다음 명령에 넘기기 좋아요(`kill $(pgrep -f order-api)`).'
+      - p: '"서버를 껐는데 새 서버가 안 떠요"라면 먼저 이 명령으로 옛 서버가 아직 있는지 봐요.'
+      - more:
+          summary: '더 알아보기: top과 RSS'
+          body:
+            - p: '`top`은 CPU와 메모리를 많이 쓰는 프로세스를 실시간으로 줄 세워 보여 줘요. 자바 프로세스의 RSS(실제로 쓰는 메모리)는 힙 최대 크기보다 커요. 도커와 컨테이너 레슨에서 본 힙 밖의 메모리(메타스페이스, 스레드 스택, 버퍼) 때문이에요.'
+      - quiz:
+          q: '`ps aux | grep order-api`의 출력에 줄이 두 개 나왔어요. 하나는 `grep order-api`예요. 다른 하나는 무엇일까요?'
+          options:
+            - 주문 서버 프로세스
+            - 같은 서버가 두 개 떠 있다
+            - ps 명령 자신
+          answer: 1
+          explain: 'grep 명령 자신도 그 순간 도는 프로세스라 목록에 나와요. 나머지 한 줄이 서버예요.'
+      - next: 'PID를 찾았으면 서버를 끌 수 있어요. 그런데 끄는 방법이 둘이에요.'
+    recall: '`ps aux`로 지금 도는 프로세스의 목록(사용자, PID, CPU, 메모리, 명령)을 보고, `grep`으로 내 프로그램의 줄을 골라요. 이때 grep 자신도 목록에 나와요. `pgrep -f 이름`은 명령 줄에서 찾아 PID만 돌려줘요. PID를 알아야 신호를 보내고 포트와 스레드를 볼 수 있어요.'
   - id: q2
     title: kill과 kill -9는 무엇이 다른가요?
     conclusion:
@@ -92,6 +164,51 @@ questions:
     asks:
       - '본문의 예시: 종료 훅에서 "정리 완료"를 쓰는 서버에 `kill -9`를 보냈다. 로그에 "정리 완료"가 있나 (없다. SIGKILL은 종료 훅을 돌릴 틈을 주지 않는다)'
       - '옮긴 상황: 배포 스크립트가 옛 서버를 `kill -9`로 끈다. 결제 처리 중이던 요청은 어떻게 되나 (끊긴다. SIGTERM을 보내고 기다려야 우아한 종료가 돈다)'
+    body:
+      - p: '`kill`이라는 이름과 달리 이 명령은 프로세스에 **신호**를 보내요. 신호는 운영체제가 프로세스에 보내는 짧은 알림이에요. 번호 없이 `kill PID`면 **SIGTERM**(15번, "끝내 달라")을, `kill -9 PID`면 **SIGKILL**(9번, "죽인다")을 보내요([signal(7)](link:signal)).'
+      - p: '예측의 답이에요. 끝날 때 종료 훅에서 "정리 완료"를 쓰는 서버에 두 신호를 각각 보냈어요.'
+      - code: hook
+      - ci:
+          key: kill
+          label: 실제 결과 보기
+          source: LinuxBasicsTest.killAndKill9
+          code: killRun
+      - p: '{{predict-result}} SIGTERM을 받은 서버는 **종료 훅을 돌려** 파일에 "정리 완료"를 남기고 종료 코드 143으로 끝났어요. SIGKILL은 파일이 **없어요**. 종료 코드는 137이에요. 둘 다 128에 신호 번호를 더한 값이에요(128 + 15, 128 + 9).'
+      - widget:
+          kind: toggle
+          layout: [selector, duo, verdict]
+          selector:
+            label: 보낸 신호
+            options:
+              - {value: term, label: 'kill (SIGTERM)'}
+              - {value: kill, label: 'kill -9 (SIGKILL)'}
+          scenes:
+            term:
+              duo:
+                - label: 프로세스
+                  rows: [{k: 신호, v: SIGTERM (15)}, {k: 종료 훅, v: 돌았음, mark: changed}]
+                - label: 남은 것
+                  rows: [{k: hook.txt, v: 정리 완료, mark: changed}, {k: 종료 코드, v: '143'}]
+              verdict: '프로그램이 신호를 받고 스스로 정리한 뒤 끝났어요.'
+            kill:
+              duo:
+                - label: 프로세스
+                  rows: [{k: 신호, v: SIGKILL (9)}, {k: 종료 훅, v: 돌지 않음, mark: bad}]
+                - label: 남은 것
+                  rows: [{k: hook.txt, v: 없음, mark: bad}, {k: 종료 코드, v: '137'}]
+              verdict: '커널이 바로 죽여서 프로그램은 아무것도 하지 못했어요.'
+      - p: 'SIGKILL은 프로그램이 막거나 처리할 수 없어요. 커널이 그 자리에서 프로세스를 지워요. 그래서 JVM의 종료 훅, 로그 버퍼 비우기, 스프링 부트의 우아한 종료(CI/CD와 무중단 배포 레슨)가 모두 건너뛰어져요. 처리 중이던 결제는 끊겨요. 도커와 컨테이너 레슨에서 본 메모리 초과의 137도 커널이 보낸 SIGKILL이었어요.'
+      - callout: '**순서: 먼저 `kill`로 끝내 달라고 하고, 기다려요.** 정해 둔 시간 안에 끝나지 않을 때만 `kill -9`를 써요. `kill -9` 뒤에는 정리되지 않은 것(임시 파일, 처리 중이던 요청)을 따로 확인해요.'
+      - quiz:
+          q: '종료 훅에서 "정리 완료"를 쓰는 서버에 `kill -9`를 보냈어요. 파일에 "정리 완료"가 있을까요?'
+          options:
+            - 있다
+            - 없다. SIGKILL은 종료 훅을 돌릴 틈을 주지 않는다
+            - 몇 초 뒤에 생긴다
+          answer: 2
+          explain: 'SIGKILL은 커널이 바로 프로세스를 지워요. SIGTERM이면 종료 훅이 돌아요.'
+      - next: '옛 서버를 끄지 않고 새 서버를 띄우면 "포트가 이미 사용 중"이라는 오류가 나요. 그 포트를 누가 잡았는지 어떻게 찾을까요?'
+    recall: '`kill PID`는 SIGTERM(15)을 보내 프로그램이 종료 훅을 돌리며 스스로 정리하고 끝나게 해요(종료 코드 143). `kill -9 PID`는 SIGKILL(9)로 커널이 바로 죽여서 종료 훅, 버퍼 비우기, 우아한 종료가 모두 건너뛰어져요(137). 그래서 먼저 `kill`을 보내고 기다렸다가, 끝나지 않을 때만 `-9`를 써요.'
   - id: q3
     title: 포트를 누가 쓰고 있는지 어떻게 찾나요?
     conclusion:
@@ -105,6 +222,28 @@ questions:
     asks:
       - '본문의 예시: 새 서버가 "Address already in use"로 뜨지 않는다. 어느 프로세스가 8080을 쓰는지 찾는 명령은 (`ss -ltnp | grep 8080`)'
       - '옮긴 상황: 서버 안에서 `curl localhost:8080`은 되는데 바깥에서는 닿지 않는다. `ss -ltn`에 `127.0.0.1:8080`이 보인다. 이유는 (서버 안의 주소에서만 듣는다. `0.0.0.0`에서 듣게 바꾼다)'
+    body:
+      - p: '서버 프로그램은 포트를 하나 열고 요청을 기다려요. 이것을 **듣는다**(LISTEN)고 해요. 포트 하나는 한 번에 한 프로세스만 들을 수 있어요. 누가 어느 포트를 듣는지 보는 명령이 `ss`예요([ss(8)](link:ss)). 옛 명령 `netstat`도 같은 일을 해요.'
+      - ci:
+          key: ss
+          label: 실제 출력 보기
+          source: LinuxBasicsTest.whoListens
+          code: ssRun
+      - ul:
+          - '**`ss -ltnp`**: `-l`은 듣는 것만, `-t`는 TCP만, `-n`은 포트를 이름 대신 숫자로, `-p`는 그 포트를 잡은 프로세스까지 보여 줘요. 출력의 `users:(("java",pid=...))`가 질문 1에서 찾은 서버의 PID와 같아요.'
+          - '**`curl`**은 명령 줄에서 HTTP 요청을 보내요. 서버가 듣기만 하는지, 실제로 답하는지를 확인해요. `-v`를 붙이면 주고받은 헤더까지 보여요.'
+          - '**같은 포트로 하나 더** 띄우면 `java.net.BindException: Address already in use`로 실패해요. "8080 포트가 이미 사용 중"의 정체예요. `ss`로 PID를 찾아 옛 서버를 끄거나(질문 2) 다른 포트를 써요.'
+      - p: '듣는 주소도 봐요. `127.0.0.1:8080`이면 그 서버 안에서만 닿고, `*:8080`이나 `0.0.0.0:8080`이면 바깥에서도 닿아요. 서버 안의 `curl`은 되는데 바깥에서 안 되면 이 주소를 먼저 봐요.'
+      - quiz:
+          q: '새 서버가 "Address already in use"로 뜨지 않아요. 8080을 어느 프로세스가 쓰는지 찾는 명령은 무엇일까요?'
+          options:
+            - '`ss -ltnp | grep 8080`'
+            - '`df -h`'
+            - '`chmod +x`'
+          answer: 1
+          explain: '`ss -ltnp`가 듣는 포트와 그 포트를 잡은 프로세스의 PID를 보여 줘요.'
+      - next: '서버가 떠 있고 포트도 듣는데 주문이 실패한대요. 이제 로그를 봐야 해요.'
+    recall: '`ss -ltnp`는 듣고 있는(LISTEN) TCP 포트와 그 포트를 잡은 프로세스의 이름과 PID를 보여 줘요. 같은 포트로 서버를 하나 더 띄우면 BindException: Address already in use가 나니, PID를 찾아 옛 서버를 끄거나 다른 포트를 써요. `curl`로 실제로 답하는지 확인하고, 듣는 주소가 127.0.0.1이면 바깥에서는 닿지 않아요.'
   - id: q4
     title: 로그에서 오류를 어떻게 찾나요?
     conclusion:
@@ -118,24 +257,97 @@ questions:
     asks:
       - '본문의 예시: 예외 줄과 그 아래 스택 트레이스 다섯 줄을 함께 보려면 (`grep -A 5 Exception app.log`)'
       - '옮긴 상황: 서버가 갑자기 로그를 쓰지 못하고 DB도 멈췄다. `df -h /`에 사용률 100%가 보인다. 무엇부터 확인하나 (`du -sh`로 어느 폴더가 큰지. 보통 로그 파일이다)'
+    body:
+      - p: '로그 파일은 몇 GB씩 되기도 해서 편집기로 열지 않고 명령으로 걸러요. 컨테이너에 주문 서버의 로그(결제 실패 두 건과 스택 트레이스가 든 것)를 넣고 돌려 봤어요.'
+      - ci:
+          key: grep
+          label: 실제 출력 보기
+          source: LinuxBasicsTest.grepLogs
+          code: grepRun
+      - ul:
+          - '**`grep -n ERROR`**는 ERROR가 든 줄을 줄 번호와 함께 찾아요.'
+          - '**`grep -A 3`**은 맞는 줄과 그 **뒤(After)** 세 줄을 함께 보여 줘요. 예외 줄 아래의 스택 트레이스와 `Caused by`가 함께 나와요. 앞의 줄은 `-B`(Before)예요.'
+          - '**`grep -c`**는 맞는 줄의 수만 세요.'
+          - '**파이프 `|`**는 앞 명령의 출력을 뒤 명령의 입력으로 넘겨요. 셋째 칸(수준)만 뽑아(`awk`), 수준만 남기고(`grep -E`), 줄 세워(`sort`), 같은 것끼리 세면(`uniq -c`) 수준마다 몇 줄인지 나와요. 로그와 모니터링 레슨의 요청 ID로도 같은 방법으로 셀 수 있어요.'
+          - '**`tail -n 2`**는 마지막 두 줄이에요.'
+      - p: '지금 쌓이는 로그는 `tail -f`로 따라가요. 끄기 전까지 새 줄이 생길 때마다 찍어요. 파이프로 이으면 새 오류만 볼 수 있어요.'
+      - code: tailf
+      - h3: 디스크가 차면 모든 것이 멈춰요
+      - ci:
+          key: disk
+          label: 실제 출력 보기
+          source: LinuxBasicsTest.diskUsage
+          code: diskRun
+      - p: '`df -h`는 디스크 전체의 크기, 쓴 양, 남은 양을, `du -sh`는 폴더 하나가 차지한 크기를 보여 줘요. 디스크가 100% 차면 서버는 로그를 쓰지 못하고, 같은 디스크의 DB도 멈춰요. `df`로 찬 것을 알고, `du -sh /var/log/*`처럼 폴더마다 재서 범인을 찾아요. 대개 로그예요. 그래서 로그는 날짜마다 파일을 나누고 오래된 것을 지우는 롤링 설정을 둬요.'
+      - quiz:
+          q: '예외가 난 줄과 그 아래 스택 트레이스 다섯 줄을 함께 보려면 어떻게 할까요?'
+          options:
+            - '`grep -c Exception app.log`'
+            - '`grep -A 5 Exception app.log`'
+            - '`tail -n 5 app.log`'
+          answer: 2
+          explain: '`-A 5`는 맞는 줄의 뒤 다섯 줄을 함께 보여 줘요. `-c`는 세기만 하고, `tail`은 파일 끝만 봐요.'
+    recall: '`tail -n`으로 끝부분을, `tail -f`로 새로 쌓이는 줄을 보고, `grep -n`으로 오류 줄과 줄 번호를, `grep -A`, `-B`로 그 앞뒤(스택 트레이스)를 봐요. 파이프로 `awk`, `sort`, `uniq -c`를 이어 수준이나 요청 ID마다 셀 수 있어요. 디스크가 차면 로그와 DB가 멈추니 `df -h`로 남은 양을, `du -sh`로 큰 폴더를 찾아요.'
 practice:
+  title: 실무에서는 이렇게 써요
   says:
     - '`ssh 사용자@서버`로 접속한다. 비밀번호 대신 키(`~/.ssh/id_ed25519`)로 인증한다 (문서 근거)'
     - '`systemd`로 서버를 서비스로 등록하면 `systemctl start|stop|status order-api`로 다루고, `journalctl -u order-api -f`로 로그를 본다. `systemctl stop`은 SIGTERM을 보낸다 (문서 근거)'
     - '흔한 실수 하나: 배포 스크립트에 실행 권한이 없어 "Permission denied". `ls -l`의 `rwx`를 읽고 `chmod +x deploy.sh`로 고친다 (컨테이너에서 확인)'
     - '흔한 실수 둘: 습관처럼 `kill -9`로 끈다. 질문 2대로 `kill` 다음 기다리고, 그래도 안 끝날 때만 `-9`를 쓴다'
     - '환경 변수는 `export`한 셸에서 띄운 프로세스가 물려받는다. `env | grep SPRING`으로 확인한다. 스프링 부트가 환경 변수를 설정 값으로 읽는 것은 S5'
+  body:
+    - p: '이 구역의 접속과 서비스 관리는 테스트가 아니라 공식 문서가 근거예요. 권한은 컨테이너에서 돌려 확인했어요.'
+    - h3: 서버에 접속하기
+    - code: ssh
+    - p: '`ssh`로 서버의 셸에 접속해요. 비밀번호 대신 내 PC의 비밀 키로 인증하고, 서버에는 짝이 되는 공개 키를 등록해 둬요. 비밀 키 파일은 남에게 주지 않아요.'
+    - h3: 서비스로 등록된 서버
+    - code: systemd
+    - p: '서버를 `systemd` 서비스로 등록해 두면 서버가 재부팅돼도 다시 뜨고, `systemctl`로 켜고 끄고 상태를 봐요. 로그는 `journalctl -u 서비스 이름`으로 봐요. `systemctl stop`은 기본으로 SIGTERM을 보내고 기다렸다가, 정해 둔 시간 안에 안 끝나면 SIGKILL을 보내요([systemd.kill](link:systemdKill)). 질문 2의 순서를 대신 지켜 줘요.'
+    - h3: '흔한 실수: 실행 권한이 없는 스크립트'
+    - ci:
+        key: chmod
+        label: 실제 출력 보기
+        source: LinuxBasicsTest.permissions
+        code: chmodRun
+    - p: '`ls -l`의 맨 앞 `-rw-r--r--`는 권한이에요. 세 글자씩 소유자, 그룹, 다른 사람의 읽기(r), 쓰기(w), 실행(x) 권한이에요. x가 없어서 스크립트가 "Permission denied"(종료 코드 126)로 실패했어요. `chmod +x`로 실행 권한을 주면 돌아요.'
+    - h3: '흔한 실수: 습관처럼 kill -9'
+    - p: '질문 2에서 본 대로 종료 훅과 우아한 종료가 건너뛰어져요. `kill`을 먼저 보내고 기다려요.'
+    - h3: 환경 변수
+    - code: envRun
+    - p: '`export`한 환경 변수는 그 셸에서 띄운 프로세스가 물려받아요. 스프링 부트는 `SPRING_PROFILES_ACTIVE` 같은 환경 변수를 설정 값으로 읽어요(설정과 프로파일 레슨). 서버가 엉뚱한 설정으로 떴다면 `env`로 무엇을 물려받았는지 봐요.'
+interview:
+  question: '운영 중인 리눅스 서버에서 자바 서버가 응답하지 않을 때 무엇을 어떤 순서로 확인하는지 설명해 주세요'
+  model:
+    - label: 정의
+      text: 리눅스는 실행 중인 프로그램을 PID가 붙은 프로세스로 관리하고, 서버 프로그램은 포트를 열고 듣습니다. ps와 pgrep으로 프로세스를, ss로 포트를, curl로 응답을, grep과 tail로 로그를, df와 du로 디스크를 봅니다.
+    - label: 원리
+      text: 프로세스가 있는지 pgrep으로 보고, ss -ltnp로 포트를 듣는지와 그 PID를 보고, curl로 실제로 답하는지 봅니다. 로그는 grep -n ERROR와 grep -A로 스택 트레이스까지 보고, 디스크가 찼는지 df -h로 봅니다.
+    - label: 주의할 점
+      text: 끌 때는 kill로 SIGTERM을 먼저 보내 종료 훅과 우아한 종료가 돌게 하고, 끝나지 않을 때만 kill -9를 씁니다. kill -9는 정리 없이 137로 끝납니다. Address already in use는 옛 프로세스가 포트를 잡고 있다는 뜻이라 ss로 PID를 찾습니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 배포 뒤 새 서버가 뜨지 않아 ss로 보니 옛 서버가 8080을 잡고 있었고, 배포 스크립트를 kill -9 대신 SIGTERM과 대기로 바꿨습니다.'
+verified: '이 레슨의 출력은 짐작이 아니라 테스트가 우분투 기반 JDK 컨테이너 안에서 명령을 실제로 돌려 받은 값이에요. ssh와 systemd는 공식 문서가 근거예요. 코드가 바뀔 때마다 테스트([LinuxBasicsTest](link:test))가 다시 돌아요.'
+footer: '근거: 신호는 [signal(7)](link:signal), `ss`는 [ss(8)](link:ss), `ps`는 [ps(1)](link:ps), 자바의 종료 훅은 [Runtime 문서](link:hook), `systemctl stop`의 신호는 [systemd.kill(5)](link:systemdKill). 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '`ps aux | grep java`는 grep 자신의 줄도 찍고, `pgrep -f`는 자바 서버의 PID만 돌려준다'
-    how: 'Testcontainers로 `eclipse-temurin:21-jdk`(우분투 기반)를 띄우고, 작은 자바 서버를 백그라운드로 돌린 뒤 `execInContainer`로 명령을 돌린다'
+  - claim: '`ps aux | grep`은 grep 자신의 줄도 찍고, `pgrep -f`는 서버의 PID만 돌려준다'
+    how: 'Testcontainers로 `eclipse-temurin:21-jdk`를 띄우고, 작은 자바 서버를 뒤에서 돌린 뒤 `execInContainer`로 명령을 돌린다. execInContainer가 띄운 `bash -c` 줄은 출력에서 뺀다'
+    test: LinuxBasicsTest.findProcess
   - claim: '`kill`(SIGTERM)을 받은 자바 프로그램은 종료 훅을 돌리고 143으로 끝나며, `kill -9`는 종료 훅 없이 137로 끝난다'
-    how: '종료 훅에서 파일을 쓰는 단일 파일 자바 프로그램을 컨테이너에서 돌리고 신호를 보낸 뒤 파일과 종료 코드를 본다'
+    how: '종료 훅에서 파일을 쓰는 단일 파일 자바 프로그램에 신호를 보낸 뒤 파일과 종료 코드를 본다'
+    test: LinuxBasicsTest.killAndKill9
   - claim: '`ss -ltnp`에 듣고 있는 포트와 PID가 나오고, 같은 포트로 두 번째 서버를 띄우면 BindException이 난다'
-    how: '`ss`가 없으면 `iproute2`를 깔거나 `/proc/net/tcp`를 읽는다. 실제로 쓴 명령을 레슨에 적는다'
-  - claim: '`grep -n`, `grep -A`, 파이프로 센 결과가 로그 파일의 내용과 맞는다'
+    how: '이미지에 없으면 `procps`, `iproute2`, `curl`을 apt로 깐다'
+    test: LinuxBasicsTest.whoListens
+  - claim: '`grep -n`, `grep -A`, `grep -c`, 파이프로 센 결과가 로그 파일의 내용과 맞는다'
     how: '정해 둔 로그 파일을 컨테이너에 넣고 명령의 출력을 남긴다'
-  - claim: '실행 권한이 없는 스크립트는 Permission denied로 실패하고 `chmod +x` 뒤에 돈다'
+    test: LinuxBasicsTest.grepLogs
+  - claim: '`df -h`와 `du -sh`가 디스크와 폴더의 크기를 보인다'
+    how: '5MB 파일을 만든 폴더를 잰다'
+    test: LinuxBasicsTest.diskUsage
+  - claim: '실행 권한이 없는 스크립트는 Permission denied(126)로 실패하고 `chmod +x` 뒤에 돈다'
     how: '컨테이너에서 확인한다'
+    test: LinuxBasicsTest.permissions
 sources:
   - '신호와 기본 동작(SIGTERM, SIGKILL은 처리할 수 없다): signal(7) https://man7.org/linux/man-pages/man7/signal.7.html'
   - '`ss`: ss(8) https://man7.org/linux/man-pages/man8/ss.8.html'
