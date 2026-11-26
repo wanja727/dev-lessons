@@ -1,0 +1,369 @@
+# DB 복제와 샤딩
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/replication-sharding.yaml에 있다.
+# 심화 레슨. 설계 칸과 본문을 한 번에 썼다 (이번 작업의 설계 승인은 사용자가 미리 맡겼다)
+title: DB 복제와 샤딩
+description: 원본의 변경을 복제본에 옮겨 읽기를 나누는 복제, 복제 지연이 만드는 "방금 쓴 것이 안 보이는" 문제, 데이터를 샤드 키로 나눠 담는 샤딩과 그 대가, 샤드를 늘릴 때 데이터가 옮겨 가는 양. PostgreSQL 두 대로 복제와 샤딩을 직접 해 보는 대화형 레슨.
+unit: 시스템 설계와 아키텍처
+minutes: 25
+roadmap: A15
+type: 동작 확인
+prerequisites:
+  - {slug: isolation-level, title: 격리 수준과 이상 현상}
+  - {slug: scale-out, title: 서버를 늘리는 방법}
+assume: 'PostgreSQL 16, 스프링 부트 3.5. 애플리케이션 서버는 늘리기 쉽지만 DB는 어렵다는 것(서버를 늘리는 방법 레슨). 트랜잭션과 커밋(격리 수준과 이상 현상 레슨). 인덱스로 찾는 것(인덱스와 실행계획 레슨).'
+example: '회원과 주문 서비스. 읽기가 많아 원본 DB 하나에 복제본을 붙이고, 데이터가 커지자 주문을 회원 id로 샤드 두 대에 나눠 담는다.'
+intro:
+  - '닉네임을 바꾸고 저장 버튼을 눌렀는데, 다음 화면에 옛 닉네임이 보였어요. 새로고침하니 바뀌어 있었어요. 쓰기는 원본 DB로, 읽기는 복제본으로 보내고 있었는데 복제본이 잠깐 뒤처져 있었던 거예요.'
+  - '서비스가 커지면 DB 한 대로는 읽기도, 담을 양도 모자라요. 그때 쓰는 것이 복제(같은 데이터를 여러 대에)와 샤딩(데이터를 나눠 여러 대에)이에요. 스프링 개발자는 어떤 쿼리를 어디로 보낼지, 어떤 키로 나눌지 정해야 해요. 시스템 설계 면접에서 거의 빠지지 않는 주제예요.'
+  - '이 레슨에서는 PostgreSQL 두 대에 논리 복제를 걸어 원본에 쓴 값이 복제본에 언제 보이는지 재고, 복제본이 밀렸을 때 옛 값을 읽는 것을 재현해요. 두 대를 샤드로 나눠 쿼리가 몇 대를 읽는지, 샤드를 늘릴 때 데이터가 얼마나 옮겨 가는지도 세어 봐요.'
+covers:
+  - topic: '복제: 원본(primary)의 변경을 복제본(replica)에 옮긴다. 쓰기는 원본으로, 읽기는 복제본으로 나눠 읽기를 늘린다'
+    where: '질문 1'
+  - topic: '원본이 죽으면 복제본을 원본으로 올려 이어 간다(장애 조치)'
+    where: '질문 1'
+  - topic: '물리 복제(WAL 그대로)와 논리 복제(행 변경)'
+    where: '질문 1의 더 알아보기'
+  - topic: '비동기 복제에는 지연이 있다. 한가할 때는 몇 밀리초지만, 부하나 긴 트랜잭션이 있으면 늘어난다'
+    where: '질문 2'
+  - topic: '방금 쓴 것을 읽기(read-your-writes): 쓴 직후의 읽기는 원본에서 한다'
+    where: '질문 2'
+  - topic: '동기 복제는 지연이 없지만 쓰기가 복제본을 기다려 느려지고, 복제본이 죽으면 쓰기가 멈춘다'
+    where: '질문 2의 더 알아보기'
+  - topic: '샤딩: 데이터를 샤드 키(회원 id 등)로 나눠 여러 DB에 담는다. 쓰기와 담는 양을 늘린다'
+    where: '질문 3'
+  - topic: '샤드 키로 찾는 쿼리는 한 샤드만, 샤드 키 없이 찾는 쿼리는 모든 샤드를 읽어 합친다. 샤드 사이의 조인과 트랜잭션은 어렵다'
+    where: '질문 3'
+  - topic: '샤드 키 고르기: 고르게 퍼지고, 자주 묻는 조건이며, 함께 쓰는 데이터를 한 샤드에 모으는 키'
+    where: '질문 4'
+  - topic: '샤드를 늘릴 때 id % N은 대부분의 키가 옮겨 가고, 해시 링(일관된 해싱)은 일부만 옮겨 간다'
+    where: '질문 4'
+  - topic: '스프링에서 읽기 전용 트랜잭션을 복제본으로 보내는 AbstractRoutingDataSource'
+    where: '실무에서는'
+  - topic: '샤드마다 자동 증가 id가 겹치는 문제'
+    where: '다루지 않음: 유일한 ID 만들기(A17)'
+  - topic: '나눠 담은 데이터의 일관성과 CAP'
+    where: '다루지 않음: CAP 정리와 결과적 일관성(A16)'
+codes:
+  predict: |-
+    // 복제본이 밀려 있는 동안
+    primary.update("update member set"
+        + " nickname = '준호2'"
+        + " where id = 200");
+    replica.queryForObject("select nickname"
+        + " from member where id = 200", ...);
+    // 복제본에서 읽은 닉네임은?
+  setup: |-
+    -- 원본
+    create publication pub
+        for table member;
+    -- 복제본
+    create subscription sub
+        connection 'host=primary ...'
+        publication pub;
+  readAfterWrite: |-
+    @Transactional
+    public void changeNickname(Long id,
+        String nick) { ... }      // 원본
+
+    @Transactional([[readOnly = true]])
+    public String nickname(Long id) {
+      ...                          // 복제본
+    }
+  shardRoute: |-
+    JdbcTemplate shardOf(long memberId) {
+      return shards[(int) (memberId % 2)];
+    }
+  queries: |-
+    -- 한 샤드만
+    select * from orders
+    where member_id = 3;
+
+    -- 모든 샤드를 읽어 합침
+    select * from orders
+    order by created_at desc
+    limit 3;
+  ring: |-
+    // 샤드마다 가상 노드 100개를 링에 둔다
+    // 키는 시계 방향으로 처음 만나는
+    // 노드의 샤드로 간다
+    SortedMap<Long, Integer> tail =
+        ring.tailMap(hash(key));
+  routing: |-
+    class ReplicaRouting
+        extends AbstractRoutingDataSource {
+      protected Object
+          determineCurrentLookupKey() {
+        return TransactionSynchronization⤷
+    Manager.isCurrentTransactionReadOnly()
+            ? "replica" : "primary";
+      }
+    }
+  badRouting: |-
+    @Transactional(readOnly = true)
+    public Member afterJoin(Long id) {
+      // 가입 직후 화면
+      return members.findById(id)
+          [[.orElseThrow()]];
+    }
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/replication/ReplicationShardingTest.java
+  pgLogical: https://www.postgresql.org/docs/16/logical-replication.html
+  pgHa: https://www.postgresql.org/docs/16/high-availability.html
+  pgSync: https://www.postgresql.org/docs/16/warm-standby.html#SYNCHRONOUS-REPLICATION
+  routing: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/lookup/AbstractRoutingDataSource.html
+  lazyProxy: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/LazyConnectionDataSourceProxy.html
+predict:
+  title: 밀린 복제본에서 읽으면?
+  text: '원본에서 회원 200의 닉네임을 준호에서 준호2로 바꿨어요. 그런데 복제본은 바빠서 밀려 있어요. 바로 복제본에서 읽으면 무엇이 나올까요? 답은 질문 2에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: new
+      label: 준호2
+    - value: old
+      label: 준호
+    - value: error
+      label: 오류
+  answer: old
+  storageKey: replication-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 복제는 무엇을 늘리나요?
+    conclusion:
+      lead: '원본의 변경을 복제본에 옮겨 같은 데이터를 여러 대가 갖게 해서, 읽기를 복제본으로 나눠 늘리고 원본이 죽으면 복제본이 이어받게 해요.'
+      sub: '쓰기는 여전히 원본 한 대가 받아요. 복제는 읽기와 장애에는 강하지만 쓰기와 담는 양은 늘리지 않아요.'
+    says:
+      - '원본과 복제본, 쓰기와 읽기 나누기'
+      - '논리 복제를 걸고 원본의 행이 복제본에 보이는 것'
+      - '장애 조치'
+    asks:
+      - '본문의 예시: 원본 한 대와 복제본 두 대. 회원 가입(INSERT)은 어디로 보내나 (원본)'
+      - '옮긴 상황: 쓰기가 몰려 원본이 버겁다. 복제본을 늘리면 나아지나 (아니다. 쓰기는 원본 한 대가 받는다. 쓰기를 나누려면 샤딩)'
+    body:
+      - p: '**복제**는 원본(primary) DB의 변경을 복제본(replica)에 계속 옮겨, 여러 대가 같은 데이터를 갖게 하는 거예요. 쓰기는 원본이 받고, 읽기는 복제본들이 나눠 받아요. 대부분의 서비스는 읽기가 쓰기보다 훨씬 많아서 읽기를 나누면 크게 숨통이 트여요.'
+      - prewrap: '쓰기 → 원본 ── 변경 ──▶ 복제본 1, 복제본 2 ◀── 읽기'
+      - p: '원본이 죽으면 복제본 하나를 원본으로 올려 이어 가요(장애 조치). 원본 한 대뿐일 때보다 장애에 강해요([PostgreSQL 문서](link:pgHa)).'
+      - p: 'PostgreSQL 두 대를 띄우고 논리 복제를 걸었어요. 원본에 "이 테이블을 내보낸다"(publication)를, 복제본에 "그것을 받는다"(subscription)를 만들어요([PostgreSQL 문서](link:pgLogical)).'
+      - code: setup
+      - ci:
+          key: lag
+          label: 실제 결과 보기
+          source: ReplicationShardingTest.replicationLag
+      - p: '원본에 저장한 회원이 복제본에도 생겼어요. 한가한 로컬 환경에서는 7ms 안쪽에 옮겨져 바로 읽어도 대개 보였어요. 이 "대개"가 질문 2의 주제예요.'
+      - p: '복제가 늘리지 **못하는** 것도 있어요. 쓰기는 여전히 원본 한 대가 받고, 모든 복제본이 같은 데이터를 다 들고 있으니 담을 수 있는 양도 늘지 않아요. 쓰기와 양을 나누려면 샤딩(질문 3)이에요.'
+      - more:
+          summary: 물리 복제와 논리 복제
+          body:
+            - p: '**물리 복제**(스트리밍 복제)는 원본의 WAL(변경 기록)을 그대로 보내 복제본을 원본과 똑같은 사본으로 만들어요. 복제본은 읽기만 돼요. 읽기 분리와 장애 조치에 흔히 써요.'
+            - p: '**논리 복제**는 "이 테이블의 이 행이 바뀌었다"는 행 단위 변경을 보내요. 고른 테이블만 옮기거나 버전이 다른 DB로 옮길 때 써요. 이 레슨의 테스트는 컨테이너에서 걸기 쉬운 논리 복제를 썼어요.'
+      - quiz:
+          q: '쓰기가 몰려 원본 DB가 버거워요. 복제본을 두 대 더 붙이면 쓰기가 나아지나요?'
+          options:
+            - '나아진다. 쓰기를 세 대가 나눈다'
+            - '나아지지 않는다. 쓰기는 원본 한 대가 받는다'
+            - '복제본이 쓰기를 대신 받는다'
+          answer: 2
+          explain: '복제는 읽기를 나눠요. 쓰기를 나누려면 데이터를 나눠 담는 샤딩이 필요해요.'
+      - next: '복제본이 원본을 "대개" 금방 따라잡았어요. 따라잡지 못한 순간에 읽으면 어떻게 될까요?'
+    recall: '복제는 원본 DB의 변경을 복제본에 계속 옮겨 여러 대가 같은 데이터를 갖게 해요. 쓰기는 원본이 받고 읽기는 복제본들이 나눠 받아 읽기를 늘리고, 원본이 죽으면 복제본을 원본으로 올려 이어 가요. 하지만 쓰기는 여전히 원본 한 대가 받고 모든 복제본이 데이터를 다 갖고 있어서, 쓰기와 담을 양은 늘지 않아요.'
+  - id: q2
+    title: 복제본에서 읽으면 왜 방금 쓴 것이 안 보이나요?
+    conclusion:
+      lead: '복제는 보통 비동기라, 원본에 커밋된 변경이 복제본에 닿기까지 시간이 걸려요. 그 사이에 복제본에서 읽으면 옛 값이 나와요.'
+      sub: '한가할 때는 몇 밀리초지만, 부하나 긴 트랜잭션으로 복제본이 밀리면 몇 초가 되기도 해요. 그래서 방금 쓴 것을 보여 줘야 하는 읽기는 원본에서 해요.'
+    says:
+      - '한가할 때: 7ms, 바로 읽어도 0/20번 옛 값'
+      - '밀린 복제본: 준호 (옛 값), 다시 돌고 29ms 뒤 준호2. 예측의 답'
+      - 'read-your-writes는 원본에서'
+      - '더 알아보기: 동기 복제'
+    widget:
+      kind: timeline
+      note: '원본과 복제본 두 칸. 닉네임 변경 커밋, 복제본은 아직 옛 값, 그 사이 복제본에서 읽기, 변경이 도착'
+    asks:
+      - '본문의 예시: 복제본이 밀린 동안 원본에서 닉네임을 준호에서 준호2로 바꾸고 바로 복제본에서 읽었다 (준호)'
+      - '옮긴 상황: 글을 쓰고 바로 내 글 목록으로 넘어가는 화면을 복제본에서 읽는다. 생길 수 있는 일과 고치는 방법은 (방금 쓴 글이 없을 수 있다. 쓴 직후의 목록은 원본에서 읽는다)'
+    body:
+      - p: '보통의 복제는 **비동기**예요. 원본은 커밋하고 바로 응답하고, 변경은 그 뒤에 복제본으로 흘러가요. 그래서 원본에 커밋된 순간과 복제본에 보이는 순간 사이에 틈이 있어요. 이것을 **복제 지연**이라고 해요.'
+      - p: '질문 1에서는 이 틈이 몇 밀리초라 바로 읽어도 20번 모두 새 값이었어요. 닉네임을 바꾸고 바로 읽는 것도 20번 다 맞았어요.'
+      - ci:
+          key: read-your-writes
+          label: 실제 결과 보기
+          source: ReplicationShardingTest.readYourWrites
+      - p: '하지만 복제본은 늘 한가하지 않아요. 무거운 조회가 몰리거나, 원본에 큰 트랜잭션이 커밋되거나, 네트워크가 느리면 복제본이 **밀려요.** 구독을 잠시 멈춰 복제본이 밀린 상황을 만들고 처음 예측을 돌려 봤어요.'
+      - ci:
+          key: behind
+          label: 실제 결과 보기
+          source: ReplicationShardingTest.laggingReplica
+          code: predict
+      - p: '답은 **준호**예요. {{predict-result}} 원본은 준호2인데 밀린 복제본은 옛 값을 줬어요. 복제가 다시 돌자 금방 따라잡았지만, 그 사이에 읽은 사용자는 "바꿨는데 안 바뀌었다"고 느껴요.'
+      - widget:
+          kind: timeline
+          layout: [duo, timeline, buttons, verdict]
+          lanes: [원본, 복제본]
+          initial:
+            duo:
+              - {label: 원본, rows: [{k: 닉네임, v: 준호}]}
+              - {label: 복제본, rows: [{k: 닉네임, v: 준호}]}
+          scenarios:
+            default:
+              - event:
+                  dir: right
+                  title: 닉네임 변경 커밋
+                  text: update member set nickname = '준호2'
+                  note: 원본은 커밋하고 바로 응답해요. 변경은 아직 가는 중이에요.
+                duo:
+                  - {label: 원본, rows: [{k: 닉네임, v: 준호2, mark: changed}]}
+                  - {label: 복제본, rows: [{k: 닉네임, v: 준호}]}
+              - event:
+                  dir: left
+                  title: 다음 화면이 복제본에서 읽음
+                  text: select nickname → 준호
+                  note: 복제본은 아직 옛 값이에요.
+                duo:
+                  - {label: 원본, rows: [{k: 닉네임, v: 준호2}]}
+                  - {label: 복제본, rows: [{k: 닉네임, v: 준호, mark: bad}]}
+              - event:
+                  dir: right
+                  title: 변경이 복제본에 도착
+                  text: 준호 → 준호2
+                  note: 이제부터는 복제본도 새 값이에요.
+                duo:
+                  - {label: 원본, rows: [{k: 닉네임, v: 준호2}]}
+                  - {label: 복제본, rows: [{k: 닉네임, v: 준호2, mark: changed}]}
+                verdict: '변경이 도착하기 전의 짧은 틈에 읽으면 옛 값이 보여요.'
+      - h3: 방금 쓴 것은 원본에서
+      - p: '사용자가 방금 바꾼 것을 다음 화면에서 봐야 하는 읽기는 **원본에서** 해요. 이것을 "내가 쓴 것을 읽기"(read-your-writes)를 지킨다고 해요. 테스트에서도 원본에서 읽으면 20번 모두 새 값이었어요. 나머지 읽기(남의 글 목록, 상품 목록)는 조금 늦어도 괜찮으니 복제본으로 보내요.'
+      - more:
+          summary: 동기 복제
+          body:
+            - p: '원본이 복제본에 변경이 닿은 것을 확인한 뒤 커밋을 끝내는 **동기 복제**도 있어요([PostgreSQL 문서](link:pgSync)). 지연은 없지만 쓰기마다 복제본을 기다려 느려지고, 복제본이 죽으면 쓰기가 멈출 수 있어요. 그래서 장애 조치용 복제본 하나만 동기로 두고 읽기용은 비동기로 두기도 해요.'
+      - quiz:
+          q: '글을 쓰고 저장하면 바로 "내 글 목록" 화면으로 넘어가요. 목록을 복제본에서 읽으면 무슨 일이 생길 수 있고, 어떻게 고치나요?'
+          options:
+            - '문제없다. 복제는 즉시 된다'
+            - '방금 쓴 글이 목록에 없을 수 있다. 쓴 직후의 목록은 원본에서 읽는다'
+            - '글이 두 번 보인다. 복제본을 끈다'
+          answer: 2
+          explain: '비동기 복제에는 지연이 있어요. 방금 쓴 것을 보여 줘야 하는 읽기는 원본에서 해요.'
+      - next: '복제로는 쓰기와 담을 양이 늘지 않았어요. 데이터 자체를 나눠 담으면 어떨까요?'
+    recall: '보통의 복제는 비동기라 원본은 커밋하고 바로 응답하고 변경은 그 뒤에 복제본으로 가요. 그 틈에 복제본에서 읽으면 옛 값이 나와요. 한가할 때는 몇 밀리초라 대개 맞지만, 부하나 큰 트랜잭션으로 복제본이 밀리면 늘어나요. 밀린 복제본은 준호2가 아니라 준호를 줬어요. 그래서 방금 쓴 것을 보여 줘야 하는 읽기는 원본에서 하고(read-your-writes), 늦어도 되는 읽기만 복제본으로 보내요.'
+  - id: q3
+    title: 샤딩은 무엇을 나누고, 무엇을 잃나요?
+    conclusion:
+      lead: '데이터를 샤드 키(예: 회원 id)로 나눠 여러 DB에 담아서, 쓰기와 담을 양을 대수만큼 늘려요.'
+      sub: '샤드 키로 찾는 쿼리는 한 샤드만 읽지만, 샤드 키 없이 찾는 쿼리는 모든 샤드를 읽어 합쳐야 해요. 샤드 사이의 조인과 트랜잭션은 한 DB에서처럼 할 수 없어요.'
+    says:
+      - '주문 40건을 member_id % 2로 20건씩'
+      - '회원 3: 한 샤드. 최근 3건: 두 샤드를 읽어 합침'
+      - '샤드 사이 조인과 트랜잭션'
+    asks:
+      - '본문의 예시: 주문을 member_id로 샤드 두 대에 나눴다. 회원 3의 주문 목록은 몇 대를 읽나 (한 대)'
+      - '옮긴 상황: 같은 구조에서 "오늘 가장 비싼 주문 10건"을 구하려면 (모든 샤드에서 10건씩 읽어 합친 뒤 다시 10건을 고른다)'
+    body:
+      - p: '**샤딩**은 데이터를 나눠 서로 다른 DB(샤드)에 담는 거예요. 무엇으로 나눌지 정하는 칸을 **샤드 키**라고 해요. 회원 id로 나누면, 회원 3의 데이터는 늘 같은 샤드에 있어요.'
+      - code: shardRoute
+      - ci:
+          key: sharding
+          label: 실제 결과 보기
+          source: ReplicationShardingTest.sharding
+      - p: '주문 40건이 두 샤드에 20건씩 나뉘었어요. 샤드마다 쓰기도 저장도 절반이니, 쓰기와 담을 양이 대수만큼 늘어요. 복제로는 못 하던 일이에요.'
+      - code: queries
+      - p: '대가는 쿼리에서 와요. **샤드 키가 조건에 있는** 쿼리(회원 3의 주문)는 한 샤드만 읽어 빨라요. 샤드 키가 **없는** 쿼리(최근 주문 3건)는 모든 샤드에서 3건씩 읽어 애플리케이션이 합치고 다시 골라야 해요. 샤드가 열 대면 열 번 읽어요.'
+      - p: '더 어려운 것은 **샤드 사이의 조인과 트랜잭션**이에요. 회원 3과 회원 4가 다른 샤드에 있으면, 둘 사이의 송금을 한 DB 트랜잭션으로 묶을 수 없어요([분산 트랜잭션과 사가](lesson:saga)의 문제가 DB 안에서도 생겨요). 샤드마다 자동 증가 id가 겹치는 문제도 있어요([유일한 ID 만들기](lesson:unique-id)).'
+      - quiz:
+          q: '주문을 member_id로 샤드 네 대에 나눴어요. "오늘 가장 비싼 주문 10건"을 구하려면 어떻게 해야 하나요?'
+          options:
+            - '샤드 한 대에서 10건을 읽는다'
+            - '네 샤드에서 10건씩 읽어 합친 뒤 다시 10건을 고른다'
+            - '구할 수 없다'
+          answer: 2
+          explain: '샤드 키가 조건에 없으니 모든 샤드를 읽어야 해요. 각 샤드의 상위 10건을 모아 다시 골라요.'
+      - next: '이렇게 나누면 샤드 키를 무엇으로 정하느냐가 중요해 보여요. 샤드를 늘릴 때는 어떻게 될까요?'
+    recall: '샤딩은 데이터를 샤드 키(예: 회원 id)로 나눠 서로 다른 DB에 담아요. 샤드마다 쓰기와 저장이 나뉘니 쓰기와 담을 양이 대수만큼 늘어요. 대신 샤드 키가 조건에 있는 쿼리는 한 샤드만 읽지만, 없는 쿼리는 모든 샤드를 읽어 애플리케이션이 합쳐야 해요. 샤드 사이의 조인과 트랜잭션은 한 DB에서처럼 할 수 없고, 샤드마다 자동 증가 id가 겹쳐요.'
+  - id: q4
+    title: 샤드 키는 어떻게 고르고, 샤드를 늘리면 어떻게 되나요?
+    conclusion:
+      lead: '고르게 퍼지고, 자주 찾는 조건이며, 함께 쓰는 데이터를 한 샤드에 모으는 칸을 샤드 키로 골라요. 샤드를 늘릴 때는 키가 적게 옮겨 가는 방식으로 나눠요.'
+      sub: 'id % 샤드 수로 나누면 2대에서 3대로 늘릴 때 키의 3분의 2쯤이 다른 샤드로 옮겨 가요. 해시 링(일관된 해싱)은 새 샤드가 맡을 몫만큼만 옮겨 가요.'
+    says:
+      - '샤드 키의 세 조건, 나쁜 예(가입일, 국가)'
+      - 'mod: 66%, 해시 링: 39% 옮겨 감'
+    asks:
+      - '본문의 예시: id % 2로 나눈 데이터를 id % 3으로 다시 나누면 옮겨 가는 키는 (3분의 2쯤)'
+      - '옮긴 상황: 주문을 주문 날짜로 샤드를 나눴다. 오늘의 주문은 어디로 가나 (모두 한 샤드로 몰린다. 고르게 퍼지지 않는 샤드 키다)'
+    body:
+      - h3: 샤드 키 고르기
+      - ul:
+          - '**고르게 퍼져요.** 주문 날짜로 나누면 오늘의 주문이 모두 한 샤드로 몰려요. 국가로 나누면 한국 샤드만 커요.'
+          - '**자주 찾는 조건이에요.** 주문은 대개 "내 주문"으로 찾으니 회원 id가 맞아요. 질문 3처럼 조건에 없으면 모든 샤드를 읽어요.'
+          - '**함께 쓰는 데이터를 한 샤드에 모아요.** 회원, 그 회원의 주문, 장바구니를 같은 회원 id로 나누면 한 회원의 일은 한 샤드에서 트랜잭션으로 끝나요.'
+      - h3: 샤드를 늘리면
+      - p: '데이터가 더 커져 샤드를 2대에서 3대로 늘려요. `id % 2`로 나누던 것을 `id % 3`으로 바꾸면 어떤 키가 다른 샤드로 옮겨 가는지 10만 개로 세어 봤어요.'
+      - code: ring
+      - ci:
+          key: resharding
+          label: 실제 결과 보기
+          source: ReplicationShardingTest.resharding
+      - p: '나머지로 나누면 3분의 2가 옮겨 갔어요. 나누는 수가 바뀌면 대부분의 키의 나머지가 바뀌기 때문이에요. 옮기는 동안 데이터를 복사하고 쿼리를 바꿔야 하니 큰 작업이에요.'
+      - p: '**해시 링**(일관된 해싱)은 샤드들을 링 위에 흩어 놓고 키를 시계 방향으로 처음 만나는 샤드에 둬요. 새 샤드가 링에 끼어들면 그 앞 구간의 키만 옮겨 가요. 이론으로는 새 샤드의 몫인 3분의 1이고, 테스트에서는 39%였어요(가상 노드 수에 따라 조금 달라요).'
+      - quiz:
+          q: '주문을 주문 날짜로 샤드를 나눴어요(날짜마다 한 샤드). 무엇이 문제인가요?'
+          options:
+            - '문제없다'
+            - '오늘의 쓰기가 모두 한 샤드로 몰려, 나눈 의미가 없다'
+            - '날짜는 샤드 키가 될 수 없다'
+          answer: 2
+          explain: '쓰기는 늘 "오늘"에 몰려요. 고르게 퍼지는 키를 골라요.'
+      - next: '원리는 여기까지예요. 이제 스프링에서 읽기를 복제본으로 보내는 코드와 흔한 실수를 볼게요.'
+    recall: '샤드 키는 고르게 퍼지고, 자주 찾는 조건이며, 함께 쓰는 데이터를 한 샤드에 모으는 칸으로 골라요. 주문은 대개 회원 id예요. 날짜나 국가는 한 샤드로 몰려요. 샤드를 늘릴 때 id % N으로 나누면 2대에서 3대로 갈 때 키의 3분의 2쯤이 옮겨 가고, 해시 링은 새 샤드의 몫(테스트에서 39%)만 옮겨 가요.'
+practice:
+  title: 스프링에서 읽기를 복제본으로 보낼 때
+  says:
+    - 'AbstractRoutingDataSource와 readOnly, LazyConnectionDataSourceProxy. 문서 근거'
+    - '흔한 실수: 쓴 직후의 읽기도 readOnly로 복제본에 보낸다'
+  body:
+    - p: '스프링에서는 데이터 소스 두 개(원본, 복제본)를 두고 `AbstractRoutingDataSource`로 트랜잭션마다 고르게 해요. `@Transactional(readOnly = true)`면 복제본으로 보내는 식이에요([스프링 문서](link:routing)).'
+    - code: routing
+    - p: '주의할 점이 하나 있어요. 스프링은 트랜잭션을 시작할 때 커넥션을 먼저 얻는데, 그때는 아직 readOnly 표시가 붙기 전일 수 있어요. 그래서 커넥션을 실제로 쓸 때까지 미루는 `LazyConnectionDataSourceProxy`로 감싸요([스프링 문서](link:lazyProxy)). 이 설정은 이 레슨의 테스트에 넣지 않아서 문서가 근거예요.'
+    - code: readAfterWrite
+    - h3: 흔한 실수 하나
+    - code: badRouting
+      notes:
+        - mark: .orElseThrow()
+          as: code
+          text: '가입 직후 화면을 readOnly로 복제본에서 읽어요. 복제본이 밀려 있으면 방금 가입한 회원이 없어 예외가 나요.'
+    - p: '"조회니까 readOnly"로 일괄 붙이면 이런 일이 생겨요. 질문 2의 원칙대로, 방금 쓴 것을 읽는 화면(가입 직후, 주문 직후)은 원본에서 읽게 readOnly를 빼거나 원본용 메서드를 따로 둬요.'
+interview:
+  question: DB를 늘리는 방법인 복제와 샤딩을 설명해 주세요.
+  model:
+    - label: 복제
+      text: 원본의 변경을 복제본에 옮겨 쓰기는 원본, 읽기는 복제본으로 나누고, 원본이 죽으면 복제본을 올려 이어 갑니다. 쓰기와 담을 양은 늘지 않습니다.
+    - label: 복제 지연
+      text: 보통 비동기라 원본에 커밋된 변경이 복제본에 닿기까지 틈이 있어, 그 사이 복제본에서 읽으면 옛 값이 나옵니다. 방금 쓴 것을 보여 줘야 하는 읽기는 원본에서 하고, 스프링에서는 readOnly 트랜잭션만 복제본으로 보냅니다.
+    - label: 샤딩
+      text: 데이터를 샤드 키로 나눠 여러 DB에 담아 쓰기와 양을 늘립니다. 샤드 키가 조건에 없는 쿼리는 모든 샤드를 읽고, 샤드 사이의 조인과 트랜잭션은 어렵습니다. 고르게 퍼지고 자주 찾으며 함께 쓰는 데이터를 모으는 키를 고르고, 늘릴 때는 해시 링처럼 적게 옮겨 가는 방식을 씁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 닉네임을 바꿔도 옛 값이 보이던 문제를, 변경 직후의 조회를 원본으로 보내도록 readOnly를 정리해 고쳤습니다.'
+verified: 복제 지연, 밀린 복제본의 옛 값, 샤드별 쿼리, 샤드를 늘릴 때 옮겨 가는 비율은 PostgreSQL 16 두 대(논리 복제)와 자바 21에서 코드를 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([ReplicationShardingTest](link:test))가 다시 돌아요.
+footer: '근거: 논리 복제는 [PostgreSQL 문서](link:pgLogical), 고가용성과 복제는 [PostgreSQL 문서](link:pgHa), 동기 복제는 [PostgreSQL 문서](link:pgSync), 라우팅은 [AbstractRoutingDataSource](link:routing)와 [LazyConnectionDataSourceProxy](link:lazyProxy). 결과는 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '원본에 쓴 행이 논리 복제로 복제본에 보이고, 한가할 때는 몇 밀리초 안에 보인다'
+    how: 'PostgreSQL 두 대, publication과 subscription. 처음엔 쿼리마다 연결을 새로 열어 지연이 안 보였다. 연결 하나를 계속 쓰게 고쳤는데도 한가한 로컬에서는 바로 읽어도 0/20번 옛 값이라, 지연이 있다는 주장은 아래의 밀린 복제본으로 확인하고 본문도 "한가할 때는 대개 맞다"로 썼다'
+    test: ReplicationShardingTest.replicationLag
+  - claim: '쓴 직후 원본에서 읽으면 늘 새 값이다'
+    how: '같은 구성'
+    test: ReplicationShardingTest.readYourWrites
+  - claim: '복제본이 밀린 동안에는 옛 값을 읽고, 따라잡으면 새 값이다'
+    how: '구독을 잠시 멈춰(alter subscription disable) 밀린 상황을 만든다'
+    test: ReplicationShardingTest.laggingReplica
+  - claim: '샤드 키로 찾으면 한 샤드, 샤드 키 없는 최근 주문은 두 샤드를 읽어 합친다'
+    how: 'PostgreSQL 두 대를 샤드로'
+    test: ReplicationShardingTest.sharding
+  - claim: '샤드 2대에서 3대로 갈 때 id % N은 66%, 해시 링은 39%가 옮겨 간다'
+    how: '키 10만 개로 계산'
+    test: ReplicationShardingTest.resharding
+sources:
+  - '논리 복제: https://www.postgresql.org/docs/16/logical-replication.html'
+  - '고가용성과 복제: https://www.postgresql.org/docs/16/high-availability.html'
+  - 'AbstractRoutingDataSource: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/lookup/AbstractRoutingDataSource.html'

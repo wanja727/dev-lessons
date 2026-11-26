@@ -1,0 +1,224 @@
+# DB 복제와 샤딩 문제
+# 형식: https://github.com/wanja727/retrievo/blob/main/docs/content-format.md
+#
+# 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
+# (site/src/content/lesson-pages/replication-sharding.yaml의 says).
+# 동작에 관한 정답은 verification의 ReplicationShardingTest로 확인했다 (PostgreSQL 16 두 대).
+# 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 쓴 날 검수까지 마쳐 reviewed로 올린다 (2026-11-26)
+subject:
+  key: dev
+  name: 개발자 면접
+lesson:
+  key: replication-sharding
+  title: DB 복제와 샤딩
+  unit: 시스템 설계와 아키텍처
+  order: 915
+concepts:
+  - key: core
+    name: DB 복제와 샤딩
+coreQuestions:
+  - key: q1
+    text: "복제는 무엇을 늘리나요?"
+  - key: q2
+    text: "복제본에서 읽으면 왜 방금 쓴 것이 안 보이나요?"
+  - key: q3
+    text: "샤딩은 무엇을 나누고, 무엇을 잃나요?"
+  - key: q4
+    text: "샤드 키는 어떻게 고르고, 샤드를 늘리면 어떻게 되나요?"
+questions:
+  # ── 질문 1 ──
+  - key: rs-insert-where
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 원본 DB 한 대와 복제본 두 대로 운영해요. 회원 가입(INSERT)은 어디로 보내나요?
+    choices:
+      - 복제본 가운데 아무 곳
+      - 원본
+      - 세 대 모두
+      - 가장 한가한 복제본
+    answer: "2"
+    explanation: |-
+      **원본으로 보내요.** 쓰기는 원본이 받고, 변경이 복제본으로 옮겨져요.
+
+      - 복제본은 읽기를 나눠 받아요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  - key: rs-write-heavy
+    concept: core
+    coreQuestion: q1
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 쓰기가 몰려 원본 DB가 버거워요. 복제본을 두 대 더 붙이면 쓰기가 나아지나요?
+    choices:
+      - 나아진다. 쓰기를 세 대가 나눈다
+      - 복제본이 쓰기를 대신 받는다
+      - 나아지지 않는다. 쓰기는 원본 한 대가 받는다
+      - 쓰기가 두 배로 빨라진다
+    answer: "3"
+    explanation: |-
+      **나아지지 않아요.** 복제는 읽기를 나누고, 쓰기는 여전히 원본 한 대가 받아요.
+
+      - 쓰기와 담을 양을 나누려면 샤딩이 필요해요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  # ── 질문 2 ──
+  - key: rs-behind-read
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 복제본이 밀려 있는 동안, 원본에서 회원 200의 닉네임을 준호에서 준호2로 바꾸고 바로 복제본에서 읽었어요. 무엇이 나오나요?
+    choices:
+      - 준호2
+      - 오류
+      - 빈 값
+      - 준호
+    answer: "4"
+    explanation: |-
+      **준호(옛 값)가 나와요.** 변경이 아직 복제본에 닿지 않았어요.
+
+      - 테스트에서 복제가 다시 돌고 29ms 뒤에 준호2가 됐어요
+    source: https://www.postgresql.org/docs/16/logical-replication.html
+  - key: rs-my-posts
+    concept: core
+    coreQuestion: q2
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 글을 저장하면 바로 "내 글 목록"으로 넘어가요. 목록을 복제본에서 읽으면 생길 수 있는 일과 고치는 방법으로 맞는 것은?
+    choices:
+      - 방금 쓴 글이 목록에 없을 수 있다. 쓴 직후의 목록은 원본에서 읽는다
+      - 문제없다. 복제는 즉시 된다
+      - 글이 두 번 보인다. 복제본을 끈다
+      - 목록이 비어 보인다. 글을 두 번 저장한다
+    answer: "1"
+    explanation: |-
+      **방금 쓴 글이 없을 수 있어요.** 비동기 복제에는 지연이 있어요.
+
+      - 방금 쓴 것을 보여 줘야 하는 읽기는 원본에서 해요(read-your-writes)
+    source: https://www.postgresql.org/docs/16/warm-standby.html
+  - key: rs-readonly-signup
+    concept: core
+    coreQuestion: q2
+    type: code_predict
+    status: reviewed
+    difficulty: 2
+    body: readOnly 트랜잭션은 복제본으로 가게 라우팅했어요. 가입 직후 화면에서 아래 메서드를 부르는데, 복제본이 밀려 있으면 어떻게 되나요?
+    code: |-
+      @Transactional(readOnly = true)
+      public Member afterJoin(Long id) {
+        return members.findById(id)
+            .orElseThrow();
+      }
+    choices:
+      - 늘 정상으로 회원을 돌려준다
+      - 원본으로 자동으로 다시 읽는다
+      - 방금 가입한 회원이 복제본에 아직 없어 예외가 날 수 있다
+      - 회원이 두 명 보인다
+    answer: "3"
+    explanation: |-
+      **예외가 날 수 있어요.** 쓴 직후의 읽기를 복제본으로 보냈어요.
+
+      - 가입 직후처럼 방금 쓴 것을 읽는 곳은 원본에서 읽게 해요
+    source: https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/jdbc/datasource/lookup/AbstractRoutingDataSource.html
+  # ── 질문 3 ──
+  - key: rs-member-shard
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: 주문을 member_id % 2로 샤드 두 대에 나눠 담았어요. 회원 3의 주문 목록을 읽으려면 샤드 몇 대를 읽나요?
+    choices:
+      - 두 대
+      - 한 대
+      - 0대
+      - 회원 수만큼
+    answer: "2"
+    explanation: |-
+      **한 대예요.** 샤드 키(member_id)가 조건에 있으니 3 % 2 = 1번 샤드만 읽어요.
+
+      - 테스트에서도 한 샤드에서 회원 3의 주문 4건을 읽었어요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  - key: rs-top10
+    concept: core
+    coreQuestion: q3
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 주문을 member_id로 샤드 네 대에 나눴어요. "오늘 가장 비싼 주문 10건"을 구하려면 어떻게 해야 하나요?
+    choices:
+      - 샤드 한 대에서 10건을 읽는다
+      - 구할 수 없다
+      - 아무 샤드나 두 대에서 5건씩 읽는다
+      - 네 샤드에서 10건씩 읽어 합친 뒤 다시 10건을 고른다
+    answer: "4"
+    explanation: |-
+      **모든 샤드를 읽어 합쳐요.** 샤드 키가 조건에 없어서예요.
+
+      - 샤드가 늘수록 이런 쿼리는 비싸져요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  # ── 질문 4 ──
+  - key: rs-mod-reshard
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: reviewed
+    difficulty: 1
+    body: id % 2로 나눠 담던 데이터를 샤드를 늘려 id % 3으로 다시 나눠요. 다른 샤드로 옮겨 가는 키는 대략 얼마인가요?
+    choices:
+      - 3분의 2쯤
+      - 3분의 1쯤
+      - 없다
+      - 전부
+    answer: "1"
+    explanation: |-
+      **3분의 2쯤이에요.** 나누는 수가 바뀌면 대부분의 키의 나머지가 바뀌어요.
+
+      - 테스트에서 키 10만 개 가운데 66%가 옮겨 갔어요
+      - 해시 링은 39%였어요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  - key: rs-date-key
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: reviewed
+    difficulty: 2
+    body: 주문을 주문 날짜로 샤드를 나눴어요(날짜마다 한 샤드). 무엇이 문제인가요?
+    choices:
+      - 문제없다
+      - 날짜는 샤드 키가 될 수 없다
+      - 오늘의 쓰기가 모두 한 샤드로 몰려 나눈 의미가 없다
+      - 샤드가 너무 적어진다
+    answer: "3"
+    explanation: |-
+      **쓰기가 한 샤드로 몰려요.** 주문은 늘 "오늘"에 쓰여요.
+
+      - 고르게 퍼지고 자주 찾는 조건인 회원 id 같은 키를 골라요
+    source: https://www.postgresql.org/docs/16/high-availability.html
+  # ── 네 질문을 하나로 ──
+  - key: rs-interview
+    concept: core
+    coreQuestion: all
+    type: descriptive
+    status: reviewed
+    difficulty: 2
+    body: 면접에서 "DB를 늘리는 방법인 복제와 샤딩을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
+    explanation: |-
+      **복제는 같은 데이터를 여러 대에 둬 읽기를 나누고, 샤딩은 데이터를 나눠 담아 쓰기와 양을 나눠요.**
+
+      - **복제:** 쓰기는 원본, 읽기는 복제본. 장애 조치
+      - **복제 지연:** 방금 쓴 것은 원본에서 읽는다
+      - **샤딩:** 샤드 키로 나눈다. 키가 없는 쿼리는 모든 샤드, 샤드 사이 조인과 트랜잭션이 어렵다
+      - **늘리기:** 고르게 퍼지는 키, 해시 링으로 적게 옮긴다
+    checklist:
+      - 복제가 읽기를 나눈다고 말했다
+      - 복제 지연과 read-your-writes를 말했다
+      - 샤딩이 쓰기와 양을 나눈다고 말했다
+      - 샤드 키와 모든 샤드를 읽는 쿼리를 말했다
+      - 샤드를 늘릴 때의 이동이나 해시 링을 말했다
+    source: https://www.postgresql.org/docs/16/high-availability.html
