@@ -182,7 +182,7 @@ questions:
     type: multiple_choice
     status: reviewed
     difficulty: 2
-    body: "결제 서비스 메서드에 `@Transactional(isolation = Isolation.REPEATABLE_READ)`만 붙이고 다시 시도 코드는 두지 않았어요. 같은 주문을 고치는 요청 둘이 거의 동시에 오면 어떻게 되나요?"
+    body: "결제 서비스 메서드에 `@Transactional(isolation = Isolation.REPEATABLE_READ)`만 붙이고 다시 시도 코드는 두지 않았어요. 같은 주문을 고치는 요청 둘이 겹쳤어요. 나중 요청이 주문을 읽은 뒤에 먼저 요청이 그 주문을 고치고 커밋했고, 이제 나중 요청이 그 주문을 고치려 해요. 어떻게 되나요?"
     choices:
       - 둘 다 성공한다
       - 나중 요청이 CannotAcquireLockException으로 실패하고 사용자가 오류를 받는다

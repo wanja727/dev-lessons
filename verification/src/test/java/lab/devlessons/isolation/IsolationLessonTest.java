@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -223,7 +223,7 @@ class IsolationLessonTest {
     }
 
     @Test
-    @DisplayName("스프링 TransactionTemplate에 REPEATABLE_READ를 주면 그 연결의 격리 수준이 바뀌고, 40001은 ConcurrencyFailureException 계열 예외가 된다")
+    @DisplayName("스프링 TransactionTemplate에 REPEATABLE_READ를 주면 그 연결의 격리 수준이 바뀌고, 40001은 CannotAcquireLockException이 된다")
     void springIsolation() throws Exception {
         TransactionTemplate rr = new TransactionTemplate(txManager);
         rr.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
@@ -246,7 +246,8 @@ class IsolationLessonTest {
 
         assertThat(inside).isEqualTo("repeatable read");
         assertThat(outside).isEqualTo("read committed");
-        assertThat(thrown).isInstanceOf(ConcurrencyFailureException.class);
+        // 레슨과 문제가 이 클래스 이름을 적는다. 스프링이 다른 예외로 바꾸면 여기서 걸려 레슨을 고치게 한다
+        assertThat(thrown).isExactlyInstanceOf(CannotAcquireLockException.class);
         CiOutput.record(LESSON, "spring", String.join("\n",
                 "트랜잭션 안: " + inside,
                 "트랜잭션 밖: " + outside,
