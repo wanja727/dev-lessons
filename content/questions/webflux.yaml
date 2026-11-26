@@ -31,7 +31,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 웹플럭스(네티) 컨트롤러에서 Thread.currentThread().getName()을 찍었어요. 어떤 모양의 이름이 나올까요?
     choices:
@@ -49,7 +49,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 서비스 메서드가 아래처럼 알림 요청을 만들고 끝나요. m을 돌려주지도 구독하지도 않아요. 알림 요청은 외부로 나갈까요?
     code: |-
@@ -75,7 +75,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 외부 재고 서버가 1초 걸려요. MVC(톰캣 스레드 2개, RestClient)로 만든 상품 API에 요청 10개를 동시에 보내면 대략 얼마 걸릴까요? 같은 조건의 웹플럭스(이벤트 루프 2개, WebClient)는 약 1초였어요.
     choices:
@@ -93,7 +93,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 외부 호출 없이 CPU로 0.1초씩 계산만 하는 요청이 많아요. 이벤트 루프 2개인 웹플럭스로 바꾸면 훨씬 빨라질까요?
     choices:
@@ -110,7 +110,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 이벤트 루프 스레드가 2개인 웹플럭스 앱이에요. 아래 엔드포인트에 요청 10개를 동시에 보내면 대략 얼마 걸릴까요?
     code: |-
@@ -135,7 +135,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 웹플럭스 컨트롤러에서 Mono.just(orderRepository.findById(id).orElseThrow())로 JPA 조회 결과를 돌려줘요. 요청이 몰리면 어떤 문제가 생길까요?
     choices:
@@ -154,7 +154,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: JPA로 주문을 저장하고 조회하는 일반 쇼핑몰 API를 새로 만들어요. MVC와 웹플럭스 중 무엇이 맞는 편일까요?
     choices:
@@ -170,7 +170,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: DB 없이 여러 외부 서비스를 동시에 부르고 결과를 합쳐 돌려주는 API 게이트웨이를 만들어요. 무엇이 맞는 편일까요?
     choices:
@@ -189,7 +189,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: MVC 앱에서 WebClient만 쓰려고 spring-boot-starter-webflux를 함께 넣었어요. 앱은 어떻게 뜰까요?
     choices:
@@ -206,7 +206,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 MVC와 웹플럭스의 차이를 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

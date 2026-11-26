@@ -31,7 +31,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: '@EnableAsync가 켜진 앱에서 컨트롤러가 sendAll을 불렀어요. send는 어느 스레드에서 돌까요?'
     code: |-
@@ -61,7 +61,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '컨트롤러가 다른 빈의 @Async 메서드(3초 걸림)를 부른 뒤 바로 응답을 돌려줘요. 응답은 몇 초 뒤에 나갈까요?'
     choices:
@@ -78,7 +78,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 스프링 부트 3.5 기본 설정(spring.task.execution.* 설정 없음)에서 오래 걸리는 @Async 작업 1,000개를 한꺼번에 넣었어요. 실행기의 스레드는 몇 개까지 생길까요?
     choices:
@@ -96,7 +96,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'spring.task.execution.pool의 core-size: 2, max-size: 4, queue-capacity: 10으로 바꾸고, 끝나지 않는 @Async 작업 20개를 차례로 넣었어요. 몇 개를 받고, 나머지는 어떻게 될까요?'
     choices:
@@ -113,7 +113,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 반환 타입이 void인 @Async 메서드가 런타임 예외를 던졌어요. 핸들러는 따로 바꾸지 않았어요. 그 메서드를 부른 컨트롤러는 어떻게 될까요?
     choices:
@@ -131,7 +131,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 'CompletableFuture<Void>를 돌려주는 @Async 메서드가 IllegalStateException으로 실패했어요. 부른 쪽이 돌려받은 future에 .join()을 부르면 어떻게 될까요?'
     choices:
@@ -148,7 +148,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 로그인한 kim의 요청에서 @Async 메서드를 불렀어요. 기본 설정에서 그 메서드 안의 SecurityContextHolder.getContext().getAuthentication()은 무엇일까요?
     choices:
@@ -166,7 +166,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: '@Transactional 주문 서비스가 주문을 저장한 뒤, 커밋하기 전에 @Async 메일 메서드(@Transactional)에 주문 id를 넘겨요. 메일 메서드가 그 주문을 조회하면 늘 찾을 수 있을까요?'
     choices:
@@ -184,7 +184,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 메일 발송이 몰릴 때 다른 @Async 작업까지 밀리지 않게 하려고 해요. 가장 알맞은 방법은 무엇일까요?
     choices:
@@ -201,7 +201,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "@Async는 어떻게 동작하고, 무엇을 조심해야 하나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-

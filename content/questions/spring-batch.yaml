@@ -30,7 +30,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 청크 크기 10인 Step이 25건을 처리해요. writer는 몇 번 불리고 커밋은 몇 번일까요?
     choices:
@@ -46,7 +46,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 청크 크기 100으로 1,050건을 처리해요. writer는 몇 번 불리고, 마지막에는 몇 건을 받을까요?
     choices:
@@ -63,7 +63,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 청크 크기 10으로 25건을 처리하다 17번째 항목을 처리할 때 예외가 나 Step이 실패했어요. 테이블에 남는 행은 몇 개일까요?
     choices:
@@ -79,7 +79,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 청크 크기 100으로 돌다 3,250번째에서 실패했어요. 원인을 고치고 같은 Job 파라미터로 다시 실행하면 몇 번째 항목부터 읽을까요? 리더는 재시작을 지원해요.
     choices:
@@ -95,7 +95,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 실패한 가져오기 Job을 "그냥 다시" 돌리려고 Job 파라미터의 run 값을 새로 바꿔 실행했어요. 어떻게 될까요?
     choices:
@@ -114,7 +114,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 아래 Step이 25건을 처리하는데, 그 가운데 3건에서 processor가 IllegalArgumentException을 던져요. 결과는 어떻게 될까요?
     code: |-
@@ -140,7 +140,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 어제 성공한 정산 Job을 실수로 같은 날짜 파라미터(date=2026-11-25)로 다시 실행했어요. 어떻게 될까요?
     choices:
@@ -159,7 +159,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "스프링 배치의 청크 처리와 재시작을 설명해 주세요"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
