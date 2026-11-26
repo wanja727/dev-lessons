@@ -196,7 +196,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "application.yml에 spring.jpa.properties.hibernate.query.fail_on_pagination_over_collection_fetch: true를 적었어요. 그 뒤 \"select t from Team t left join fetch t.members\"에 setMaxResults(2)를 걸어 실행하면 어떻게 될까요?"
     choices:
