@@ -60,6 +60,9 @@ class SchemaMigrationTest {
     void lockQueue() throws Exception {
         List<String> log = new ArrayList<>();
         try (Connection c1 = ds.getConnection(); Connection c2 = ds.getConnection(); Connection c3 = ds.getConnection()) {
+            for (Connection c : List.of(c1, c2, c3)) {
+                exec(c, "set lock_timeout = 0");
+            }
             c1.setAutoCommit(false);
             number(c1, "select count(*) from mg_member");
             log.add("연결 1: begin; select count(*) (커밋 전)");
