@@ -5,6 +5,7 @@
 # (site/src/content/lesson-pages/b-tree.yaml의 says).
 # 동작에 관한 정답은 verification의 BTreeTest로 확인했다 (자바 21, PostgreSQL 16).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다.
+# 2026-11-26에 만들고 같은 날 검수해 reviewed로 바꿨다.
 subject:
   key: dev
   name: 개발자 면접
@@ -31,7 +32,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 키 100만 개를 균형 이진 탐색 트리에 담았어요. 키 하나를 찾을 때 거치는 노드는 많아야 몇 개쯤일까요?
     choices:
@@ -50,7 +51,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 노드를 하나 읽을 때마다 디스크를 한 번 읽는 저장소에, 같은 키 1천만 개를 높이 24의 트리와 높이 3의 트리로 담았어요. 높이 3의 트리는 노드 안에서 비교를 더 많이 해요. 어느 쪽이 빨리 찾고, 무엇이 그 차이를 정할까요?
     choices:
@@ -70,7 +71,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 노드마다 자식이 300개인 B-트리에 키 2,700만 개를 담으면 높이는 얼마쯤일까요?
     choices:
@@ -89,7 +90,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "PostgreSQL에서 explain (analyze, buffers)로 인덱스 조회를 봤더니 Buffers: shared hit=3 read=1이 나왔어요. 디스크에서 읽은 페이지는 몇 개이고, 나머지는 어디서 읽었을까요?"
     choices:
@@ -108,7 +109,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 같은 30만 행에서 bigint 기본 키 인덱스는 6.6MB에 세 겹이에요. 평균 176자인 url 열에 그대로 인덱스를 만들면 어떻게 될까요?
     choices:
@@ -128,7 +129,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 노드당 키를 최대 3개 담는 B+트리에 1, 2, 3을 넣은 뒤 4를 넣어요. 무슨 일이 일어날까요?
     choices:
@@ -147,7 +148,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 자동 증가 번호처럼 늘 커지는 키 100만 개를, 노드당 키 255개인 B+트리와 균형을 맞추지 않는 이진 탐색 트리에 각각 넣었어요. 두 트리의 높이는 각각 어떻게 될까요?
     choices:
@@ -167,7 +168,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: 높이 3의 B+트리에서 이어진 키 100개를 between으로 읽어요. 한 잎에 키가 300개쯤 들어 있다면 읽는 노드는 대략 몇 개일까요?
     choices:
@@ -186,7 +187,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 잎끼리 이어져 있지 않은 트리에서 이어진 범위를 읽으면, 잎이 옆으로 이어진 B+트리보다 무엇이 더 들까요?
     choices:
@@ -206,7 +207,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 2
     body: 면접에서 "DB 인덱스는 왜 이진 탐색 트리가 아니라 B-트리를 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
