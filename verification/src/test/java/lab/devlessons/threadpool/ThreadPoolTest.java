@@ -210,21 +210,32 @@ class ThreadPoolTest {
     @Test
     @DisplayName("요청마다 만들고 끝내지 않은 풀은 스레드를 남긴다")
     void poolPerRequestLeaksThreads() throws Exception {
-        int before = Thread.activeCount();
+        // 다른 테스트의 스레드가 함께 늘고 줄어 Thread.activeCount()는 흔들린다.
+        // 이 풀들이 만든 스레드만 이름으로 센다
+        String prefix = "per-request-";
+        java.util.concurrent.atomic.AtomicInteger seq = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.ThreadFactory named = r -> new Thread(r, prefix + seq.incrementAndGet());
+        int before = aliveThreads(prefix);
         List<ExecutorService> pools = new java.util.ArrayList<>();
         try {
             for (int i = 0; i < 10; i++) {
-                ExecutorService perRequest = Executors.newFixedThreadPool(4);
+                ExecutorService perRequest = Executors.newFixedThreadPool(4, named);
                 pools.add(perRequest);
                 perRequest.submit(() -> "보고서").get();
             }
-            int after = Thread.activeCount();
+            int after = aliveThreads(prefix);
             assertThat(after - before).isGreaterThanOrEqualTo(10);
             CiOutput.record("thread-pool", "per-request", "요청 10번, 요청마다 newFixedThreadPool(4)를 만들고 끝내지 않음\n"
                     + "살아 있는 스레드 → " + before + "개에서 " + after + "개로");
         } finally {
             pools.forEach(ExecutorService::shutdownNow);
         }
+    }
+
+    private static int aliveThreads(String prefix) {
+        return (int) Thread.getAllStackTraces().keySet().stream()
+                .filter(t -> t.isAlive() && t.getName().startsWith(prefix))
+                .count();
     }
 
     @Test
