@@ -1,18 +1,19 @@
 ---
-title: "스프링 배치: 청크 처리와 재시작"
-unit: Spring
-order: 23
-stage: DB와 운영
-summary: 25건을 청크 10으로 처리하다 17번째에서 실패하면 무엇이 남고, 재시작하면 어디서부터 할까요? 시뮬레이터로 청크 커밋과 재시작을 직접 돌려 보고 JobInstance, ExecutionContext, skip까지 배워요.
-minutes: 35
+title: "스프링 배치"
+unit: 스프링
+order: 715
+stage: 실무 시스템
+summary: 스프링 배치가 대량 데이터를 청크 단위로 처리하고 커밋하는 방식, 중간에 실패했을 때 어디부터 다시 하는지, 잘못된 데이터와 이미 끝난 Job을 다루는 법. 25건을 청크 10으로 돌리다 실패시키고 다시 시작해 봐요.
+minutes: 16
 page: spring-batch
 verifiedBy:
+  - verification/src/test/java/lab/devlessons/batch/SpringBatchLessonTest.java
   - verification/src/test/java/lab/devlessons/batch/SpringBatchTest.java
 sources:
-  - https://docs.spring.io/spring-batch/reference/domain.html
   - https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing.html
   - https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/restart.html
-updated: 2026-11-16
+  - https://docs.spring.io/spring-boot/how-to/batch.html
+updated: 2026-11-26
 ---
 
-선수 레슨: @Transactional 동작 원리.
+선수 레슨: 트랜잭션 전파와 롤백 규칙.

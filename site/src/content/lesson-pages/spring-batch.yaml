@@ -1,15 +1,16 @@
-# 스프링 배치 (설계서)
-# 자료 파일의 칸은 docs/lesson-data-format.md에 있다.
-# 예전 레슨 site/src/pages/lessons/spring-batch.astro와 batch/SpringBatchTest를 재료로 다시 쓴다.
-stage: design
+# 스프링 배치
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/spring-batch.yaml에 있다.
+# 예전 레슨 site/src/pages/lessons/spring-batch.astro와 batch/SpringBatchTest를 재료로 다시 썼다.
 title: 스프링 배치
+description: 스프링 배치가 대량 데이터를 청크 단위로 처리하고 커밋하는 방식, 중간에 실패했을 때 어디부터 다시 하는지, 잘못된 데이터와 이미 끝난 Job을 다루는 법. 세 가지 질문에 스스로 답할 수 있게 25건을 청크 10으로 돌리다 실패시키고 다시 시작해 보는 대화형 레슨.
 unit: 스프링
+minutes: 16
 roadmap: S15
 type: 동작 확인
 prerequisites:
   - {slug: tx-propagation, title: 트랜잭션 전파와 롤백 규칙}
-assume: '자바 21, 스프링 부트 3.5(스프링 배치 5.2), PostgreSQL 16. 트랜잭션은 커밋 단위로 함께 성공하고 함께 실패한다는 것(트랜잭션 기초, 트랜잭션 전파와 롤백 규칙 레슨). 대량 데이터를 한 번에 읽지 않고 나눠 읽는다는 것(DB 과정)은 알면 좋아요.'
-example: '거래처에서 받은 주문 25건(실무에서는 수십만 건)을 읽어 검증하고 주문 테이블에 저장하는 가져오기 Job. 청크 크기 10으로 돌리다 17번째에서 실패하고, 다시 시작한다.'
+assume: '자바 21, 스프링 부트 3.5(스프링 배치 5.2), PostgreSQL 16. 트랜잭션은 커밋 단위로 함께 성공하고 함께 실패한다는 것(트랜잭션 기초, 트랜잭션 전파와 롤백 규칙 레슨). 대량 데이터를 한 번에 읽지 않고 나눠 읽는다는 것은 알면 좋아요.'
+example: '거래처에서 받은 숫자 25개(실무에서는 주문 수십만 건)를 읽어 검증하고 테이블에 저장하는 가져오기 Job. 청크 크기 10으로 돌리다 17번째에서 실패하고, 다시 시작한다.'
 intro:
   - '밤마다 거래처 주문 30만 건을 가져오는 작업이 있어요. 한 트랜잭션으로 돌렸더니 29만 번째에서 실패해 전부 롤백되고, 다시 처음부터 돌려야 해요. 건마다 커밋했더니 이번에는 너무 느리고, 실패한 곳에서 이어 가려면 어디까지 했는지 직접 적어 둬야 해요.'
   - '스프링 배치는 대량 처리를 읽기, 처리, 쓰기로 나누고, 정한 개수(청크)마다 커밋하며, 어디까지 커밋했는지 메타데이터 테이블에 남겨 실패한 곳부터 다시 시작하게 해 주는 도구예요. 정산, 집계, 데이터 이관처럼 사용자의 요청과 상관없이 도는 일을 맡는 백엔드 개발자가 써요.'
@@ -33,22 +34,79 @@ covers:
     where: '실무에서는'
   - topic: '대량 DML을 나눠서 하는 원리'
     where: '다루지 않음: 대량 DML 안전하게 하기(D15)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/batch/SpringBatchLessonTest.java
+  oldTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/batch/SpringBatchTest.java
+  job: https://github.com/wanja727/dev-lessons/blob/main/verification/src/main/java/lab/devlessons/batch/ImportJobConfig.java
+  chunk: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing.html
+  restart: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/restart.html
+  skip: https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing/configuring-skip.html
+  schema: https://docs.spring.io/spring-batch/reference/schema-appendix.html
+  bootBatch: https://docs.spring.io/spring-boot/how-to/batch.html
 codes:
   predict: |-
     @Bean
     Step importStep(JobRepository repo,
         PlatformTransactionManager tx) {
       return new StepBuilder("import", repo)
-          .<Line, Order>chunk(10, tx)
+          .<Integer, Integer>chunk(10, tx)
           .reader(reader())
           .processor(processor())
           .writer(writer())
           .build();
     }
     // 25건을 읽는다
+  job: |-
+    @Bean
+    Job importJob(JobRepository repo,
+        Step importStep) {
+      return new JobBuilder("importJob", repo)
+          .start(importStep)
+          .build();
+    }
+  step: |-
+    new StepBuilder("importStep", repo)
+        .<Integer, Integer>[[chunk(10, tx)]]
+        .reader(numberReader)
+        .processor(item -> check(item))
+        .writer(chunk -> save(chunk))
+        .build();
+  skip: |-
+    new StepBuilder("skipStep", repo)
+        .<Integer, Integer>chunk(10, tx)
+        .reader(numberReader)
+        .processor(item -> check(item))
+        .writer(chunk -> save(chunk))
+        [[.faultTolerant()]]
+        [[.skip(IllegalArgumentException.class)]]
+        [[.skipLimit(5)]]
+        .build();
+  params: |-
+    JobParameters p = new JobParametersBuilder()
+        .addLocalDate("date",
+            LocalDate.of(2026, 11, 25))
+        .toJobParameters();
+    jobLauncher.run(importJob, p);
+  yml: |-
+    spring:
+      batch:
+        job:
+          enabled: false
+        jdbc:
+          initialize-schema: always
 predict:
-  text: '코드 predict의 Step이 25건을 처리해요. writer는 몇 번, 몇 건씩 불릴까요? 보기: 25번 1건씩, 1번 25건, 3번 10건 10건 5건, 2번 10건 15건.'
-  answer: '3번, 10건 10건 5건. 청크 크기만큼 모아 한 번에 쓰고 커밋한다. 질문 1에서 밝힌다.'
+  title: writer는 몇 번 불릴까요?
+  text: '코드 predict의 Step이 25건을 처리해요. writer는 몇 번, 몇 건씩 불릴까요? 답은 질문 1에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - {value: a, label: '25번, 1건씩'}
+    - {value: b, label: '1번, 25건'}
+    - {value: c, label: '3번, 10건 10건 5건'}
+    - {value: d, label: '2번, 10건 15건'}
+  answer: c
+  storageKey: batch-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
 questions:
   - id: q1
     title: 스프링 배치는 대량 데이터를 어떤 단위로 처리하나요?
@@ -57,7 +115,7 @@ questions:
       sub: '건마다 커밋하는 것보다 빠르고, 전체를 한 트랜잭션으로 하는 것보다 실패 때 잃는 것이 적어요.'
     says:
       - 'Job, Step, reader, processor, writer의 관계를 그림으로 보인다'
-      - '코드 predict를 돌려 writer 호출을 기록한 실제 출력을 보인다(예전 테스트)'
+      - '코드 predict를 돌려 writer 호출과 커밋 수를 기록한 실제 출력을 보인다'
       - '청크마다 트랜잭션이 하나라는 것을 커밋 횟수로 보인다'
     widget:
       kind: steps
@@ -65,47 +123,171 @@ questions:
     asks:
       - '본문의 예시: 청크 크기 10으로 25건이면 커밋은 몇 번인가 (3번)'
       - '옮긴 상황: 청크 크기 100으로 1,050건이면 writer는 몇 번 불리고 마지막엔 몇 건인가 (11번, 50건)'
+    body:
+      - p: '스프링 배치에서 일 하나는 **Job**이고, Job은 단계(**Step**) 하나 이상으로 이루어져요. 대량 처리를 하는 Step은 세 부분으로 나눠요.'
+      - ul:
+          - '**`ItemReader`:** 한 건씩 읽어요(파일 한 줄, DB 한 행).'
+          - '**`ItemProcessor`:** 한 건씩 검증하고 바꿔요.'
+          - '**`ItemWriter`:** 모인 여러 건을 한 번에 써요.'
+      - code: job
+      - code: step
+        notes:
+          - mark: 'chunk(10, tx)'
+            as: code
+            text: '10건을 읽고 처리해 모은 뒤 한 번에 쓰고, 그 10건을 한 트랜잭션으로 커밋해요.'
+      - p: '이 "모아서 쓰고 커밋하는 단위"가 **청크**예요([근거](link:chunk)). 한 단계씩 따라가 보세요.'
+      - widget:
+          kind: steps
+          layout: [log, buttons, verdict]
+          initial: {}
+          scenarios:
+            default:
+              - log: '트랜잭션 시작 → 1~10 읽기, 처리'
+              - log: 'writer(1~10) → 커밋 #1'
+              - log: '트랜잭션 시작 → 11~20 읽기, 처리'
+              - log: 'writer(11~20) → 커밋 #2'
+              - log: '트랜잭션 시작 → 21~25 읽기, 26번째에서 더 없음'
+              - log: 'writer(21~25) → 커밋 #3. Step 완료'
+                verdict: '청크 하나가 트랜잭션 하나예요. 25건이 커밋 세 번으로 끝나요.'
+      - p: '예측의 Step을 실제로 돌렸어요.'
+      - ci:
+          key: chunks
+          label: 실제 결과 보기
+          source: SpringBatchLessonTest.chunks
+          code: predict
+      - p: 'writer는 **10건, 10건, 5건**으로 세 번 불렸고 커밋도 세 번이에요. {{predict-result}} 건마다 커밋하면 25번 커밋해 느리고, 25건을 한 트랜잭션으로 하면 마지막에 실패할 때 전부 롤백돼요. 청크는 그 사이의 타협이에요. 예제 Job의 코드는 [ImportJobConfig](link:job)에 있어요.'
+      - quiz:
+          q: '청크 크기 100으로 1,050건을 처리해요. writer는 몇 번 불리고, 마지막에는 몇 건일까요?'
+          options:
+            - '10번, 마지막 150건'
+            - '11번, 마지막 50건'
+            - '1,050번, 1건씩'
+          answer: 2
+          explain: '100건씩 10번, 남은 50건으로 한 번 더 불려요. 커밋도 11번이에요.'
+      - next: '청크마다 커밋한다면, 중간에 실패했을 때는 무엇이 남고 어디부터 다시 할까요?'
+    recall: '스프링 배치의 Job은 Step으로 이루어지고, 청크 지향 Step은 ItemReader로 한 건씩 읽고 ItemProcessor로 처리해 청크 크기만큼 모은 뒤 ItemWriter로 한 번에 쓰고 커밋해요. 청크 하나가 트랜잭션 하나라서, 청크 10에 25건이면 writer는 10, 10, 5건으로 세 번, 커밋도 세 번이에요.'
   - id: q2
     title: 중간에 실패하면 어디부터 다시 하나요?
     conclusion:
-      lead: '실패한 청크만 롤백되고, 다시 실행하면 마지막으로 커밋한 청크 다음부터 읽어요.'
+      lead: '실패한 청크만 롤백되고, 같은 파라미터로 다시 실행하면 마지막으로 커밋한 청크 다음부터 읽어요.'
       sub: '`JobRepository`가 메타데이터 테이블에 어디까지 커밋했는지 남겨 두기 때문이에요.'
     says:
-      - '17번째에서 실패시키면 1~10은 남고 11~20은 롤백된다(예전 테스트)'
-      - '같은 파라미터로 다시 실행하면 11번부터 읽어 15건만 처리하고 중복 없이 25건이 된다(예전 테스트)'
+      - '17번째에서 실패시키면 1~10은 남고 11~20은 롤백된다'
+      - '같은 파라미터로 다시 실행하면 11번부터 읽어 15건만 처리하고 중복 없이 25건이 된다'
       - '메타데이터 테이블에서 읽은 수와 커밋한 수를 출력한다'
     asks:
-      - '본문의 예시: 청크 10으로 돌다 17번째에서 실패하면 DB에 남는 주문은 몇 건인가 (10건)'
+      - '본문의 예시: 청크 10으로 돌다 17번째에서 실패하면 DB에 남는 행은 몇 건인가 (10건)'
       - '옮긴 상황: 청크 100, 3,250번째에서 실패한 뒤 같은 파라미터로 다시 실행하면 몇 번째부터 읽나 (3,201번째)'
+    body:
+      - p: '17번째 항목을 처리할 때 실패하게 하고 돌린 뒤, 원인을 고치고 **같은 파라미터**로 다시 돌렸어요.'
+      - ci:
+          key: restart
+          label: 실제 결과 보기
+          source: SpringBatchLessonTest.failAndRestart
+      - h3: 실패한 청크만 롤백돼요
+      - p: '첫 청크(1~10)는 이미 커밋돼서 남았어요. 17번이 든 둘째 청크(11~20)는 통째로 롤백됐어요. 메타데이터 테이블의 `commit_count=1`, `rollback_count=1`이 그 기록이에요. `read_count=20`인 것은 실패한 청크도 20번째까지 읽기는 했기 때문이에요.'
+      - h3: 다시 실행하면 이어서 해요
+      - p: '스프링 배치는 실행마다 `JobRepository`를 통해 메타데이터 테이블에 상태를 남겨요([근거](link:schema)).'
+      - table:
+          head: [테이블, 무엇]
+          rows:
+            - ['`BATCH_JOB_INSTANCE`', 'Job 이름과 파라미터가 같은 실행의 묶음']
+            - ['`BATCH_JOB_EXECUTION`', '실행 한 번의 상태(COMPLETED, FAILED)']
+            - ['`BATCH_STEP_EXECUTION`', 'Step의 읽은 수, 쓴 수, 커밋 수']
+            - ['`BATCH_STEP_EXECUTION_CONTEXT`', '리더가 남긴 "커밋까지 읽은 개수"']
+      - p: '같은 파라미터로 다시 실행하면 새 `JobInstance`를 만들지 않고 실패한 그 Instance를 이어 가요. 리더는 마지막 커밋 때 저장해 둔 "읽은 개수"(10)를 꺼내 11번부터 읽어요. 그래서 이번에는 15건만 읽었고, 기본 키가 있는 테이블에 중복 없이 25건이 됐어요([근거](link:restart)).'
+      - quiz:
+          q: '청크 크기 100으로 돌다 3,250번째에서 실패했어요. 원인을 고치고 같은 파라미터로 다시 실행하면 몇 번째부터 읽을까요?'
+          options:
+            - '1번째'
+            - '3,201번째'
+            - '3,251번째'
+          answer: 2
+          explain: '3,201~3,300 청크가 롤백됐고, 마지막 커밋은 3,200번째까지예요. 그 다음부터 읽어요.'
+      - next: '실패의 원인이 데이터 몇 건이라면, 그때마다 멈춰야 할까요? 이미 끝난 Job을 다시 돌리면요?'
+    recall: '실패하면 실패한 청크만 롤백되고 앞의 청크는 커밋되어 남아요. JobRepository가 BATCH_JOB_INSTANCE, BATCH_JOB_EXECUTION, BATCH_STEP_EXECUTION 같은 메타데이터 테이블에 진행 상황과 커밋까지 읽은 개수를 남겨서, 같은 파라미터로 다시 실행하면 같은 JobInstance를 이어 가며 마지막 커밋 다음부터 읽어요.'
   - id: q3
     title: 잘못된 데이터와 이미 끝난 Job은 어떻게 다루나요?
     conclusion:
       lead: '잘못된 데이터는 skip으로 건너뛰고, 이미 완료된 Job은 같은 파라미터로 다시 돌릴 수 없어서 날짜 같은 파라미터로 구분해요.'
-      sub: '일시적 오류는 retry로 다시 시도해요.'
+      sub: '일시적인 오류는 retry로 다시 시도해요.'
     says:
-      - 'skip 설정으로 7, 14, 21번을 건너뛰고 22건을 저장하며 Job은 성공한다(예전 테스트)'
-      - '완료된 JobInstance를 같은 파라미터로 실행하면 예외(예전 테스트)'
+      - 'skip 설정으로 7, 14, 21번을 건너뛰고 22건을 저장하며 Job은 성공한다'
+      - '완료된 JobInstance를 같은 파라미터로 실행하면 예외'
       - '날짜 파라미터로 매일 새 JobInstance를 만든다'
     asks:
       - '본문의 예시: skipLimit 5로 잘못된 데이터 3건이 섞인 25건을 돌리면 몇 건이 저장되고 Job은 성공하나 (22건, 성공)'
       - '옮긴 상황: 어제 성공한 정산 Job을 같은 날짜 파라미터로 다시 실행하면 (실행되지 않는다. 이미 완료된 JobInstance다)'
+    body:
+      - code: skip
+        notes:
+          - mark: '.faultTolerant()'
+            as: code
+            text: '실패를 견디는 설정을 켜요.'
+          - mark: '.skip(IllegalArgumentException.class)'
+            as: code
+            text: '이 예외가 난 항목은 건너뛰어요.'
+          - mark: '.skipLimit(5)'
+            as: code
+            text: '5건까지만 건너뛰고, 넘으면 Step이 실패해요.'
+      - p: '7의 배수를 잘못된 데이터로 보고 처리할 때 예외를 던지게 했어요. 그리고 이미 끝난 Job을 같은 파라미터로 다시 돌려 봤어요.'
+      - ci:
+          key: complete-skip
+          label: 실제 결과 보기
+          source: SpringBatchLessonTest.completedAndSkip
+      - p: '잘못된 3건(7, 14, 21)을 건너뛰고 22건을 저장했어요. Job은 **성공**이에요. 몇 건 때문에 30만 건 작업을 멈추지 않아요. 건너뛴 건수는 메타데이터에 남고, `SkipListener`로 따로 기록해 나중에 손볼 수 있어요. 네트워크처럼 다시 하면 될 수 있는 오류에는 `.retry(...)`와 `.retryLimit(...)`로 다시 시도해요([근거](link:skip)).'
+      - h3: 끝난 Job은 다시 돌지 않아요
+      - p: '같은 Job, 같은 파라미터의 `JobInstance`가 이미 **완료**됐으면 다시 실행할 수 없어요(`JobInstanceAlreadyCompleteException`). 어제 정산을 실수로 두 번 돌리는 일을 막아 줘요. 그래서 매일 도는 Job은 날짜를 파라미터로 넣어 날마다 새 Instance를 만들어요.'
+      - code: params
+      - quiz:
+          q: 'skipLimit 5, 잘못된 데이터(skip 대상 예외) 3건이 섞인 25건을 돌렸어요. 결과는?'
+          options:
+            - '22건 저장, Job 성공'
+            - '0건 저장, Job 실패'
+            - '25건 저장, Job 성공'
+          answer: 1
+          explain: '3건은 skipLimit 5 안이라 건너뛰고 나머지 22건을 저장해요. Job은 성공이에요.'
+    recall: 'faultTolerant().skip(예외).skipLimit(n)이면 그 예외가 난 항목을 n건까지 건너뛰고 Job은 성공해요. 일시적 오류는 retry로 다시 시도해요. 같은 Job과 같은 파라미터의 JobInstance가 이미 완료됐으면 JobInstanceAlreadyCompleteException으로 다시 실행되지 않아서, 매일 도는 Job은 날짜를 파라미터로 넣어 구분해요.'
 practice:
+  title: 스프링 부트에서는 이렇게 돌려요
   says:
     - '실무 모양: `spring.batch.job.enabled=false`로 두고 스케줄러가 날짜 파라미터를 붙여 띄운다. 청크 크기는 100~1,000 사이에서 재 보고 고른다'
     - '흔한 실수: 전체를 한 트랜잭션으로 돌리다 마지막에 실패해 처음부터 다시 한다. 또는 reader가 전체를 메모리에 올린다'
     - '흔한 실수 둘: 실패한 Job을 파라미터를 바꿔 다시 돌려 처음부터 중복으로 처리한다'
+  body:
+    - h3: 설정과 띄우기
+    - code: yml
+    - p: '`spring.batch.job.enabled`가 기본 `true`면 앱이 뜰 때 모든 Job을 한 번씩 돌려요. 보통은 `false`로 두고 스케줄러(cron, `@Scheduled`, 사내 배치 스케줄러)가 날짜 파라미터를 붙여 원하는 Job을 띄워요. `initialize-schema`는 메타데이터 테이블을 만들지 정해요([근거](link:bootBatch)).'
+    - h3: 청크 크기 고르기
+    - p: '크게 잡을수록 커밋이 적어 빠르지만, 실패할 때 다시 하는 양과 한 번에 메모리에 드는 양이 커져요. 100~1,000 사이에서 실제 데이터로 재 보고 골라요. 리더는 전체를 한 번에 읽지 않고 페이지나 커서로 나눠 읽는 것(`JdbcPagingItemReader`, `JdbcCursorItemReader`)을 써요.'
+    - h3: '흔한 실수: 실패한 Job을 새 파라미터로 다시 돌림'
+    - p: '실패한 Job을 "그냥 다시" 돌리려고 파라미터에 아무 값이나 바꿔 넣으면 새 `JobInstance`가 돼서, 이어 가지 않고 처음부터 다시 읽어요. 앞서 커밋된 청크가 또 들어가 중복이 생기거나 기본 키에 걸려 실패해요. 원인을 고치고 **같은 파라미터**로 다시 실행해요(질문 2).'
+interview:
+  question: 스프링 배치의 청크 처리와 재시작을 설명해 주세요
+  model:
+    - label: 정의
+      text: 스프링 배치는 대량 처리를 ItemReader, ItemProcessor, ItemWriter로 나누고 청크 크기만큼 모아 한 번에 쓰고 커밋하는 프레임워크입니다. 청크 하나가 트랜잭션 하나입니다.
+    - label: 원리
+      text: 실패하면 실패한 청크만 롤백되고, JobRepository가 메타데이터 테이블에 커밋까지 읽은 개수를 남기므로 같은 파라미터로 다시 실행하면 마지막 커밋 다음부터 이어 갑니다. 완료된 JobInstance는 같은 파라미터로 다시 실행되지 않습니다.
+    - label: 주의할 점
+      text: 청크 크기는 속도와 실패 비용, 메모리 사이에서 재 보고 정하고, 리더는 나눠 읽습니다. 잘못된 데이터는 skip, 일시적 오류는 retry로 다루고, 실패한 Job은 파라미터를 바꾸지 말고 같은 파라미터로 재시작합니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 한 트랜잭션으로 돌던 주문 가져오기를 청크 500으로 나눠, 실패 때 처음부터 다시 하던 일을 없앴습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 스프링 배치 5.2와 PostgreSQL 16(Testcontainers)에서 Job을 돌려 받은 값이에요. 주장은 예전 테스트([SpringBatchTest](link:oldTest))가, 실제 출력은 [SpringBatchLessonTest](link:test)가 남겨요.
+footer: '근거: 청크 지향 처리는 스프링 배치 문서([링크](link:chunk)), 재시작은 [링크](link:restart), skip은 [링크](link:skip), 메타데이터 테이블은 [링크](link:schema), 스프링 부트의 배치 설정은 [링크](link:bootBatch). 결과는 OpenJDK 21에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
 claims:
-  - claim: '청크 10으로 25건이면 writer는 10, 10, 5건씩 세 번 불린다'
+  - claim: '청크 10으로 25건이면 writer는 10, 10, 5건씩 세 번 불리고 커밋도 세 번이다'
+    how: '예전 테스트와 커밋 수 기록'
+    test: 'batch/SpringBatchTest#chunkSizes, batch/SpringBatchLessonTest#chunks'
+  - claim: '17번째에서 실패하면 첫 청크는 남고 실패한 청크는 롤백되며, 같은 파라미터로 다시 실행하면 같은 JobInstance로 11번부터 15건을 읽는다'
+    how: '예전 테스트와 `batch_step_execution` 조회'
+    test: 'batch/SpringBatchTest#failureRollsBackOnlyCurrentChunk, restartResumesFromLastCommit, batch/SpringBatchLessonTest#failAndRestart'
+  - claim: '완료된 JobInstance는 같은 파라미터로 다시 실행할 수 없고, skip은 잘못된 3건을 건너뛰고 22건을 저장한다'
     how: '예전 테스트'
-    test: 'batch/SpringBatchTest'
-  - claim: '17번째에서 실패하면 첫 청크는 남고 실패한 청크는 롤백되며, 같은 파라미터로 다시 실행하면 11번부터 읽는다'
-    how: '예전 테스트'
-    test: 'batch/SpringBatchTest'
-  - claim: '완료된 JobInstance는 같은 파라미터로 다시 실행할 수 없고, skip은 잘못된 데이터를 건너뛴다'
-    how: '예전 테스트'
-    test: 'batch/SpringBatchTest'
-  - claim: '메타데이터 테이블의 읽은 수와 커밋 수'
-    how: '`BATCH_STEP_EXECUTION`을 조회해 출력한다'
+    test: 'batch/SpringBatchTest#completedInstanceCannotRerun, skipBadItems, batch/SpringBatchLessonTest#completedAndSkip'
+  - claim: '실패한 실행의 `batch_step_execution`은 read_count 20, write_count 10, commit_count 1, rollback_count 1이다'
+    how: '메타데이터 테이블을 조회한다'
+    test: 'batch/SpringBatchLessonTest#failAndRestart'
 sources:
   - '스프링 배치 문서(청크 지향 처리, 재시작): https://docs.spring.io/spring-batch/reference/step/chunk-oriented-processing.html'
   - '스프링 부트의 배치 설정: https://docs.spring.io/spring-boot/how-to/batch.html'
