@@ -6,6 +6,8 @@
 # 금액, 고치는 파일, 컴파일 오류는 verification의 lab.devlessons.srpocp 테스트로 확인한 동작에서 나온다 (자바 21, OpenJDK).
 # 품질 계획 3단계에서 써 둔 초안(docs/type-trials)을 2026-11-23에 레슨을 쓰며 옮기고 본문과 맞췄다.
 # 같은 날 판정 문제 17개의 정답을 테스트 결과와 본문(says)에 하나씩 맞춰 보고 reviewed로 바꿨다.
+# 2026-11-26에 레슨을 표준에 맞추며 so-ocp-compile(so-ocp-add-method와 같은 것을 묻는다)을 지우고,
+# "실무에서는"으로 묻는 so-spring-component를 질문 4의 셋째로 더했다(draft). 판정 12개를 넘지 않는다.
 subject:
   key: dev
   name: 개발자 면접
@@ -342,6 +344,24 @@ questions:
       - 조립 코드의 목록에 `new SilverDiscount()`를 넣으면 9700이 나와요
     source: https://blog.cleancoder.com/uncle-bob/2014/05/12/TheOpenClosedPrinciple.html
 
+  - key: so-spring-component
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: 스프링 프로젝트에서 VipDiscount와 GoldDiscount는 @Component 빈이고, DiscountCalculator는 생성자로 List<DiscountPolicy>를 받아요. 정책 목록을 만드는 조립 코드는 따로 없어요. SILVER 등급 3% 할인을 더하려면 무엇을 해야 하나요? (Grade에 SILVER를 더하는 것은 이미 했어요)
+    choices:
+      - "@Component를 붙인 SilverDiscount 클래스를 새로 만든다"
+      - DiscountCalculator의 생성자에 SilverDiscount를 더한다
+      - SilverDiscount를 만들고 DiscountCalculator의 for 문에 SILVER 분기를 더한다
+      - "@Component 없이 SilverDiscount 클래스를 만들면 스프링이 알아서 찾는다"
+    answer: "1"
+    explanation: |-
+      **@Component를 붙인 SilverDiscount만 새로 만들어요.** 스프링이 DiscountPolicy 타입의 빈을 모두 모아 List로 넣어 줘서, 계산 코드도 조립 코드도 고치지 않아요.
+
+      - @Component를 빠뜨리면 컴포넌트 스캔이 빈으로 만들지 않아 목록에서 빠지고, SILVER 주문은 오류 없이 할인이 빠진 금액이 나와요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/srpocp/spring/SrpOcpSpringTest.java
   # ── 질문 5. 개방 폐쇄 원칙을 지키면 어떤 변경이든 있던 코드를 고치지 않고 할 수 있나요? ──
   - key: so-ocp-add-method
     concept: core
@@ -366,54 +386,6 @@ questions:
 
       - 인터페이스에 메서드를 더하면 구현 클래스가 모두 그 메서드를 구현해야 해요
       - "[코드 C]는 새 등급을 더하는 변경에만 닫혀 있어요. 인터페이스를 바꾸는 변경에는 닫혀 있지 않아요"
-    source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
-  - key: so-ocp-compile
-    concept: core
-    coreQuestion: q5
-    type: code_predict
-    status: reviewed
-    difficulty: 2
-    body: DiscountPolicy에 name()을 더하고 VipDiscount만 고쳤어요. default 메서드는 쓰지 않았어요. 이 코드를 컴파일하면 어떻게 될까요?
-    code: |-
-      interface DiscountPolicy {
-          boolean supports(Grade grade);
-          int apply(int price);
-          String name();
-      }
-
-      class VipDiscount
-              implements DiscountPolicy {
-          public boolean supports(Grade grade) {
-              return grade == Grade.VIP;
-          }
-          public int apply(int price) {
-              return price * 90 / 100;
-          }
-          public String name() {
-              return "VIP 할인";
-          }
-      }
-
-      class GoldDiscount
-              implements DiscountPolicy {
-          public boolean supports(Grade grade) {
-              return grade == Grade.GOLD;
-          }
-          public int apply(int price) {
-              return price * 95 / 100;
-          }
-      }
-    choices:
-      - 오류 없이 컴파일된다
-      - VipDiscount에서 컴파일 오류가 난다
-      - GoldDiscount에서 컴파일 오류가 난다
-      - DiscountPolicy에서 컴파일 오류가 난다
-    answer: "3"
-    explanation: |-
-      **GoldDiscount에서 컴파일 오류가 나요.** name()을 구현하지 않았기 때문이에요.
-
-      - 인터페이스를 구현하는 클래스는 인터페이스의 메서드를 모두 구현해야 해요
-      - 구현 클래스가 많을수록 고칠 곳이 많아요
     source: https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.1.1.1
   - key: so-ocp-closed-against
     concept: core
