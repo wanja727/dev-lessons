@@ -48,7 +48,7 @@ description: Dev Lessons 저장소에 새 대화형 레슨을 만들거나 기�
 
 ## 5. 문제 초안
 
-표준 4장 규칙으로 문제를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 핵심 질문마다 판정 2개다: 본문의 예시로 묻는 문제를 먼저, 다른 상황으로 옮긴 문제를 그다음에 적는다. "실무에서는"의 코드로 묻는 문제를 하나 이상 더해 관련된 질문의 셋째 문제로 적는다. 레슨 전체로 판정 6~12개, 설명형은 핵심 질문 전체를 잇는 면접 질문(`coreQuestion: all`) 하나를 포함해 1~2개다. 같은 것을 겉모습만 바꿔 다시 묻지 않는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
+표준 4장 규칙으로 문제를 만들어 `content/questions/<slug>.yaml`에 `status: draft`로 넣는다. 핵심 질문마다 판정 2개다: 본문의 예시로 묻는 문제를 먼저, 다른 상황으로 옮긴 문제를 그다음에 적는다. "실무에서는"의 코드로 묻는 문제를 하나 이상 더해 관련된 질문의 셋째 문제로 적는다. 레슨 전체로 판정 6~12개, 설명형은 핵심 질문 전체를 잇는 면접 질문(`coreQuestion: all`) 하나를 포함해 1~2개다. 같은 것을 겉모습만 바꿔 다시 묻지 않는다. 파일의 `coreQuestions`에 핵심 질문을 적고 문제마다 `coreQuestion`으로 묶는다. 형식은 https://github.com/wanja727/retrievo/blob/main/docs/content-format.md. CI(`Check questions`)가 형식과 표준 4장의 규칙을 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`를 돌려 본다. 정답만 길게 쓰지 않고(검사가 경고한다), OX는 답이 O인 문장도 낸다. 노션 문제 DB에는 더 넣지 않는다 (2026-11-17부터 문제 원본은 이 파일).
 
 ## 6. 마무리
 

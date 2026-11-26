@@ -24,11 +24,18 @@ export const RULES = {
   judgmentPerLessonMax: 12,
   descriptivePerLessonMin: 1,
   descriptivePerLessonMax: 2,
+  /** 보기 문제가 이 수 이상인 파일에서, 정답이 가장 긴 보기인 문제가 이 비율을 넘으면 경고한다 */
+  longestAnswerMinQuestions: 4,
+  longestAnswerMaxShare: 0.5,
+  /** OX 문제가 이 수 이상일 때, 한쪽 답이 이 비율을 넘으면 경고한다 (모든 파일을 합쳐서 본다) */
+  oxMinQuestions: 10,
+  oxMaxShare: 0.7,
 };
 
 /**
  * 문제 파일 하나를 검사한다.
- * 오류는 CI를 실패시킨다. 경고는 알리기만 한다: 개수의 위쪽 한계를 넘은 것과, 면접 질문(all)이 없는 것은 경고다.
+ * 오류는 CI를 실패시킨다. 경고는 알리기만 한다: 개수의 위쪽 한계를 넘은 것, 면접 질문(all)이 없는 것,
+ * 정답이 가장 긴 보기에 몰린 것은 경고다.
  * 한계를 낮추기 전에 쓴 레슨이 있어서다 (docs/lesson-standard.md "아직 맞추지 않은 것"). 그 레슨들을 줄이면 오류로 바꾼다.
  * @returns {{skipped: boolean, errors: string[], warnings: string[]}} skipped는 옛 구조 파일이라 검사하지 않았다는 뜻이다
  */
@@ -89,7 +96,43 @@ export function checkQuestionFile(text) {
     }
   }
 
+  // 정답만 길게 쓰면 내용을 몰라도 가장 긴 보기를 골라 맞힌다. 앱이 보기를 섞어도 이 치우침은 남는다
+  const withChoices = questions.filter((q) => Array.isArray(q.choices) && q.choices.length >= 2);
+  const longest = withChoices.filter(isAnswerLongest);
+  if (withChoices.length >= RULES.longestAnswerMinQuestions && longest.length / withChoices.length > RULES.longestAnswerMaxShare) {
+    warnings.push(`보기 문제 ${withChoices.length}개 가운데 ${longest.length}개의 정답이 가장 긴 보기다. 오답도 정답만큼 자세히 쓰거나 정답을 줄인다: ${longest.map((q) => q.key).join(", ")}`);
+  }
+
   return { skipped: false, errors, warnings };
+}
+
+/** 정답이 다른 모든 보기보다 긴가 */
+function isAnswerLongest(q) {
+  const lengths = q.choices.map((c) => String(c).trim().length);
+  const answer = lengths[Number.parseInt(q.answer, 10) - 1];
+  return answer !== undefined && lengths.filter((n) => n >= answer).length === 1;
+}
+
+/**
+ * OX 문제의 답이 한쪽으로 몰렸는지 모든 파일을 합쳐서 본다. 파일 하나에는 OX가 한두 개뿐이라 파일마다는 볼 수 없다.
+ * 틀린 문장을 내는 문제만 쓰면 내용을 몰라도 X를 골라 맞힌다.
+ * @param {string[]} texts 문제 파일들의 내용
+ * @returns {string[]} 경고
+ */
+export function checkOxBalance(texts) {
+  const count = { O: 0, X: 0 };
+  for (const text of texts) {
+    const file = parse(text);
+    if (!file || !Array.isArray(file.coreQuestions)) continue;
+    for (const q of file.questions ?? []) {
+      const answer = String(q.answer ?? "").trim().toUpperCase();
+      if (q.type === "ox" && q.status !== "hidden" && answer in count) count[answer]++;
+    }
+  }
+  const total = count.O + count.X;
+  const [more, n] = count.O >= count.X ? ["O", count.O] : ["X", count.X];
+  if (total < RULES.oxMinQuestions || n / total <= RULES.oxMaxShare) return [];
+  return [`OX 문제 ${total}개 가운데 ${n}개의 답이 ${more}다. 새로 쓰는 OX 문제는 답이 ${more === "O" ? "X" : "O"}인 문장으로 낸다`];
 }
 
 function main(dir) {
@@ -98,11 +141,12 @@ function main(dir) {
   let skipped = 0;
   let errorCount = 0;
   let warningCount = 0;
-  for (const name of names) {
-    const result = checkQuestionFile(readFileSync(join(dir, name), "utf8"));
+  const texts = names.map((name) => readFileSync(join(dir, name), "utf8"));
+  names.forEach((name, i) => {
+    const result = checkQuestionFile(texts[i]);
     if (result.skipped) {
       skipped++;
-      continue;
+      return;
     }
     checked++;
     for (const e of result.errors) {
@@ -113,6 +157,10 @@ function main(dir) {
     }
     errorCount += result.errors.length;
     warningCount += result.warnings.length;
+  });
+  for (const w of checkOxBalance(texts)) {
+    console.log(`경고 모든 파일: ${w}`);
+    warningCount++;
   }
   console.log(`검사한 파일 ${checked}개, 옛 구조라 건너뛴 파일 ${skipped}개, 오류 ${errorCount}개, 경고 ${warningCount}개`);
   if (checked === 0) {
