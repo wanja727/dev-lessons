@@ -3,13 +3,50 @@
 title: JPA N+1 문제
 description: N+1 문제가 왜 생기는지, EAGER로는 왜 안 되는지, 어떻게 해결하는지, 페이징할 때는 무엇을 고르는지. 네 가지 질문에 스스로 답할 수 있게 만드는 대화형 레슨.
 unit: JPA
-minutes: 15
+minutes: 20
 prerequisites:
   - slug: proxy-lazy-loading
     title: 프록시와 지연 로딩
 assume: 엔티티, 리포지토리, JPQL([JPA 첫걸음](lesson:jpa-basics)), 지연 로딩([프록시와 지연 로딩](lesson:proxy-lazy-loading)), SQL의 JOIN과 LIMIT.
+roadmap: P5
+type: 동작 확인
+example: '팀이 멤버 목록(`@OneToMany`, LAZY)을 가진다. 팀 10개를 조회한 뒤 팀마다 멤버 수를 센다.'
+intro:
+  - '개발할 때는 빠르던 목록 화면이, 운영에서 데이터가 쌓이자 몇 초씩 걸려요. SQL 로그를 켜 보면 같은 모양의 `select ... where team_id = ?`가 화면 한 번에 수백 줄 찍혀 있어요. 코드에는 반복문 하나와 getter 하나뿐인데요.'
+  - 'JPA를 쓰는 스프링 개발자라면 거의 반드시 만나는 문제예요. 엔티티의 연관을 따라가는 코드는 SQL이 눈에 보이지 않아서, 쿼리 수를 세어 보기 전에는 알아채기 어려워요. 면접에서도 "N+1 문제와 해결 방법"을 자주 물어요.'
+  - '이 레슨에서는 팀 10개를 실제 PostgreSQL에서 조회하며 나간 SQL을 세어 봐요. LAZY와 EAGER, fetch join, 배치 페치, 페이징을 차례로 바꿔 쿼리 수가 어떻게 달라지는지 확인해요.'
+covers:
+  - topic: 'N+1은 목록 쿼리 1번 뒤에 엔티티마다 연관을 따로 조회해 쿼리가 1 + N번 나가는 것이다. 연관을 쓰지 않으면 추가 쿼리는 없다'
+    where: '질문 1'
+  - topic: '지연 로딩(LAZY)은 연관을 처음 쓰는 순간에 조회한다. `@OneToMany`의 기본값은 LAZY다'
+    where: '질문 1'
+  - topic: 'EAGER는 가져오는 시점만 앞당긴다. JPQL은 적힌 대상만 조회하고 그 뒤에 연관을 따로 조회해서 쿼리 수가 같고, 필요 없을 때도 나가 손해다'
+    where: '질문 2'
+  - topic: '연관은 모두 LAZY로 둔다. `@ManyToOne`과 `@OneToOne`은 기본값이 EAGER라 직접 적는다'
+    where: '질문 2'
+  - topic: 'id로 하나만 찾는 `em.find`는 EAGER 연관을 join으로 가져오기도 한다'
+    where: '질문 2의 더 알아보기'
+  - topic: 'fetch join은 연관을 join해서 쿼리 1번에 가져온다. Spring Data JPA의 `@EntityGraph`도 같은 join을 만든다. Hibernate 6은 중복된 부모를 합친다'
+    where: '질문 3, 실무에서는'
+  - topic: '배치 페치(`default_batch_fetch_size`)는 여러 부모의 연관을 IN으로 묶는다. 쿼리 수는 1 + (N ÷ 배치 크기, 올림)'
+    where: '질문 3'
+  - topic: '필요한 값만 DTO로 바로 조회하는 방법'
+    where: '질문 3의 더 알아보기'
+  - topic: '컬렉션 fetch join에 페이징을 걸면 SQL에 LIMIT이 붙지 않고 Hibernate가 메모리에서 자른다(HHH90003004 경고). 팀만 페이징하고 멤버는 배치 페치로 가져온다'
+    where: '질문 4'
+  - topic: 'ToOne fetch join은 행이 늘지 않아 페이징과 함께 써도 된다'
+    where: '질문 4'
+  - topic: '메모리 페이징을 경고 대신 예외로 막는 설정 `hibernate.query.fail_on_pagination_over_collection_fetch`'
+    where: '실무에서는'
+  - topic: 'N+1은 데이터가 적은 개발 환경에서 보이지 않는다. 쿼리 수를 Hibernate 통계로 테스트에서 단정한다'
+    where: '실무에서는'
+  - topic: 'OSIV를 끈 뒤의 지연 로딩 예외는 EAGER가 아니라 fetch join과 DTO로 고친다'
+    where: '다루지 않음 (P6 OSIV)'
 links:
   test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOneTest.java
+  practiceTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOnePracticeTest.java
+  hibernateFetching: https://docs.hibernate.org/orm/6.6/userguide/html_single/#fetching
+  entityGraph: https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
 codes:
   predict: |-
     // 팀 10개
@@ -91,6 +128,40 @@ codes:
     from member m
     join team t on t.id = m.team_id
     [[limit 20]]
+  repoGraph: |-
+    interface TeamRepository
+        extends JpaRepository<Team, Long> {
+
+      [[@EntityGraph(attributePaths = "members")]]
+      List<Team> findAllBy();
+    }
+  practiceYml: |-
+    # application.yml
+    spring.jpa.properties.hibernate:
+      default_batch_fetch_size: 100
+      query.[[fail_on_pagination_⤷
+      over_collection_fetch]]: true
+  statsYml: |-
+    # src/test/resources/application.yml
+    spring.jpa.properties.hibernate:
+      [[generate_statistics]]: true
+  statsTest: |-
+    @Autowired EntityManagerFactory emf;
+
+    @Test
+    void 팀_목록은_쿼리_1번() {
+      Statistics stats = emf
+          .unwrap(SessionFactory.class)
+          .getStatistics();
+      stats.clear();
+
+      teamRepository.findAllBy()
+          .forEach(t -> t.getMembers().size());
+
+      assertThat(stats
+          .[[getPrepareStatementCount()]])
+          .isEqualTo(1);
+    }
 predict:
   title: 이 코드는 DB에 SQL을 몇 번 보낼까요?
   text: 팀이 10개 있고, 팀마다 멤버가 여러 명 있어요. 팀 목록을 가져온 뒤 팀마다 멤버 수를 세서 출력해요. 모르는 게 정상이니 감으로 골라 보세요. 답은 바로 다음 장에 나와요.
@@ -321,6 +392,58 @@ questions:
           answer: 2
           explain: 1~3행이 팀 A, 4행이 팀 B의 첫 멤버예요. 팀 B는 2명 중 1명만 받아요.
     recall: 팀 목록에 멤버를 붙일 때는 팀만 페이징하고 멤버는 배치 페치로 가져와요(2번). 컬렉션을 fetch join하면 행이 멤버 수만큼 늘어 DB에서 자를 수 없고, Hibernate가 전체를 메모리로 가져와 잘라요. 멤버 목록에 팀을 붙일 때는 행이 늘지 않아 fetch join을 써도 돼요.
+practice:
+  title: 스프링 데이터 JPA에서는 이렇게 해요
+  body:
+    - h3: 조회 메서드에 @EntityGraph를 붙여요
+    - code: repoGraph
+      notes:
+        - mark: '@EntityGraph(attributePaths = "members")'
+          text: 이 메서드로 조회할 때만 members를 join해서 함께 가져와요. 엔티티의 LAZY 설정은 그대로예요.
+    - p: 'JPQL을 직접 쓰지 않아도 질문 3의 fetch join과 같은 SQL이 나가요. 멤버가 필요한 화면은 이 메서드를, 필요 없는 화면은 `findAll()`을 불러요.'
+    - h3: 배치 크기와 메모리 페이징 막기는 설정으로
+    - code: practiceYml
+      notes:
+        - mark: 'fail_on_pagination_⤷'
+          text: 컬렉션 fetch join에 페이징을 걸면 경고만 남기지 않고 예외를 던지게 해요.
+    - p: '배치 크기는 모든 LAZY 연관에 한 번에 적용돼요. 질문 4의 메모리 페이징은 경고 한 줄이라 지나치기 쉬워서, 예외로 바꿔 두면 개발 중에 바로 드러나요.'
+    - ci:
+        key: fail-on-paging
+        label: 설정을 켜고 컬렉션 fetch join에 페이징을 건 실제 결과
+        source: NPlusOnePracticeTest.failOnCollectionFetchPaging
+    - h3: '흔한 실수: 개발 DB에서 빠르니 괜찮다고 넘어가기'
+    - p: '개발 DB에 팀이 3개뿐이면 N+1이 있어도 쿼리 4번이라 느리지 않아요. 운영에서 팀이 1,000개가 되면 1,001번이 돼요. 화면 속도로는 알아챌 수 없으니 **쿼리 수를 테스트에서 단정**해요.'
+    - code: statsYml
+    - code: statsTest
+      notes:
+        - mark: getPrepareStatementCount()
+          text: 이 세션 팩토리가 DB에 보낸 SQL 문의 수예요. clear() 뒤부터 세요.
+    - ci:
+        key: statistics
+        label: 팀 10개로 쿼리 수를 센 실제 결과
+        source: NPlusOnePracticeTest.countQueriesWithStatistics
+    - p: '누군가 조회 메서드를 `findAll()`로 바꾸거나 엔티티의 연관을 바꾸면 이 테스트가 실패해요. 쿼리 수가 늘어난 것을 배포 전에 알 수 있어요.'
+    - muted: '근거: `@EntityGraph`는 [Spring Data JPA 참조 문서](link:entityGraph), 배치 페치와 페이징 설정은 [Hibernate 사용자 가이드](link:hibernateFetching). 쿼리 수와 예외는 테스트([NPlusOnePracticeTest](link:practiceTest))로 확인했어요.'
+  says:
+    - '`@EntityGraph(attributePaths = "members")`를 조회 메서드에 붙이면 그 메서드만 fetch join처럼 쿼리 1번이다. 엔티티는 LAZY 그대로(테스트)'
+    - '`default_batch_fetch_size`와 `hibernate.query.fail_on_pagination_over_collection_fetch: true`를 설정에 둔다. 켜면 컬렉션 fetch join + 페이징이 예외로 멈춘다(테스트)'
+    - '흔한 실수: 데이터가 적은 개발 DB에서 빠르니 넘어간다. 고친 코드: `generate_statistics`를 켜고 `getPrepareStatementCount()`로 쿼리 수를 테스트에서 단정한다(테스트)'
+claims:
+  - claim: '지연 로딩인 팀 10개를 조회하고 팀마다 멤버를 쓰면 쿼리는 11번, 멤버를 쓰지 않으면 1번'
+    how: 'SqlCapture로 나간 SQL을 센다'
+    test: 'NPlusOneTest.lazyAccess, NPlusOneTest.lazyWithoutAccess'
+  - claim: 'EAGER로 바꾸면 멤버를 쓰지 않아도 11번'
+    how: '같은 방법'
+    test: 'NPlusOneTest.eagerDoesNotFix'
+  - claim: 'fetch join과 @EntityGraph는 쿼리 1번, 배치 크기 5면 3번'
+    how: '같은 방법'
+    test: 'NPlusOneTest.fetchJoin, NPlusOneTest.entityGraph, NPlusOneTest.batchFetch'
+  - claim: '컬렉션 fetch join + 페이징은 SQL에 LIMIT이 없고 HHH90003004 경고, ToOne fetch join + 페이징과 팀만 페이징 + 배치 페치는 LIMIT이 붙는다'
+    how: 'SQL 문자열과 로그를 본다'
+    test: 'NPlusOneTest.collectionFetchJoinPaging, NPlusOneTest.toOneFetchJoinPaging, NPlusOneTest.pagingWithBatchFetch'
+  - claim: 'fail_on_pagination_over_collection_fetch를 켜면 같은 조회가 예외로 멈추고, Hibernate 통계로 쿼리 수 11과 1을 센다'
+    how: '설정을 켠 @DataJpaTest'
+    test: 'NPlusOnePracticeTest.failOnCollectionFetchPaging, NPlusOnePracticeTest.countQueriesWithStatistics'
 interview:
   question: JPA N+1 문제를 설명해 주세요
   model:
@@ -332,5 +455,5 @@ interview:
       text: 연관관계는 모두 LAZY로 두고, 필요한 조회에서 fetch join으로 한 번에 가져옵니다. 컬렉션을 페이징해야 하면 fetch join은 메모리에서 페이징하므로, 배치 페치로 IN 쿼리에 묶습니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 목록 화면에서 SQL 로그로 쿼리 수를 세어 보고 배치 페치를 적용해 줄였습니다.'
-verified: "이 레슨의 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 코드가 바뀔 때마다 테스트([NPlusOneTest](link:test))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
+verified: "이 레슨의 쿼리 수는 짐작이 아니라, 실제 PostgreSQL에서 코드를 돌려 나간 SQL을 세어 본 값이에요. 코드가 바뀔 때마다 테스트([NPlusOneTest](link:test), [NPlusOnePracticeTest](link:practiceTest))가 다시 돌고, 결과가 달라지면 레슨을 고쳐요."
 footer: '근거: Hibernate ORM 사용자 가이드의 Fetching 장, Spring Data JPA 참조 문서의 Entity Graph 절. 쿼리 수는 Spring Boot 3.5(Hibernate 6.6) 기본 설정에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'

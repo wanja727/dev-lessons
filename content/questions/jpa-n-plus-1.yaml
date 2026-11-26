@@ -192,6 +192,26 @@ questions:
       - 반대로 Post에서 comments를 fetch join하면 행이 댓글 수만큼 늘어요. DB에서 자르지 못하고 전체를 메모리로 가져와 잘라요
       - EAGER로 바꾸거나 아무것도 하지 않으면 게시글을 따로 조회하는 쿼리가 더 나가요
     source: https://docs.jboss.org/hibernate/orm/6.6/userguide/html_single/Hibernate_User_Guide.html#fetching
+  - key: n1-fail-on-paging
+    concept: core
+    coreQuestion: q4
+    type: multiple_choice
+    status: draft
+    difficulty: 2
+    body: "application.yml에 spring.jpa.properties.hibernate.query.fail_on_pagination_over_collection_fetch: true를 적었어요. 그 뒤 \"select t from Team t left join fetch t.members\"에 setMaxResults(2)를 걸어 실행하면 어떻게 될까요?"
+    choices:
+      - "경고 없이 SQL에 LIMIT 2가 붙어 팀 2개가 나온다"
+      - "경고를 남기고 메모리에서 잘라 팀 2개가 나온다"
+      - "예외가 나고 조회가 멈춘다"
+      - "멤버를 빼고 팀만 2개 가져온다"
+    answer: "3"
+    explanation: |-
+      **예외(HibernateException)가 나고 조회가 멈춰요.**
+
+      - 이 설정이 없으면 HHH90003004 경고를 남기고 전체 행을 메모리로 가져와 잘라요
+      - 설정을 켜면 메모리 페이징을 하려던 순간에 예외를 던져서 개발 중에 바로 드러나요
+      - 고치는 법은 그대로예요. 팀만 페이징하고 멤버는 배치 페치로 가져와요
+    source: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/nplusone/NPlusOnePracticeTest.java
   - key: q-73be0dc3
     concept: core
     coreQuestion: q4

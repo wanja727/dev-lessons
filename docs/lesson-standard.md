@@ -202,6 +202,6 @@
 | 무엇 | 지금 | 맞출 곳 |
 | --- | --- | --- |
 | 코드와 실제 출력 | 틀은 한 상자로 보여 줄 수 있다 (`ci` 블록의 `code`). 이미 쓴 레슨의 실제 출력 19곳 가운데 2곳만 그렇게 바꿨다 | 자료 파일 넷 (`equals-hashcode`, `srp-ocp`, `tx-basics`, `connection-pool`) |
-| 이미 쓴 레슨 두 개의 문제 수 | `equals-hashcode`는 판정 23개와 설명형 5개이고 면접 질문이 없다. `srp-ocp`는 판정 17개와 설명형 6개다. 검사는 경고만 한다. 두 파일을 본문과 함께 줄인 뒤에 경고를 오류로 바꾼다 | `content/questions/`의 두 파일, `scripts/check-questions.mjs` |
+| 문제 수 검사 | 2026-11-26에 `equals-hashcode`와 `srp-ocp`의 문제를 기준에 맞춰 줄여 경고가 0개다. 검사는 아직 경고만 한다. 경고를 오류로 바꾼다 | `scripts/check-questions.mjs` |
 | 이미 쓴 레슨의 분량 | `equals-hashcode`와 `srp-ocp`의 자료 파일이 60KB와 64KB다. 같은 설명이 겹치는 곳과 비슷한 문제를 줄인다 | 두 자료 파일 |
-| 도입부, 알아야 할 것, 실무에서는 | 2026-11-25에 더했다. `cookie-session-token`만 갖췄다. 나머지 다섯 레슨은 틀이 예전 머리말을 보여 주고 실무 구역이 없다 | 자료 파일 다섯 (`jpa-n-plus-1`, `tx-basics`, `connection-pool`, `equals-hashcode`, `srp-ocp`) |
+| 도입부, 알아야 할 것, 실무에서는 | 2026-11-25에 더했다. `cookie-session-token`만 갖췄다. 나머지 네 레슨은 틀이 예전 머리말을 보여 주고 실무 구역이 없다. `jpa-n-plus-1`은 2026-11-26에 맞췄다 | 자료 파일 넷 (`tx-basics`, `connection-pool`, `equals-hashcode`, `srp-ocp`) |
