@@ -1,7 +1,7 @@
 # 영속성 컨텍스트
 # 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/jpa-persistence-context.yaml에 있다.
 title: 영속성 컨텍스트
-description: 영속성 컨텍스트가 무엇이고 언제 생기는지, 같은 id를 두 번 조회하면 왜 SELECT가 한 번인지, INSERT는 언제 나가는지, save() 없이 왜 UPDATE가 나가는지, 트랜잭션 밖에서 바꾼 값은 왜 저장되지 않는지. 다섯 가지 질문에 스스로 답할 수 있게, 책 제목을 바꾸며 나간 SQL을 세는 대화형 레슨.
+description: 영속성 컨텍스트가 무엇이고 언제 생기는지, 같은 id를 두 번 조회하면 왜 SELECT가 한 번인지, INSERT는 언제 어떤 순서로 나가는지, save() 없이 왜 UPDATE가 나가는지, 트랜잭션 밖에서 바꾼 값은 왜 저장되지 않는지. 다섯 가지 질문에 스스로 답할 수 있게, 책 제목을 바꾸며 나간 SQL을 세는 대화형 레슨.
 unit: JPA
 minutes: 25
 roadmap: P2
@@ -31,6 +31,8 @@ covers:
     where: '질문 3'
   - topic: 'flush가 일어나는 때: 트랜잭션 커밋 직전, JPQL 실행 직전, `em.flush()`. flush는 SQL을 보내는 것이지 커밋이 아니다'
     where: '질문 3'
+  - topic: 'flush는 코드에 적은 순서가 아니라 INSERT, UPDATE, DELETE 순서로 SQL을 보낸다. 그래서 유니크 값이 같은 행을 지우고 다시 넣으면 INSERT가 먼저 나가 23505로 실패한다. remove 뒤에 flush하거나 있는 행을 고쳐서 피한다'
+    where: '질문 3'
   - topic: 'IDENTITY 전략은 id를 INSERT해야 알 수 있어서 `persist` 즉시 INSERT가 나간다'
     where: '질문 3의 더 알아보기. 자세한 차이는 다루지 않음: 식별자 생성 전략(P9)'
   - topic: '변경 감지: 조회할 때 찍어 둔 스냅샷과 flush 때의 값을 비교해 바뀐 엔티티의 UPDATE를 만든다. `save()`를 부르지 않아도 된다'
@@ -58,6 +60,8 @@ links:
   scopeTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/persistencecontext/PersistenceContextScopeTest.java
   spec: https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html
   save: https://docs.spring.io/spring-data/jpa/reference/jpa/entity-persistence.html
+  flushTest: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/persistencecontext/FlushOrderTest.java
+  flushOrder: https://docs.hibernate.org/orm/6.6/userguide/html_single/#flushing-order
 codes:
   states: |-
     Book b = new Book("새 책"); // 비영속
@@ -101,6 +105,24 @@ codes:
     em.persist(new Book("새 책 2"));
     em.persist(new Book("새 책 3"));
     // 여기까지 INSERT는 몇 번?
+    em.flush();
+  flushOrder: |-
+    em.remove(old);
+    keep.changeTitle("스프링 핵심 2판");
+    em.persist(
+        new IsbnBook("978-2", "새 책"));
+    em.flush();
+  reinsert: |-
+    // old의 isbn은 978-1
+    em.remove(old);
+    em.persist(
+        new IsbnBook([["978-1"]], "다시 등록"));
+    em.flush();
+  reinsertFixed: |-
+    em.remove(old);
+    [[em.flush();]]
+    em.persist(
+        new IsbnBook("978-1", "다시 등록"));
     em.flush();
   service: |-
     @Service
@@ -251,19 +273,23 @@ questions:
       - next: '조회는 미뤄 두었다 꺼내 썼어요. 저장은 어떨까요? `persist`하면 INSERT가 바로 나갈까요?'
     recall: '첫 조회의 결과를 영속성 컨텍스트에 담아 두고, 두 번째 `find`는 DB에 가지 않고 거기서 꺼내기 때문이에요. 이것이 1차 캐시예요. 같은 객체를 돌려주니 같은 트랜잭션에서 같은 id의 엔티티는 `==`로도 같아요. JPQL은 캐시를 보지 않고 늘 SQL을 보내지만, 이미 있는 엔티티는 같은 객체를 돌려줘요.'
   - id: q3
-    title: persist한 엔티티의 INSERT는 언제 나가나요?
+    title: persist한 엔티티의 INSERT는 언제, 어떤 순서로 나가나요?
     conclusion:
-      lead: '바로 나가지 않고 모아 두었다가 flush할 때 한꺼번에 나가요.'
+      lead: '바로 나가지 않고 모아 두었다가 flush할 때 한꺼번에 나가요. 순서는 코드에 적은 순서가 아니라 INSERT, UPDATE, DELETE 순서예요.'
       sub: 'flush는 트랜잭션이 커밋되기 직전, JPQL을 실행하기 직전, `flush()`를 부를 때 일어나요. 이것을 쓰기 지연이라고 해요.'
     says:
       - '코드 writeBehind. `persist` 세 번 뒤 INSERT는 0번, `flush` 뒤 3번이다. 테스트의 수를 실제 출력으로 보인다'
       - 'flush는 모아 둔 SQL을 DB에 보내는 일이다. 커밋이 아니다. flush한 뒤에 롤백하면 INSERT도 없던 일이 된다'
       - 'JPQL을 실행하기 직전에도 flush한다. 아직 보내지 않은 INSERT가 있으면 JPQL이 그 행을 못 보기 때문이다. 나간 순서가 INSERT 다음 SELECT인 것을 테스트로 보인다'
       - '모아서 보내면 같은 SQL을 묶어 보내는 JDBC 배치를 쓸 수 있다는 것을 한 줄로 적는다(설정은 P9)'
+      - 'flush는 모아 둔 SQL을 코드의 순서가 아니라 종류별로 INSERT, UPDATE, DELETE 순서로 보낸다(Hibernate 문서의 Flush operation order). 코드 flushOrder는 remove, changeTitle, persist 순서인데 나간 SQL은 INSERT, UPDATE, DELETE다. 테스트로 보인다'
+      - '그래서 유니크 제약이 있는 값(ISBN)이 같은 행을 지우고 같은 값으로 새로 넣으면, INSERT가 DELETE보다 먼저 나가서 옛 행과 겹쳐 23505로 실패한다(코드 reinsert). 테스트로 보인다'
+      - '피하는 법 둘: remove 뒤에 `em.flush()`를 불러 DELETE를 먼저 보낸다(코드 reinsertFixed, 테스트로 보인다). 같은 책이라면 지우고 넣지 말고 있는 행의 값을 고친다(질문 4의 변경 감지)'
       - '더 알아보기: `@GeneratedValue(strategy = IDENTITY)`는 DB가 INSERT할 때 id를 만든다. 영속 상태가 되려면 id가 있어야 하므로 `persist` 즉시 INSERT가 나간다. 테스트로 보인다. 자세한 것은 P9'
     asks:
       - '본문의 예시: SEQUENCE 전략인 `Book`을 `persist`하고, 이어서 `select b from Book b`를 실행했다. INSERT와 SELECT 가운데 먼저 나간 것은 (INSERT. JPQL 실행 전에 자동으로 flush한다)'
       - '옮긴 상황: 트랜잭션 안에서 SEQUENCE 전략인 주문 3개를 `persist`하고 `em.flush()`를 부른 뒤 예외가 나서 롤백됐다. DB에 주문은 몇 개 남나 (0개. flush는 SQL을 보냈을 뿐 커밋이 아니다)'
+      - '옮긴 상황: 카테고리 코드(`code`, UNIQUE)를 고치는 기능을 "옛 카테고리를 `remove`하고 같은 코드로 새 카테고리를 `persist`"로 만들었다. 커밋할 때 어떻게 되나 (INSERT가 먼저 나가 23505로 실패한다)'
     body:
       - p: '`Book`은 id를 DB 시퀀스에서 미리 받아 오는 SEQUENCE 전략이에요. 새 책 셋을 `persist`하고 세어 봤어요.'
       - ci:
@@ -279,6 +305,28 @@ questions:
           - '`em.flush()`를 직접 부를 때'
       - callout: '**flush는 커밋이 아니에요.** SQL을 보냈을 뿐 트랜잭션은 아직 열려 있어요. flush한 뒤에 롤백하면 INSERT도 없던 일이 돼요. 책 셋을 flush한 뒤 롤백했더니 책의 수가 그대로였어요.'
       - p: '모아서 보내기 때문에, 같은 모양의 INSERT를 한 번에 묶어 보내는 JDBC 배치도 쓸 수 있어요. 설정은 식별자 생성 전략 레슨(P9)에서 봐요.'
+      - h3: flush는 정해진 순서로 보내요
+      - p: '모아 둔 SQL은 코드에 적은 순서대로 나가지 않아요. Hibernate는 종류별로 모아 **INSERT, UPDATE, DELETE 순서**로 보내요([Hibernate 문서](link:flushOrder)). ISBN이 겹치면 안 되는 책 `IsbnBook`으로 지우기, 고치기, 넣기를 차례로 하고 flush했어요.'
+      - ci:
+          key: flush-order
+          label: 실제 출력 보기
+          source: FlushOrderTest.flushOrder
+          code: flushOrder
+      - p: '코드에서는 지우기가 먼저인데 DELETE가 마지막에 나갔어요. 대부분은 순서가 바뀌어도 결과가 같아서 몰라도 돼요. 문제는 **유니크 제약**이 있을 때예요.'
+      - p: '잘못 등록한 책(ISBN 978-1)을 지우고 같은 ISBN으로 다시 넣었어요.'
+      - ci:
+          key: delete-then-insert
+          label: 실제 출력 보기
+          source: FlushOrderTest.deleteThenInsertSameUniqueValue
+          code: reinsert
+      - p: 'INSERT가 먼저 나가서, 아직 지워지지 않은 옛 행과 ISBN이 겹쳤어요. 그래서 유니크 위반(**23505**)으로 실패했어요. 코드만 보면 지운 뒤에 넣었으니 이상해 보이지만, flush의 순서로 보면 당연한 결과예요.'
+      - p: '피하는 법은 둘이에요. 하나는 지운 뒤 `em.flush()`를 불러 DELETE를 먼저 보내는 거예요.'
+      - ci:
+          key: flush-after-remove
+          label: 실제 출력 보기
+          source: FlushOrderTest.flushAfterRemove
+          code: reinsertFixed
+      - p: '더 나은 방법은 지우고 넣지 않는 거예요. 같은 책의 제목이나 분류를 바꾸려는 것이면, 있는 행을 조회해 값을 고쳐요. 질문 4의 변경 감지가 UPDATE 하나로 처리해요.'
       - more:
           summary: '더 알아보기: IDENTITY는 바로 INSERT해요'
           body:
@@ -292,7 +340,7 @@ questions:
           answer: 2
           explain: 'JPQL을 실행하기 직전에 자동으로 flush해서, 모아 둔 INSERT를 먼저 보내요.'
       - next: '저장도 미뤘다 보내요. 그러면 처음 코드처럼 `save()`조차 부르지 않았는데 UPDATE는 누가 만들었을까요?'
-    recall: '바로 나가지 않고 영속성 컨텍스트가 모아 두었다가 flush할 때 한꺼번에 나가요. 이것이 쓰기 지연이에요. flush는 커밋 직전, JPQL 실행 직전, `flush()`를 부를 때 일어나요. flush는 SQL을 보내는 것이지 커밋이 아니라서 그 뒤에 롤백하면 없던 일이 돼요. IDENTITY 전략은 id를 받으려고 `persist` 즉시 INSERT해요.'
+    recall: '바로 나가지 않고 영속성 컨텍스트가 모아 두었다가 flush할 때 한꺼번에 나가요. 이것이 쓰기 지연이에요. flush는 커밋 직전, JPQL 실행 직전, `flush()`를 부를 때 일어나요. flush는 SQL을 보내는 것이지 커밋이 아니라서 그 뒤에 롤백하면 없던 일이 돼요. 순서는 코드와 상관없이 INSERT, UPDATE, DELETE라서, 유니크 값이 같은 행을 지우고 다시 넣으면 INSERT가 먼저 나가 실패해요. IDENTITY 전략은 id를 받으려고 `persist` 즉시 INSERT해요.'
   - id: q4
     title: save()를 부르지 않았는데 왜 UPDATE가 나가나요?
     conclusion:
@@ -404,6 +452,12 @@ claims:
   - claim: 'JPQL 전에 자동 flush해서 INSERT가 SELECT보다 먼저 나간다'
     how: '나간 순서를 본다'
     test: 'PersistenceContextTest.autoFlushBeforeJpql'
+  - claim: 'flush는 코드의 순서와 상관없이 INSERT, UPDATE, DELETE 순서로 보낸다'
+    how: '나간 SQL의 종류와 순서를 본다'
+    test: 'FlushOrderTest.flushOrder'
+  - claim: '유니크 값이 같은 행을 remove하고 persist하면 INSERT가 먼저 나가 23505로 실패하고, remove 뒤에 flush하면 성공한다'
+    how: '같은 방법과 오류의 SQLState'
+    test: 'FlushOrderTest.deleteThenInsertSameUniqueValue, flushAfterRemove'
   - claim: '값을 바꾸면 `save()` 없이 UPDATE 1번, 바꾸지 않으면 0번'
     how: '같은 방법'
     test: 'PersistenceContextTest.dirtyChecking, noChangeNoUpdate'
@@ -421,6 +475,7 @@ sources:
   - '영속성 컨텍스트와 엔티티 상태, flush 시점: Jakarta Persistence 3.1 명세 3장 https://jakarta.ee/specifications/persistence/3.1/jakarta-persistence-spec-3.1.html'
   - '`save()`가 persist와 merge를 고르는 기준: Spring Data JPA 문서 https://docs.spring.io/spring-data/jpa/reference/jpa/entity-persistence.html'
   - '`@DynamicUpdate`: Hibernate 6.6 문서 https://docs.hibernate.org/orm/6.6/userguide/html_single/'
+  - 'flush가 SQL을 보내는 순서: Hibernate 6.6 문서의 Flush operation order https://docs.hibernate.org/orm/6.6/userguide/html_single/#flushing-order'
 interview:
   question: 영속성 컨텍스트가 무엇이고, 어떤 이점이 있나요?
   model:
@@ -429,8 +484,8 @@ interview:
     - label: 원리
       text: 같은 id를 다시 조회하면 1차 캐시에서 같은 객체를 돌려줘 SELECT가 한 번이고, persist한 엔티티의 INSERT는 모아 두었다가 flush 때 보냅니다. 조회할 때 스냅샷을 찍어 flush 때 비교하므로 save를 부르지 않아도 바뀐 엔티티의 UPDATE가 나갑니다.
     - label: 주의할 점
-      text: 트랜잭션이 끝난 준영속 엔티티는 바꿔도 반영되지 않고 예외도 없습니다. readOnly 트랜잭션은 스냅샷을 찍지 않아 변경이 반영되지 않습니다. JPQL은 1차 캐시를 보지 않고 늘 SQL을 보내며, 그 전에 자동으로 flush합니다. IDENTITY 전략은 persist 즉시 INSERT합니다.
+      text: 트랜잭션이 끝난 준영속 엔티티는 바꿔도 반영되지 않고 예외도 없습니다. readOnly 트랜잭션은 스냅샷을 찍지 않아 변경이 반영되지 않습니다. JPQL은 1차 캐시를 보지 않고 늘 SQL을 보내며, 그 전에 자동으로 flush합니다. flush는 INSERT, UPDATE, DELETE 순서로 보내서, 유니크 값이 같은 행을 지우고 다시 넣으면 INSERT가 먼저 나가 실패합니다. IDENTITY 전략은 persist 즉시 INSERT합니다.
     - label: 경험
       text: '(내 프로젝트로 채우기) 예: 컨트롤러에서 엔티티를 바꿨는데 저장되지 않는 문제를, 바꾸는 일을 서비스의 트랜잭션 메서드로 옮겨 고쳤습니다.'
-verified: 이 레슨의 SQL과 출력은 짐작이 아니라 스프링 부트 3.5와 Hibernate 6.6으로 PostgreSQL 16 컨테이너에 실제로 보내고 받은 값이에요. 코드가 바뀔 때마다 테스트([PersistenceContextTest](link:test), [PersistenceContextScopeTest](link:scopeTest))가 다시 돌아요.
-footer: '근거: 영속성 컨텍스트와 엔티티 상태, flush 시점은 [Jakarta Persistence 3.1 명세](link:spec) 3장, `save()`의 동작은 [Spring Data JPA 문서](link:save). SQL은 Hibernate 6.6과 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+verified: 이 레슨의 SQL과 출력은 짐작이 아니라 스프링 부트 3.5와 Hibernate 6.6으로 PostgreSQL 16 컨테이너에 실제로 보내고 받은 값이에요. 코드가 바뀔 때마다 테스트([PersistenceContextTest](link:test), [PersistenceContextScopeTest](link:scopeTest), [FlushOrderTest](link:flushTest))가 다시 돌아요.
+footer: '근거: 영속성 컨텍스트와 엔티티 상태, flush 시점은 [Jakarta Persistence 3.1 명세](link:spec) 3장, flush가 SQL을 보내는 순서는 [Hibernate 6.6 문서](link:flushOrder), `save()`의 동작은 [Spring Data JPA 문서](link:save). SQL은 Hibernate 6.6과 PostgreSQL 16에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
