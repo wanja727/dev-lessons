@@ -4,7 +4,7 @@
 # 모든 문제는 coreQuestions의 질문 하나에 묶이고(coreQuestion), 답의 근거가 레슨 본문에 있다
 # (site/src/content/lesson-pages/many-to-many-table.yaml의 says).
 # 동작에 관한 정답은 verification의 ManyToManyTableTest로 확인했다 (PostgreSQL 16, 하이버네이트 6.6).
-# 2026-11-27에 만들었다. 검수 전이라 draft다.
+# 2026-11-27에 만들고, 같은 날 레슨 본문과 검증 테스트에 대조해 검수했다(reviewed).
 # 질문마다 첫 문제는 본문의 예시로 묻고, 둘째 문제는 다른 상황으로 옮겨 묻는다. 실무 구역의 문제는 관련된 질문의 셋째 문제다.
 subject:
   key: dev
@@ -34,7 +34,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: code_predict
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "매핑 테이블 `study_member(member_id, study_id)`에는 두 외래 키만 있고 기본 키도 UNIQUE도 없어요. kim(1)이 자바 스터디(1) 가입 버튼을 두 번 눌렀고, lee(2)도 가입했어요. 마지막 select의 결과는? (PostgreSQL 16)"
     code: |-
@@ -60,9 +60,9 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
-    body: "게시글 태그 매핑 `post_tag(post_id, tag_id)`에는 두 외래 키만 있어요. 버그로 (10, 3)이 두 번 들어갔어요. 태그 3이 붙은 글은 실제로 4개예요. 이 문제를 바르게 고치는 방법은?"
+    body: "게시글 태그 매핑 `post_tag(post_id, tag_id)`에는 두 외래 키만 있어요. 버그로 (10, 3)이 두 번 들어가서, 태그 3이 붙은 글이 실제로는 4개인데 5개로 세어져요. 이 문제를 바르게 고치는 방법은?"
     choices:
       - "태그 수를 셀 때마다 `count(distinct post_id)`로 센다"
       - "`post_tag`에 `primary key (post_id, tag_id)`를 걸어 둘째 행을 DB가 막게 한다"
@@ -80,7 +80,7 @@ questions:
     concept: core
     coreQuestion: q1
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "`Member`에 `@ManyToMany @JoinTable(name = \"member_study\") List<Study> studies`가 있고, 테이블은 하이버네이트 6.6의 `ddl-auto`로 만들었어요. 스터디 셋에 들어간 kim에게서 `studies.remove(0)`으로 하나를 빼고 커밋하면 `member_study`에 어떤 SQL이 나가나요?"
     choices:
@@ -102,7 +102,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "매핑 테이블을 `study_member(id bigint generated always as identity primary key, member_id, study_id)`로 만들었어요. 두 열은 외래 키이고 다른 제약은 없어요. kim을 자바 스터디에 두 번 넣으면 어떻게 되나요?"
     choices:
@@ -122,7 +122,7 @@ questions:
     concept: core
     coreQuestion: q2
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "수강 테이블 `enrollment`의 기본 키가 `(student_id, course_id)`예요. 과제 제출 테이블 `submission`이 \"어느 수강의 제출인지\"를 외래 키로 가리키려면 어떻게 해야 하나요? (PostgreSQL 16)"
     choices:
@@ -143,7 +143,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "매핑 테이블 `study_member`에 짝이 10만 개 있고, 인덱스는 기본 키 `(member_id, study_id)` 하나뿐이에요. 스터디 하나의 짝은 50개쯤이에요. `select member_id from study_member where study_id = 42`의 실행계획은? (PostgreSQL 16, 통계를 갱신한 뒤)"
     choices:
@@ -162,7 +162,7 @@ questions:
     concept: core
     coreQuestion: q3
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "팔로우 테이블 `follow(follower_id, followee_id)`의 기본 키가 `(follower_id, followee_id)`예요. \"나를 팔로우하는 사람\" 목록(`where followee_id = ?`)이 느려요. 무엇을 더하나요?"
     choices:
@@ -183,7 +183,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "kim은 자바 스터디에서는 LEADER, SQL 스터디에서는 MEMBER예요. 역할(`role`) 열은 어디에 두나요?"
     choices:
@@ -203,7 +203,7 @@ questions:
     concept: core
     coreQuestion: q4
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 3
     body: "수강 테이블의 기본 키가 `(student_id, course_id)`이고, 수강을 취소하면 행을 지우지 않고 `dropped_at`에 날짜를 적어요. 취소한 학생이 같은 강의를 다시 신청하자 23505 오류가 났어요. 취소 기록을 남기면서 다시 신청할 수 있게 하려면? (PostgreSQL 16)"
     choices:
@@ -226,7 +226,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 1
     body: "`study_member`의 두 외래 키가 모두 `on delete cascade`예요. kim과 lee가 자바 스터디에, kim이 SQL 스터디에 있어요. 자바 스터디를 지우면 어떻게 되나요?"
     choices:
@@ -246,7 +246,7 @@ questions:
     concept: core
     coreQuestion: q5
     type: multiple_choice
-    status: draft
+    status: reviewed
     difficulty: 2
     body: "주문 항목 `order_item(order_id, product_id, qty, price)`이 상품을 외래 키로 가리켜요. 판매를 끝낸 상품을 지우려 할 때, `product_id` 외래 키의 규칙으로 알맞은 것은?"
     choices:
@@ -266,7 +266,7 @@ questions:
     concept: core
     coreQuestion: all
     type: descriptive
-    status: draft
+    status: reviewed
     difficulty: 3
     body: 면접에서 "다대다 관계를 테이블로 어떻게 설계하고, 매핑 테이블에서는 무엇을 신경 쓰나요?"라는 질문을 받았어요. 1분 안에 답해 보세요.
     explanation: |-
