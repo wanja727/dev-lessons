@@ -8,6 +8,7 @@
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
 import { inline } from '../lib/inline';
+import '../styles/site.css';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const lessons = await getCollection('lessons');
@@ -46,36 +47,44 @@ const count = cards.length;
 const units = files.map((f) => f.data.course).join(', ');
 ---
 <Base title="찾아보기 | Dev Lessons" description="개발 용어를 찾아 짧은 요약을 보고, 그 내용이 있는 레슨으로 가서 자세히 배워요.">
-  <main>
+  <link slot="head" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500;700&display=swap" />
+  <main class="page">
     <a class="back" href={`${base}/`}>← 레슨 목록</a>
-    <header>
+    <header class="page-head">
       <p class="eyebrow">Dev Lessons</p>
       <h1>찾아보기</h1>
       <p class="lede">궁금한 용어를 찾으면 짧게 알려 드려요. 더 알고 싶으면 그 내용이 있는 레슨의 질문으로 바로 가요. 지금은 {units} 용어 {count}개가 있어요.</p>
     </header>
 
     <div class="search" role="search">
-      <label for="q" class="sr">용어 찾기</label>
-      <input id="q" type="search" placeholder="예: persist, 변경 감지, N+1" autocomplete="off" spellcheck="false" />
+      <label class="search-field">
+        <span class="sr">용어 찾기</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+        <input id="q" type="search" placeholder="예: persist, 변경 감지, N+1" autocomplete="off" spellcheck="false" />
+      </label>
       <p class="status" id="status" aria-live="polite"></p>
     </div>
 
     <ol class="terms" id="terms">
       {cards.map((c, i) => (
-        <li class="term" id={c.key} data-i={i} data-names={JSON.stringify([c.name, ...c.aliases])} data-summary={c.summary}>
-          <h2 class="name">{c.name}{c.status === 'draft' && <span class="draft">검수 전</span>}</h2>
+        <li class="card term" id={c.key} data-i={i} data-names={JSON.stringify([c.name, ...c.aliases])} data-summary={c.summary}>
+          <div class="head">
+            <h2 class="name">{c.name}</h2>
+            {c.status === 'draft' && <span class="pill">검수 전</span>}
+          </div>
           {c.aliases.length > 0 && <p class="aliases">{c.aliases.join(', ')}</p>}
           <p class="summary" set:html={inline(c.summary)} />
           <a class="go" href={c.main.href}>
-            <span class="where">{c.main.lesson} {c.main.where}</span>
-            {c.main.title && <span class="qtitle">{c.main.title}</span>}
+            <span class="text">
+              <span class="where">{c.main.lesson} {c.main.where}</span>
+              {c.main.title && <span class="qtitle">{c.main.title}</span>}
+            </span>
+            <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
           </a>
           {c.also.length > 0 && (
             <p class="also">
-              함께 보기:{' '}
-              {c.also.map((a, ai) => (
-                <>{ai > 0 && ', '}<a href={a.href}>{a.lesson} {a.where}</a></>
-              ))}
+              <span>함께 보기</span>
+              {c.also.map((a) => <a href={a.href}>{a.lesson} {a.where}</a>)}
             </p>
           )}
         </li>
@@ -154,46 +163,30 @@ const units = files.map((f) => f.data.course).join(', ');
 </script>
 
 <style>
-  main {
-    max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px;
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-    padding-block: 32px 64px; line-height: 1.75; word-break: keep-all;
-  }
-  .back { color: var(--muted); font-size: 14px; text-decoration: none; }
-  .back:hover { color: var(--accent); }
-  header { display: flex; flex-direction: column; gap: 12px; }
-  .eyebrow { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.04em; }
-  h1 { margin: 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.3; letter-spacing: -0.02em; }
-  .lede { margin: 0; color: var(--muted); font-size: 17px; }
-  .search { position: sticky; top: 0; z-index: 1; padding: 12px 0 4px; background: var(--bg); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  input {
-    width: 100%; box-sizing: border-box; padding: 14px 16px; font: inherit; font-size: 17px;
-    color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-  }
-  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-  .status { margin: 6px 0 0 4px; min-height: 1.5em; font-size: 14px; color: var(--muted); }
-  .terms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
-  .term {
-    display: flex; flex-direction: column; gap: 8px; padding: 20px; border: 1px solid var(--line);
-    border-radius: 12px; background: var(--surface); scroll-margin-top: 96px;
-  }
-  .term:target { border-color: var(--accent); }
-  .name { margin: 0; font-size: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
-  .draft { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
-  .aliases { margin: -4px 0 0; font-family: var(--font-mono); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
-  .summary { margin: 0; color: var(--ink); }
-  .summary :global(code) { font-family: var(--font-mono); font-size: 0.9em; padding: 1px 5px; border-radius: 5px; background: var(--code-bg); overflow-wrap: anywhere; }
+  /* 찾는 칸은 목록을 내려도 위에 붙어 있다. 흰 면이라 아래 카드가 비치지 않는다 */
+  .search { position: sticky; top: 0; z-index: 1; margin-top: 20px; padding: 12px 0 2px; background: #ffffff; }
+  .status { margin: 6px 0 0 8px; min-height: 1.6em; font-size: 13px; color: var(--soft); }
+  .terms { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .term { display: flex; flex-direction: column; gap: 8px; padding: 20px 20px 18px; scroll-margin-top: 100px; }
+  .term:target { border-color: var(--accent-line); }
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .name { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .aliases { margin: -4px 0 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
+  .summary { margin: 0; font-size: 15px; line-height: 1.7; color: var(--ink-2); }
+  .summary :global(code) { font-family: var(--font-mono); font-size: 0.88em; padding: 1px 5px; border-radius: 6px; background: var(--code-bg); overflow-wrap: anywhere; }
+  /* 레슨으로 가는 길: 옅은 면 하나. 카드 안에서 누를 수 있는 곳이 여기라는 것을 보여 준다 */
   .go {
-    display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding: 12px 14px; border-radius: 10px;
-    border: 1px solid var(--line); color: var(--ink); text-decoration: none;
+    display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px;
+    border-radius: 14px; background: var(--tint); color: inherit; text-decoration: none;
   }
-  .go:hover { border-color: var(--accent); }
-  .go .where { font-size: 14px; font-weight: 700; color: var(--accent); }
-  .go .where::after { content: ' →'; }
-  .go .qtitle { font-size: 15px; color: var(--muted); }
-  .also { margin: 0; font-size: 14px; color: var(--muted); }
-  .also a { color: var(--accent); }
-  .empty { margin: 0; color: var(--muted); }
+  .go:hover { background: var(--accent-soft); }
+  .go:hover .arrow { color: var(--accent-ink); }
+  .go .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .go .where { font-size: 13px; font-weight: 600; color: var(--accent-ink); }
+  .go .qtitle { font-size: 14px; color: var(--sub); }
+  .also { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0; padding: 0 4px; font-size: 13px; color: var(--soft); }
+  .also a { color: var(--accent-ink); text-decoration: none; }
+  .also a:hover { text-decoration: underline; }
+  .empty { margin: 8px 0 0; padding: 0 8px; font-size: 15px; color: var(--sub); }
 </style>

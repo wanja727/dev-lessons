@@ -1,0 +1,67 @@
+/*
+ * 레슨 목록(첫 화면)과 찾아보기의 모양. Retrievo 앱의 디자인 토큰(노션 ADR-023, 앱의 globals.css)과 같은 값을 쓴다.
+ * - 흰 바탕에 가는 선. 묶음(.card)은 선으로만 나누고 그림자와 번짐은 쓰지 않는다
+ * - 라벤더(accent)는 누를 수 있는 것과 지금 고른 것에만 쓴다
+ * - 앱이 밝은 화면만 쓰므로 여기서도 다크 모드를 끈다 (tokens.css의 다크 값을 덮는다)
+ * 글꼴은 페이지가 Base의 head 슬롯으로 불러온다.
+ */
+html:root:root {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --ink: #3b3944;
+  --ink-2: #4a4856;
+  --sub: #5f5d6b;
+  --muted: #807e8c;
+  --soft: #8f8c9b;
+  --faint: #a9a7b6;
+  --line: #ebeaf1;
+  --line-strong: #e2e0ea;
+  --tint: #f7f6fb;
+  --accent: #8477e6;
+  --accent-ink: #6c5fd3;
+  --accent-soft: #f5f2ff;
+  --accent-line: #cfc6fb;
+  --code-bg: #f3f2f8;
+  --font-body: "Inter Tight", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  /* JetBrains Mono에는 한글이 없다. 뒤에 한글 글꼴을 두지 않으면 윈도우에서 굴림체로 나온다 */
+  --font-mono: "JetBrains Mono", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", ui-monospace, monospace;
+  color-scheme: light;
+}
+body { -webkit-tap-highlight-color: transparent; }
+:focus-visible, a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.page {
+  max-width: 640px; margin: 0 auto; display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 72px; line-height: 1.7; word-break: keep-all;
+}
+.page-head { display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
+.page-head .eyebrow { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.page-head h1 { margin: 0; font-size: clamp(26px, 5vw, 32px); line-height: 1.3; font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
+.page-head .lede { margin: 0; font-size: 15px; color: var(--sub); }
+.back { align-self: flex-start; margin: 0 0 20px 4px; font-size: 14px; color: var(--muted); text-decoration: none; }
+.back:hover { color: var(--ink); }
+
+/* 묶음 제목: 작은 회색 글자. 오른쪽에 짧은 설명을 둘 수 있다 */
+.group-title { margin: 0; padding: 0 8px 2px; font-size: 13px; font-weight: 600; color: var(--sub); }
+.group-note { margin: 0; padding: 0 8px; font-size: 13px; color: var(--soft); }
+
+.card { background: #ffffff; border: 1px solid var(--line); border-radius: 20px; }
+a.card { color: inherit; text-decoration: none; }
+a.card:hover { border-color: var(--accent-line); }
+a.card:active { background: var(--tint); }
+.arrow { flex: none; width: 16px; height: 16px; color: var(--faint); }
+
+/* 찾는 칸: 흰 면에 가는 선, 왼쪽에 돋보기 */
+.search-field { position: relative; display: block; }
+.search-field svg { position: absolute; left: 16px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--soft); pointer-events: none; }
+.search-field input {
+  width: 100%; box-sizing: border-box; height: 52px; padding: 0 16px 0 44px;
+  font: inherit; font-size: 16px; color: var(--ink); background: #ffffff;
+  border: 1px solid var(--line-strong); border-radius: 16px; -webkit-appearance: none; appearance: none;
+}
+.search-field input::placeholder { color: var(--faint); }
+.search-field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.pill { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent-ink); }
