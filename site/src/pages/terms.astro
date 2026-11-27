@@ -1,0 +1,199 @@
+---
+/**
+ * 찾아보기: 용어 카드를 찾아 짧은 요약을 보고, 그 내용이 있는 레슨의 질문으로 간다.
+ * 카드는 src/content/terms/*.yaml에 있다. 요약은 레슨 본문을 옮긴 것이고 자세한 설명은 레슨에 둔다.
+ * 찾기는 브라우저에서 한다. 카드가 수백 개를 넘으면 그때 색인을 따로 만든다.
+ * 주소의 ?q=로 검색어를 넘길 수 있다 (예: /terms/?q=persist). Retrievo 앱은 ?embed=1을 붙여 iframe으로 연다.
+ */
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import { inline } from '../lib/inline';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const lessons = await getCollection('lessons');
+const pages = await getCollection('lessonPages', (p) => p.data.stage === 'full');
+const files = await getCollection('terms');
+
+/** 카드가 가리키는 곳을 레슨 주소와 이름으로 바꾼다. 레슨이나 질문이 없으면 빌드를 멈춘다 */
+function place(key: string, lesson: string, at: string) {
+  const page = pages.find((p) => p.id === lesson);
+  const listed = lessons.find((l) => l.data.page === lesson);
+  if (!page || !listed) throw new Error(`찾아보기 카드 '${key}': 레슨 '${lesson}'이 없다`);
+  const data = page.data as Record<string, any>;
+  if (at === 'practice') {
+    if (!data.practice) throw new Error(`찾아보기 카드 '${key}': 레슨 '${lesson}'에 실무에서는 구역이 없다`);
+    return { href: `${base}/lessons/${lesson}/#practice`, lesson: listed.data.title, where: '실무에서는', title: data.practice.title ?? '' };
+  }
+  const q = data.questions.find((x: { id: string }) => x.id === at);
+  if (!q) throw new Error(`찾아보기 카드 '${key}': 레슨 '${lesson}'에 ${at}이 없다`);
+  return { href: `${base}/lessons/${lesson}/#${at}`, lesson: listed.data.title, where: `질문 ${at.slice(1)}`, title: q.title };
+}
+
+const seen = new Map<string, string>();
+const cards = files.flatMap((f) => f.data.terms).map((t) => {
+  // 이름과 다른 이름이 두 카드에 겹치면 어느 카드를 보여 줄지 모호하다. 빌드를 멈춘다
+  for (const n of [t.key, t.name, ...t.aliases].map((n) => n.toLowerCase())) {
+    const other = seen.get(n);
+    if (other && other !== t.key) throw new Error(`찾아보기 카드 '${t.key}': '${n}'가 카드 '${other}'와 겹친다`);
+    seen.set(n, t.key);
+  }
+  const main = place(t.key, t.lesson, t.at);
+  const also = t.also.map((a) => place(t.key, a.lesson, a.at));
+  return { ...t, main, also };
+}); // 파일에 적은 순서(배우는 순서)대로 둔다
+
+const count = cards.length;
+const units = files.map((f) => f.data.course).join(', ');
+---
+<Base title="찾아보기 | Dev Lessons" description="개발 용어를 찾아 짧은 요약을 보고, 그 내용이 있는 레슨으로 가서 자세히 배워요.">
+  <main>
+    <a class="back" href={`${base}/`}>← 레슨 목록</a>
+    <header>
+      <p class="eyebrow">Dev Lessons</p>
+      <h1>찾아보기</h1>
+      <p class="lede">궁금한 용어를 찾으면 짧게 알려 드려요. 더 알고 싶으면 그 내용이 있는 레슨의 질문으로 바로 가요. 지금은 {units} 용어 {count}개가 있어요.</p>
+    </header>
+
+    <div class="search" role="search">
+      <label for="q" class="sr">용어 찾기</label>
+      <input id="q" type="search" placeholder="예: persist, 변경 감지, N+1" autocomplete="off" spellcheck="false" />
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+
+    <ol class="terms" id="terms">
+      {cards.map((c, i) => (
+        <li class="term" id={c.key} data-i={i} data-names={JSON.stringify([c.name, ...c.aliases])} data-summary={c.summary}>
+          <h2 class="name">{c.name}{c.status === 'draft' && <span class="draft">검수 전</span>}</h2>
+          {c.aliases.length > 0 && <p class="aliases">{c.aliases.join(', ')}</p>}
+          <p class="summary" set:html={inline(c.summary)} />
+          <a class="go" href={c.main.href}>
+            <span class="where">{c.main.lesson} {c.main.where}</span>
+            {c.main.title && <span class="qtitle">{c.main.title}</span>}
+          </a>
+          {c.also.length > 0 && (
+            <p class="also">
+              함께 보기:{' '}
+              {c.also.map((a, ai) => (
+                <>{ai > 0 && ', '}<a href={a.href}>{a.lesson} {a.where}</a></>
+              ))}
+            </p>
+          )}
+        </li>
+      ))}
+    </ol>
+    <p class="empty" id="empty" hidden>
+      <span id="empty-q"></span>에 맞는 용어가 아직 없어요. 지금은 {units} 레슨의 용어만 있어요.
+    </p>
+  </main>
+</Base>
+
+<script>
+  const input = document.getElementById('q') as HTMLInputElement;
+  const list = document.getElementById('terms') as HTMLOListElement;
+  const status = document.getElementById('status') as HTMLParagraphElement;
+  const empty = document.getElementById('empty') as HTMLParagraphElement;
+  const emptyQ = document.getElementById('empty-q') as HTMLSpanElement;
+  const items = [...list.querySelectorAll<HTMLLIElement>('li.term')];
+
+  // 비교할 때는 대소문자, 띄어쓰기, 괄호와 점 같은 기호를 무시한다. "em.persist()"를 "persist"로 찾을 수 있게
+  const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣+]/g, '');
+  const index = items.map((li) => ({
+    li,
+    i: Number(li.dataset.i),
+    names: (JSON.parse(li.dataset.names || '[]') as string[]).map(norm).filter(Boolean),
+    summary: norm(li.dataset.summary || ''),
+  }));
+
+  function score(e: (typeof index)[number], q: string, words: string[]): number {
+    let best = 0;
+    for (const n of e.names) {
+      if (n === q) best = Math.max(best, 100);
+      else if (n.startsWith(q)) best = Math.max(best, 60);
+      else if (n.includes(q)) best = Math.max(best, 40);
+    }
+    if (best) return best;
+    if (e.summary.includes(q)) return 10;
+    // 여러 낱말이면 낱말마다 이름이나 요약 어딘가에 있으면 맞는 것으로 본다
+    if (words.length > 1 && words.every((w) => e.names.some((n) => n.includes(w)) || e.summary.includes(w))) return 5;
+    return 0;
+  }
+
+  function run(raw: string) {
+    const q = norm(raw);
+    const words = raw.split(/\s+/).map(norm).filter(Boolean);
+    const ranked = index
+      .map((e) => ({ e, s: q ? score(e, q, words) : 1 }))
+      .sort((a, b) => b.s - a.s || a.e.i - b.e.i);
+    let shown = 0;
+    for (const { e, s } of ranked) {
+      e.li.hidden = s === 0;
+      if (s > 0) shown++;
+      list.appendChild(e.li);
+    }
+    empty.hidden = shown > 0;
+    emptyQ.textContent = `'${raw.trim()}'`;
+    status.textContent = q && shown > 0 ? `${shown}개 찾았어요` : '';
+  }
+
+  // 검색어를 주소에 남겨 두면 그 결과를 링크로 나눌 수 있다. embed 같은 다른 값은 그대로 둔다
+  function remember(raw: string) {
+    const url = new URL(location.href);
+    if (raw.trim()) url.searchParams.set('q', raw.trim());
+    else url.searchParams.delete('q');
+    history.replaceState(null, '', url);
+  }
+
+  const initial = new URLSearchParams(location.search).get('q') || '';
+  input.value = initial;
+  run(initial);
+  input.addEventListener('input', () => {
+    run(input.value);
+    remember(input.value);
+  });
+  if (!document.documentElement.classList.contains('embed') && !location.hash) input.focus();
+</script>
+
+<style>
+  main {
+    max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 64px; line-height: 1.75; word-break: keep-all;
+  }
+  .back { color: var(--muted); font-size: 14px; text-decoration: none; }
+  .back:hover { color: var(--accent); }
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .eyebrow { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.04em; }
+  h1 { margin: 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.3; letter-spacing: -0.02em; }
+  .lede { margin: 0; color: var(--muted); font-size: 17px; }
+  .search { position: sticky; top: 0; z-index: 1; padding: 12px 0 4px; background: var(--bg); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 14px 16px; font: inherit; font-size: 17px;
+    color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .status { margin: 6px 0 0 4px; min-height: 1.5em; font-size: 14px; color: var(--muted); }
+  .terms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .term {
+    display: flex; flex-direction: column; gap: 8px; padding: 20px; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--surface); scroll-margin-top: 96px;
+  }
+  .term:target { border-color: var(--accent); }
+  .name { margin: 0; font-size: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+  .draft { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+  .aliases { margin: -4px 0 0; font-family: var(--font-mono); font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .summary { margin: 0; color: var(--ink); }
+  .summary :global(code) { font-family: var(--font-mono); font-size: 0.9em; padding: 1px 5px; border-radius: 5px; background: var(--code-bg); overflow-wrap: anywhere; }
+  .go {
+    display: flex; flex-direction: column; gap: 2px; margin-top: 4px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--line); color: var(--ink); text-decoration: none;
+  }
+  .go:hover { border-color: var(--accent); }
+  .go .where { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .go .where::after { content: ' →'; }
+  .go .qtitle { font-size: 15px; color: var(--muted); }
+  .also { margin: 0; font-size: 14px; color: var(--muted); }
+  .also a { color: var(--accent); }
+  .empty { margin: 0; color: var(--muted); }
+</style>

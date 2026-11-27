@@ -133,5 +133,25 @@ const lessonPages = defineCollection({
   ),
 });
 
-export const collections = { lessons, lessonPages };
+// 찾아보기 카드 (docs/lesson-data-format.md "찾아보기 카드"). 파일 하나에 과정 하나의 카드를 모은다.
+// 가리키는 레슨과 질문이 있는지는 칸만으로 알 수 없어서 /terms/ 페이지를 만들 때 확인한다
+const termAt = z.union([questionId, z.literal('practice')]);
+const terms = defineCollection({
+  loader: glob({ pattern: '**/*.yaml', base: './src/content/terms' }),
+  schema: z.object({
+    course: text, // 찾아보기 첫머리에 "지금은 JPA 용어 N개"처럼 쓴다
+    terms: z.array(z.object({
+      key: z.string().regex(/^[a-z0-9-]+$/),
+      name: text,
+      aliases: z.array(text).default([]),
+      summary: text,
+      lesson: text,
+      at: termAt,
+      also: z.array(z.object({ lesson: text, at: termAt })).default([]),
+      status: z.enum(['draft', 'reviewed']),
+    })).min(1),
+  }),
+});
+
+export const collections = { lessons, lessonPages, terms };
 

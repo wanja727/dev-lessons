@@ -1,0 +1,423 @@
+# 찾아보기 카드: JPA
+# 형식: docs/lesson-data-format.md "찾아보기 카드"
+#
+# 카드는 레슨 본문에 이미 있는 내용만 짧게 옮긴다. 요약의 근거는 lesson과 at이 가리키는 질문의 본문이다.
+# at은 질문 id(q1~q6) 또는 practice(실무에서는)다. 레슨이나 질문이 없으면 빌드가 멈춘다.
+# 새 카드는 status: draft로 올리고, 레슨 본문에 대조해 검수한 뒤 reviewed로 바꾼다.
+# 2026-11-28에 JPA 레슨 11개로 만들었다.
+course: JPA
+terms:
+  # ── 기본 ──
+  - key: jpa-hibernate
+    name: JPA와 Hibernate
+    aliases: [JPA, Hibernate, ORM, Spring Data JPA, 하이버네이트]
+    summary: 'JPA는 객체와 테이블 사이를 옮기는 방법을 정한 자바 표준이고, Hibernate는 그 표준을 구현한 라이브러리예요. ORM은 이 변환을 대신해 주는 기술을 부르는 말이에요. Spring Data JPA는 그 위에서 리포지토리 구현까지 만들어 주는 스프링 프로젝트예요.'
+    lesson: jpa-basics
+    at: q1
+    status: draft
+
+  - key: entity
+    name: '@Entity'
+    aliases: [엔티티, Entity, '@Id', '@Column', 기본 생성자]
+    summary: '클래스를 테이블에 대응시키는 표시예요. `@Id`는 기본 키, `@Column`은 컬럼 이름과 제약이고, 적지 않은 필드는 필드 이름을 스네이크 케이스로 바꾼 컬럼이 돼요. Hibernate가 조회한 행으로 객체를 만들 때 쓰도록 인자 없는 생성자가 있어야 해요(protected 가능).'
+    lesson: jpa-basics
+    at: q2
+    status: draft
+
+  - key: jpa-repository
+    name: JpaRepository
+    aliases: [리포지토리, Repository, findById, findAll, 메서드 이름 쿼리, 쿼리 메서드]
+    summary: '인터페이스만 쓰면 스프링이 앱을 띄울 때 구현 객체(프록시)를 만들어 빈으로 넣어 줘요. `JpaRepository<엔티티, id 타입>`을 상속하면 `save`, `findById`, `findAll`을 받아요. `findByName`처럼 이름 규칙으로 적은 메서드는 이름을 읽어 WHERE 조건을 만들고, 이름이 필드와 맞지 않으면 앱이 뜰 때 실패해요.'
+    lesson: jpa-basics
+    at: q3
+    status: draft
+
+  - key: jpql
+    name: JPQL
+    aliases: ['@Query', 쿼리, 네이티브 쿼리]
+    summary: '테이블과 컬럼이 아니라 엔티티와 필드를 대상으로 쓰는 쿼리예요. Hibernate가 매핑을 보고 SQL로 바꿔 보내요. 실행하기 직전에 자동으로 flush하고, 1차 캐시를 먼저 보지 않고 늘 SQL을 보내요.'
+    lesson: jpa-basics
+    at: q4
+    also:
+      - { lesson: jpa-persistence-context, at: q2 }
+    status: draft
+
+  # ── 영속성 컨텍스트 ──
+  - key: persistence-context
+    name: 영속성 컨텍스트
+    aliases: [persistence context, 퍼시스턴스 컨텍스트]
+    summary: '엔티티를 id로 담아 두는 작업 공간이에요. 스프링에서는 트랜잭션이 시작될 때 생겨서 끝날 때 닫혀요. 여기에 담긴 엔티티를 JPA가 지켜보면서 1차 캐시, 쓰기 지연, 변경 감지를 해 줘요.'
+    lesson: jpa-persistence-context
+    at: q1
+    status: draft
+
+  - key: entity-manager
+    name: EntityManager
+    aliases: [엔티티 매니저, em]
+    summary: '영속성 컨텍스트를 다루는 JPA의 인터페이스예요. `persist`, `find`, `remove`, `flush` 같은 메서드로 엔티티를 넣고 꺼내요. 스프링에서는 트랜잭션 하나에 영속성 컨텍스트 하나가 생겨요.'
+    lesson: jpa-persistence-context
+    at: q1
+    status: draft
+
+  - key: entity-state
+    name: 엔티티의 상태
+    aliases: [비영속, 영속, 삭제 상태, 생명주기, transient, managed, removed]
+    summary: '`new`만 한 엔티티는 비영속, 영속성 컨텍스트가 관리하면 영속, 컨텍스트가 닫혔거나 `detach`하면 준영속, `remove`하면 삭제 상태예요. JPA가 변경을 지켜보는 것은 영속 상태뿐이에요.'
+    lesson: jpa-persistence-context
+    at: q1
+    status: draft
+
+  - key: em-persist
+    name: em.persist()
+    aliases: [persist, EntityManager.persist, 저장]
+    summary: '엔티티를 영속성 컨텍스트에 넣어 영속 상태로 만들어요. INSERT는 바로 나가지 않고 모아 두었다가 flush할 때 나가요. IDENTITY 전략이면 id를 받으려고 `persist` 즉시 INSERT해요.'
+    lesson: jpa-persistence-context
+    at: q3
+    also:
+      - { lesson: id-generation, at: q1 }
+    status: draft
+
+  - key: em-find
+    name: em.find()
+    aliases: [find, EntityManager.find, 조회]
+    summary: 'id로 엔티티를 찾아요. 먼저 영속성 컨텍스트를 보고, 없을 때만 SELECT해요. 같은 트랜잭션에서 같은 id로 다시 찾으면 SELECT 없이 같은 객체를 돌려줘요.'
+    lesson: jpa-persistence-context
+    at: q2
+    also:
+      - { lesson: proxy-lazy-loading, at: q1 }
+    status: draft
+
+  - key: em-remove
+    name: em.remove()
+    aliases: [remove, EntityManager.remove, 삭제]
+    summary: '엔티티를 삭제 상태로 만들고, DELETE는 flush할 때 나가요. flush는 INSERT, UPDATE, DELETE 순서로 보내서, 유니크 값이 같은 행을 지우고 같은 값으로 다시 넣으면 INSERT가 먼저 나가 실패해요.'
+    lesson: jpa-persistence-context
+    at: q3
+    also:
+      - { lesson: cascade-orphan, at: q2 }
+    status: draft
+
+  - key: first-level-cache
+    name: 1차 캐시
+    aliases: [first level cache, 일차 캐시, 동일성 보장]
+    summary: '같은 id를 두 번 조회하면 두 번째는 DB에 가지 않고 영속성 컨텍스트에서 꺼내요. 같은 객체를 돌려줘서 같은 트랜잭션 안에서는 `==`로 비교해도 같아요. 트랜잭션 하나의 것이라 요청 사이에 데이터를 아끼는 캐시는 아니에요.'
+    lesson: jpa-persistence-context
+    at: q2
+    status: draft
+
+  - key: write-behind
+    name: 쓰기 지연
+    aliases: [transactional write-behind, 쓰기 지연 저장소]
+    summary: '`persist`한 엔티티의 INSERT를 바로 보내지 않고 모아 두었다가 flush할 때 한꺼번에 보내는 것이에요. 모아서 보내기 때문에 같은 INSERT를 묶는 JDBC 배치도 쓸 수 있어요.'
+    lesson: jpa-persistence-context
+    at: q3
+    status: draft
+
+  - key: flush
+    name: flush
+    aliases: [em.flush(), 플러시, EntityManager.flush]
+    summary: '영속성 컨텍스트에 모아 둔 SQL을 DB에 보내는 일이에요. 트랜잭션이 커밋되기 직전, JPQL을 실행하기 직전, `em.flush()`를 부를 때 일어나요. SQL을 보낼 뿐 커밋은 아니라서 그 뒤에 롤백하면 없던 일이 돼요.'
+    lesson: jpa-persistence-context
+    at: q3
+    status: draft
+
+  - key: flush-order
+    name: flush 순서
+    aliases: [INSERT UPDATE DELETE 순서, '23505', 유니크 위반]
+    summary: 'flush는 코드에 적은 순서가 아니라 INSERT, UPDATE, DELETE 순서로 SQL을 보내요. 그래서 유니크 값이 같은 행을 지우고 다시 넣으면 INSERT가 먼저 나가 23505로 실패해요. `remove` 뒤에 `em.flush()`를 부르거나, 지우지 말고 있는 행의 값을 고쳐서 피해요.'
+    lesson: jpa-persistence-context
+    at: q3
+    status: draft
+
+  - key: dirty-checking
+    name: 변경 감지
+    aliases: [dirty checking, 더티 체킹, 스냅샷]
+    summary: '조회할 때 찍어 둔 스냅샷과 flush할 때의 값을 비교해서, 바뀐 엔티티의 UPDATE를 JPA가 만들어요. 그래서 `save()`를 부르지 않아도 UPDATE가 나가요. 값이 그대로면 UPDATE도 없어요.'
+    lesson: jpa-persistence-context
+    at: q4
+    status: draft
+
+  - key: detached
+    name: 준영속
+    aliases: [detached, detach, em.detach()]
+    summary: '영속성 컨텍스트가 닫혔거나 `detach`해서 더는 JPA가 지켜보지 않는 엔티티예요. 바꿔도 비교할 스냅샷이 없고 flush도 없어서 DB에 반영되지 않아요. 트랜잭션 밖에서 바꾼 값이 그래서 저장되지 않아요.'
+    lesson: jpa-persistence-context
+    at: q5
+    status: draft
+
+  - key: merge
+    name: em.merge()
+    aliases: [merge, 병합]
+    summary: '준영속 객체의 값을 영속 엔티티에 모든 필드째 복사해요. 화면에서 받은 객체에 비어 있는 필드가 있으면 그 필드도 null로 덮어써요. 그래서 고칠 때는 다시 조회해서 값을 바꾸는 쪽(변경 감지)을 써요.'
+    lesson: jpa-persistence-context
+    at: q5
+    status: draft
+
+  - key: save
+    name: save()
+    aliases: [repository.save, JpaRepository.save, saveAll]
+    summary: 'Spring Data JPA의 `save()`는 새 엔티티면 `persist`, id가 있으면 `merge`를 불러요. 조회한 엔티티를 고칠 때는 부르지 않아도 변경 감지로 UPDATE가 나가요.'
+    lesson: jpa-persistence-context
+    at: practice
+    also:
+      - { lesson: jpa-basics, at: q3 }
+    status: draft
+
+  - key: read-only
+    name: '@Transactional(readOnly = true)'
+    aliases: [readOnly, 읽기 전용 트랜잭션]
+    summary: '읽기 전용 트랜잭션에서는 변경 감지를 하지 않아요. 그래서 이 안에서 엔티티의 값을 바꿔도 UPDATE가 나가지 않아요.'
+    lesson: jpa-persistence-context
+    at: q5
+    status: draft
+
+  # ── 식별자 ──
+  - key: identity-sequence
+    name: IDENTITY와 SEQUENCE
+    aliases: ['@GeneratedValue', GenerationType, IDENTITY, SEQUENCE, AUTO, 식별자 생성 전략, id 생성]
+    summary: 'IDENTITY는 INSERT할 때 DB에서 id를 얻어서 `persist` 즉시 INSERT해요. SEQUENCE는 INSERT 전에 시퀀스에서 id를 받아 INSERT를 flush까지 미뤄요. Hibernate 6에서 `GenerationType.AUTO`는 SEQUENCE를 골라요.'
+    lesson: id-generation
+    at: q1
+    also:
+      - { lesson: id-generation, at: practice }
+    status: draft
+
+  - key: allocation-size
+    name: allocationSize
+    aliases: ['@SequenceGenerator', 시퀀스 예약]
+    summary: '시퀀스에서 번호를 한 번에 여러 개(기본 50개) 예약해 두고 메모리에서 나눠 줘서, 시퀀스를 부르는 횟수를 줄여요. DB 시퀀스의 증가값과 맞아야 해요. 앱이 다시 뜨면 남은 예약 번호가 버려져 id에 구멍이 생겨요.'
+    lesson: id-generation
+    at: q2
+    status: draft
+
+  - key: jdbc-batch
+    name: JDBC 배치
+    aliases: [batch_size, hibernate.jdbc.batch_size, order_inserts, 배치 INSERT, 벌크 INSERT]
+    summary: '같은 모양의 INSERT를 묶어 한 번에 보내요(`hibernate.jdbc.batch_size`). SEQUENCE는 INSERT를 모아 둘 수 있어 배치로 묶이지만, IDENTITY는 INSERT마다 id를 돌려받아야 해서 묶이지 않아요.'
+    lesson: id-generation
+    at: q3
+    status: draft
+
+  # ── 연관관계 ──
+  - key: many-to-one
+    name: '@ManyToOne'
+    aliases: [ManyToOne, 다대일, '@JoinColumn', 외래 키 매핑]
+    summary: '외래 키 컬럼을 가진 쪽(다 쪽)에서 상대 엔티티를 가리켜요. 다대일 단방향이 가장 기본이에요. 기본 로딩이 EAGER라서 `fetch = FetchType.LAZY`를 직접 적어요.'
+    lesson: association-owner
+    at: q1
+    also:
+      - { lesson: proxy-lazy-loading, at: practice }
+    status: draft
+
+  - key: one-to-many
+    name: '@OneToMany'
+    aliases: [OneToMany, 일대다, 양방향, 일대다 단방향]
+    summary: '일 쪽에서 컬렉션으로 여러 엔티티를 가리켜요. 양방향이면 `mappedBy`를 적고, 그 컬렉션은 읽기만 해요. `mappedBy` 없이 `@JoinColumn`으로 쓰는 일대다 단방향은 INSERT 뒤에 외래 키를 채우는 UPDATE가 더 나가서 피해요.'
+    lesson: association-owner
+    at: q4
+    also:
+      - { lesson: association-owner, at: q2 }
+    status: draft
+
+  - key: owner
+    name: 연관관계의 주인
+    aliases: [mappedBy, owner, 주인]
+    summary: '외래 키를 바꾸는 필드는 하나예요. 외래 키를 가진 테이블 쪽 필드(`Member.team`)가 주인이고, `mappedBy`를 적은 쪽은 주인을 비추는 거울이라 읽기만 해요. 거울 쪽 컬렉션에 넣거나 빼도 외래 키는 바뀌지 않아요.'
+    lesson: association-owner
+    at: q2
+    status: draft
+
+  - key: convenience-method
+    name: 연관관계 편의 메서드
+    aliases: [편의 메서드, 양방향 동기화]
+    summary: '주인만 바꾸면 DB는 맞지만, 같은 트랜잭션 안의 반대쪽 컬렉션은 그대로라 메모리의 객체가 DB와 달라요. JPA는 거울 쪽을 대신 채워 주지 않아서, 메서드 하나로 양쪽 필드를 함께 맞춰요.'
+    lesson: association-owner
+    at: q3
+    status: draft
+
+  - key: many-to-many
+    name: '@ManyToMany'
+    aliases: [ManyToMany, 다대다, 연결 엔티티]
+    summary: '매핑 테이블을 엔티티 없이 감춰 주지만, 그 테이블에 가입일이나 역할 같은 열을 더할 수 없어요. 그래서 실무에서는 연결 엔티티 하나와 `@ManyToOne` 둘로 풀어요. List로 두면 매핑 테이블에 기본 키가 없어 같은 쌍이 들어가니, 쓴다면 Set으로 둬요.'
+    lesson: many-to-many-table
+    at: practice
+    also:
+      - { lesson: association-owner, at: q4 }
+    status: draft
+
+  # ── 프록시와 로딩 ──
+  - key: proxy
+    name: 프록시
+    aliases: [proxy, 하이버네이트 프록시, HibernateProxy]
+    summary: '지연 로딩인 연관 필드에 진짜 엔티티 대신 들어가는 객체예요. 엔티티 클래스를 상속해 Hibernate가 실행 중에 만들어요. id만 알고 있다가, id가 아닌 값을 처음 읽을 때 SELECT를 한 번 보내 초기화해요.'
+    lesson: proxy-lazy-loading
+    at: q1
+    also:
+      - { lesson: proxy-lazy-loading, at: q2 }
+    status: draft
+
+  - key: get-reference
+    name: getReferenceById()
+    aliases: [getReference, em.getReference(), getReferenceById]
+    summary: 'SELECT 없이 프록시를 돌려줘요. 외래 키만 채워 저장할 때 쓰면 연관 엔티티를 조회하지 않고 저장해요. 없는 id로 만든 프록시는 초기화할 때 `EntityNotFoundException`이 나요.'
+    lesson: proxy-lazy-loading
+    at: q1
+    also:
+      - { lesson: proxy-lazy-loading, at: practice }
+    status: draft
+
+  - key: lazy
+    name: 지연 로딩
+    aliases: [LAZY, FetchType.LAZY, lazy loading]
+    summary: '연관 엔티티를 처음 쓰는 순간에 조회해요. 그 전까지는 프록시가 자리를 지켜요. `@OneToMany`, `@ManyToMany`의 기본값이고, `@ManyToOne`, `@OneToOne`은 직접 적어야 해요.'
+    lesson: proxy-lazy-loading
+    at: q1
+    also:
+      - { lesson: jpa-n-plus-1, at: q2 }
+    status: draft
+
+  - key: eager
+    name: 즉시 로딩
+    aliases: [EAGER, FetchType.EAGER, eager loading]
+    summary: '가져오는 시점만 앞당길 뿐 N+1을 해결하지 않아요. JPQL은 적힌 대상만 조회한 뒤 연관을 따로 조회해서 쿼리 수가 같고, 필요 없을 때도 나가 손해예요. 연관은 모두 LAZY로 둬요.'
+    lesson: jpa-n-plus-1
+    at: q2
+    status: draft
+
+  - key: lazy-init-exception
+    name: LazyInitializationException
+    aliases: [could not initialize proxy, no Session, 지연 로딩 예외]
+    summary: '영속성 컨텍스트가 닫힌 뒤에 초기화되지 않은 프록시를 읽으면 나요. 서비스가 돌려준 엔티티의 LAZY 연관을 컨트롤러에서 읽을 때 흔해요. 트랜잭션 안에서 fetch join으로 가져오거나 DTO로 바꿔 돌려줘서 막아요. EAGER로 바꾸는 것은 해결이 아니에요.'
+    lesson: proxy-lazy-loading
+    at: q3
+    also:
+      - { lesson: proxy-lazy-loading, at: q4 }
+    status: draft
+
+  # ── 조회 성능 ──
+  - key: n-plus-1
+    name: N+1 문제
+    aliases: [N+1, n+1, 엔플러스원]
+    summary: '목록을 쿼리 1번으로 가져온 뒤, 각 엔티티의 연관을 따로 조회해서 쿼리가 1 + N번 나가는 문제예요. 연관을 쓰지 않으면 추가 쿼리는 없어요. fetch join이나 배치 페치로 묶어서 가져와 해결해요.'
+    lesson: jpa-n-plus-1
+    at: q1
+    also:
+      - { lesson: jpa-n-plus-1, at: q3 }
+    status: draft
+
+  - key: fetch-join
+    name: fetch join
+    aliases: [join fetch, 페치 조인, '@EntityGraph', EntityGraph]
+    summary: '연관을 join해서 쿼리 1번에 함께 가져와요. Spring Data JPA의 `@EntityGraph`도 같은 join을 만들어요. 컬렉션을 fetch join하고 페이징하면 DB가 아니라 Hibernate가 메모리에서 잘라서, 그때는 배치 페치를 써요.'
+    lesson: jpa-n-plus-1
+    at: q3
+    also:
+      - { lesson: jpa-n-plus-1, at: q4 }
+    status: draft
+
+  - key: batch-fetch
+    name: 배치 페치
+    aliases: [default_batch_fetch_size, '@BatchSize', BatchSize, batch fetch]
+    summary: '여러 부모의 연관을 IN 하나로 묶어 가져와요(`default_batch_fetch_size`). 쿼리 수는 1 + (N을 배치 크기로 나눠 올림)이에요. 부모 목록은 그대로 페이징되어서, 컬렉션이 붙은 목록을 페이징할 때 써요.'
+    lesson: jpa-n-plus-1
+    at: q3
+    also:
+      - { lesson: jpa-n-plus-1, at: q4 }
+    status: draft
+
+  - key: collection-fetch-paging
+    name: 컬렉션 fetch join과 페이징
+    aliases: [HHH90003004, firstResult/maxResults specified with collection fetch, 메모리 페이징, fail_on_pagination_over_collection_fetch]
+    summary: '컬렉션을 fetch join한 쿼리에 페이징을 걸면 SQL에 LIMIT이 붙지 않고, Hibernate가 전체를 메모리로 가져온 뒤 잘라요(HHH90003004 경고). 부모만 페이징하고 컬렉션은 배치 페치로 가져와요. ToOne fetch join은 행이 늘지 않아 페이징과 함께 써도 돼요.'
+    lesson: jpa-n-plus-1
+    at: q4
+    status: draft
+
+  # ── cascade, 벌크 연산 ──
+  - key: cascade
+    name: cascade
+    aliases: [CascadeType, CascadeType.ALL, CascadeType.PERSIST, CascadeType.REMOVE, 영속성 전이]
+    summary: 'JPA는 엔티티를 하나씩 따로 저장해서, 부모만 저장하면 자식은 저장되지 않아요. `cascade = PERSIST`는 부모를 저장할 때 자식도, `REMOVE`는 부모를 지울 때 자식을 하나씩 먼저 지워요. 외래 키를 정하는 주인과는 상관없는 설정이에요.'
+    lesson: cascade-orphan
+    at: q1
+    also:
+      - { lesson: cascade-orphan, at: q2 }
+    status: draft
+
+  - key: orphan-removal
+    name: orphanRemoval
+    aliases: [orphanRemoval = true, 고아 객체, 고아 제거]
+    summary: '부모 컬렉션에서 뺀 자식(고아)을 DELETE해요. 없으면 컬렉션에서 빼도 아무 일도 없어요. cascade와 함께, 자식의 생명주기를 부모 하나가 온전히 가질 때만 써요(주문과 주문 상품).'
+    lesson: cascade-orphan
+    at: q3
+    also:
+      - { lesson: cascade-orphan, at: q4 }
+    status: draft
+
+  - key: bulk-update
+    name: 벌크 연산
+    aliases: ['@Modifying', executeUpdate, 벌크 업데이트, bulk update, clearAutomatically]
+    summary: '조건에 맞는 행을 UPDATE나 DELETE 한 번으로 바꿔요(`@Modifying @Query`). 영속성 컨텍스트를 거치지 않아서 이미 조회한 엔티티는 옛 값 그대로예요. 뒤에서 다시 읽으려면 `clearAutomatically = true`로 컨텍스트를 비우거나 트랜잭션의 맨 앞에서 해요.'
+    lesson: jpa-bulk-update
+    at: q1
+    also:
+      - { lesson: jpa-bulk-update, at: q2 }
+      - { lesson: jpa-bulk-update, at: q3 }
+    status: draft
+
+  # ── 동적 쿼리 ──
+  - key: specification
+    name: Specification
+    aliases: [Criteria API, JpaSpecificationExecutor, 스펙]
+    summary: '조건 하나를 Specification 하나로 만들고, 들어온 것만 `and`로 이어요. 조건 값이 null이면 null을 돌려주는 Specification은 건너뛰어서 메서드 하나로 모든 조합을 처리해요. 스프링 데이터만으로 되지만 필드 이름을 문자열로 써요.'
+    lesson: dynamic-query
+    at: q2
+    status: draft
+
+  - key: querydsl
+    name: Querydsl
+    aliases: [Q 클래스, QClass, BooleanBuilder, JPAQueryFactory]
+    summary: '엔티티로 만든 Q 클래스로 쿼리를 자바 코드로 써요. 필드 이름의 오타를 컴파일러가 잡아요. 조건이 null이면 빠지는 메서드를 `where`에 나열해 동적 쿼리를 만들고, 빌드에 코드 생성 설정이 필요해요.'
+    lesson: dynamic-query
+    at: q3
+    status: draft
+
+  # ── OSIV ──
+  - key: osiv
+    name: OSIV
+    aliases: [Open Session In View, open-in-view, spring.jpa.open-in-view, OpenEntityManagerInViewInterceptor]
+    summary: '영속성 컨텍스트를 요청이 들어올 때 열어 응답이 끝날 때 닫아요. 스프링 부트의 기본값은 켜짐이고, 트랜잭션의 범위는 그대로 서비스 메서드예요. 켜면 컨트롤러에서도 지연 로딩이 되지만, 요청이 끝날 때까지 DB 커넥션을 쥐어서 API 서버는 보통 꺼요.'
+    lesson: osiv
+    at: q1
+    also:
+      - { lesson: osiv, at: q3 }
+    status: draft
+
+  # ── 상속과 값 타입 ──
+  - key: inheritance
+    name: '@Inheritance'
+    aliases: [상속 매핑, SINGLE_TABLE, JOINED, TABLE_PER_CLASS, dtype, '@DiscriminatorColumn']
+    summary: '상속을 테이블로 옮기는 방법이에요. SINGLE_TABLE은 한 테이블에 모두 담고 `dtype`으로 나누며, JOINED는 부모와 자식 테이블을 조인하고, TABLE_PER_CLASS는 자식마다 테이블을 둬요. 기본은 SINGLE_TABLE이고 TABLE_PER_CLASS는 쓰지 않아요.'
+    lesson: inheritance-embedded
+    at: q1
+    also:
+      - { lesson: inheritance-embedded, at: q2 }
+    status: draft
+
+  - key: mapped-superclass
+    name: '@MappedSuperclass'
+    aliases: [MappedSuperclass, BaseEntity, 공통 필드]
+    summary: '테이블 없이 생성 시각 같은 필드만 자식 엔티티에 물려줘요. 엔티티가 아니라서 부모 타입으로 조회할 수 없어요.'
+    lesson: inheritance-embedded
+    at: q2
+    status: draft
+
+  - key: embeddable
+    name: '@Embeddable'
+    aliases: ['@Embedded', 값 타입, 임베디드 타입, '@AttributeOverride', '@ElementCollection']
+    summary: '여러 필드를 값 하나로 묶은 클래스예요. 자기 id와 테이블이 없고, 컬럼은 그것을 쓰는 엔티티의 테이블에 그대로 들어가요. 두 엔티티가 같은 값 객체를 함께 가리키면 한쪽을 바꿀 때 둘 다 바뀌어서 불변으로 만들어요.'
+    lesson: inheritance-embedded
+    at: q3
+    also:
+      - { lesson: inheritance-embedded, at: q4 }
+    status: draft
