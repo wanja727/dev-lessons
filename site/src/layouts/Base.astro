@@ -85,7 +85,21 @@ const { title, description, theme } = Astro.props;
             last = h;
             window.parent.postMessage({ source: 'dev-lessons', type: 'height', height: h }, '*');
           }
-          new ResizeObserver(send).observe(document.body);
+          /*
+           * 주소에 #q3처럼 구역이 있으면(찾아보기에서 온 경우) 높이가 맞춰진 뒤 한 번 앱에 그 위치를 알린다.
+           * 높이가 맞춰지면 이 페이지는 스크롤되지 않아서 브라우저가 #앵커로 가 주지 못한다
+           */
+          var target = location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null;
+          var sentTarget = false;
+          function scrollToTarget() {
+            if (!target || sentTarget || !fitted()) return;
+            sentTarget = true;
+            setTimeout(function () {
+              window.parent.postMessage({ source: 'dev-lessons', type: 'scroll', top: Math.round(target.getBoundingClientRect().top + window.scrollY) }, '*');
+            }, 120);
+          }
+          new ResizeObserver(function () { send(); scrollToTarget(); }).observe(document.body);
+          window.addEventListener('resize', scrollToTarget);
           window.addEventListener('load', send);
           window.addEventListener('resize', send);
           send();

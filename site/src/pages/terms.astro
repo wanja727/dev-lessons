@@ -23,11 +23,11 @@ function place(key: string, lesson: string, at: string) {
   const data = page.data as Record<string, any>;
   if (at === 'practice') {
     if (!data.practice) throw new Error(`찾아보기 카드 '${key}': 레슨 '${lesson}'에 실무에서는 구역이 없다`);
-    return { href: `${base}/lessons/${lesson}/#practice`, lesson: listed.data.title, where: '실무에서는', title: data.practice.title ?? '' };
+    return { slug: lesson, at, href: `${base}/lessons/${lesson}/#practice`, lesson: listed.data.title, where: '실무에서는', title: data.practice.title ?? '' };
   }
   const q = data.questions.find((x: { id: string }) => x.id === at);
   if (!q) throw new Error(`찾아보기 카드 '${key}': 레슨 '${lesson}'에 ${at}이 없다`);
-  return { href: `${base}/lessons/${lesson}/#${at}`, lesson: listed.data.title, where: `질문 ${at.slice(1)}`, title: q.title };
+  return { slug: lesson, at, href: `${base}/lessons/${lesson}/#${at}`, lesson: listed.data.title, where: `질문 ${at.slice(1)}`, title: q.title };
 }
 
 const seen = new Map<string, string>();
@@ -74,7 +74,7 @@ const units = files.map((f) => f.data.course).join(', ');
           </div>
           {c.aliases.length > 0 && <p class="aliases">{c.aliases.join(', ')}</p>}
           <p class="summary" set:html={inline(c.summary)} />
-          <a class="go" href={c.main.href}>
+          <a class="go" href={c.main.href} data-lesson={c.main.slug} data-at={c.main.at}>
             <span class="text">
               <span class="where">{c.main.lesson} {c.main.where}</span>
               {c.main.title && <span class="qtitle">{c.main.title}</span>}
@@ -84,7 +84,7 @@ const units = files.map((f) => f.data.course).join(', ');
           {c.also.length > 0 && (
             <p class="also">
               <span>함께 보기</span>
-              {c.also.map((a) => <a href={a.href}>{a.lesson} {a.where}</a>)}
+              {c.also.map((a) => <a href={a.href} data-lesson={a.slug} data-at={a.at}>{a.lesson} {a.where}</a>)}
             </p>
           )}
         </li>
@@ -160,6 +160,33 @@ const units = files.map((f) => f.data.course).join(', ');
     remember(input.value);
   });
   if (!document.documentElement.classList.contains('embed') && !location.hash) input.focus();
+
+  // Retrievo 앱 안(iframe)에서는 앱에 있는 레슨의 링크를 앱의 레슨 화면으로 보낸다.
+  // 앱이 먼저 자기 레슨 키 목록(lessons)을 보내 준다. 목록에 있는 레슨이면 링크를 막고 레슨 키와 구역을 알린다(open-lesson).
+  // 목록에 없거나 목록이 아직 없으면 막지 않는다. 그러면 링크가 새 탭으로 열린다 (Base가 target을 _blank로 둔다)
+  if (document.documentElement.classList.contains('embed') && window.parent !== window) {
+    let appLessons: Set<string> | null = null;
+    window.addEventListener('message', (e) => {
+      if (e.source !== window.parent) return;
+      const data = e.data as { source?: unknown; type?: unknown; keys?: unknown } | null;
+      if (!data || data.source !== 'retrievo' || data.type !== 'lessons' || !Array.isArray(data.keys)) return;
+      appLessons = new Set(data.keys.filter((k): k is string => typeof k === 'string'));
+    });
+    list.addEventListener('click', (e) => {
+      const a = (e.target as Element).closest<HTMLAnchorElement>('a[data-lesson]');
+      if (!a || !appLessons || !appLessons.has(a.dataset.lesson || '') || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      window.parent.postMessage({ source: 'dev-lessons', type: 'open-lesson', lesson: a.dataset.lesson, at: a.dataset.at }, '*');
+    });
+    // 준비됐다고 알리면 앱이 레슨 키 목록을 답으로 보낸다. 앱이 아직 듣기 전이면 놓치므로 목록이 올 때까지 몇 번 다시 알린다
+    let tries = 0;
+    const ready = () => {
+      if (appLessons || tries++ >= 20) return;
+      window.parent.postMessage({ source: 'dev-lessons', type: 'terms-ready' }, '*');
+      setTimeout(ready, 500);
+    };
+    ready();
+  }
 </script>
 
 <style>
@@ -170,6 +197,8 @@ const units = files.map((f) => f.data.course).join(', ');
   .terms { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
   .term { display: flex; flex-direction: column; gap: 8px; padding: 20px 20px 18px; scroll-margin-top: 100px; }
   .term:target { border-color: var(--accent-line); }
+  /* 카드의 display: flex가 hidden 속성을 이기지 않게 한다. 찾기에 맞지 않는 카드를 숨긴다 */
+  .term[hidden] { display: none; }
   .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .name { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
   .aliases { margin: -4px 0 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--faint); overflow-wrap: anywhere; }
@@ -189,4 +218,7 @@ const units = files.map((f) => f.data.course).join(', ');
   .also a { color: var(--accent-ink); text-decoration: none; }
   .also a:hover { text-decoration: underline; }
   .empty { margin: 8px 0 0; padding: 0 8px; font-size: 15px; color: var(--sub); }
+  /* 앱 안에서는 앱이 제목(찾아보기)을 보여 주므로 페이지의 제목을 숨긴다 */
+  :global(html.embed) .page-head :is(.eyebrow, h1) { display: none; }
+  :global(html.embed) .search { margin-top: 12px; }
 </style>
