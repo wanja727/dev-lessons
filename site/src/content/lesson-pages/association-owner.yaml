@@ -348,8 +348,8 @@ questions:
           summary: '더 알아보기: 다대다와 일대일'
           body:
             - ul:
-                - '`@ManyToMany`는 연결 테이블(`team_member`)을 감춰 줘요. 그런데 가입일처럼 연결 자체의 정보를 담을 컬럼을 더할 수 없어요. 그래서 연결 엔티티(`TeamMembership`)를 만들고 양쪽에 다대일 둘로 풀어요.'
-                - '`@OneToOne`은 외래 키를 어느 테이블에 둘지 골라요. 외래 키를 가진 쪽이 주인이에요.'
+                - '`@ManyToMany`는 연결 테이블(`team_member`)을 감춰 줘요. 그런데 가입일처럼 연결 자체의 정보를 담을 컬럼을 더할 수 없어요. 그래서 연결 엔티티(`TeamMembership`)를 만들고 양쪽에 다대일 둘로 풀어요. 연결 테이블의 기본 키, 같은 쌍을 막는 제약, 양쪽 방향 인덱스, 삭제 규칙은 [다대다와 매핑 테이블](lesson:many-to-many-table)에서 다뤄요.'
+                - '`@OneToOne`은 외래 키를 어느 테이블에 둘지 골라요. 외래 키를 가진 쪽이 주인이에요. 테이블에서 1:1을 지키는 UNIQUE는 [테이블 관계 설계](lesson:table-relationships) 질문 4에서 다뤄요.'
       - quiz:
           q: '일대다 단방향(팀에만 `@OneToMany`와 `@JoinColumn`)으로 팀 하나와 멤버 3명을 함께 저장했어요. 멤버 테이블에 나가는 UPDATE는 몇 번일까요?'
           options:

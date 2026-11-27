@@ -1,0 +1,537 @@
+# 테이블 관계 설계
+# 자료 파일의 칸은 docs/lesson-data-format.md에 있다. 문제는 content/questions/table-relationships.yaml에 있다.
+# 매핑 테이블을 깊게 다루는 것(키, 인덱스, 관계의 속성, 삭제 규칙)은 다대다와 매핑 테이블(D18, many-to-many-table)이 맡는다.
+title: 테이블 관계 설계
+description: 요구사항에서 테이블과 관계를 어떻게 찾는지, ERD의 선 끝 기호는 무엇을 뜻하는지, 1:N과 1:1은 외래 키를 어디에 어떻게 두는지, N:M은 왜 외래 키 하나로 담을 수 없는지. 다섯 가지 질문에 스스로 답할 수 있게 스터디 서비스의 회원, 프로필, 글, 스터디로 배우는 대화형 레슨.
+unit: DB
+minutes: 20
+roadmap: D17
+type: 설계
+prerequisites:
+  - slug: keys-constraints
+    title: 키와 제약 조건
+  - slug: sql-join
+    title: 조인
+assume: 'PostgreSQL 16. 기본 키, 외래 키, UNIQUE가 무엇인지([키와 제약 조건](lesson:keys-constraints)), 두 테이블을 조인하는 SQL([조인](lesson:sql-join)). 실무 구역은 JPA의 `@ManyToOne`을 한 번 본 정도면 돼요.'
+example: '스터디 서비스. 회원(`member`)은 프로필(`profile`)을 하나 가질 수 있고, 글(`post`)을 여러 개 쓰고, 여러 스터디(`study`)에 들어가요. 요구사항 문장에서 이 네 테이블과 세 관계를 찾아 테이블로 옮겨요.'
+intro:
+  - '새 서비스의 DB를 처음 설계하는 날이에요. 요구사항 문서에는 "회원은 여러 스터디에 들어가고, 스터디에는 여러 회원이 있다" 같은 문장이 수십 줄 있어요. 일단 `study` 테이블에 `member_id`를 하나 넣었더니, 스터디 하나에 회원을 둘 넣을 방법이 없었어요.'
+  - '테이블 사이의 관계는 한 번 정하면 바꾸기 어려워요. 데이터가 쌓인 뒤 외래 키의 자리를 옮기려면 마이그레이션과 코드 수정이 함께 따라와요. 스프링 개발자는 엔티티의 `@ManyToOne`, `@OneToOne`을 쓰기 전에, 테이블에서 외래 키가 어느 쪽에 어떤 제약과 함께 있어야 하는지부터 정해요.'
+  - '이 레슨에서는 요구사항 문장에서 관계를 찾고, ERD로 읽고, 1:N, 1:1, N:M을 PostgreSQL 테이블로 옮겨요. 외래 키를 잘못된 쪽에 두거나 제약을 빠뜨렸을 때 실제로 어떤 데이터가 들어가는지도 돌려 봐요.'
+covers:
+  - topic: '요구사항의 명사 가운데 따로 저장하고 가리켜야 하는 것이 엔티티(테이블)이고, 값 하나로 끝나는 것(이메일, 제목)은 열이다. 엔티티를 잇는 동사가 관계다'
+    where: '질문 1'
+  - topic: '관계의 종류(카디널리티)는 "A 하나에 B는 몇 개?"를 양쪽 방향으로 물어 정한다. 한쪽만 물으면 N:M을 1:N으로 잘못 본다'
+    where: '질문 1'
+  - topic: '같은 두 엔티티도 요구사항에 따라 관계가 다르다. 회원이 팀 하나에만 들어가면 1:N, 여러 팀에 들어가면 N:M'
+    where: '질문 1'
+  - topic: '관계의 최소 개수(없어도 되나, 꼭 있어야 하나)는 외래 키 열의 NULL 허용으로 옮긴다'
+    where: '질문 1과 질문 3'
+  - topic: 'ERD는 엔티티를 상자로, 관계를 선으로 그린다. 상자 안에 열과 PK, FK, UK 표시가 있다'
+    where: '질문 2'
+  - topic: '선 끝의 까마귀 발 기호: 막대 둘은 정확히 하나, 동그라미와 막대는 없거나 하나, 동그라미와 까마귀 발은 없거나 여럿, 막대와 까마귀 발은 하나 이상. 기호는 그 기호가 붙은 쪽의 개수다'
+    where: '질문 2'
+  - topic: '식별 관계(부모의 키가 자식 기본 키의 일부)와 비식별 관계. Mermaid에서는 실선과 점선'
+    where: '질문 2의 더 알아보기'
+  - topic: '1:N은 N 쪽(자식)에 외래 키를 둔다. 1 쪽에 두면 칸 하나에 값 여럿이 필요하거나 부모 행이 자식 수만큼 반복된다'
+    where: '질문 3'
+  - topic: '외래 키 하나로 양쪽 방향을 다 찾는다(회원의 글, 글의 작성자)'
+    where: '질문 3'
+  - topic: '같은 테이블 안의 1:N(상위 카테고리, 댓글의 부모 댓글)은 자기 자신을 가리키는 외래 키다'
+    where: '질문 3의 더 알아보기'
+  - topic: '1:1은 외래 키에 UNIQUE를 건다. UNIQUE가 없으면 1:N이라 둘째 행이 들어간다. 외래 키를 기본 키로 쓰는 공유 기본 키도 있다'
+    where: '질문 4'
+  - topic: '1:1의 외래 키는 나중에 생기거나 없을 수 있는 쪽(프로필)에 둔다. 1:1은 한 테이블로 합칠 수도 있고, 나누는 이유가 있을 때 나눈다'
+    where: '질문 4'
+  - topic: 'N:M은 어느 쪽에 외래 키를 두어도 칸 하나에 상대 하나만 담겨서 외래 키 하나로 담을 수 없다. 두 외래 키를 가진 매핑 테이블이 N:M을 1:N 둘로 푼다'
+    where: '질문 5'
+  - topic: '쉼표로 이은 id 목록이나 배열 열로 N:M을 담으면 외래 키와 조인을 쓸 수 없다'
+    where: '질문 5. 제1정규형은 정규화(D4)'
+  - topic: '매핑 테이블의 기본 키, 같은 쌍을 막는 제약, 양쪽 방향 인덱스, 관계의 속성(가입일, 역할), ON DELETE'
+    where: '다루지 않음: 다대다와 매핑 테이블(D18)'
+  - topic: 'JPA `@OneToOne`은 외래 키에 UNIQUE를 만들지만 저장할 때 검사하지 않는다. 손으로 쓴 마이그레이션에 UNIQUE가 빠지면 둘째 행이 들어가고 조회가 실패한다'
+    where: '실무에서는'
+  - topic: '연관관계의 주인, `mappedBy`, 양방향 매핑'
+    where: '다루지 않음: 연관관계 매핑(P3)'
+  - topic: '1:N을 조인하면 1 쪽 행이 반복되는 것'
+    where: '다루지 않음: 조인(D2)'
+  - topic: '한 테이블에 여러 사실을 담았을 때의 이상 현상과 정규형'
+    where: '다루지 않음: 정규화(D4)'
+links:
+  test: https://github.com/wanja727/dev-lessons/blob/main/verification/src/test/java/lab/devlessons/relationship/TableRelationshipsTest.java
+  mermaid: https://mermaid.js.org/syntax/entityRelationshipDiagram.html
+  constraints: https://www.postgresql.org/docs/16/ddl-constraints.html
+  hibernate: https://docs.hibernate.org/orm/6.6/userguide/html_single/
+codes:
+  predict: |-
+    create table profile (
+      id bigint primary key,
+      member_id bigint not null
+        references member(id),
+      bio text
+    );
+    insert into profile
+    values (1, 1, '안녕하세요');
+    -- 같은 회원(1)의 프로필을 한 번 더
+    insert into profile
+    values (2, 1, '반가워요');
+  requirements: |-
+    1. 회원은 이메일로 가입한다
+    2. 회원은 프로필을 하나 가질 수 있다
+    3. 회원은 글을 여러 개 쓴다
+    4. 회원은 여러 스터디에 들어간다
+    5. 스터디에는 여러 회원이 있다
+  erd: |-
+    erDiagram
+      MEMBER ||--o| PROFILE : has
+      MEMBER ||--o{ POST : writes
+      MEMBER ||--o{ STUDY_MEMBER : joins
+      STUDY ||--o{ STUDY_MEMBER : has
+  erdLine: |-
+    MEMBER [[||]]--[[o{]] POST : writes
+  erdBox: |-
+    POST {
+      bigint id PK
+      bigint member_id FK
+      text title
+    }
+  post: |-
+    create table post (
+      id bigint primary key,
+      [[member_id bigint not null]]
+        references member(id),
+      title text not null
+    );
+  fkOnOne: |-
+    create table member (
+      id bigint primary key,
+      name text not null,
+      [[post_id bigint]]
+    );
+  selfRef: |-
+    create table category (
+      id bigint primary key,
+      name text not null,
+      parent_id bigint
+        references category(id)
+    );
+  profileUnique: |-
+    create table profile (
+      id bigint primary key,
+      member_id bigint not null
+        [[unique]]
+        references member(id),
+      bio text
+    );
+  profileShared: |-
+    create table profile (
+      [[member_id bigint primary key]]
+        references member(id),
+      bio text
+    );
+  studyBad: |-
+    create table study (
+      id bigint primary key,
+      title text not null,
+      [[member_id bigint]]
+        references member(id)
+    );
+  studyMember: |-
+    create table study_member (
+      member_id bigint
+        references member(id),
+      study_id bigint
+        references study(id),
+      primary key (member_id, study_id)
+    );
+  bothWays: |-
+    -- kim(1)의 스터디
+    select s.title
+      from study_member sm
+      join study s on s.id = sm.study_id
+     where sm.member_id = 1;
+
+    -- 자바 스터디(1)의 회원
+    select m.name
+      from study_member sm
+      join member m on m.id = sm.member_id
+     where sm.study_id = 1;
+  migration: |-
+    -- V1__create_member_profile_post.sql
+    create table member (
+      id bigint generated always
+         as identity primary key,
+      email text not null unique
+    );
+    create table profile (
+      id bigint generated always
+         as identity primary key,
+      member_id bigint not null
+         [[unique]] references member(id),
+      bio text
+    );
+    create table post (
+      id bigint generated always
+         as identity primary key,
+      member_id bigint not null
+         references member(id),
+      title text not null
+    );
+    create index post_member_id_idx
+      on post (member_id);
+  entities: |-
+    @Entity
+    class Post {
+      @ManyToOne(fetch = LAZY,
+          optional = false)
+      @JoinColumn(name = "member_id")
+      Member member;
+    }
+
+    @Entity
+    class Profile {
+      [[@OneToOne]](fetch = LAZY,
+          optional = false)
+      @JoinColumn(name = "member_id")
+      Member member;
+    }
+  migrationNoUnique: |-
+    create table profile (
+      id bigint generated always
+         as identity primary key,
+      [[member_id bigint not null]]
+         [[references member(id)]],
+      bio text
+    );
+predict:
+  title: 같은 회원의 프로필을 한 번 더 넣으면?
+  text: '회원 하나에 프로필 하나를 두려고 `profile`에 `member_id` 외래 키를 만들었어요. 회원 1의 프로필이 이미 있는데 하나를 더 넣으면 어떻게 될까요? 감으로 골라 보세요. 답은 질문 4에 나와요.'
+  code: predict
+  label: 내 예측
+  options:
+    - value: fk
+      label: 외래 키 위반(23503)으로 실패한다
+    - value: unique
+      label: 중복(23505)으로 실패한다
+    - value: ok
+      label: 들어가서 회원 1의 프로필이 둘이 된다
+  answer: ok
+  storageKey: tr-predict
+  wrong: 예측은 "{label}"이었어요. 틀린 예측이 더 오래 남으니 괜찮아요.
+questions:
+  - id: q1
+    title: 요구사항에서 테이블과 관계를 어떻게 찾나요?
+    conclusion:
+      lead: '따로 저장하고 가리켜야 하는 명사를 테이블로, 그 명사들을 잇는 동사를 관계로 잡고, 관계마다 "A 하나에 B는 몇 개?"를 양쪽 방향으로 물어 1:1, 1:N, N:M을 정해요.'
+      sub: '한쪽만 물으면 틀려요. "회원은 여러 스터디에 들어간다"만 보면 1:N 같지만, 반대로 "스터디 하나에 회원은?"도 여럿이라 N:M이에요.'
+    says:
+      - '코드 requirements의 다섯 문장에서 명사를 고른다. 회원, 프로필, 글, 스터디는 여러 정보를 갖고 다른 것이 가리켜야 하므로 엔티티(테이블)다. 이메일은 값 하나로 끝나므로 회원의 열이다'
+      - '엔티티를 잇는 동사(가진다, 쓴다, 들어간다)가 관계다. 관계마다 두 질문을 한다: "회원 하나에 X는 최대 몇 개?", "X 하나에 회원은 최대 몇 개?" 둘 다 하나면 1:1, 한쪽만 여럿이면 1:N, 둘 다 여럿이면 N:M'
+      - '같은 두 엔티티도 요구사항이 정한다. 회원이 팀 하나에만 들어가면 1:N이고, 여러 팀에 들어갈 수 있으면 N:M이다. 그래서 "나중에 여러 개가 될 수 있나"를 요구사항에서 확인한다'
+      - '최소 개수도 함께 묻는다. "프로필을 하나 가질 수 있다"는 없어도 된다(0 또는 1). "글에는 작성자가 있다"는 꼭 하나다. 이것은 질문 3에서 외래 키 열의 NOT NULL로 옮긴다'
+    widget:
+      kind: classify
+      note: '요구사항 문장 다섯 개(회원과 프로필, 회원과 글, 주문과 배송지, 학생과 강의, 회원과 팀 하나)를 1:1, 1:N, N:M으로 분류한다. 해설에서 양쪽 방향의 답을 보인다'
+    asks:
+      - '본문의 예시: "회원은 여러 스터디에 들어가고, 스터디에는 여러 회원이 있다"의 관계는 (N:M. 양쪽 다 여럿)'
+      - '옮긴 상황: "주문 하나에는 상품이 여러 개 담기고, 상품 하나는 여러 주문에 담길 수 있다"는 (N:M. "주문은 상품 여러 개"만 보면 1:N으로 틀린다)'
+    body:
+      - p: '스터디 서비스의 요구사항 다섯 줄이에요. 레슨 전체에서 이 문장들을 테이블로 옮겨요.'
+      - code: requirements
+      - h3: 명사에서 테이블을 찾아요
+      - p: '먼저 명사를 골라요. 회원, 프로필, 글, 스터디는 각각 여러 정보를 갖고, 다른 것이 "어느 회원", "어느 스터디"처럼 가리켜야 해요. 이런 명사가 **엔티티**이고 테이블이 돼요. 이메일은 값 하나로 끝나고 무엇이 가리킬 일도 없으니 회원 테이블의 열이에요.'
+      - h3: 동사에서 관계를 찾고, 양쪽으로 물어요
+      - p: '엔티티를 잇는 동사(가진다, 쓴다, 들어간다)가 **관계**예요. 관계마다 질문 두 개를 해요. 이 답으로 정하는 관계의 종류를 **카디널리티**라고 해요.'
+      - table:
+          head: [관계, '회원 하나에 상대는 최대?', '상대 하나에 회원은 최대?', 종류]
+          rows:
+            - ['회원과 프로필', '하나', '하나', '1:1']
+            - ['회원과 글', '여럿', '하나', '1:N']
+            - ['회원과 스터디', '여럿', '여럿', 'N:M']
+      - p: '**한쪽만 물으면 틀려요.** 4번 문장 "회원은 여러 스터디에 들어간다"만 보면 회원 하나에 스터디 여럿이라 1:N 같아요. 5번 문장으로 반대 방향을 물으면 스터디 하나에도 회원이 여럿이에요. 그래서 N:M이에요.'
+      - p: '같은 두 엔티티라도 요구사항이 관계를 정해요. 회원이 팀 하나에만 들어가는 서비스라면 회원과 팀은 1:N이고, [연관관계 매핑](lesson:association-owner)의 `Member.team`이 그 모양이에요. 여러 팀에 들어갈 수 있으면 N:M이에요. 지금은 하나여도 곧 여럿이 될 수 있는지 요구사항을 쓴 사람에게 확인해요.'
+      - p: '**최소 개수**도 함께 물어요. 2번 문장 "프로필을 하나 **가질 수 있다**"는 없어도 된다는 뜻이에요(0개 또는 1개). 글은 작성자가 꼭 하나 있어요. 이 차이는 질문 3에서 외래 키 열의 NOT NULL로 옮겨요.'
+      - widget:
+          kind: classify
+          categories:
+            - '1:1'
+            - '1:N'
+            - 'N:M'
+          items:
+            - text: '회원은 배송지를 여러 개 저장하고, 배송지 하나는 그것을 저장한 회원의 것이다.'
+              answer: 2
+              explain: '회원 하나에 배송지 여럿, 배송지 하나에 회원 하나예요. 한쪽만 여럿이라 1:N이에요.'
+            - text: '학생은 여러 강의를 듣고, 강의 하나는 여러 학생이 듣는다.'
+              answer: 3
+              explain: '양쪽 다 여럿이에요. 수강이라는 매핑 테이블이 필요한 N:M이에요.'
+            - text: '회원은 사업자 정보를 하나 등록할 수 있고, 사업자 정보 하나는 회원 한 명의 것이다.'
+              answer: 1
+              explain: '양쪽 다 최대 하나예요. 등록하지 않을 수도 있어서 사업자 정보 쪽은 0개 또는 1개예요.'
+            - text: '주문 하나에는 상품이 여러 개 담기고, 상품 하나는 여러 주문에 담긴다.'
+              answer: 3
+              explain: '"주문에 상품 여러 개"만 보면 1:N 같아요. 반대로 상품 하나도 여러 주문에 담기니 N:M이에요. 주문 항목이 매핑 테이블이에요.'
+            - text: '직원은 부서 하나에 속하고, 부서에는 직원이 여러 명 있다.'
+              answer: 2
+              explain: '직원 하나에 부서 하나, 부서 하나에 직원 여럿이라 1:N이에요. 직원이 여러 부서를 겸할 수 있다면 N:M이 돼요.'
+      - quiz:
+          q: '"주문 하나에는 상품이 여러 개 담기고, 상품 하나는 여러 주문에 담길 수 있다." 주문과 상품의 관계는 무엇인가요?'
+          options:
+            - '1:1'
+            - '1:N (주문 하나에 상품 여럿)'
+            - 'N:M'
+          answer: 3
+          explain: '주문 하나에 상품 여럿이고, 상품 하나에도 주문 여럿이에요. 양쪽 다 여럿이면 N:M이에요.'
+      - next: '찾은 관계를 사람들과 나누려면 그림으로 그려야 해요. ERD의 선 끝에 붙은 기호는 무엇을 뜻할까요?'
+    recall: '요구사항의 명사 가운데 여러 정보를 갖고 다른 것이 가리켜야 하는 것을 테이블로, 값 하나로 끝나는 것은 열로 잡아요. 명사를 잇는 동사가 관계예요. 관계마다 "A 하나에 B는 최대 몇 개?"와 "B 하나에 A는 최대 몇 개?"를 둘 다 물어서, 둘 다 하나면 1:1, 한쪽만 여럿이면 1:N, 둘 다 여럿이면 N:M이에요. 없어도 되는지(최소 개수)도 함께 물어요.'
+  - id: q2
+    title: ERD의 선 끝 기호는 무엇을 뜻하나요?
+    conclusion:
+      lead: '선 끝의 기호는 그 기호가 붙은 쪽 엔티티가 상대 하나에 최소 몇 개, 최대 몇 개인지를 뜻해요.'
+      sub: '까마귀 발은 여럿, 막대는 하나, 동그라미는 없어도 됨이에요. `MEMBER ||--o{ POST`는 "회원 하나에 글은 0개 이상, 글 하나에 회원은 정확히 하나"로 읽어요.'
+    says:
+      - 'ERD(엔티티 관계 다이어그램)는 엔티티를 상자로, 관계를 선으로 그린 설계도다. 질문 1에서 찾은 것을 Mermaid 문법(코드 erd)으로 그린다. 깃허브의 마크다운은 mermaid 코드 블록을 그림으로 그려 준다'
+      - '선 끝의 기호는 두 글자다. 바깥쪽 글자가 최대(막대는 하나, 까마귀 발은 여럿), 안쪽 글자가 최소(동그라미는 0, 막대는 1)다. 네 가지 조합을 표로 보인다'
+      - '기호는 그 기호가 붙은 쪽의 개수다. `MEMBER ||--o{ POST`에서 POST 옆의 `o{`는 회원 하나에 글이 0개 이상, MEMBER 옆의 `||`는 글 하나에 회원이 정확히 하나라는 뜻이다'
+      - '상자 안에는 열과 표시가 있다. PK는 기본 키, FK는 외래 키, UK는 유니크다. 외래 키(FK)는 까마귀 발 쪽 상자에 있다'
+      - '더 알아보기: 실선(`--`)은 식별 관계, 점선(`..`)은 비식별 관계다. 식별 관계는 부모의 키가 자식 기본 키의 일부가 되는 것이다. 매핑 테이블의 (member_id, study_id) 기본 키가 그렇다'
+    asks:
+      - '본문의 예시: `MEMBER ||--o| PROFILE`을 말로 읽으면 (회원 하나에 프로필은 없거나 하나, 프로필 하나에 회원은 정확히 하나)'
+      - '옮긴 상황: `DEPARTMENT ||--|{ EMPLOYEE`에서 직원이 한 명도 없는 부서가 있을 수 있나 (없다. `|{`는 하나 이상)'
+    body:
+      - p: '**ERD**(엔티티 관계 다이어그램)는 엔티티를 상자로, 관계를 선으로 그린 설계도예요. 질문 1에서 찾은 것을 [Mermaid](link:mermaid) 문법으로 적었어요. 깃허브의 README나 이슈에 `mermaid` 코드 블록으로 붙이면 그림으로 그려 줘요. 매핑 테이블 `STUDY_MEMBER`는 질문 5에서 다뤄요.'
+      - code: erd
+      - h3: 기호 두 글자를 읽어요
+      - p: '선 끝의 기호는 두 글자예요. **바깥쪽 글자가 최대**, 안쪽 글자가 최소예요. 바깥쪽의 막대는 하나, 까마귀 발(`{`, `}`)은 여럿이에요. 안쪽의 동그라미(`o`)는 0, 막대는 1이에요.'
+      - table:
+          head: [기호, 최소, 최대, 읽는 법]
+          rows:
+            - ['`||`', '1', '1', '정확히 하나']
+            - ['`o|` 또는 `|o`', '0', '1', '없거나 하나']
+            - ['`o{` 또는 `}o`', '0', '여럿', '없거나 여럿']
+            - ['`|{` 또는 `}|`', '1', '여럿', '하나 이상']
+      - h3: 기호는 그것이 붙은 쪽의 개수예요
+      - code: erdLine
+        notes:
+          - mark: 'o{'
+            as: code
+            text: 'POST 옆의 기호예요. **회원 하나에** 글이 0개 이상이라는 뜻이에요.'
+          - mark: '||'
+            as: code
+            text: 'MEMBER 옆의 기호예요. **글 하나에** 회원이 정확히 하나라는 뜻이에요.'
+      - p: '헷갈리면 이렇게 읽어요. "상대 하나에, 이 기호가 붙은 쪽은 몇 개?" 그래서 `MEMBER ||--o| PROFILE`은 "회원 하나에 프로필은 없거나 하나, 프로필 하나에 회원은 정확히 하나"예요. 질문 1에서 물은 두 방향의 답을 선의 양 끝에 하나씩 적은 것이에요.'
+      - p: 'ERD는 상자 안에 열도 적어요. PK는 기본 키, FK는 외래 키, UK는 유니크 표시예요. 외래 키는 까마귀 발이 붙은 쪽 상자에 있어요. 왜 그쪽인지는 질문 3에서 봐요.'
+      - code: erdBox
+      - more:
+          summary: '더 알아보기: 실선과 점선'
+          body:
+            - p: 'Mermaid는 선을 실선(`--`)과 점선(`..`)으로 그려요. 실선은 **식별 관계**, 점선은 **비식별 관계**예요. 식별 관계는 부모의 키가 자식 기본 키의 일부가 되는 관계예요. 매핑 테이블 `study_member`의 기본 키 (member_id, study_id)가 회원과 스터디의 키로 이루어지니 식별 관계예요. 글은 자기 id를 기본 키로 갖고 `member_id`는 그냥 열이라 비식별 관계예요. 위 그림은 단순하게 모두 실선으로 그렸어요.'
+      - quiz:
+          q: 'ERD에 `DEPARTMENT ||--|{ EMPLOYEE`가 있어요. 직원이 한 명도 없는 부서가 있을 수 있나요?'
+          options:
+            - '있다. 까마귀 발은 0개도 포함한다'
+            - '없다. EMPLOYEE 옆의 `|{`는 하나 이상이다'
+            - '알 수 없다. DEPARTMENT 옆의 기호를 봐야 한다'
+          answer: 2
+          explain: '부서 하나에 직원이 몇 명인지는 EMPLOYEE 옆의 기호가 말해요. `|{`는 최소 1, 최대 여럿이라 직원 없는 부서는 없어요.'
+      - next: '1:N 선에서 외래 키는 까마귀 발 쪽 상자에 있었어요. 반대쪽에 두면 왜 안 될까요?'
+    recall: '선 끝의 기호는 그 기호가 붙은 쪽 엔티티가 상대 하나에 몇 개인지를 뜻해요. 바깥쪽 글자가 최대(막대는 하나, 까마귀 발은 여럿), 안쪽 글자가 최소(동그라미는 0, 막대는 1)예요. `MEMBER ||--o{ POST`는 회원 하나에 글이 0개 이상, 글 하나에 회원은 정확히 하나라는 뜻이에요.'
+  - id: q3
+    title: 1:N은 외래 키를 어느 쪽에 두나요?
+    conclusion:
+      lead: 'N 쪽(자식) 테이블에 1 쪽을 가리키는 외래 키를 둬요. 글 테이블에 `member_id`를 두는 것처럼요.'
+      sub: '행 하나의 칸 하나에는 값이 하나만 들어가요. 글은 작성자가 하나라 한 칸이면 되지만, 회원 쪽에 두면 글 여럿을 담을 칸이 없어서 회원 행이 글 수만큼 반복돼요.'
+    says:
+      - '코드 post처럼 글에 `member_id`를 둔다. 글 하나에 작성자는 하나라 칸 하나로 충분하다. kim이 글 셋을 쓰면 글 세 행이 각자 1을 가진다'
+      - '외래 키 하나로 양쪽 방향을 다 찾는다. 회원의 글은 `where member_id = 1`, 글의 작성자는 조인으로 찾는다. 실제 출력을 보인다'
+      - '반대로 회원에 `post_id`를 두면(코드 fkOnOne) kim의 글 셋을 담으려고 kim 행이 셋이 된다. 이름을 한 행만 고치면 같은 사람의 이름이 둘이 된다(정규화의 갱신 이상). 실제 출력을 보인다'
+      - '최소 개수는 NULL 허용으로 옮긴다. 글에 작성자가 꼭 있어야 하면 `member_id`에 NOT NULL, 없어도 되면(카테고리 없는 글) NULL을 허용한다. ERD의 `||`와 `o|`가 이것이다'
+      - '외래 키 열에는 인덱스를 직접 만든다(키와 제약 조건 질문 2의 더 알아보기). 회원의 글을 찾는 조회가 이 열로 한다'
+      - '더 알아보기: 같은 테이블 안의 1:N은 자기 자신을 가리키는 외래 키다. 카테고리의 `parent_id`, 댓글의 부모 댓글'
+    asks:
+      - '본문의 예시: 회원과 글이 1:N일 때 외래 키를 회원 테이블에 `post_id`로 두면 kim이 글 셋을 쓸 때 생기는 일 (kim 행이 셋이 된다)'
+      - '옮긴 상황: 주문과 결제가 1:N(주문 하나를 여러 번 나눠 결제)일 때 외래 키를 두는 곳 (결제 테이블의 `order_id`)'
+    body:
+      - p: '회원과 글은 1:N이에요. ERD에서 까마귀 발이 붙은 쪽, 곧 **N 쪽인 글에 외래 키를** 둬요.'
+      - code: post
+        notes:
+          - mark: 'member_id bigint not null'
+            as: code
+            text: '글 하나에 작성자는 하나라 **칸 하나면 충분해요.** kim이 글 셋을 쓰면 글 세 행이 각자 1을 가져요. 작성자가 꼭 있어야 하니 NOT NULL이에요.'
+      - p: '외래 키는 한쪽에만 있지만 **양쪽 방향을 다 찾아요.** kim의 글은 `where member_id = 1`로, 글 12의 작성자는 조인으로 찾아요.'
+      - ci:
+          key: one-to-many
+          label: 실제 결과 보기
+          source: TableRelationshipsTest.oneToManyFkOnManySide
+      - h3: 반대쪽에 두면
+      - p: '회원 테이블에 `post_id`를 두면 어떨까요. 칸 하나에는 글 id가 하나만 들어가요. kim의 글 셋을 담으려면 kim 행을 셋 만들어야 해요.'
+      - code: fkOnOne
+      - p: 'kim 행 셋을 만들고, 이름을 바꾸다가 첫 행만 고쳤어요.'
+      - ci:
+          key: fk-on-one
+          label: 실제 결과 보기
+          source: TableRelationshipsTest.fkOnOneSideDuplicatesParent
+      - p: '**같은 사람의 이름이 두 가지가 됐어요.** 같은 사실을 여러 행에 두면 생기는 갱신 이상이에요([정규화](lesson:normalization)). 쉼표로 `''10,11,12''`를 한 칸에 넣는 방법도 있지만, 그러면 안의 값에 외래 키를 걸 수도 조인할 수도 없어요. 칸 하나에 값 하나인 자리는 N 쪽뿐이에요.'
+      - h3: 없어도 되는 관계는 NULL로
+      - p: '질문 1의 최소 개수를 여기서 옮겨요. 글에 작성자가 꼭 있어야 하면 `member_id`에 NOT NULL을 걸어요. ERD에서는 MEMBER 옆의 `||`예요. 카테고리 없이 쓸 수 있는 글이라면 `category_id`는 NULL을 허용하고, ERD에서는 CATEGORY 옆에 `o|`를 그려요.'
+      - p: '외래 키 열에는 인덱스를 직접 만들어요. PostgreSQL은 외래 키에 인덱스를 저절로 만들지 않고([키와 제약 조건](lesson:keys-constraints) 질문 2), "kim의 글" 조회가 바로 이 열로 찾거든요.'
+      - more:
+          summary: '더 알아보기: 같은 테이블 안의 1:N'
+          body:
+            - p: '상위 카테고리 하나에 하위 카테고리가 여럿이에요. 양쪽이 같은 테이블이어도 규칙은 같아요. N 쪽인 하위 카테고리 행에 상위를 가리키는 외래 키를 둬요. 댓글의 부모 댓글, 직원의 상사도 같은 모양이에요.'
+            - code: selfRef
+      - quiz:
+          q: '주문 하나를 여러 번 나눠 결제할 수 있어요(주문과 결제가 1:N). 외래 키는 어디에 두나요?'
+          options:
+            - '주문 테이블에 `payment_id`'
+            - '결제 테이블에 `order_id`'
+            - '두 테이블 모두에 서로의 id'
+          answer: 2
+          explain: '결제 하나에 주문은 하나라 결제 행의 칸 하나로 충분해요. 주문 쪽에 두면 결제 여럿을 담을 칸이 없어요.'
+      - next: '1:N은 N 쪽에 외래 키를 두었어요. 양쪽 다 하나인 1:1은 어느 쪽에, 무엇을 더해서 두어야 할까요?'
+    recall: '1:N은 N 쪽(자식) 테이블에 1 쪽을 가리키는 외래 키를 둬요. 글 하나에 작성자는 하나라 칸 하나로 충분하고, 외래 키 하나로 회원의 글과 글의 작성자를 둘 다 찾아요. 1 쪽에 두면 칸 하나에 글 여럿을 담을 수 없어서 회원 행이 글 수만큼 반복되고 값이 어긋나요. 꼭 있어야 하는 관계는 외래 키에 NOT NULL을 걸어요.'
+  - id: q4
+    title: 1:1은 어떻게 테이블로 옮기나요?
+    conclusion:
+      lead: '외래 키에 UNIQUE를 걸어야 1:1이에요. 외래 키만 두면 1:N이라 같은 회원의 프로필이 둘 들어가요.'
+      sub: '외래 키는 나중에 생기거나 없을 수 있는 쪽(프로필)에 둬요. 외래 키를 그대로 기본 키로 쓰는 공유 기본 키도 같은 일을 해요.'
+    says:
+      - '예측의 답을 밝힌다. 외래 키만 둔 `profile`에 회원 1의 프로필을 한 번 더 넣으면 들어간다. 외래 키는 "가리키는 회원이 있나"만 보고, 몇 개인지는 보지 않는다. 그것은 1:N의 모양이다'
+      - '`member_id`에 UNIQUE를 걸면 둘째 프로필은 23505로 실패한다. `member_id`를 기본 키로 쓰는 공유 기본 키도 23505로 막는다. 세 가지를 같은 데이터로 돌린 실제 출력을 보인다'
+      - '외래 키를 둘 쪽: 나중에 생기거나 없을 수 있는 쪽. 회원에 `profile_id`를 두면 프로필 없는 회원은 NULL이고, 회원을 먼저 만들 수 없거나 나중에 고쳐야 한다. 프로필이 회원에 기대는 쪽이라 프로필에 둔다'
+      - '1:1은 한 테이블로 합칠 수도 있다. 나누는 이유: 없는 경우가 많아 빈 칸이 많을 때, 크고 드물게 읽는 열을 떼어 낼 때, 개인정보처럼 접근을 따로 다룰 때'
+    asks:
+      - '본문의 예시: `profile.member_id`에 외래 키만 있고 UNIQUE가 없을 때 회원 1의 프로필을 두 번 넣으면 (둘 다 들어간다)'
+      - '옮긴 상황: 회원과 사업자 정보가 1:1이다. `business.member_id`에 걸어야 하는 것 (외래 키와 UNIQUE. 또는 `member_id`를 기본 키로)'
+    body:
+      - p: '처음 예측으로 돌아가요. 외래 키만 둔 `profile`에 회원 1의 프로필을 한 번 더 넣었어요. 같은 데이터로 UNIQUE를 건 테이블과, `member_id`를 기본 키로 쓴 테이블에도 넣어 봤어요.'
+      - ci:
+          key: one-to-one
+          label: 실제 결과 보기
+          source: TableRelationshipsTest.oneToOneNeedsUnique
+          code: predict
+      - p: '외래 키만 있으면 **들어가요.** {{predict-result}} 외래 키는 "가리키는 회원이 있나"만 보고, 그 회원을 가리키는 행이 몇 개인지는 보지 않아요. 그러니 외래 키만 있는 테이블은 1:N이에요.'
+      - p: '1:1로 만들려면 외래 키에 **UNIQUE**를 더해요. 같은 `member_id`가 두 번 나올 수 없으니 회원 하나에 프로필이 최대 하나예요.'
+      - code: profileUnique
+        notes:
+          - mark: unique
+            as: code
+            text: '이 한 단어가 1:N과 1:1을 가르는 차이예요. 둘째 프로필은 23505로 실패해요.'
+      - p: '`member_id`를 그대로 프로필의 기본 키로 쓰는 방법도 있어요. 이것을 **공유 기본 키**라고 해요. 기본 키는 겹칠 수 없으니 UNIQUE와 같은 일을 하고, 따로 id 열을 두지 않아요.'
+      - code: profileShared
+      - h3: 외래 키는 어느 쪽에 두나요
+      - p: '1:1은 양쪽 다 하나라서 어느 쪽에 두어도 칸 하나면 돼요. 기준은 **나중에 생기거나 없을 수 있는 쪽**이에요. 회원에 `profile_id`를 두면 프로필 없는 회원은 그 칸이 NULL이고, 프로필을 만들 때마다 회원 행을 다시 고쳐야 해요. 프로필은 회원이 있어야 생기니, 프로필이 회원을 가리키게 둬요.'
+      - p: '1:1이면 한 테이블로 합쳐도 돼요. 따로 둘 때는 이유가 있어요. 프로필 없는 회원이 많아 빈 칸이 많을 때, 긴 자기소개처럼 크고 드물게 읽는 열을 떼어 낼 때, 개인정보처럼 접근 권한을 따로 다룰 때예요.'
+      - quiz:
+          q: '회원과 사업자 정보가 1:1이에요. `business` 테이블에 `member_id bigint references member(id)`만 두었어요. 무엇이 빠졌나요?'
+          options:
+            - '없다. 외래 키가 있으니 1:1이다'
+            - '`member_id`의 UNIQUE. 없으면 한 회원의 사업자 정보가 여럿 들어간다'
+            - '`member` 테이블의 `business_id` 외래 키'
+          answer: 2
+          explain: '외래 키는 가리키는 회원이 있는지만 봐요. 회원 하나에 하나만 있게 하는 것은 UNIQUE(또는 기본 키)예요.'
+      - next: '1:N은 N 쪽에, 1:1은 UNIQUE와 함께 외래 키 하나로 담았어요. 양쪽 다 여럿인 N:M은 외래 키를 어디에 두면 될까요?'
+    recall: '1:1은 외래 키에 UNIQUE를 걸어서 만들어요. 외래 키만 있으면 가리키는 대상이 있는지만 보고 개수는 보지 않아서 1:N이 돼요. 외래 키는 나중에 생기거나 없을 수 있는 쪽(프로필)에 두고, 그 외래 키를 기본 키로 쓰는 공유 기본 키로도 같은 것을 지켜요. 한 테이블로 합칠 수도 있고, 빈 칸이 많거나 크고 드물게 읽는 열이 있으면 나눠요.'
+  - id: q5
+    title: N:M은 왜 외래 키 하나로 담을 수 없나요?
+    conclusion:
+      lead: '어느 쪽에 외래 키를 두어도 칸 하나에는 상대 하나만 담겨서, 양쪽 다 여럿인 관계를 담을 수 없어요.'
+      sub: '그래서 두 외래 키(`member_id`, `study_id`)를 가진 매핑 테이블을 따로 두고, 그 행 하나가 "이 회원이 이 스터디에 있다"는 짝 하나를 뜻하게 해요. N:M이 1:N 둘로 풀려요.'
+    says:
+      - '스터디에 `member_id`를 두면(코드 studyBad) 회원 둘이 있는 자바 스터디를 담으려고 스터디 행이 둘이 된다. 같은 스터디가 두 행이라 제목이 반복되고, 스터디 id가 둘이다. 회원 쪽에 `study_id`를 두어도 같은 일이 회원에게 생긴다. 실제 출력을 보인다'
+      - '배열 열이나 쉼표 목록은 안의 값에 외래 키를 걸 수 없다(정규화의 제1정규형)'
+      - '매핑 테이블 `study_member(member_id, study_id)`는 행 하나가 짝 하나다. 회원 쪽에서 1:N, 스터디 쪽에서 1:N이다. ERD의 `MEMBER ||--o{ STUDY_MEMBER`와 `STUDY ||--o{ STUDY_MEMBER`가 이것이다'
+      - '양쪽 방향을 조인 하나씩으로 찾는다: kim의 스터디, 자바 스터디의 회원. 실제 출력을 보인다'
+      - '매핑 테이블을 어떻게 만드는지(기본 키, 같은 쌍 막기, 인덱스, 가입일 같은 열, 삭제 규칙)는 다음 레슨이 맡는다'
+    asks:
+      - '본문의 예시: 스터디 테이블에 `member_id`를 두면 회원 둘이 있는 자바 스터디는 (스터디 행이 둘이 된다)'
+      - '옮긴 상황: 학생과 강의가 N:M일 때 필요한 테이블의 수와 외래 키 (세 개. 수강 테이블에 `student_id`와 `course_id`)'
+    body:
+      - p: '회원과 스터디는 N:M이에요. 1:N처럼 한쪽에 외래 키를 둬 볼게요. 스터디에 `member_id`를 두고, kim과 lee가 있는 자바 스터디와 kim만 있는 SQL 스터디를 넣었어요.'
+      - code: studyBad
+      - ci:
+          key: many-to-many
+          label: 실제 결과 보기
+          source: TableRelationshipsTest.manyToManyNeedsMappingTable
+      - p: '결과의 위쪽을 봐요. 칸 하나에 회원 하나만 들어가니 **자바 스터디가 두 행**이 됐어요. 같은 스터디인데 id가 1과 2로 둘이고 제목이 반복돼요. 회원 쪽에 `study_id`를 두면 이번에는 회원 행이 스터디 수만큼 반복돼요. 질문 3에서 본 1 쪽 외래 키의 문제가 **양쪽 어디에 두어도** 생겨요.'
+      - p: '배열 열이나 쉼표로 이은 목록에 담으면 행은 하나지만 안의 값마다 외래 키를 걸 수 없어요. [정규화](lesson:normalization)의 제1정규형이 이 경우예요.'
+      - h3: 짝을 담는 테이블을 따로 둬요
+      - p: '답은 **짝 자체를 행으로** 두는 거예요. 두 외래 키를 가진 테이블을 하나 더 만들고, 행 하나가 "이 회원이 이 스터디에 있다"는 짝 하나를 뜻하게 해요. 이것을 **매핑 테이블**(연결 테이블)이라고 해요.'
+      - code: studyMember
+      - p: 'kim과 lee의 자바 스터디, kim의 SQL 스터디는 행 셋이에요. 회원 하나에 매핑 행 여럿, 매핑 행 하나에 회원 하나라 **회원 쪽에서 1:N**이에요. 스터디 쪽에서도 1:N이에요. 질문 2의 ERD에서 `STUDY_MEMBER`로 두 선이 모이는 것이 이 모양이에요. N:M을 1:N 둘로 푼 거예요.'
+      - p: '양쪽 방향은 조인 하나씩으로 찾아요. 위 실제 결과의 아래쪽 두 줄이 이 쿼리의 결과예요.'
+      - code: bothWays
+      - callout: '매핑 테이블은 여기서 끝이 아니에요. 기본 키를 (member_id, study_id)로 둘지 따로 id를 둘지, 같은 짝이 두 번 들어가지 않게 하는 법, 양쪽 방향 조회에 필요한 인덱스, 가입일이나 역할 같은 열, 회원을 지울 때의 규칙은 [다대다와 매핑 테이블](lesson:many-to-many-table)에서 다뤄요.'
+      - quiz:
+          q: '학생과 강의가 N:M이에요. 이 관계를 담으려면 테이블이 모두 몇 개 필요하고, 외래 키는 어디에 있나요?'
+          options:
+            - '두 개. 강의 테이블에 `student_id`'
+            - '두 개. 학생 테이블에 `course_id`'
+            - '세 개. 수강 테이블에 `student_id`와 `course_id`'
+          answer: 3
+          explain: '학생과 강의 사이에 짝을 담는 수강 테이블을 두고, 두 외래 키를 그 테이블에 둬요. 한쪽에 외래 키 하나를 두면 칸 하나에 상대 하나만 담겨요.'
+    recall: 'N:M은 어느 쪽에 외래 키를 두어도 칸 하나에 상대 하나만 담겨서, 같은 스터디나 같은 회원의 행이 반복돼요. 그래서 두 외래 키를 가진 매핑 테이블을 따로 두고, 그 행 하나가 짝 하나를 뜻하게 해요. 매핑 테이블은 회원 쪽에서 1:N, 스터디 쪽에서 1:N이라 N:M이 1:N 둘로 풀리고, 양쪽 방향을 조인으로 찾아요.'
+practice:
+  says:
+    - 'ERD를 마이그레이션 SQL(코드 migration)과 JPA 엔티티(코드 entities)로 옮긴 모양을 보인다. 1:N은 `@ManyToOne`과 외래 키 인덱스, 1:1은 `@OneToOne`과 UNIQUE'
+    - '하이버네이트 6.6의 `ddl-auto`는 `@OneToOne`의 외래 키에 UNIQUE를 만든다. 테스트로 만들어진 제약을 보인다'
+    - '흔한 실수: 운영 DB는 손으로 쓴 마이그레이션으로 만드는데, 프로필 테이블에 UNIQUE를 빠뜨린다. JPA는 저장할 때 개수를 검사하지 않아서 둘째 프로필이 저장되고, 그 회원을 읽을 때 `Duplicate row was found` 예외가 난다. 테스트로 보인다'
+    - '고친 것: 마이그레이션에 `unique`를 적는다. 엔티티의 애너테이션보다 테이블의 제약이 1:1을 지킨다'
+    - '양방향과 연관관계의 주인은 연관관계 매핑(P3)으로 넘긴다'
+  title: 마이그레이션과 엔티티로 옮겨요
+  body:
+    - p: '질문에서 정한 테이블은 운영에서 마이그레이션 SQL로 만들어요. 회원, 프로필, 글을 옮긴 첫 마이그레이션이에요.'
+    - code: migration
+      notes:
+        - mark: unique
+          as: code
+          text: '1:1을 지키는 것은 이 제약이에요(질문 4).'
+    - p: '엔티티에서는 외래 키를 가진 쪽에 매핑을 둬요. 1:N의 글에는 `@ManyToOne`, 1:1의 프로필에는 `@OneToOne`이에요. 반대쪽에서도 따라가는 양방향과 연관관계의 주인은 [연관관계 매핑](lesson:association-owner)에서 다뤄요.'
+    - code: entities
+      notes:
+        - mark: '@OneToOne'
+          as: anno
+          text: '하이버네이트가 테이블을 만들 때(`ddl-auto`)는 이 외래 키에 UNIQUE를 붙여 줘요. 저장할 때 개수를 세지는 않아요.'
+    - h3: '흔한 실수: 마이그레이션에서 UNIQUE를 빠뜨리기'
+    - p: '개발 중에는 `ddl-auto`가 만든 테이블을 써서 문제가 없었어요. 운영 DB는 손으로 쓴 마이그레이션으로 만드는데, 프로필 테이블을 1:N처럼 외래 키만으로 적었어요.'
+    - code: migrationNoUnique
+    - p: '같은 엔티티로 회원 kim의 프로필을 두 번 저장하고 kim을 읽어 봤어요. 위쪽은 `ddl-auto`가 만든 테이블, 아래쪽은 UNIQUE를 지운 테이블이에요.'
+    - ci:
+        key: jpa-one-to-one
+        label: 실제 결과 보기
+        source: TableRelationshipsTest.oneToOneWithoutUniqueInMigration
+    - p: 'UNIQUE가 없으니 **둘째 프로필이 그대로 저장됐어요.** JPA는 `@OneToOne`이라고 해서 저장 전에 개수를 세지 않아요. 문제는 나중에 터져요. 회원을 읽을 때 하이버네이트가 프로필을 함께 찾는데, 하나여야 할 행이 둘이라 예외를 던져요. 저장은 성공하고 조회가 실패하니 원인을 찾기 어려워요.'
+    - p: '고치는 곳은 마이그레이션이에요. 위의 첫 마이그레이션처럼 `member_id`에 `unique`를 적으면 둘째 저장이 23505로 바로 실패해요. 엔티티의 애너테이션이 아니라 **테이블의 제약이 1:1을 지켜요.**'
+    - muted: '근거: 선 끝 기호는 [Mermaid ER 다이어그램 문서](link:mermaid), 제약은 [PostgreSQL 16 문서](link:constraints), `@OneToOne` 매핑은 [하이버네이트 6.6 사용자 가이드](link:hibernate). 제약 생성과 조회 예외는 하이버네이트 6.6에서 테스트로 확인했어요.'
+interview:
+  question: 테이블 사이의 1:1, 1:N, N:M 관계를 각각 어떻게 설계하나요?
+  model:
+    - label: 정의
+      text: 관계의 종류는 "A 하나에 B가 몇 개, B 하나에 A가 몇 개"를 양쪽으로 물어 정합니다. 둘 다 하나면 1:1, 한쪽만 여럿이면 1:N, 둘 다 여럿이면 N:M입니다. ERD에서는 선 끝의 까마귀 발 기호로 그립니다.
+    - label: 원리
+      text: 칸 하나에는 값 하나만 들어가므로 1:N은 N 쪽에 외래 키를 둡니다. 1:1은 외래 키에 UNIQUE를 걸거나 외래 키를 기본 키로 씁니다. N:M은 어느 쪽에 두어도 칸 하나에 상대 하나만 담기므로, 두 외래 키를 가진 매핑 테이블로 1:N 둘로 풉니다.
+    - label: 주의할 점
+      text: 한쪽 방향만 물으면 N:M을 1:N으로 잘못 봅니다. 외래 키만 있고 UNIQUE가 없으면 1:1이 아니라 1:N이 되고, JPA의 @OneToOne은 저장할 때 이것을 검사하지 않습니다. 없어도 되는 관계인지는 외래 키의 NULL 허용으로 옮깁니다.
+    - label: 경험
+      text: '(내 프로젝트로 채우기) 예: 스터디 테이블에 회원 id를 하나 두었다가 스터디에 여러 명이 들어가야 해서 매핑 테이블로 바꿨습니다.'
+verified: 이 레슨의 결과는 짐작이 아니라 PostgreSQL 16 컨테이너에서 SQL을 실행하고, 실무 구역은 스프링 부트 3.5와 하이버네이트 6.6으로 돌려 받은 값이에요. 코드가 바뀔 때마다 테스트([TableRelationshipsTest](link:test))가 다시 돌아요.
+footer: '근거: ERD 기호는 [Mermaid 문서](link:mermaid), 외래 키와 UNIQUE는 [PostgreSQL 16 문서](link:constraints), JPA 매핑은 [하이버네이트 6.6 사용자 가이드](link:hibernate). 결과는 PostgreSQL 16과 스프링 부트 3.5에서 테스트로 확인했어요. 오류는 [GitHub 이슈](https://github.com/wanja727/dev-lessons/issues)로 알려 주세요.'
+claims:
+  - claim: '1:N은 N 쪽의 외래 키 하나로 회원의 글과 글의 작성자를 둘 다 찾는다'
+    how: '글에 member_id를 두고 where와 조인으로 양쪽을 조회한다'
+    test: TableRelationshipsTest.oneToManyFkOnManySide
+  - claim: '1 쪽에 외래 키를 두면 회원 행이 글 수만큼 반복되고, 한 행만 고치면 이름이 어긋난다'
+    how: '회원에 post_id를 두고 kim 행 셋을 넣은 뒤 한 행만 고친다'
+    test: TableRelationshipsTest.fkOnOneSideDuplicatesParent
+  - claim: '외래 키만 있으면 같은 회원의 프로필이 둘 들어가고, UNIQUE나 공유 기본 키면 23505로 막는다'
+    how: '세 가지 프로필 테이블에 같은 회원의 프로필을 두 번 넣는다'
+    test: TableRelationshipsTest.oneToOneNeedsUnique
+  - claim: 'N:M을 스터디의 외래 키 하나로 담으면 스터디 행이 회원 수만큼 늘고, 매핑 테이블이면 양쪽 방향을 조인으로 찾는다'
+    how: '스터디에 member_id를 둔 테이블과 매핑 테이블에 같은 짝을 넣는다'
+    test: TableRelationshipsTest.manyToManyNeedsMappingTable
+  - claim: '하이버네이트 6.6의 ddl-auto는 @OneToOne 외래 키에 UNIQUE를 만들고, UNIQUE가 없는 테이블에는 둘째 프로필이 저장되며 회원 조회가 Duplicate row 예외로 실패한다'
+    how: '만들어진 제약을 pg_constraint로 읽고, 제약을 지운 뒤 저장과 조회를 해 본다'
+    test: TableRelationshipsTest.oneToOneWithoutUniqueInMigration
+sources:
+  - 'ERD 선 끝 기호와 식별 관계: Mermaid 문서 https://mermaid.js.org/syntax/entityRelationshipDiagram.html'
+  - '외래 키, UNIQUE, 기본 키: PostgreSQL 16 문서 https://www.postgresql.org/docs/16/ddl-constraints.html'
+  - '@OneToOne 매핑: 하이버네이트 6.6 사용자 가이드 https://docs.hibernate.org/orm/6.6/userguide/html_single/'
