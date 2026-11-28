@@ -163,6 +163,7 @@
 
 - 문제는 레슨마다 `content/questions/<slug>.yaml` 파일 하나에 둔다. 형식은 [Retrievo의 문제 파일 형식](https://github.com/wanja727/retrievo/blob/main/docs/content-format.md)을 따르고, CI(`Check questions`)가 Retrievo의 검사기로 확인한다
 - 파일의 `coreQuestions`에 핵심 질문을 적고(키는 레슨 페이지의 장 id와 같은 `q1`, `q2`), 문제마다 `coreQuestion`으로 어느 질문에서 나왔는지 묶는다. 질문 여럿을 한꺼번에 묻는 문제는 `all`로 적는다. 묶이지 않은 문제가 있으면 CI가 실패한다
+- 핵심 질문마다 모범 답(`answer`)과 핵심 포인트(`points`, 1~4개)를 적는다. 학습 앱의 복습에서 학습자가 질문에 직접 답하면 이 포인트로 채점한다. 레슨 페이지의 결론(`conclusion`)과 주장(`says`)에서 뽑고, 쓰는 기준은 위 형식 문서의 "모범 답과 핵심 포인트"를 따른다. 2026-11-28에 객체지향 설계와 패턴 단원부터 적기 시작했고, 아직 적지 않은 단원은 앱이 지금처럼 문제로 복습한다
 - 이 장의 규칙 가운데 기계가 볼 수 있는 것은 같은 CI의 `standard`가 본다(`scripts/check-questions.mjs`): 가운뎃점, 핵심 질문 3~6개, 질문마다 판정 2개 이상, 레슨 전체 판정 6개 이상, 설명형 1개 이상, 해설의 굵은 결론. 개수의 위쪽 한계(질문마다 3개, 레슨 전체 판정 12개, 설명형 2개)를 넘거나 `all`로 묶인 면접 질문이 없으면 경고만 한다. 핵심 질문 구조로 쓴 파일만 검사한다. 올리기 전에 `scripts`에서 `npm run check:questions`로 먼저 돌려 본다
 - 본문 단계(`steps`)는 쓰지 않는다. 앱이 레슨 페이지를 앱 안에서 연다
 - 새 문제는 `status: draft`로 넣고, 근거를 확인한 뒤 `reviewed`로 바꾼다. Retrievo는 `reviewed`만 보여준다. 문제 키(`key`)는 한 번 정하면 바꾸지 않는다. 뺄 문제는 파일에서 지운다(앱에서 숨겨지고 기록은 남는다)
